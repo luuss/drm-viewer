@@ -1,0 +1,24 @@
+node_modules
+dist
+.env
+.env.local
+convex/_generated
+__pycache__
+*.pyc
+.venv
+tile-service/.venv
+backend/drm.db
+backend/__pycache__
+
+# Sample EPUB/PDF and dev screenshots
+*.epub
+*.pdf
+*.zip
+reader*.png
+spread*.png
+admin.png
+.playwright-mcp/
+
+# Build artifacts
+build/
+*.egg-info/

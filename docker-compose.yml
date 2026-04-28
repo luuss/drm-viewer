@@ -1,0 +1,24 @@
+services:
+  tile-service:
+    build:
+      context: ./tile-service
+    environment:
+      CONVEX_URL: ${CONVEX_URL}
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_CONVEX_URL: ${VITE_CONVEX_URL}
+        VITE_TILE_SERVICE_URL: ${VITE_TILE_SERVICE_URL}
+    ports:
+      - "5173:80"
+    depends_on:
+      - tile-service
+    restart: unless-stopped

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Reader</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- No Session -->
+    <div id="no-session-screen">
+        <h1>PDF Reader</h1>
+        <p>Bitte öffne den Reader über deinen Shop-Account.</p>
+        <p class="hint">Du wirst automatisch weitergeleitet wenn du ein Buch im Shop kaufst.</p>
+    </div>
+
+    <!-- Book List -->
+    <div id="book-list-screen">
+        <div id="user-bar">
+            <span id="user-email"></span>
+        </div>
+        <h2>Meine Bücher</h2>
+        <div id="book-list"></div>
+    </div>
+
+    <!-- Reader -->
+    <div id="reader-screen">
+        <div id="reader-toolbar">
+            <button id="btn-back" onclick="showBookList()">Zurück</button>
+            <button id="btn-prev" onclick="prevPage()">◀ Zurück</button>
+            <span id="page-info">-</span>
+            <button id="btn-next" onclick="nextPage()">Weiter ▶</button>
+            <button id="btn-spread" onclick="toggleSpread()">Doppelseite</button>
+            <button id="btn-fullscreen" onclick="toggleFullscreen()">Vollbild</button>
+        </div>
+        <div id="reader-viewport">
+            <div id="tile-grid"></div>
+            <canvas id="noise-overlay"></canvas>
+            <div id="copy-guard"></div>
+            <div id="loading-indicator">Laden...</div>
+        </div>
+    </div>
+
+    <script src="/static/reader.js"></script>
+</body>
+</html>
