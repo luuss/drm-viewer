@@ -612,6 +612,12 @@ ul.plain li { padding: 0.35rem 0; color: var(--ink-soft); display: flex; gap: 0.
 
 .article-hotspots {
   position: absolute;
+  /* Ueber dem Kopierschutz, sonst schluckt der die Klicks auf die Artikel.
+     Die Flaeche selbst laesst Zeiger durch, nur die Felder fangen sie ab. */
+  z-index: 7;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 .article-hotspots .hotspot {
@@ -669,14 +675,19 @@ ul.plain li { padding: 0.35rem 0; color: var(--ink-soft); display: flex; gap: 0.
 .article-reader-inner figcaption { font-size: 0.8rem; color: var(--muted); margin-top: 0.4rem; }
 .article-reader .close {
   position: sticky;
-  top: 0;
+  top: 0.75rem;
   float: right;
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  padding: 0.4rem 0.8rem;
+  background: var(--ink);
+  color: var(--paper);
+  border: none;
+  padding: 0.45rem 0.9rem;
   border-radius: 4px;
   cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  z-index: 2;
 }
+.article-reader .close:hover { background: var(--accent); }
 
 /* --- Redaktion --- */
 

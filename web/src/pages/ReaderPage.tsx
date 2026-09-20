@@ -41,6 +41,7 @@ export default function ReaderPage() {
   const copyGuardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const progressTimer = useRef<number | null>(null);
+  const chromeBaseline = useRef<{ w: number; h: number } | null>(null);
   const noiseInterval = useRef<number | null>(null);
 
   useEffect(() => {
@@ -341,10 +342,22 @@ export default function ReaderPage() {
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
 
+    // Werkzeugleisten des Browsers sind schon ueber 160px hoch. Deshalb gilt
+    // nicht der absolute Abstand, sondern nur eine Vergroesserung gegenueber
+    // dem Zustand beim Oeffnen — das ist der Fall, wenn jemand die
+    // Entwicklerwerkzeuge aufklappt.
+    if (chromeBaseline.current === null) {
+      chromeBaseline.current = {
+        w: window.outerWidth - window.innerWidth,
+        h: window.outerHeight - window.innerHeight,
+      };
+    }
     const devtoolsTimer = window.setInterval(() => {
-      const w = window.outerWidth - window.innerWidth > 160;
-      const h = window.outerHeight - window.innerHeight > 160;
-      if (w || h) clearAllTiles();
+      const base = chromeBaseline.current;
+      if (!base) return;
+      const dw = window.outerWidth - window.innerWidth - base.w;
+      const dh = window.outerHeight - window.innerHeight - base.h;
+      if (dw > 180 || dh > 180) clearAllTiles();
     }, 1000);
 
     return () => {

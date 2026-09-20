@@ -76,19 +76,26 @@ def _callback_allowed(url: str) -> bool:
     return url.startswith(f"{CONVEX_SITE_URL}/")
 
 
-async def _report(callback_url: str, payload: dict) -> None:
+async def _report(callback_url: str, payload: dict) -> bool:
+    """Ergebnis ans Backend melden. Der Rueckgabewert sagt, ob es ankam."""
     if not _callback_allowed(callback_url):
         print(f"Rueckmeldung abgelehnt, fremdes Ziel: {callback_url[:80]}")
-        return
+        return False
     try:
-        await _client.post(
+        res = await _client.post(
             callback_url,
             json=payload,
             headers={"x-service-secret": SERVICE_SECRET},
             timeout=120.0,
         )
+        if res.status_code != 200:
+            # Frueher lief das still ins Leere und der Auftrag blieb ewig offen.
+            print(f"Rueckmeldung abgelehnt: {res.status_code} {res.text[:300]}")
+            return False
+        return True
     except Exception as exc:
         print(f"Rueckmeldung fehlgeschlagen: {exc}")
+        return False
 
 
 MIME_BY_EXT = {
@@ -177,11 +184,17 @@ async def _run_job(job: dict) -> None:
 
         stored = await _store_images(articles, job["callbackUrl"])
 
+        # Leere Felder ganz weglassen: der Validator im Backend nimmt
+        # fehlende Felder an, aber kein null.
+        articles = [
+            {k: v for k, v in a.items() if v is not None} for a in articles
+        ]
+
         # Grosse Hefte in Teilen melden: eine Nachricht pro 40 Artikel.
         chunk = 40
         for i in range(0, max(1, len(articles)), chunk):
             part = articles[i : i + chunk]
-            await _report(
+            ok = await _report(
                 job["callbackUrl"],
                 {
                     "jobId": job["jobId"],
@@ -192,6 +205,10 @@ async def _run_job(job: dict) -> None:
                     "articles": part,
                 },
             )
+            if not ok:
+                raise RuntimeError(
+                    f"Backend hat Teil {i // chunk + 1} nicht angenommen"
+                )
     except Exception as exc:
         traceback.print_exc()
         await _report(
