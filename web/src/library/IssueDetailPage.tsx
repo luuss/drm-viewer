@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/react";
-import { api, formatEuro, formatDate, type Id } from "../lib/api";
+import { api, formatEuro, formatDate, type Id , cleanError } from "../lib/api";
 
 export default function IssueDetailPage() {
   const { slug } = useParams();
@@ -35,7 +35,7 @@ export default function IssueDetailPage() {
       });
       window.location.href = url;
     } catch (e: any) {
-      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") ?? "Kauf fehlgeschlagen");
+      setErr(cleanError(e) ?? "Kauf fehlgeschlagen");
       setBusy(false);
     }
   }

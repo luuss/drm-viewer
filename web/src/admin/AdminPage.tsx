@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { api, formatEuro, type Id } from "../lib/api";
+import { api, formatEuro, type Id , cleanError } from "../lib/api";
 import ImportWizard from "./ImportWizard";
 import ArticleReview from "./ArticleReview";
 import TocEditor from "./TocEditor";
@@ -46,7 +46,7 @@ export default function AdminPage() {
       await fn();
       if (okMessage) setMsg(okMessage);
     } catch (e: any) {
-      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") ?? "Fehler");
+      setErr(cleanError(e) ?? "Fehler");
     }
   }
 

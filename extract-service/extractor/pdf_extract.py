@@ -388,8 +388,11 @@ def extract_pdf_pages(
                 continue
             page = pdf.pages[source_index]
             words = page.extract_words(
-                extra_attrs=["size", "fontname"], keep_blank_chars=False
+                extra_attrs=["size", "fontname", "upright"], keep_blank_chars=False
             )
+            # Gedrehter Satz (Preisleiste am Umschlagruecken, Bildnachweise)
+            # gehoert nicht in den Lesefluss und zerreisst sonst die Zeilen.
+            words = [w for w in words if w.get("upright", True)]
             # Winzige Zeichen sind gedrehte Bildnachweise am Rand. Sie zerreissen
             # sonst die Zeilen des Fliesstextes daneben.
             words = [w for w in words if float(w.get("size", 0) or 0) >= 4.5]

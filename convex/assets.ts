@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { requireEditor } from "./roles";
+import { assertUploadAllowed } from "./uploadRules";
 import { Id } from "./_generated/dataModel";
 
 export const assetKind = v.union(
@@ -24,19 +25,34 @@ export const generateUploadUrl = mutation({
   },
 });
 
+/**
+ * Eintrag nach dem Upload — fuer beide Wege gleich: ueber die Convex-Ablage
+ * (`storageId`) oder direkt in den Medienspeicher (`bucket`).
+ */
 export const registerUpload = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.optional(v.id("_storage")),
+    bucket: v.optional(v.string()),
     key: v.string(),
     contentType: v.string(),
     kind: assetKind,
     issueId: v.optional(v.id("issues")),
     bytes: v.optional(v.number()),
+    filename: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireEditor(ctx);
+    if (!args.storageId && !args.bucket) {
+      throw new Error("Weder Convex-Ablage noch Eimer angegeben");
+    }
+    assertUploadAllowed(
+      args.contentType,
+      args.bytes ?? 0,
+      args.filename ?? args.key,
+    );
     return await ctx.db.insert("assets", {
       key: args.key,
+      bucket: args.bucket,
       contentType: args.contentType,
       kind: args.kind,
       issueId: args.issueId,

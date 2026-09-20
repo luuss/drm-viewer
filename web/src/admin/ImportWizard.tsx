@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api, type Id } from "../lib/api";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { api, type Id , cleanError } from "../lib/api";
 
 type PageDraft = {
   sourceAssetId: Id<"assets">;
@@ -24,6 +24,7 @@ type SourceDraft = {
  */
 export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
   const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
+  const presignUpload = useAction(api.uploads.presignUpload);
   const registerUpload = useMutation(api.assets.registerUpload);
   const addSource = useMutation(api.issueSources.add);
   const sources = useQuery(api.issueSources.listForIssue, { issueId });
@@ -46,26 +47,56 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
     setErr(null);
     setBusy(`Lade ${file.name}`);
     try {
-      const url = await generateUploadUrl();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      if (!res.ok) throw new Error("Upload abgelehnt");
-      const { storageId } = await res.json();
-      const assetId = await registerUpload({
-        storageId,
-        key: `uploads/${issueId}/${file.name}`,
-        contentType: file.type || "application/octet-stream",
-        kind: "source",
+      const contentType = file.type || "application/octet-stream";
+      // Ist ein Medienspeicher eingerichtet, geht die Datei direkt dorthin —
+      // grosse Hefte laufen dann nicht durch den Server.
+      const direct = await presignUpload({
         issueId,
+        filename: file.name,
+        contentType,
         bytes: file.size,
       });
+
+      let assetId;
+      if (direct) {
+        const put = await fetch(direct.url, {
+          method: "PUT",
+          headers: { "Content-Type": contentType },
+          body: file,
+        });
+        if (!put.ok) throw new Error("Direkter Upload abgelehnt");
+        assetId = await registerUpload({
+          bucket: "emag-media",
+          key: direct.key,
+          contentType,
+          kind: "source",
+          issueId,
+          bytes: file.size,
+          filename: file.name,
+        });
+      } else {
+        const url = await generateUploadUrl();
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": contentType },
+          body: file,
+        });
+        if (!res.ok) throw new Error("Upload abgelehnt");
+        const { storageId } = await res.json();
+        assetId = await registerUpload({
+          storageId,
+          key: `uploads/${issueId}/${file.name}`,
+          contentType,
+          kind: "source",
+          issueId,
+          bytes: file.size,
+          filename: file.name,
+        });
+      }
       await addSource({ issueId, assetId, kind, role, filename: file.name });
       setMsg(`${file.name} hochgeladen`);
     } catch (e: any) {
-      setErr(e?.message ?? "Upload fehlgeschlagen");
+      setErr(cleanError(e));
     } finally {
       setBusy(null);
     }
@@ -240,7 +271,7 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
                 const n = await setOrder({ issueId, pages });
                 setMsg(`${n} Seiten gespeichert`);
               } catch (e: any) {
-                setErr(e?.message ?? "Speichern fehlgeschlagen");
+                setErr(cleanError(e));
               }
             }}
           >
@@ -264,7 +295,7 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
             await enqueue({ issueId, kind: "full" });
             setMsg("Auftrag eingestellt. Der Worker übernimmt ihn in Kürze.");
           } catch (e: any) {
-            setErr(e?.message?.replace(/^\[.*?\]\s*/, "") ?? "Fehler");
+            setErr(cleanError(e) ?? "Fehler");
           }
         }}
       >

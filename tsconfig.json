@@ -1,15 +1,26 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": ["ES2021", "DOM"],
+    "lib": [
+      "ES2021",
+      "DOM"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "types": ["node"],
+    "types": [
+      "node",
+      "vite/client"
+    ],
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["convex/**/*.ts"]
+  "include": [
+    "convex/**/*.ts"
+  ],
+  "exclude": [
+    "convex/**/*.test.ts"
+  ]
 }

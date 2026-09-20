@@ -13,6 +13,8 @@
     "worker": "cd extract-service && .venv/bin/python worker.py"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@aws-sdk/s3-request-presigner": "^3.1136.0",
     "@convex-dev/auth": "^0.0.95",
     "@convex-dev/stripe": "^0.1.6",
     "convex": "^1.46.0",

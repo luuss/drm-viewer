@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Authenticated, useAction, useQuery } from "convex/react";
-import { api, formatEuro, type Id } from "../lib/api";
+import { api, formatEuro, type Id , cleanError } from "../lib/api";
 
 /** Kiosk: veroeffentlichte Ausgaben und die Abos je Titel. */
 export default function KioskPage() {
@@ -28,7 +28,7 @@ export default function KioskPage() {
       });
       window.location.href = url;
     } catch (e: any) {
-      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") ?? "Abo fehlgeschlagen");
+      setErr(cleanError(e) ?? "Abo fehlgeschlagen");
       setBusy(null);
     }
   }

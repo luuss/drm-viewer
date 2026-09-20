@@ -26,3 +26,14 @@ export function formatDate(ms: number | null | undefined): string {
     year: "numeric",
   });
 }
+
+/**
+ * Serverfehler lesbar machen. Convex haengt Anfragekennung und Aufrufort an;
+ * davon soll in der Oberflaeche nur der Satz stehen, der die Redaktion angeht.
+ */
+export function cleanError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const match = raw.match(/Uncaught Error:\s*([\s\S]*?)(?:\n|\s+at\s|$)/);
+  const text = (match?.[1] ?? raw).replace(/^\[.*?\]\s*/, "").trim();
+  return text || "Unbekannter Fehler";
+}

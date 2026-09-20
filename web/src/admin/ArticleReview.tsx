@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { api, type Id } from "../lib/api";
+import { api, type Id , cleanError } from "../lib/api";
 
 /**
  * Pruefansicht: links die Seitenlage der Regionen, rechts die Bloecke.
@@ -37,7 +37,7 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
     try {
       await fn();
     } catch (e: any) {
-      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") ?? "Fehler");
+      setErr(cleanError(e) ?? "Fehler");
     }
   }
 

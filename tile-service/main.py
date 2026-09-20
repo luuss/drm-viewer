@@ -211,8 +211,11 @@ async def tile(
 
     image, meta = await load_page(issue_id, index)
     scale = 2 ** max(0, level)
-    width = max(1, meta["width"] // scale)
-    height = max(1, meta["height"] // scale)
+    # Aufrunden, nicht abschneiden: OpenSeadragon rechnet die Stufengroesse
+    # ebenfalls aufgerundet. Sonst sitzen die Randkacheln um ein Pixel daneben
+    # und es bleibt ein Streifen stehen.
+    width = max(1, -(-meta["width"] // scale))
+    height = max(1, -(-meta["height"] // scale))
     left = col * TILE_SIZE
     top = row * TILE_SIZE
     if left >= width or top >= height or level < 0 or level > 12:
@@ -226,8 +229,8 @@ async def tile(
     )
     cropped = image.crop(box)
     target = (
-        max(1, (box[2] - box[0]) // scale),
-        max(1, (box[3] - box[1]) // scale),
+        max(1, -(-(box[2] - box[0]) // scale)),
+        max(1, -(-(box[3] - box[1]) // scale)),
     )
     if cropped.size != target:
         cropped = cropped.resize(target, Image.LANCZOS)
