@@ -6,12 +6,11 @@ export const recordPaid = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     email: v.string(),
-    bookId: v.optional(v.id("books")),
+    issueId: v.optional(v.id("issues")),
     planId: v.optional(v.id("subscriptionPlans")),
     stripeSessionId: v.string(),
     stripePaymentIntentId: v.optional(v.string()),
     amountCents: v.number(),
-    currency: v.string(),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -27,12 +26,11 @@ export const recordPaid = internalMutation({
     return await ctx.db.insert("purchases", {
       userId: args.userId,
       email: args.email,
-      bookId: args.bookId,
+      issueId: args.issueId,
       planId: args.planId,
       stripeSessionId: args.stripeSessionId,
       stripePaymentIntentId: args.stripePaymentIntentId,
       amountCents: args.amountCents,
-      currency: args.currency,
       status: "paid",
       createdAt: Date.now(),
     });
@@ -51,11 +49,11 @@ export const markRefunded = internalMutation({
     if (!row) return null;
     await ctx.db.patch(row._id, { status: "refunded" });
     // Rueckerstattung entzieht den Zugriff auf das Einzelheft.
-    if (row.userId && row.bookId) {
+    if (row.userId && row.issueId) {
       const ent = await ctx.db
         .query("entitlements")
-        .withIndex("by_user_book", (q) =>
-          q.eq("userId", row.userId!).eq("bookId", row.bookId!),
+        .withIndex("by_user_issue", (q) =>
+          q.eq("userId", row.userId!).eq("issueId", row.issueId!),
         )
         .first();
       if (ent && (ent.source === "purchase" || ent.source === "claim")) {
@@ -89,10 +87,9 @@ export const mine = query({
     return Promise.all(
       rows.map(async (r) => ({
         _id: r._id,
-        title: r.bookId ? (await ctx.db.get(r.bookId))?.title ?? null : null,
+        title: r.issueId ? (await ctx.db.get(r.issueId))?.title ?? null : null,
         planName: r.planId ? (await ctx.db.get(r.planId))?.name ?? null : null,
         amountCents: r.amountCents,
-        currency: r.currency,
         status: r.status,
         createdAt: r.createdAt,
       })),

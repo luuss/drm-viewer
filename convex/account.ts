@@ -100,14 +100,14 @@ export const purgeUserData = internalMutation({
     for (const e of ents) await ctx.db.delete(e._id);
 
     const sessions = await ctx.db
-      .query("tileSessions")
+      .query("readerSessions")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     for (const s of sessions) await ctx.db.delete(s._id);
 
     const progress = await ctx.db
       .query("readingProgress")
-      .withIndex("by_user_book", (q) => q.eq("userId", userId))
+      .withIndex("by_user_issue", (q) => q.eq("userId", userId))
       .collect();
     for (const p of progress) await ctx.db.delete(p._id);
 

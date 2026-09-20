@@ -4,10 +4,10 @@ import { api } from "./_generated/api";
 import { sendMail, layout, escapeHtml, appUrl } from "./mail";
 
 export const sendClaimEmail = internalAction({
-  args: { email: v.string(), bookId: v.id("books"), token: v.string() },
-  handler: async (ctx, { email, bookId, token }): Promise<{ ok: boolean; stubbed: boolean }> => {
-    const book: any = await ctx.runQuery(api.books.getBook, { bookId });
-    const title: string = book?.title ?? "deine Ausgabe";
+  args: { email: v.string(), issueId: v.id("issues"), token: v.string() },
+  handler: async (ctx, { email, issueId, token }): Promise<{ ok: boolean; stubbed: boolean }> => {
+    const issue: any = await ctx.runQuery(api.issues.getPublic, { issueId });
+    const title: string = issue?.title ?? "deine Ausgabe";
     const claimUrl = `${appUrl()}/claim/${token}`;
     return await sendMail({
       to: email,

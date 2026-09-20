@@ -1,244 +1,402 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { requireAdmin } from "./admin";
+import { requireEditor, audit } from "./roles";
+import { articleInput } from "./articles";
 import { Id } from "./_generated/dataModel";
 
-const articleValidator = v.object({
-  order: v.number(),
-  title: v.string(),
-  subtitle: v.optional(v.string()),
-  author: v.optional(v.string()),
-  teaser: v.optional(v.string()),
-  text: v.string(),
-  pageStart: v.number(),
-  pageEnd: v.number(),
-  boxes: v.array(
-    v.object({
-      page: v.number(),
-      x0: v.number(),
-      y0: v.number(),
-      x1: v.number(),
-      y1: v.number(),
-    }),
-  ),
-  source: v.union(v.literal("idml"), v.literal("pdf"), v.literal("manual")),
-  images: v.optional(
-    v.array(
-      v.object({
-        storageId: v.id("_storage"),
-        page: v.number(),
-        caption: v.optional(v.string()),
-      }),
-    ),
-  ),
-});
+/** Wie lange ein Worker einen Auftrag fuer sich behalten darf. */
+const LEASE_MS = Number(process.env.IMPORT_LEASE_MS ?? String(10 * 60 * 1000));
+const MAX_ATTEMPTS = Number(process.env.IMPORT_MAX_ATTEMPTS ?? "3");
 
-export const createJobInternal = internalMutation({
-  args: {
-    bookId: v.id("books"),
-    kind: v.union(v.literal("idml"), v.literal("pdf")),
-    userId: v.optional(v.id("users")),
-  },
-  handler: async (ctx, { bookId, kind, userId }) => {
-    return await ctx.db.insert("importJobs", {
-      bookId,
-      kind,
-      status: "queued",
-      createdByUserId: userId,
-      startedAt: Date.now(),
-    });
-  },
-});
-
-export const applyResult = internalMutation({
-  args: {
-    jobId: v.id("importJobs"),
-    bookId: v.id("books"),
-    status: v.union(
-      v.literal("running"),
-      v.literal("done"),
-      v.literal("error"),
-    ),
-    message: v.optional(v.string()),
-    progress: v.optional(v.number()),
-    replace: v.optional(v.boolean()),
-    articles: v.optional(v.array(articleValidator)),
-  },
-  handler: async (ctx, args) => {
-    const job = await ctx.db.get(args.jobId);
-    if (!job) throw new Error("Job unbekannt");
-    if (job.bookId !== args.bookId) throw new Error("Job passt nicht zur Ausgabe");
-
-    let count = job.articleCount ?? 0;
-    if (args.articles && args.articles.length > 0) {
-      const old = args.replace
-        ? await ctx.db
-            .query("articles")
-            .withIndex("by_book", (q) => q.eq("bookId", args.bookId))
-            .collect()
-        : [];
-      for (const o of old) await ctx.db.delete(o._id);
-
-      for (const a of args.articles) {
-        await ctx.db.insert("articles", {
-          bookId: args.bookId,
-          order: a.order,
-          title: a.title,
-          subtitle: a.subtitle,
-          author: a.author,
-          teaser: a.teaser,
-          text: a.text,
-          pageStart: a.pageStart,
-          pageEnd: a.pageEnd,
-          boxes: a.boxes,
-          images: a.images,
-          source: a.source,
-          status: "draft",
-          updatedAt: Date.now(),
-        });
-      }
-      const all = await ctx.db
-        .query("articles")
-        .withIndex("by_book", (q) => q.eq("bookId", args.bookId))
-        .collect();
-      count = all.length;
-      await ctx.db.patch(args.bookId, { articleCount: count });
-    }
-
-    await ctx.db.patch(args.jobId, {
-      status: args.status,
-      message: args.message,
-      progress: args.progress,
-      articleCount: count,
-      finishedAt:
-        args.status === "done" || args.status === "error" ? Date.now() : undefined,
-    });
-    return { ok: true, articleCount: count };
-  },
-});
-
-export const setJobStatusInternal = internalMutation({
-  args: {
-    jobId: v.id("importJobs"),
-    status: v.union(
-      v.literal("queued"),
-      v.literal("running"),
-      v.literal("done"),
-      v.literal("error"),
-    ),
-    message: v.optional(v.string()),
-  },
-  handler: async (ctx, { jobId, status, message }) => {
-    await ctx.db.patch(jobId, {
-      status,
-      message,
-      finishedAt: status === "done" || status === "error" ? Date.now() : undefined,
-    });
-  },
-});
-
-export const getJobInternal = internalQuery({
-  args: { jobId: v.id("importJobs") },
-  handler: async (ctx, { jobId }) => await ctx.db.get(jobId),
-});
+export const jobKind = v.union(
+  v.literal("prepare"),
+  v.literal("pdf"),
+  v.literal("idml"),
+  v.literal("full"),
+);
 
 /**
- * Startet die Artikel-Extraktion. IDML wird bevorzugt: dort sind die Artikel
- * als zusammenhaengende Stories bereits sauber getrennt. PDF ist der
- * Heuristik-Weg mit optionaler LLM-Gruppierung im Extraktions-Dienst.
+ * Auftrag einstellen. Die Verarbeitung laeuft in einem eigenen Worker; die
+ * Warteschlange liegt in der Datenbank, damit ein Neustart nichts verliert.
  */
-export const start = action({
-  args: {
-    bookId: v.id("books"),
-    kind: v.union(v.literal("idml"), v.literal("pdf")),
-  },
-  handler: async (ctx, { bookId, kind }): Promise<{ jobId: Id<"importJobs"> }> => {
-    await ctx.runQuery(api.users.requireAdminQuery, {});
-    const userId = (await getAuthUserId(ctx)) ?? undefined;
-
-    const serviceUrl = process.env.EXTRACT_SERVICE_URL;
-    const secret =
-      process.env.EXTRACT_SERVICE_SECRET ?? process.env.TILE_SERVICE_SECRET;
-    if (!serviceUrl) throw new Error("EXTRACT_SERVICE_URL nicht gesetzt");
-    if (!secret) throw new Error("EXTRACT_SERVICE_SECRET nicht gesetzt");
-
-    const jobId: Id<"importJobs"> = await ctx.runMutation(
-      internal.imports.createJobInternal,
-      { bookId, kind, userId: userId as Id<"users"> | undefined },
+export const enqueue = mutation({
+  args: { issueId: v.id("issues"), kind: jobKind, payload: v.optional(v.string()) },
+  handler: async (ctx, { issueId, kind, payload }) => {
+    await requireEditor(ctx);
+    const userId = await getAuthUserId(ctx);
+    const open = await ctx.db
+      .query("importJobs")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    const running = open.find(
+      (j) => j.status === "queued" || j.status === "claimed" || j.status === "running",
     );
-
-    const src: any = await ctx.runQuery(internal.books.getSourceUrlForService, {
-      bookId,
-      which: kind === "idml" ? "source" : "pdf",
-    });
-    if (!src?.url) {
-      await ctx.runMutation(internal.imports.setJobStatusInternal, {
-        jobId,
-        status: "error",
-        message:
-          kind === "idml"
-            ? "Keine IDML-Quelldatei hinterlegt"
-            : "Keine PDF-Datei hinterlegt",
-      });
-      throw new Error("Quelldatei fehlt");
+    if (running) {
+      throw new Error("Für diese Ausgabe läuft bereits ein Auftrag");
     }
-
-    const convexSiteUrl = process.env.CONVEX_SITE_URL;
-    const res = await fetch(`${serviceUrl.replace(/\/$/, "")}/api/extract`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-service-secret": secret,
-      },
-      body: JSON.stringify({
-        jobId,
-        bookId,
-        kind,
-        url: src.url,
-        callbackUrl: `${convexSiteUrl}/import/result`,
-      }),
+    const id = await ctx.db.insert("importJobs", {
+      issueId,
+      kind,
+      status: "queued",
+      payload,
+      attempts: 0,
+      createdByUserId: (userId as Id<"users">) ?? undefined,
+      createdAt: Date.now(),
     });
-    if (!res.ok) {
-      const text = await res.text();
-      await ctx.runMutation(internal.imports.setJobStatusInternal, {
-        jobId,
-        status: "error",
-        message: `Dienst antwortet ${res.status}: ${text.slice(0, 300)}`,
-      });
-      throw new Error(`Extraktionsdienst nicht erreichbar (${res.status})`);
-    }
-
-    await ctx.runMutation(internal.imports.setJobStatusInternal, {
-      jobId,
-      status: "running",
-      message: "Extraktion laeuft",
-    });
-    return { jobId };
+    await audit(ctx, "import.enqueue", issueId, kind);
+    return id;
   },
 });
 
-export const listForBook = query({
-  args: { bookId: v.id("books") },
-  handler: async (ctx, { bookId }) => {
-    await requireAdmin(ctx);
+export const listForIssue = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requireEditor(ctx);
     return await ctx.db
       .query("importJobs")
-      .withIndex("by_book", (q) => q.eq("bookId", bookId))
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .order("desc")
       .take(10);
   },
 });
 
-export const cancelJob = mutation({
+export const cancel = mutation({
   args: { jobId: v.id("importJobs") },
   handler: async (ctx, { jobId }) => {
-    await requireAdmin(ctx);
+    await requireEditor(ctx);
     await ctx.db.patch(jobId, {
       status: "error",
-      message: "Abgebrochen",
+      message: "Von der Redaktion abgebrochen",
       finishedAt: Date.now(),
     });
+  },
+});
+
+export const retry = mutation({
+  args: { jobId: v.id("importJobs") },
+  handler: async (ctx, { jobId }) => {
+    await requireEditor(ctx);
+    await ctx.db.patch(jobId, {
+      status: "queued",
+      message: undefined,
+      leaseUntil: undefined,
+      workerId: undefined,
+      progress: 0,
+    });
+  },
+});
+
+// --- Worker-Schnittstelle (nur ueber die Dienst-Endpunkte erreichbar) ---
+
+/**
+ * Holt genau einen Auftrag und sperrt ihn. Abgelaufene Sperren werden dabei
+ * wieder freigegeben, damit ein abgestuerzter Worker nichts blockiert.
+ */
+export const claimNextInternal = internalMutation({
+  args: { workerId: v.string() },
+  handler: async (ctx, { workerId }) => {
+    const now = Date.now();
+
+    for (const status of ["claimed", "running"] as const) {
+      const stuck = await ctx.db
+        .query("importJobs")
+        .withIndex("by_status", (q) => q.eq("status", status))
+        .collect();
+      for (const job of stuck) {
+        if ((job.leaseUntil ?? 0) < now) {
+          const failed = job.attempts >= MAX_ATTEMPTS;
+          await ctx.db.patch(job._id, {
+            status: failed ? "error" : "queued",
+            message: failed
+              ? `Abgebrochen nach ${job.attempts} Versuchen ohne Lebenszeichen`
+              : "Sperre abgelaufen, wird erneut versucht",
+            leaseUntil: undefined,
+            workerId: undefined,
+            finishedAt: failed ? now : undefined,
+          });
+        }
+      }
+    }
+
+    const queued = await ctx.db
+      .query("importJobs")
+      .withIndex("by_status", (q) => q.eq("status", "queued"))
+      .order("asc")
+      .first();
+    if (!queued) return null;
+
+    await ctx.db.patch(queued._id, {
+      status: "claimed",
+      workerId,
+      leaseUntil: now + LEASE_MS,
+      attempts: queued.attempts + 1,
+      startedAt: queued.startedAt ?? now,
+      message: "Vom Worker übernommen",
+    });
+
+    const issue = await ctx.db.get(queued.issueId);
+    const sources = await ctx.db
+      .query("issueSources")
+      .withIndex("by_issue", (q) => q.eq("issueId", queued.issueId))
+      .collect();
+    const pages = await ctx.db
+      .query("issuePages")
+      .withIndex("by_issue_index", (q) => q.eq("issueId", queued.issueId))
+      .collect();
+
+    const sourceInfos = [];
+    for (const s of sources) {
+      const asset = await ctx.db.get(s.assetId);
+      if (!asset) continue;
+      sourceInfos.push({
+        sourceId: s._id,
+        kind: s.kind,
+        role: s.role,
+        assetId: s.assetId,
+        assetKey: asset.key,
+        filename: s.filename,
+        url: asset.convexStorageId
+          ? await ctx.storage.getUrl(asset.convexStorageId)
+          : null,
+      });
+    }
+
+    return {
+      jobId: queued._id,
+      issueId: queued.issueId,
+      publicationId: issue?.publicationId ?? null,
+      kind: queued.kind,
+      payload: queued.payload ?? null,
+      attempts: queued.attempts + 1,
+      sources: sourceInfos,
+      pages: pages.map((p) => ({
+        index: p.index,
+        sourceAssetId: p.sourceAssetId,
+        sourcePageIndex: p.sourcePageIndex,
+        role: p.role,
+        printedLabel: p.printedLabel ?? null,
+      })),
+    };
+  },
+});
+
+export const heartbeatInternal = internalMutation({
+  args: {
+    jobId: v.id("importJobs"),
+    workerId: v.string(),
+    progress: v.optional(v.number()),
+    message: v.optional(v.string()),
+  },
+  handler: async (ctx, { jobId, workerId, progress, message }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job) return { ok: false, reason: "unknown" };
+    if (job.workerId && job.workerId !== workerId) {
+      // Ein anderer Worker hat uebernommen; dieser soll aufhoeren.
+      return { ok: false, reason: "lease_lost" };
+    }
+    await ctx.db.patch(jobId, {
+      status: "running",
+      progress,
+      message,
+      leaseUntil: Date.now() + LEASE_MS,
+    });
+    return { ok: true };
+  },
+});
+
+export const finishInternal = internalMutation({
+  args: {
+    jobId: v.id("importJobs"),
+    workerId: v.string(),
+    status: v.union(v.literal("review"), v.literal("done"), v.literal("error")),
+    message: v.optional(v.string()),
+  },
+  handler: async (ctx, { jobId, workerId, status, message }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job) return { ok: false };
+    if (job.workerId && job.workerId !== workerId) return { ok: false };
+    const failedTooOften = status === "error" && job.attempts >= MAX_ATTEMPTS;
+    await ctx.db.patch(jobId, {
+      status: status === "error" && !failedTooOften ? "queued" : status,
+      message,
+      progress: status === "error" ? job.progress : 100,
+      leaseUntil: undefined,
+      workerId: undefined,
+      finishedAt: status === "error" && !failedTooOften ? undefined : Date.now(),
+    });
+    return { ok: true, requeued: status === "error" && !failedTooOften };
+  },
+});
+
+export const getInternal = internalQuery({
+  args: { jobId: v.id("importJobs") },
+  handler: async (ctx, { jobId }) => await ctx.db.get(jobId),
+});
+
+/**
+ * Uebernimmt das Ergebnis eines Laufs in einem Zug.
+ *
+ * Alles aus den Quellen Abgeleitete wird ersetzt: Artikel, Bloecke, Regionen,
+ * Artikelbilder und das automatisch erzeugte Inhaltsverzeichnis. Da eine
+ * Convex-Mutation eine Transaktion ist, sehen Leser entweder den alten oder den
+ * neuen Stand — nie eine Mischung. Quellen, Stammdaten, Kaeufe und
+ * Freischaltungen bleiben unberuehrt.
+ */
+export const activateResultInternal = internalMutation({
+  args: {
+    jobId: v.id("importJobs"),
+    workerId: v.string(),
+    issueId: v.id("issues"),
+    articles: v.array(articleInput),
+    tocEntries: v.optional(
+      v.array(
+        v.object({
+          order: v.number(),
+          label: v.string(),
+          section: v.optional(v.string()),
+          pageIndex: v.optional(v.number()),
+          articleOrder: v.optional(v.number()),
+          level: v.optional(v.number()),
+        }),
+      ),
+    ),
+  },
+  handler: async (ctx, { jobId, workerId, issueId, articles, tocEntries }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job) throw new Error("Auftrag unbekannt");
+    if (job.issueId !== issueId) throw new Error("Auftrag passt nicht zur Ausgabe");
+    if (job.workerId && job.workerId !== workerId) {
+      throw new Error("Sperre liegt bei einem anderen Worker");
+    }
+
+    const oldArticles = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    for (const a of oldArticles) {
+      for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
+        const rows = await ctx.db
+          .query(table)
+          .withIndex("by_article", (q: any) => q.eq("articleId", a._id))
+          .collect();
+        for (const r of rows) await ctx.db.delete(r._id);
+      }
+      await ctx.db.delete(a._id);
+    }
+    const oldToc = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    for (const t of oldToc) await ctx.db.delete(t._id);
+
+    const now = Date.now();
+    const byOrder = new Map<number, Id<"articles">>();
+    for (const a of articles) {
+      const searchText = [
+        a.title,
+        a.subtitle ?? "",
+        a.teaser ?? "",
+        ...a.blocks.map((b) => b.text),
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+        .slice(0, 100000);
+      const articleId = await ctx.db.insert("articles", {
+        issueId,
+        order: a.order,
+        title: a.title.slice(0, 300),
+        subtitle: a.subtitle,
+        author: a.author,
+        teaser: a.teaser,
+        source: a.source,
+        reviewStatus: "pending",
+        confidence: a.confidence,
+        primaryPageIndex: a.primaryPageIndex,
+        pageStart: a.pageStart,
+        pageEnd: a.pageEnd,
+        searchText,
+        createdAt: now,
+        updatedAt: now,
+      });
+      byOrder.set(a.order, articleId);
+      for (const b of a.blocks) {
+        await ctx.db.insert("articleBlocks", {
+          articleId,
+          issueId,
+          order: b.order,
+          type: b.type,
+          text: b.text,
+          sourcePageIndex: b.sourcePageIndex,
+          sourceStoryId: b.sourceStoryId,
+          sourceFrameId: b.sourceFrameId,
+          styleName: b.styleName,
+          confidence: b.confidence,
+        });
+      }
+      for (const [i, r] of a.regions.entries()) {
+        await ctx.db.insert("articleRegions", {
+          articleId,
+          issueId,
+          pageIndex: r.pageIndex,
+          x0: r.x0,
+          y0: r.y0,
+          x1: r.x1,
+          y1: r.y1,
+          kind: r.kind ?? "body",
+          order: i,
+        });
+      }
+      for (const [i, img] of (a.images ?? []).entries()) {
+        await ctx.db.insert("articleAssets", {
+          articleId,
+          issueId,
+          assetId: img.assetId,
+          order: i,
+          caption: img.caption,
+          sourcePageIndex: img.sourcePageIndex,
+        });
+      }
+    }
+
+    const toc =
+      tocEntries && tocEntries.length > 0
+        ? tocEntries
+        : articles.map((a) => ({
+            order: a.order,
+            label: a.title,
+            pageIndex: a.primaryPageIndex,
+            articleOrder: a.order,
+            level: 1,
+            section: undefined as string | undefined,
+          }));
+    for (const t of toc) {
+      await ctx.db.insert("tocEntries", {
+        issueId,
+        order: t.order,
+        label: t.label.slice(0, 300),
+        section: t.section,
+        pageIndex: t.pageIndex,
+        articleId:
+          t.articleOrder !== undefined ? byOrder.get(t.articleOrder) : undefined,
+        level: t.level ?? 1,
+      });
+    }
+
+    await ctx.db.patch(issueId, { articleCount: articles.length, updatedAt: now });
+    console.log(
+      JSON.stringify({
+        event: "import.activated",
+        issueId,
+        articles: articles.length,
+        toc: toc.length,
+      }),
+    );
+    return { articles: articles.length, toc: toc.length };
   },
 });

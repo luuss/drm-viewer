@@ -1,14 +1,24 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin } from "./admin";
+import { requireAdmin, audit } from "./roles";
 
 export const list = query({
   args: {},
   handler: async (ctx) => {
     const plans = await ctx.db.query("subscriptionPlans").collect();
-    return plans
-      .filter((p) => p.isActive)
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const active = plans.filter((p) => p.isActive);
+    active.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    return Promise.all(
+      active.map(async (p) => ({
+        _id: p._id,
+        name: p.name,
+        description: p.description ?? null,
+        priceAmountCents: p.priceAmountCents,
+        interval: p.interval,
+        publicationId: p.publicationId,
+        publication: (await ctx.db.get(p.publicationId))?.name ?? null,
+      })),
+    );
   },
 });
 
@@ -24,25 +34,21 @@ export const create = mutation({
   args: {
     name: v.string(),
     description: v.optional(v.string()),
+    publicationId: v.id("publications"),
     stripePriceId: v.string(),
-    priceCents: v.number(),
-    currency: v.optional(v.string()),
+    priceAmountCents: v.number(),
     interval: v.union(v.literal("month"), v.literal("year")),
     sortOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    return await ctx.db.insert("subscriptionPlans", {
-      name: args.name,
-      description: args.description,
-      stripePriceId: args.stripePriceId,
-      priceCents: args.priceCents,
-      currency: args.currency ?? "eur",
-      interval: args.interval,
+    const id = await ctx.db.insert("subscriptionPlans", {
+      ...args,
       isActive: true,
-      sortOrder: args.sortOrder,
       createdAt: Date.now(),
     });
+    await audit(ctx, "plan.create", id, args.name);
+    return id;
   },
 });
 
@@ -51,14 +57,6 @@ export const setActive = mutation({
   handler: async (ctx, { planId, isActive }) => {
     await requireAdmin(ctx);
     await ctx.db.patch(planId, { isActive });
-  },
-});
-
-export const remove = mutation({
-  args: { planId: v.id("subscriptionPlans") },
-  handler: async (ctx, { planId }) => {
-    await requireAdmin(ctx);
-    await ctx.db.delete(planId);
   },
 });
 

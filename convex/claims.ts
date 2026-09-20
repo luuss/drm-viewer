@@ -1,6 +1,8 @@
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { assetUrl } from "./assets";
+import { Id } from "./_generated/dataModel";
 
 const TOKEN_TTL_DAYS = 30;
 
@@ -12,15 +14,16 @@ function randomToken() {
     .join("");
 }
 
-export const createClaimTokenInternal = internalMutation({
+export const createInternal = internalMutation({
   args: {
-    bookId: v.id("books"),
+    issueId: v.id("issues"),
     email: v.string(),
     stripeSessionId: v.optional(v.string()),
+    externalOrderId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Stripe wiederholt Ereignisse. Ohne diese Pruefung entstuende je
-    // Wiederholung ein weiterer, unabhaengig einloesbarer Gratis-Zugang.
+    // Stripe wiederholt Ereignisse; ohne diese Pruefung entstuende je
+    // Wiederholung ein weiterer einloesbarer Zugang.
     if (args.stripeSessionId) {
       const existing = await ctx.db
         .query("claimTokens")
@@ -34,9 +37,10 @@ export const createClaimTokenInternal = internalMutation({
     const now = Date.now();
     await ctx.db.insert("claimTokens", {
       token,
-      bookId: args.bookId,
-      email: args.email,
+      issueId: args.issueId,
+      email: args.email.toLowerCase(),
       stripeSessionId: args.stripeSessionId,
+      externalOrderId: args.externalOrderId,
       expiresAt: now + TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
       createdAt: now,
     });
@@ -55,18 +59,16 @@ export const lookup = query({
     if (row.claimedByUserId)
       return { status: "already_claimed" as const, email: row.email };
     if (row.expiresAt < Date.now()) return { status: "expired" as const };
-    const book = await ctx.db.get(row.bookId);
+    const issue = await ctx.db.get(row.issueId);
     return {
       status: "valid" as const,
       email: row.email,
-      book: book
+      issue: issue
         ? {
-            _id: book._id,
-            title: book.title,
-            pageCount: book.pageCount,
-            coverUrl: book.coverStorageId
-              ? await ctx.storage.getUrl(book.coverStorageId)
-              : null,
+            _id: issue._id,
+            title: issue.title,
+            pageCount: issue.pageCount,
+            coverUrl: await assetUrl(ctx, issue.coverAssetId),
           }
         : null,
     };
@@ -77,21 +79,21 @@ export const claim = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Bitte zuerst einloggen");
+    if (!userId) throw new Error("Bitte zuerst anmelden");
 
     const row = await ctx.db
       .query("claimTokens")
       .withIndex("by_token", (q) => q.eq("token", token))
       .unique();
-    if (!row) throw new Error("Ungültiger Token");
-    if (row.claimedByUserId) throw new Error("Token bereits eingelöst");
-    if (row.expiresAt < Date.now()) throw new Error("Token abgelaufen");
+    if (!row) throw new Error("Ungültiger Link");
+    if (row.claimedByUserId) throw new Error("Link bereits eingelöst");
+    if (row.expiresAt < Date.now()) throw new Error("Link abgelaufen");
 
-    // Der Link gehoert zur Kauf-Mailadresse. Ohne diese Bindung waere er ein
-    // frei weitergebbarer Zweitzugang zum selben Heft.
-    const user = await ctx.db.get(userId);
+    // Der Link gehoert zur Kauf-Mailadresse, sonst waere er ein frei
+    // weitergebbarer Zweitzugang.
+    const user = await ctx.db.get(userId as Id<"users">);
     const email = ((user as any)?.email ?? "").toLowerCase();
-    if (row.email && email !== row.email.toLowerCase()) {
+    if (row.email && email !== row.email) {
       throw new Error(
         `Dieser Link gehört zu ${row.email}. Bitte mit dieser Adresse anmelden.`,
       );
@@ -99,23 +101,24 @@ export const claim = mutation({
 
     const existing = await ctx.db
       .query("entitlements")
-      .withIndex("by_user_book", (q) =>
-        q.eq("userId", userId).eq("bookId", row.bookId),
+      .withIndex("by_user_issue", (q) =>
+        q.eq("userId", userId as Id<"users">).eq("issueId", row.issueId),
       )
       .first();
     if (!existing) {
       await ctx.db.insert("entitlements", {
-        userId,
-        bookId: row.bookId,
+        userId: userId as Id<"users">,
+        issueId: row.issueId,
         source: "claim",
         stripeSessionId: row.stripeSessionId,
+        externalOrderId: row.externalOrderId,
         createdAt: Date.now(),
       });
     }
     await ctx.db.patch(row._id, {
-      claimedByUserId: userId,
+      claimedByUserId: userId as Id<"users">,
       claimedAt: Date.now(),
     });
-    return { bookId: row.bookId };
+    return { issueId: row.issueId };
   },
 });

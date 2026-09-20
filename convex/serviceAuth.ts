@@ -33,3 +33,28 @@ export function checkExtractSecret(header: string | null): boolean {
   if (!expected || !header) return false;
   return timingSafeEqual(header, expected);
 }
+
+/**
+ * Signatur des externen Shops pruefen: HMAC-SHA256 ueber den rohen Rumpf mit
+ * dem gemeinsamen Geheimnis, hexadezimal. Ohne gesetztes Geheimnis ist die
+ * Schnittstelle zu.
+ */
+export async function checkShopSignature(
+  rawBody: string,
+  signature: string | null,
+): Promise<boolean> {
+  const secret = process.env.SHOP_WEBHOOK_SECRET;
+  if (!secret || !signature) return false;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
+  const expected = Array.from(new Uint8Array(mac))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return timingSafeEqual(signature.trim().toLowerCase(), expected);
+}

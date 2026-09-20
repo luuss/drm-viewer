@@ -3,18 +3,18 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
-/**
- * Einmalkauf abgeschlossen: Kauf protokollieren, Heft freischalten,
- * Claim-Link mailen (fuer Kaeufe ohne eingeloggten Account).
- */
+function log(event: string, detail: Record<string, unknown>) {
+  console.log(JSON.stringify({ event, ...detail }));
+}
+
+/** Einzelkauf abgeschlossen und bezahlt. */
 export const checkoutCompleted = internalAction({
   args: {
     sessionId: v.string(),
     mode: v.string(),
     email: v.string(),
     amountCents: v.number(),
-    currency: v.string(),
-    bookId: v.optional(v.string()),
+    issueId: v.optional(v.string()),
     planId: v.optional(v.string()),
     userId: v.optional(v.string()),
     paymentIntentId: v.optional(v.string()),
@@ -23,47 +23,43 @@ export const checkoutCompleted = internalAction({
     const userId = args.userId ? (args.userId as Id<"users">) : undefined;
 
     if (args.mode === "payment") {
-      if (!args.bookId) return { ok: false, reason: "missing bookId" };
-      const bookId = args.bookId as Id<"books">;
+      if (!args.issueId) return { ok: false, reason: "issueId fehlt" };
+      const issueId = args.issueId as Id<"issues">;
 
       await ctx.runMutation(internal.purchases.recordPaid, {
         userId,
         email: args.email,
-        bookId,
+        issueId,
         stripeSessionId: args.sessionId,
         stripePaymentIntentId: args.paymentIntentId,
         amountCents: args.amountCents,
-        currency: args.currency,
       });
 
       if (userId) {
-        await ctx.runMutation(internal.books.grantEntitlementInternal, {
+        await ctx.runMutation(internal.entitlements.grantInternal, {
           userId,
-          bookId,
+          issueId,
           source: "purchase",
           stripeSessionId: args.sessionId,
         });
-      }
-
-      // Claim-Link nur, wenn der Kauf ohne angemeldetes Konto lief. Sonst
-      // haette der Kaeufer sein Heft UND einen weitergebbaren Zweitzugang.
-      if (!userId && args.email) {
-        const token: string = await ctx.runMutation(
-          internal.claims.createClaimTokenInternal,
-          { bookId, email: args.email, stripeSessionId: args.sessionId },
-        );
+      } else if (args.email) {
+        // Gastkauf: Zugang per Einloeselink, gebunden an die Kauf-Mailadresse.
+        const token: string = await ctx.runMutation(internal.claims.createInternal, {
+          issueId,
+          email: args.email,
+          stripeSessionId: args.sessionId,
+        });
         try {
           await ctx.runAction(internal.email.sendClaimEmail, {
             email: args.email,
-            bookId,
+            issueId,
             token,
           });
         } catch (err) {
-          // Ein Ausfall beim Mailversand darf den Webhook nicht auf 500 setzen;
-          // Stripe wuerde ihn sonst tagelang wiederholen.
           console.error("Claim-Mail fehlgeschlagen", err);
         }
       }
+      log("stripe.checkout.paid", { mode: "payment", issueId });
       return { ok: true };
     }
 
@@ -74,7 +70,6 @@ export const checkoutCompleted = internalAction({
         planId: args.planId ? (args.planId as Id<"subscriptionPlans">) : undefined,
         stripeSessionId: args.sessionId,
         amountCents: args.amountCents,
-        currency: args.currency,
       });
       if (args.email) {
         try {
@@ -85,30 +80,35 @@ export const checkoutCompleted = internalAction({
           console.error("Abo-Mail fehlgeschlagen", err);
         }
       }
+      log("stripe.checkout.paid", { mode: "subscription" });
       return { ok: true };
     }
-
     return { ok: true };
   },
 });
 
-/** Abo-Status aus Stripe spiegeln (aktiv, gekuendigt, Zahlung offen). */
+/**
+ * Abo-Zustand spiegeln. Die Freischaltung einzelner Ausgaben passiert in
+ * `subscriptions.upsertFromStripe`, damit sie idempotent bleibt.
+ */
 export const subscriptionChanged = internalAction({
   args: {
     stripeSubscriptionId: v.string(),
     stripeCustomerId: v.string(),
     stripePriceId: v.optional(v.string()),
     status: v.string(),
+    startedAt: v.optional(v.number()),
     currentPeriodEnd: v.optional(v.number()),
     cancelAtPeriodEnd: v.optional(v.boolean()),
+    endedAt: v.optional(v.number()),
     userId: v.optional(v.string()),
-    email: v.optional(v.string()),
+    publicationId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     let userId = args.userId;
     if (!userId) {
       const found: string | null = await ctx.runQuery(
-        internal.subscriptions.findUserByCustomer,
+        internal.subscriptions.findUserByCustomerInternal,
         { stripeCustomerId: args.stripeCustomerId },
       );
       userId = found ?? undefined;
@@ -119,35 +119,40 @@ export const subscriptionChanged = internalAction({
       stripeSubscriptionId: args.stripeSubscriptionId,
       stripePriceId: args.stripePriceId,
       status: args.status,
+      startedAt: args.startedAt,
       currentPeriodEnd: args.currentPeriodEnd,
       cancelAtPeriodEnd: args.cancelAtPeriodEnd,
+      endedAt: args.endedAt,
+      publicationId: args.publicationId
+        ? (args.publicationId as Id<"publications">)
+        : undefined,
+    });
+    log("stripe.subscription", {
+      status: args.status,
+      subscription: args.stripeSubscriptionId,
     });
     return { ok: true };
   },
 });
 
-/** Rueckerstattung oder Chargeback: Zugriff auf das Einzelheft entziehen. */
+/** Rueckerstattung oder Chargeback: Kaufzugriff entziehen. */
 export const paymentReversed = internalAction({
   args: { stripePaymentIntentId: v.string(), reason: v.string() },
   handler: async (ctx, { stripePaymentIntentId, reason }) => {
     const purchaseId = await ctx.runMutation(internal.purchases.markRefunded, {
       stripePaymentIntentId,
     });
-    console.log(
-      `Zahlung rueckabgewickelt (${reason}) fuer ${stripePaymentIntentId}: ${
-        purchaseId ? "Zugriff entzogen" : "kein Kauf gefunden"
-      }`,
-    );
+    log("stripe.reversed", { reason, revoked: Boolean(purchaseId) });
     return { ok: true };
   },
 });
 
-/** Zahlung geplatzt: Kunde informieren, Zugriff laeuft nach Kulanzfrist aus. */
 export const paymentFailed = internalAction({
-  args: { email: v.optional(v.string()), amountCents: v.optional(v.number()) },
+  args: { email: v.optional(v.string()) },
   handler: async (ctx, { email }) => {
     if (!email) return { ok: false };
     await ctx.runAction(internal.email.sendPaymentFailed, { email });
+    log("stripe.paymentFailed", {});
     return { ok: true };
   },
 });

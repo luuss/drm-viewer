@@ -1,31 +1,122 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  MutationCtx,
+  mutation,
+  query,
+} from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { requireAdmin } from "./admin";
-import { hasBookAccess } from "./access";
+import { requireEditor, requirePublisher, audit } from "./roles";
+import { hasIssueAccess, accessibleIssueIds } from "./access";
+import { blockType } from "./schema";
 import { Id } from "./_generated/dataModel";
 
-const boxValidator = v.object({
-  page: v.number(),
+const regionInput = v.object({
+  pageIndex: v.number(),
   x0: v.number(),
   y0: v.number(),
   x1: v.number(),
   y1: v.number(),
+  kind: v.optional(
+    v.union(
+      v.literal("body"),
+      v.literal("title"),
+      v.literal("image"),
+      v.literal("other"),
+    ),
+  ),
 });
 
-/** Artikelumrisse fuer den Seitenmodus: Klickflaechen ueber dem Kachelbild. */
-export const listForBook = query({
-  args: { bookId: v.id("books") },
-  handler: async (ctx, { bookId }) => {
+const blockInput = v.object({
+  order: v.number(),
+  type: blockType,
+  text: v.string(),
+  sourcePageIndex: v.optional(v.number()),
+  sourceStoryId: v.optional(v.string()),
+  sourceFrameId: v.optional(v.string()),
+  styleName: v.optional(v.string()),
+  confidence: v.optional(v.number()),
+});
+
+export const articleInput = v.object({
+  order: v.number(),
+  title: v.string(),
+  subtitle: v.optional(v.string()),
+  author: v.optional(v.string()),
+  teaser: v.optional(v.string()),
+  source: v.union(
+    v.literal("idml"),
+    v.literal("pdf"),
+    v.literal("manual"),
+    v.literal("hybrid"),
+  ),
+  confidence: v.optional(v.number()),
+  primaryPageIndex: v.number(),
+  pageStart: v.number(),
+  pageEnd: v.number(),
+  blocks: v.array(blockInput),
+  regions: v.array(regionInput),
+  images: v.optional(
+    v.array(
+      v.object({
+        assetId: v.id("assets"),
+        caption: v.optional(v.string()),
+        sourcePageIndex: v.optional(v.number()),
+      }),
+    ),
+  ),
+});
+
+/** Suchtext wird aus den Bloecken abgeleitet, nie getrennt gepflegt. */
+async function rebuildSearchText(ctx: MutationCtx, articleId: Id<"articles">) {
+  const article = await ctx.db.get(articleId);
+  if (!article) return;
+  const blocks = await ctx.db
+    .query("articleBlocks")
+    .withIndex("by_article_order", (q) => q.eq("articleId", articleId))
+    .collect();
+  const parts = [article.title, article.subtitle ?? "", article.teaser ?? ""];
+  for (const b of blocks) parts.push(b.text);
+  await ctx.db.patch(articleId, {
+    searchText: parts.filter(Boolean).join("\n\n").slice(0, 100000),
+    updatedAt: Date.now(),
+  });
+}
+
+async function recountIssue(ctx: MutationCtx, issueId: Id<"issues">) {
+  const rows = await ctx.db
+    .query("articles")
+    .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+    .collect();
+  await ctx.db.patch(issueId, { articleCount: rows.length, updatedAt: Date.now() });
+}
+
+async function renumber(ctx: MutationCtx, issueId: Id<"issues">) {
+  const rows = await ctx.db
+    .query("articles")
+    .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
+    .collect();
+  let i = 1;
+  for (const r of rows) {
+    if (r.order !== i) await ctx.db.patch(r._id, { order: i });
+    i++;
+  }
+}
+
+// --- Leser ---
+
+export const listForReader = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    if (!(await hasBookAccess(ctx, userId, bookId))) return [];
+    if (!(await hasIssueAccess(ctx, userId as Id<"users">, issueId))) return [];
     const rows = await ctx.db
       .query("articles")
-      .withIndex("by_book_order", (q) => q.eq("bookId", bookId))
+      .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
       .collect();
     return rows
-      .filter((a) => a.status === "published")
+      .filter((a) => a.reviewStatus === "approved")
       .map((a) => ({
         _id: a._id,
         order: a.order,
@@ -33,87 +124,131 @@ export const listForBook = query({
         subtitle: a.subtitle ?? null,
         author: a.author ?? null,
         teaser: a.teaser ?? null,
+        primaryPageIndex: a.primaryPageIndex,
         pageStart: a.pageStart,
         pageEnd: a.pageEnd,
-        boxes: a.boxes,
       }));
   },
 });
 
-export const getArticle = query({
+/** Klickflaechen im Seitenmodus, nur von freigegebenen Artikeln. */
+export const regionsForReader = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    if (!(await hasIssueAccess(ctx, userId as Id<"users">, issueId))) return [];
+    const regions = await ctx.db
+      .query("articleRegions")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    const published = new Map<string, boolean>();
+    const out = [];
+    for (const r of regions) {
+      const key = r.articleId as string;
+      if (!published.has(key)) {
+        const a = await ctx.db.get(r.articleId);
+        published.set(key, a?.reviewStatus === "approved");
+      }
+      if (!published.get(key)) continue;
+      out.push({
+        articleId: r.articleId,
+        pageIndex: r.pageIndex,
+        x0: r.x0,
+        y0: r.y0,
+        x1: r.x1,
+        y1: r.y1,
+        kind: r.kind,
+      });
+    }
+    return out;
+  },
+});
+
+export const getForReader = query({
   args: { articleId: v.id("articles") },
   handler: async (ctx, { articleId }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return null;
-    const a = await ctx.db.get(articleId);
-    if (!a) return null;
-    if (a.status !== "published") {
-      // Entwuerfe sieht nur die Redaktion.
-      await requireAdmin(ctx);
-    } else if (!(await hasBookAccess(ctx, userId, a.bookId))) {
+    const article = await ctx.db.get(articleId);
+    if (!article) return null;
+    if (!(await hasIssueAccess(ctx, userId as Id<"users">, article.issueId))) {
       return null;
     }
-    const images = await Promise.all(
-      (a.images ?? []).map(async (img) => ({
-        url: await ctx.storage.getUrl(img.storageId),
-        page: img.page,
-        caption: img.caption ?? null,
-      })),
-    );
+    // Sichtbar sind freigegebene Artikel veroeffentlichter Ausgaben.
+    if (article.reviewStatus !== "approved") return null;
+    const issue = await ctx.db.get(article.issueId);
+    if (!issue?.isPublished) return null;
+
+    const blocks = await ctx.db
+      .query("articleBlocks")
+      .withIndex("by_article_order", (q) => q.eq("articleId", articleId))
+      .collect();
+    const images = await ctx.db
+      .query("articleAssets")
+      .withIndex("by_article", (q) => q.eq("articleId", articleId))
+      .collect();
+    const withUrls = [];
+    for (const img of images.sort((a, b) => a.order - b.order)) {
+      const asset = await ctx.db.get(img.assetId);
+      const url = asset?.convexStorageId
+        ? await ctx.storage.getUrl(asset.convexStorageId)
+        : null;
+      if (url) {
+        withUrls.push({ url, caption: img.caption ?? null, page: img.sourcePageIndex ?? null });
+      }
+    }
     return {
-      _id: a._id,
-      bookId: a.bookId,
-      title: a.title,
-      subtitle: a.subtitle ?? null,
-      author: a.author ?? null,
-      text: a.text,
-      pageStart: a.pageStart,
-      pageEnd: a.pageEnd,
-      images,
+      _id: article._id,
+      issueId: article.issueId,
+      order: article.order,
+      title: article.title,
+      subtitle: article.subtitle ?? null,
+      author: article.author ?? null,
+      teaser: article.teaser ?? null,
+      primaryPageIndex: article.primaryPageIndex,
+      pageStart: article.pageStart,
+      pageEnd: article.pageEnd,
+      blocks: blocks.map((b) => ({ type: b.type, text: b.text })),
+      images: withUrls,
     };
   },
 });
 
-/** Volltextsuche ueber alle Ausgaben, auf die der Nutzer Zugriff hat. */
 export const search = query({
-  args: { term: v.string(), bookId: v.optional(v.id("books")) },
-  handler: async (ctx, { term, bookId }) => {
+  args: { term: v.string(), issueId: v.optional(v.id("issues")) },
+  handler: async (ctx, { term, issueId }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId || term.trim().length < 3) return [];
+    const allowed = await accessibleIssueIds(ctx, userId as Id<"users">);
 
     const hits = await ctx.db
       .query("articles")
       .withSearchIndex("search_text", (q) => {
-        const base = q.search("text", term).eq("status", "published");
-        return bookId ? base.eq("bookId", bookId) : base;
+        const base = q.search("searchText", term).eq("reviewStatus", "approved");
+        return issueId ? base.eq("issueId", issueId) : base;
       })
-      .take(40);
+      .take(60);
 
-    const allowed = new Map<string, boolean>();
     const out = [];
     for (const a of hits) {
-      const key = a.bookId as string;
-      if (!allowed.has(key)) {
-        allowed.set(key, await hasBookAccess(ctx, userId, a.bookId));
-      }
-      if (!allowed.get(key)) continue;
-      const book = await ctx.db.get(a.bookId);
-      // Unveroeffentlichte Hefte tauchen auch nicht als Treffer auf.
-      if (!book?.isPublished) continue;
-      const idx = a.text.toLowerCase().indexOf(term.toLowerCase());
-      const start = Math.max(0, idx - 60);
+      if (!allowed.has(a.issueId as string)) continue;
+      const issue = await ctx.db.get(a.issueId);
+      if (!issue?.isPublished) continue;
+      const idx = a.searchText.toLowerCase().indexOf(term.toLowerCase());
+      const start = Math.max(0, idx - 70);
       out.push({
         _id: a._id,
-        bookId: a.bookId,
-        bookTitle: book?.title ?? "",
+        issueId: a.issueId,
+        issueTitle: issue.title,
         title: a.title,
-        pageStart: a.pageStart,
+        pageIndex: a.primaryPageIndex,
         snippet:
           (start > 0 ? "..." : "") +
-          a.text.slice(start, start + 220).replace(/\s+/g, " ") +
+          a.searchText.slice(start, start + 220).replace(/\s+/g, " ") +
           "...",
       });
-      if (out.length >= 20) break;
+      if (out.length >= 25) break;
     }
     return out;
   },
@@ -121,14 +256,56 @@ export const search = query({
 
 // --- Redaktion ---
 
-export const listForAdmin = query({
-  args: { bookId: v.id("books") },
-  handler: async (ctx, { bookId }) => {
-    await requireAdmin(ctx);
-    return await ctx.db
+export const listForEditors = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requireEditor(ctx);
+    const rows = await ctx.db
       .query("articles")
-      .withIndex("by_book_order", (q) => q.eq("bookId", bookId))
+      .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
       .collect();
+    return Promise.all(
+      rows.map(async (a) => {
+        const blocks = await ctx.db
+          .query("articleBlocks")
+          .withIndex("by_article_order", (q) => q.eq("articleId", a._id))
+          .collect();
+        const regions = await ctx.db
+          .query("articleRegions")
+          .withIndex("by_article", (q) => q.eq("articleId", a._id))
+          .collect();
+        return {
+          _id: a._id,
+          order: a.order,
+          title: a.title,
+          subtitle: a.subtitle ?? null,
+          author: a.author ?? null,
+          teaser: a.teaser ?? null,
+          reviewStatus: a.reviewStatus,
+          confidence: a.confidence ?? null,
+          primaryPageIndex: a.primaryPageIndex,
+          pageStart: a.pageStart,
+          pageEnd: a.pageEnd,
+          charCount: blocks.reduce((n, b) => n + b.text.length, 0),
+          blocks: blocks.map((b) => ({
+            _id: b._id,
+            order: b.order,
+            type: b.type,
+            text: b.text,
+            sourcePageIndex: b.sourcePageIndex ?? null,
+          })),
+          regions: regions.map((r) => ({
+            _id: r._id,
+            pageIndex: r.pageIndex,
+            x0: r.x0,
+            y0: r.y0,
+            x1: r.x1,
+            y1: r.y1,
+            kind: r.kind,
+          })),
+        };
+      }),
+    );
   },
 });
 
@@ -139,169 +316,426 @@ export const updateArticle = mutation({
     subtitle: v.optional(v.string()),
     author: v.optional(v.string()),
     teaser: v.optional(v.string()),
-    text: v.optional(v.string()),
-    order: v.optional(v.number()),
-    pageStart: v.optional(v.number()),
-    pageEnd: v.optional(v.number()),
-    status: v.optional(v.union(v.literal("draft"), v.literal("published"))),
-    boxes: v.optional(v.array(boxValidator)),
+    primaryPageIndex: v.optional(v.number()),
   },
   handler: async (ctx, { articleId, ...patch }) => {
-    await requireAdmin(ctx);
+    await requireEditor(ctx);
     const clean: Record<string, unknown> = { updatedAt: Date.now() };
     for (const [k, val] of Object.entries(patch)) {
       if (val !== undefined) clean[k] = val;
     }
     await ctx.db.patch(articleId, clean);
+    await rebuildSearchText(ctx, articleId);
   },
 });
 
-export const deleteArticle = mutation({
-  args: { articleId: v.id("articles") },
-  handler: async (ctx, { articleId }) => {
-    await requireAdmin(ctx);
-    const a = await ctx.db.get(articleId);
-    await ctx.db.delete(articleId);
-    if (a) await recount(ctx, a.bookId);
+export const updateBlock = mutation({
+  args: {
+    blockId: v.id("articleBlocks"),
+    text: v.optional(v.string()),
+    type: v.optional(blockType),
+  },
+  handler: async (ctx, { blockId, text, type }) => {
+    await requireEditor(ctx);
+    const block = await ctx.db.get(blockId);
+    if (!block) throw new Error("Block nicht gefunden");
+    const clean: Record<string, unknown> = {};
+    if (text !== undefined) clean.text = text;
+    if (type !== undefined) clean.type = type;
+    await ctx.db.patch(blockId, clean);
+    await rebuildSearchText(ctx, block.articleId);
   },
 });
 
-/** Zwei falsch getrennte Artikel wieder zusammenfuehren (haeufigster Korrekturfall). */
+export const deleteBlock = mutation({
+  args: { blockId: v.id("articleBlocks") },
+  handler: async (ctx, { blockId }) => {
+    await requireEditor(ctx);
+    const block = await ctx.db.get(blockId);
+    if (!block) return;
+    await ctx.db.delete(blockId);
+    await rebuildSearchText(ctx, block.articleId);
+  },
+});
+
+/** Block innerhalb des Artikels verschieben oder in einen anderen Artikel. */
+export const moveBlock = mutation({
+  args: {
+    blockId: v.id("articleBlocks"),
+    targetArticleId: v.optional(v.id("articles")),
+    direction: v.optional(v.union(v.literal("up"), v.literal("down"))),
+  },
+  handler: async (ctx, { blockId, targetArticleId, direction }) => {
+    await requireEditor(ctx);
+    const block = await ctx.db.get(blockId);
+    if (!block) throw new Error("Block nicht gefunden");
+
+    if (targetArticleId && targetArticleId !== block.articleId) {
+      const target = await ctx.db.get(targetArticleId);
+      if (!target) throw new Error("Zielartikel nicht gefunden");
+      if (target.issueId !== block.issueId) {
+        throw new Error("Zielartikel gehoert zu einer anderen Ausgabe");
+      }
+      const targetBlocks = await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_article_order", (q) => q.eq("articleId", targetArticleId))
+        .collect();
+      await ctx.db.patch(blockId, {
+        articleId: targetArticleId,
+        order: targetBlocks.length + 1,
+      });
+      await rebuildSearchText(ctx, block.articleId);
+      await rebuildSearchText(ctx, targetArticleId);
+      return;
+    }
+
+    if (!direction) return;
+    const siblings = await ctx.db
+      .query("articleBlocks")
+      .withIndex("by_article_order", (q) => q.eq("articleId", block.articleId))
+      .collect();
+    const pos = siblings.findIndex((b) => b._id === blockId);
+    const swapWith = direction === "up" ? pos - 1 : pos + 1;
+    if (swapWith < 0 || swapWith >= siblings.length) return;
+    const other = siblings[swapWith];
+    await ctx.db.patch(blockId, { order: other.order });
+    await ctx.db.patch(other._id, { order: block.order });
+    await rebuildSearchText(ctx, block.articleId);
+  },
+});
+
 export const mergeArticles = mutation({
   args: { targetId: v.id("articles"), sourceId: v.id("articles") },
   handler: async (ctx, { targetId, sourceId }) => {
-    await requireAdmin(ctx);
+    await requireEditor(ctx);
     const target = await ctx.db.get(targetId);
     const source = await ctx.db.get(sourceId);
     if (!target || !source) throw new Error("Artikel nicht gefunden");
-    if (target.bookId !== source.bookId) {
+    if (target.issueId !== source.issueId) {
       throw new Error("Artikel gehoeren zu verschiedenen Ausgaben");
     }
+
+    const targetBlocks = await ctx.db
+      .query("articleBlocks")
+      .withIndex("by_article_order", (q) => q.eq("articleId", targetId))
+      .collect();
+    const sourceBlocks = await ctx.db
+      .query("articleBlocks")
+      .withIndex("by_article_order", (q) => q.eq("articleId", sourceId))
+      .collect();
+    let order = targetBlocks.length + 1;
+    for (const b of sourceBlocks) {
+      await ctx.db.patch(b._id, { articleId: targetId, order: order++ });
+    }
+
+    const regions = await ctx.db
+      .query("articleRegions")
+      .withIndex("by_article", (q) => q.eq("articleId", sourceId))
+      .collect();
+    for (const r of regions) await ctx.db.patch(r._id, { articleId: targetId });
+
+    const images = await ctx.db
+      .query("articleAssets")
+      .withIndex("by_article", (q) => q.eq("articleId", sourceId))
+      .collect();
+    for (const img of images) await ctx.db.patch(img._id, { articleId: targetId });
+
     await ctx.db.patch(targetId, {
-      text: `${target.text}\n\n${source.text}`.trim(),
       pageStart: Math.min(target.pageStart, source.pageStart),
       pageEnd: Math.max(target.pageEnd, source.pageEnd),
-      boxes: [...target.boxes, ...source.boxes],
-      images: [...(target.images ?? []), ...(source.images ?? [])],
       updatedAt: Date.now(),
     });
     await ctx.db.delete(sourceId);
-    await recount(ctx, target.bookId);
+    await rebuildSearchText(ctx, targetId);
+    await renumber(ctx, target.issueId);
+    await recountIssue(ctx, target.issueId);
+    await audit(ctx, "article.merge", targetId, `aus ${sourceId}`);
   },
 });
 
-/** Artikel an einer Textstelle teilen (falsch zusammengezogene Artikel). */
-export const splitArticle = mutation({
-  args: { articleId: v.id("articles"), splitAt: v.number(), newTitle: v.string() },
-  handler: async (ctx, { articleId, splitAt, newTitle }) => {
-    await requireAdmin(ctx);
-    const a = await ctx.db.get(articleId);
-    if (!a) throw new Error("Artikel nicht gefunden");
-    if (splitAt <= 0 || splitAt >= a.text.length) {
-      throw new Error("Teilungsstelle liegt ausserhalb des Textes");
-    }
-    const head = a.text.slice(0, splitAt).trim();
-    const tail = a.text.slice(splitAt).trim();
-    await ctx.db.patch(articleId, { text: head, updatedAt: Date.now() });
-    await ctx.db.insert("articles", {
-      bookId: a.bookId,
-      order: a.order + 0.5,
-      title: newTitle,
-      text: tail,
-      pageStart: a.pageStart,
-      pageEnd: a.pageEnd,
-      boxes: a.boxes,
-      source: a.source,
-      status: "draft",
-      updatedAt: Date.now(),
-    });
-    await renumber(ctx, a.bookId);
-    await recount(ctx, a.bookId);
+/**
+ * Teilt an einer Blockgrenze. Regionen wandern anhand der Seiten der Bloecke
+ * mit, statt beiden Teilen alle Flaechen zu vererben — genau der Fehler des
+ * alten Zeichenversatz-Splits.
+ */
+export const splitAtBlock = mutation({
+  args: {
+    articleId: v.id("articles"),
+    firstBlockOfSecond: v.id("articleBlocks"),
+    newTitle: v.optional(v.string()),
   },
-});
-
-export const publishAll = mutation({
-  args: { bookId: v.id("books") },
-  handler: async (ctx, { bookId }) => {
-    await requireAdmin(ctx);
-    const rows = await ctx.db
-      .query("articles")
-      .withIndex("by_book", (q) => q.eq("bookId", bookId))
+  handler: async (ctx, { articleId, firstBlockOfSecond, newTitle }) => {
+    await requireEditor(ctx);
+    const article = await ctx.db.get(articleId);
+    if (!article) throw new Error("Artikel nicht gefunden");
+    const blocks = await ctx.db
+      .query("articleBlocks")
+      .withIndex("by_article_order", (q) => q.eq("articleId", articleId))
       .collect();
-    for (const r of rows) {
-      if (r.status !== "published") {
-        await ctx.db.patch(r._id, { status: "published", updatedAt: Date.now() });
+    const cut = blocks.findIndex((b) => b._id === firstBlockOfSecond);
+    if (cut <= 0) throw new Error("Trennstelle liegt nicht innerhalb des Artikels");
+
+    const head = blocks.slice(0, cut);
+    const tail = blocks.slice(cut);
+    const tailPages = new Set(
+      tail.map((b) => b.sourcePageIndex).filter((p): p is number => p !== undefined),
+    );
+    const headPages = new Set(
+      head.map((b) => b.sourcePageIndex).filter((p): p is number => p !== undefined),
+    );
+
+    const title =
+      newTitle?.trim() ||
+      tail.find((b) => b.type === "heading")?.text ||
+      `${article.title} (Fortsetzung)`;
+
+    const now = Date.now();
+    const newId = await ctx.db.insert("articles", {
+      issueId: article.issueId,
+      order: article.order + 0.5,
+      title: title.slice(0, 300),
+      source: article.source,
+      reviewStatus: "pending",
+      primaryPageIndex: Math.min(...(tailPages.size ? [...tailPages] : [article.primaryPageIndex])),
+      pageStart: Math.min(...(tailPages.size ? [...tailPages] : [article.pageStart])),
+      pageEnd: Math.max(...(tailPages.size ? [...tailPages] : [article.pageEnd])),
+      searchText: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    let order = 1;
+    for (const b of tail) {
+      await ctx.db.patch(b._id, { articleId: newId, order: order++ });
+    }
+
+    const regions = await ctx.db
+      .query("articleRegions")
+      .withIndex("by_article", (q) => q.eq("articleId", articleId))
+      .collect();
+    for (const r of regions) {
+      const inTail = tailPages.has(r.pageIndex);
+      const inHead = headPages.has(r.pageIndex);
+      if (inTail && !inHead) await ctx.db.patch(r._id, { articleId: newId });
+    }
+
+    const images = await ctx.db
+      .query("articleAssets")
+      .withIndex("by_article", (q) => q.eq("articleId", articleId))
+      .collect();
+    for (const img of images) {
+      if (img.sourcePageIndex !== undefined && tailPages.has(img.sourcePageIndex)) {
+        await ctx.db.patch(img._id, { articleId: newId });
       }
     }
-    return rows.length;
+
+    if (headPages.size > 0) {
+      await ctx.db.patch(articleId, {
+        pageStart: Math.min(...headPages),
+        pageEnd: Math.max(...headPages),
+        updatedAt: now,
+      });
+    }
+
+    await rebuildSearchText(ctx, articleId);
+    await rebuildSearchText(ctx, newId);
+    await renumber(ctx, article.issueId);
+    await recountIssue(ctx, article.issueId);
+    await audit(ctx, "article.split", articleId, `neu ${newId}`);
+    return newId;
   },
 });
 
-export const replaceForBookInternal = internalMutation({
+export const moveRegion = mutation({
+  args: { regionId: v.id("articleRegions"), targetArticleId: v.id("articles") },
+  handler: async (ctx, { regionId, targetArticleId }) => {
+    await requireEditor(ctx);
+    const region = await ctx.db.get(regionId);
+    const target = await ctx.db.get(targetArticleId);
+    if (!region || !target) throw new Error("Nicht gefunden");
+    if (region.issueId !== target.issueId) {
+      throw new Error("Andere Ausgabe");
+    }
+    await ctx.db.patch(regionId, { articleId: targetArticleId });
+  },
+});
+
+/**
+ * Redaktionelle Entscheidung. Es gibt keinen eigenen Artikel-Publish: was
+ * freigegeben ist, wird mit der Ausgabe sichtbar — und Aenderungen daran sind
+ * bei einer veroeffentlichten Ausgabe sofort live.
+ */
+export const setReviewStatus = mutation({
   args: {
-    bookId: v.id("books"),
-    replace: v.boolean(),
-    articles: v.array(
-      v.object({
-        order: v.number(),
-        title: v.string(),
-        subtitle: v.optional(v.string()),
-        author: v.optional(v.string()),
-        teaser: v.optional(v.string()),
-        text: v.string(),
-        pageStart: v.number(),
-        pageEnd: v.number(),
-        boxes: v.array(boxValidator),
-        source: v.union(v.literal("idml"), v.literal("pdf"), v.literal("manual")),
-      }),
+    articleId: v.id("articles"),
+    reviewStatus: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("excluded"),
     ),
   },
-  handler: async (ctx, { bookId, replace, articles }) => {
+  handler: async (ctx, { articleId, reviewStatus }) => {
+    await requireEditor(ctx);
+    await ctx.db.patch(articleId, { reviewStatus, updatedAt: Date.now() });
+    await audit(ctx, `article.review.${reviewStatus}`, articleId);
+  },
+});
+
+/** Alle offenen Artikel einer Ausgabe auf einmal freigeben. */
+export const approveAllPending = mutation({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requireEditor(ctx);
+    const rows = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    let n = 0;
+    for (const r of rows) {
+      if (r.reviewStatus === "pending") {
+        await ctx.db.patch(r._id, {
+          reviewStatus: "approved",
+          updatedAt: Date.now(),
+        });
+        n++;
+      }
+    }
+    await audit(ctx, "article.approveAll", issueId, `${n} Artikel`);
+    return n;
+  },
+});
+
+/** Zaehlt offene Entscheidungen — das Veroeffentlichungs-Gate haengt daran. */
+export const reviewSummary = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requireEditor(ctx);
+    const rows = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    return {
+      total: rows.length,
+      pending: rows.filter((r) => r.reviewStatus === "pending").length,
+      approved: rows.filter((r) => r.reviewStatus === "approved").length,
+      excluded: rows.filter((r) => r.reviewStatus === "excluded").length,
+    };
+  },
+});
+
+export const removeArticle = mutation({
+  args: { articleId: v.id("articles") },
+  handler: async (ctx, { articleId }) => {
+    await requireEditor(ctx);
+    const article = await ctx.db.get(articleId);
+    if (!article) return;
+    for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
+        .collect();
+      for (const r of rows) await ctx.db.delete(r._id);
+    }
+    await ctx.db.delete(articleId);
+    await renumber(ctx, article.issueId);
+    await recountIssue(ctx, article.issueId);
+  },
+});
+
+// --- Import ---
+
+export const replaceForIssueInternal = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    replace: v.boolean(),
+    articles: v.array(articleInput),
+  },
+  handler: async (ctx, { issueId, replace, articles }) => {
     if (replace) {
       const old = await ctx.db
         .query("articles")
-        .withIndex("by_book", (q) => q.eq("bookId", bookId))
+        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
         .collect();
-      for (const o of old) await ctx.db.delete(o._id);
+      for (const a of old) {
+        for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
+          const rows = await ctx.db
+            .query(table)
+            .withIndex("by_article", (q: any) => q.eq("articleId", a._id))
+            .collect();
+          for (const r of rows) await ctx.db.delete(r._id);
+        }
+        await ctx.db.delete(a._id);
+      }
     }
+
+    const now = Date.now();
     for (const a of articles) {
-      await ctx.db.insert("articles", {
-        bookId,
+      const searchText = [a.title, a.subtitle ?? "", a.teaser ?? "", ...a.blocks.map((b) => b.text)]
+        .filter(Boolean)
+        .join("\n\n")
+        .slice(0, 100000);
+      const articleId = await ctx.db.insert("articles", {
+        issueId,
         order: a.order,
-        title: a.title,
+        title: a.title.slice(0, 300),
         subtitle: a.subtitle,
         author: a.author,
         teaser: a.teaser,
-        text: a.text,
+        source: a.source,
+        // Import landet immer als offene Entscheidung, nichts geht ungeprueft live.
+        reviewStatus: "pending",
+        confidence: a.confidence,
+        primaryPageIndex: a.primaryPageIndex,
         pageStart: a.pageStart,
         pageEnd: a.pageEnd,
-        boxes: a.boxes,
-        source: a.source,
-        // Import landet als Entwurf — die Redaktion gibt frei.
-        status: "draft",
-        updatedAt: Date.now(),
+        searchText,
+        createdAt: now,
+        updatedAt: now,
       });
+      for (const b of a.blocks) {
+        await ctx.db.insert("articleBlocks", {
+          articleId,
+          issueId,
+          order: b.order,
+          type: b.type,
+          text: b.text,
+          sourcePageIndex: b.sourcePageIndex,
+          sourceStoryId: b.sourceStoryId,
+          sourceFrameId: b.sourceFrameId,
+          styleName: b.styleName,
+          confidence: b.confidence,
+        });
+      }
+      for (const [i, r] of a.regions.entries()) {
+        await ctx.db.insert("articleRegions", {
+          articleId,
+          issueId,
+          pageIndex: r.pageIndex,
+          x0: r.x0,
+          y0: r.y0,
+          x1: r.x1,
+          y1: r.y1,
+          kind: r.kind ?? "body",
+          order: i,
+        });
+      }
+      for (const [i, img] of (a.images ?? []).entries()) {
+        await ctx.db.insert("articleAssets", {
+          articleId,
+          issueId,
+          assetId: img.assetId,
+          order: i,
+          caption: img.caption,
+          sourcePageIndex: img.sourcePageIndex,
+        });
+      }
     }
-    await recount(ctx, bookId);
-    return articles.length;
+
+    const all = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    await ctx.db.patch(issueId, { articleCount: all.length, updatedAt: now });
+    return all.length;
   },
 });
-
-async function recount(ctx: any, bookId: Id<"books">) {
-  const rows = await ctx.db
-    .query("articles")
-    .withIndex("by_book", (q: any) => q.eq("bookId", bookId))
-    .collect();
-  await ctx.db.patch(bookId, { articleCount: rows.length });
-}
-
-async function renumber(ctx: any, bookId: Id<"books">) {
-  const rows = await ctx.db
-    .query("articles")
-    .withIndex("by_book_order", (q: any) => q.eq("bookId", bookId))
-    .collect();
-  let i = 1;
-  for (const r of rows) {
-    await ctx.db.patch(r._id, { order: i++ });
-  }
-}

@@ -1,51 +1,56 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { hasIssueAccess } from "./access";
+import { Id } from "./_generated/dataModel";
 
-export const save = mutation({
-  args: { bookId: v.id("books"), page: v.number() },
-  handler: async (ctx, { bookId, page }) => {
+export const get = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const ent = await ctx.db
-      .query("entitlements")
-      .withIndex("by_user_book", (q) =>
-        q.eq("userId", userId).eq("bookId", bookId),
-      )
-      .first();
-    if (!ent) throw new Error("Kein Zugriff");
-
-    const existing = await ctx.db
+    if (!userId) return null;
+    const row = await ctx.db
       .query("readingProgress")
-      .withIndex("by_user_book", (q) =>
-        q.eq("userId", userId).eq("bookId", bookId),
+      .withIndex("by_user_issue", (q) =>
+        q.eq("userId", userId as Id<"users">).eq("issueId", issueId),
       )
       .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, { page, updatedAt: Date.now() });
-    } else {
-      await ctx.db.insert("readingProgress", {
-        userId,
-        bookId,
-        page,
-        updatedAt: Date.now(),
-      });
-    }
+    if (!row) return null;
+    return {
+      mode: row.mode,
+      pageIndex: row.pageIndex,
+      articleId: row.articleId ?? null,
+      updatedAt: row.updatedAt,
+    };
   },
 });
 
-export const get = query({
-  args: { bookId: v.id("books") },
-  handler: async (ctx, { bookId }) => {
+export const save = mutation({
+  args: {
+    issueId: v.id("issues"),
+    mode: v.union(v.literal("page"), v.literal("article")),
+    pageIndex: v.number(),
+    articleId: v.optional(v.id("articles")),
+  },
+  handler: async (ctx, { issueId, mode, pageIndex, articleId }) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return 0;
-    const row = await ctx.db
+    if (!userId) return;
+    if (!(await hasIssueAccess(ctx, userId as Id<"users">, issueId))) return;
+    const existing = await ctx.db
       .query("readingProgress")
-      .withIndex("by_user_book", (q) =>
-        q.eq("userId", userId).eq("bookId", bookId),
+      .withIndex("by_user_issue", (q) =>
+        q.eq("userId", userId as Id<"users">).eq("issueId", issueId),
       )
       .unique();
-    return row?.page ?? 0;
+    const doc = {
+      userId: userId as Id<"users">,
+      issueId,
+      mode,
+      pageIndex,
+      articleId,
+      updatedAt: Date.now(),
+    };
+    if (existing) await ctx.db.patch(existing._id, doc);
+    else await ctx.db.insert("readingProgress", doc);
   },
 });

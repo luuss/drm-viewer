@@ -3,7 +3,7 @@ import { httpAction } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import { registerRoutes } from "@convex-dev/stripe";
 import { auth } from "./auth";
-import { checkExtractSecret, checkTileSecret } from "./serviceAuth";
+import { checkExtractSecret, checkTileSecret, checkShopSignature } from "./serviceAuth";
 
 const http = httpRouter();
 
@@ -13,13 +13,12 @@ function secs(ts: number | null | undefined): number | undefined {
   return ts == null ? undefined : ts * 1000;
 }
 
-// Die Component verifiziert die Signatur und spiegelt Stripe-Objekte selbst.
-// Danach laufen diese Handler mit der Fachlogik (Freischaltung, Mails).
+// Die Component prueft die Signatur und spiegelt Stripe-Objekte; danach laufen
+// diese Handler mit der Fachlogik.
 registerRoutes(http, components.stripe, {
   webhookPath: "/stripe/webhook",
   events: {
-    // SEPA, Klarna und Sofort melden "completed" bereits als unbezahlt.
-    // Freischalten erst, wenn das Geld da ist.
+    // SEPA, Klarna und Sofort melden "completed" auch unbezahlt.
     "checkout.session.completed": async (ctx, event) => {
       const s = event.data.object as any;
       if (s.payment_status !== "paid" && s.payment_status !== "no_payment_required") {
@@ -30,8 +29,7 @@ registerRoutes(http, components.stripe, {
         mode: s.mode ?? "payment",
         email: s.customer_details?.email ?? s.customer_email ?? "",
         amountCents: s.amount_total ?? 0,
-        currency: s.currency ?? "eur",
-        bookId: s.metadata?.bookId || undefined,
+        issueId: s.metadata?.issueId || undefined,
         planId: s.metadata?.planId || undefined,
         userId: s.metadata?.userId || undefined,
         paymentIntentId:
@@ -45,8 +43,7 @@ registerRoutes(http, components.stripe, {
         mode: s.mode ?? "payment",
         email: s.customer_details?.email ?? s.customer_email ?? "",
         amountCents: s.amount_total ?? 0,
-        currency: s.currency ?? "eur",
-        bookId: s.metadata?.bookId || undefined,
+        issueId: s.metadata?.issueId || undefined,
         planId: s.metadata?.planId || undefined,
         userId: s.metadata?.userId || undefined,
         paymentIntentId:
@@ -80,101 +77,59 @@ registerRoutes(http, components.stripe, {
         });
       }
     },
-    "customer.subscription.created": async (ctx, event) => {
-      const s = event.data.object as any;
-      await ctx.runAction(internal.stripeEvents.subscriptionChanged, {
-        stripeSubscriptionId: s.id,
-        stripeCustomerId:
-          typeof s.customer === "string" ? s.customer : s.customer?.id,
-        stripePriceId: s.items?.data?.[0]?.price?.id,
-        status: s.status,
-        currentPeriodEnd: secs(s.current_period_end),
-        cancelAtPeriodEnd: s.cancel_at_period_end ?? false,
-        userId: s.metadata?.userId || undefined,
-      });
-    },
-    "customer.subscription.updated": async (ctx, event) => {
-      const s = event.data.object as any;
-      await ctx.runAction(internal.stripeEvents.subscriptionChanged, {
-        stripeSubscriptionId: s.id,
-        stripeCustomerId:
-          typeof s.customer === "string" ? s.customer : s.customer?.id,
-        stripePriceId: s.items?.data?.[0]?.price?.id,
-        status: s.status,
-        currentPeriodEnd: secs(s.current_period_end),
-        cancelAtPeriodEnd: s.cancel_at_period_end ?? false,
-        userId: s.metadata?.userId || undefined,
-      });
-    },
-    "customer.subscription.deleted": async (ctx, event) => {
-      const s = event.data.object as any;
-      await ctx.runAction(internal.stripeEvents.subscriptionChanged, {
-        stripeSubscriptionId: s.id,
-        stripeCustomerId:
-          typeof s.customer === "string" ? s.customer : s.customer?.id,
-        stripePriceId: s.items?.data?.[0]?.price?.id,
-        status: "canceled",
-        currentPeriodEnd: secs(s.current_period_end),
-        cancelAtPeriodEnd: true,
-        userId: s.metadata?.userId || undefined,
-      });
-    },
     "invoice.payment_failed": async (ctx, event) => {
       const inv = event.data.object as any;
       await ctx.runAction(internal.stripeEvents.paymentFailed, {
         email: inv.customer_email ?? undefined,
-        amountCents: inv.amount_due ?? undefined,
+      });
+    },
+    "customer.subscription.created": subscriptionHandler,
+    "customer.subscription.updated": subscriptionHandler,
+    "customer.subscription.deleted": async (ctx: any, event: any) => {
+      const s = event.data.object as any;
+      await ctx.runAction(internal.stripeEvents.subscriptionChanged, {
+        stripeSubscriptionId: s.id,
+        stripeCustomerId: typeof s.customer === "string" ? s.customer : s.customer?.id,
+        stripePriceId: s.items?.data?.[0]?.price?.id,
+        status: "canceled",
+        startedAt: secs(s.start_date),
+        currentPeriodEnd: secs(s.current_period_end),
+        endedAt: secs(s.ended_at) ?? Date.now(),
+        cancelAtPeriodEnd: true,
+        userId: s.metadata?.userId || undefined,
+        publicationId: s.metadata?.publicationId || undefined,
       });
     },
   },
 });
 
-/**
- * Rueckkanal des Extraktions-Dienstes (IDML/PDF -> Artikel).
- * Authentifiziert ueber das gemeinsame Service-Geheimnis, nicht ueber Nutzer-Login.
- */
-http.route({
-  path: "/import/result",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    if (!checkExtractSecret(request.headers.get("x-service-secret"))) {
-      return new Response("forbidden", { status: 403 });
-    }
-    let body: any;
-    try {
-      body = await request.json();
-    } catch {
-      return new Response("bad json", { status: 400 });
-    }
-    try {
-      const result = await ctx.runMutation(internal.imports.applyResult, {
-        jobId: body.jobId,
-        bookId: body.bookId,
-        status: body.status,
-        message: body.message,
-        progress: body.progress,
-        articles: body.articles,
-        replace: body.replace ?? false,
-      });
-      return Response.json(result);
-    } catch (err: any) {
-      return new Response(err?.message ?? "error", { status: 400 });
-    }
-  }),
-});
+async function subscriptionHandler(ctx: any, event: any) {
+  const s = event.data.object as any;
+  await ctx.runAction(internal.stripeEvents.subscriptionChanged, {
+    stripeSubscriptionId: s.id,
+    stripeCustomerId: typeof s.customer === "string" ? s.customer : s.customer?.id,
+    stripePriceId: s.items?.data?.[0]?.price?.id,
+    status: s.status,
+    startedAt: secs(s.start_date),
+    currentPeriodEnd: secs(s.current_period_end),
+    cancelAtPeriodEnd: s.cancel_at_period_end ?? false,
+    endedAt: secs(s.ended_at),
+    userId: s.metadata?.userId || undefined,
+    publicationId: s.metadata?.publicationId || undefined,
+  });
+}
 
-/**
- * Endpunkte fuer den Kacheldienst. Vorher lagen diese Funktionen als
- * oeffentliche Queries offen und wurden nur ueber ein Argument geschuetzt —
- * damit war die signierte URL zum Original-PDF einen Request weit entfernt,
- * sobald das Geheimnis irgendwo auftauchte.
- */
-async function tileServiceRoute(
-  ctx: any,
+// --- Dienst-Endpunkte ---------------------------------------------------
+// Die zugehoerigen Convex-Funktionen sind intern. Das Geheimnis steht im
+// Header und wird in konstanter Zeit verglichen; Kachel- und Extraktionsdienst
+// haben getrennte Geheimnisse.
+
+async function serviceRoute(
   request: Request,
+  allowed: (header: string | null) => boolean,
   run: (body: any) => Promise<unknown>,
 ): Promise<Response> {
-  if (!checkTileSecret(request.headers.get("x-service-secret"))) {
+  if (!allowed(request.headers.get("x-service-secret"))) {
     return new Response("forbidden", { status: 403 });
   }
   let body: any = {};
@@ -184,88 +139,174 @@ async function tileServiceRoute(
     return new Response("bad json", { status: 400 });
   }
   try {
-    return Response.json(await run(body));
+    return Response.json((await run(body)) ?? null);
   } catch (err: any) {
-    console.error("Dienst-Endpunkt fehlgeschlagen", err);
-    return new Response("error", { status: 400 });
+    console.error("Dienst-Endpunkt fehlgeschlagen", err?.message ?? err);
+    return new Response(
+      JSON.stringify({ error: String(err?.message ?? err).slice(0, 300) }),
+      { status: 400, headers: { "content-type": "application/json" } },
+    );
   }
 }
 
-http.route({
-  path: "/service/session/verify",
-  method: "POST",
-  handler: httpAction(async (ctx, request) =>
-    tileServiceRoute(ctx, request, async (body) => {
-      const result = await ctx.runQuery(internal.tileSessions.verify, {
-        sessionToken: String(body.sessionToken ?? ""),
-      });
-      return result;
-    }),
-  ),
-});
-
-http.route({
-  path: "/service/session/usage",
-  method: "POST",
-  handler: httpAction(async (ctx, request) =>
-    tileServiceRoute(ctx, request, async (body) =>
-      ctx.runMutation(internal.tileSessions.reportUsage, {
-        sessionToken: String(body.sessionToken ?? ""),
-        tiles: Number(body.tiles ?? 0),
-      }),
+function tileRoute(path: string, run: (ctx: any, body: any) => Promise<unknown>) {
+  http.route({
+    path,
+    method: "POST",
+    handler: httpAction(async (ctx, request) =>
+      serviceRoute(request, checkTileSecret, (body) => run(ctx, body)),
     ),
-  ),
-});
+  });
+}
 
-http.route({
-  path: "/service/book/pdf-url",
-  method: "POST",
-  handler: httpAction(async (ctx, request) =>
-    tileServiceRoute(ctx, request, async (body) =>
-      ctx.runQuery(internal.books.getStoragePdfUrlForService, {
-        bookId: body.bookId,
-      }),
+function workerRoute(path: string, run: (ctx: any, body: any) => Promise<unknown>) {
+  http.route({
+    path,
+    method: "POST",
+    handler: httpAction(async (ctx, request) =>
+      serviceRoute(request, checkExtractSecret, (body) => run(ctx, body)),
     ),
-  ),
-});
+  });
+}
 
-/** Nur der Extraktionsdienst braucht die Satzdatei — eigenes Geheimnis. */
-http.route({
-  path: "/service/book/source-url",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    if (!checkExtractSecret(request.headers.get("x-service-secret"))) {
-      return new Response("forbidden", { status: 403 });
-    }
-    let body: any = {};
-    try {
-      body = await request.json();
-    } catch {
-      return new Response("bad json", { status: 400 });
-    }
-    try {
-      const result = await ctx.runQuery(
-        internal.books.getSourceUrlForService,
-        { bookId: body.bookId, which: body.which === "source" ? "source" : "pdf" },
-      );
-      return Response.json(result);
-    } catch (err: any) {
-      console.error("Quell-URL fehlgeschlagen", err);
-      return new Response("error", { status: 400 });
-    }
+tileRoute("/service/session/verify", (ctx, body) =>
+  ctx.runQuery(internal.readerSessions.verifyInternal, {
+    sessionToken: String(body.sessionToken ?? ""),
   }),
-});
+);
 
-/** Der Extraktionsdienst legt Artikelbilder selbst im Speicher ab. */
+tileRoute("/service/session/usage", (ctx, body) =>
+  ctx.runMutation(internal.readerSessions.reportUsageInternal, {
+    sessionToken: String(body.sessionToken ?? ""),
+    tiles: Number(body.tiles ?? 0),
+  }),
+);
+
+tileRoute("/service/page/resolve", (ctx, body) =>
+  ctx.runQuery(internal.issuePages.resolveForServiceInternal, {
+    issueId: body.issueId,
+    index: Number(body.index ?? 0),
+  }),
+);
+
+workerRoute("/service/jobs/claim", (ctx, body) =>
+  ctx.runMutation(internal.imports.claimNextInternal, {
+    workerId: String(body.workerId ?? "worker"),
+  }),
+);
+
+workerRoute("/service/jobs/heartbeat", (ctx, body) =>
+  ctx.runMutation(internal.imports.heartbeatInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    progress: body.progress,
+    message: body.message,
+  }),
+);
+
+workerRoute("/service/jobs/finish", (ctx, body) =>
+  ctx.runMutation(internal.imports.finishInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    status: body.status,
+    message: body.message,
+  }),
+);
+
+workerRoute("/service/jobs/result", (ctx, body) =>
+  ctx.runMutation(internal.imports.activateResultInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    issueId: body.issueId,
+    articles: body.articles ?? [],
+    tocEntries: body.tocEntries,
+  }),
+);
+
+workerRoute("/service/storage/upload-url", async (ctx) => ({
+  uploadUrl: await ctx.runMutation(internal.assets.generateUploadUrlInternal, {}),
+}));
+
+workerRoute("/service/assets/register", (ctx, body) =>
+  ctx.runMutation(internal.assets.createInternal, {
+    key: String(body.key),
+    contentType: String(body.contentType ?? "application/octet-stream"),
+    kind: body.kind,
+    issueId: body.issueId,
+    convexStorageId: body.storageId,
+    bytes: body.bytes,
+    width: body.width,
+    height: body.height,
+    bucket: body.bucket,
+  }),
+);
+
+workerRoute("/service/pages/rendered", (ctx, body) =>
+  ctx.runMutation(internal.issuePages.setRenderedInternal, {
+    issueId: body.issueId,
+    index: Number(body.index),
+    width: Number(body.width),
+    height: Number(body.height),
+    tileManifestKey: body.tileManifestKey,
+    previewKey: body.previewKey,
+  }),
+);
+
+workerRoute("/service/issue/counts", (ctx, body) =>
+  ctx.runMutation(internal.issues.setCountsInternal, {
+    issueId: body.issueId,
+    pageCount: body.pageCount,
+    articleCount: body.articleCount,
+    coverAssetId: body.coverAssetId,
+  }),
+);
+
+// --- Shop-Schnittstelle -------------------------------------------------
+
 http.route({
-  path: "/service/storage/upload-url",
+  path: "/shop/entitlements",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    if (!checkExtractSecret(request.headers.get("x-service-secret"))) {
-      return new Response("forbidden", { status: 403 });
+    const raw = await request.text();
+    const signature = request.headers.get("x-shop-signature");
+    if (!(await checkShopSignature(raw, signature))) {
+      return new Response(JSON.stringify({ ok: false, error: "bad_signature" }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      });
     }
-    const url = await ctx.runMutation(internal.books.generateUploadUrlInternal, {});
-    return Response.json({ uploadUrl: url });
+    let body: any;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return new Response(JSON.stringify({ ok: false, error: "bad_json" }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    for (const field of ["externalOrderId", "email", "action"]) {
+      if (!body[field]) {
+        return Response.json(
+          { ok: false, error: "missing_field", field },
+          { status: 400 },
+        );
+      }
+    }
+    if (!body.issueSku && !body.issueId) {
+      return Response.json(
+        { ok: false, error: "missing_field", field: "issueSku" },
+        { status: 400 },
+      );
+    }
+    const result: any = await ctx.runMutation(internal.shopIntegration.applyInternal, {
+      externalOrderId: String(body.externalOrderId),
+      externalCustomerId: body.externalCustomerId,
+      email: String(body.email),
+      issueSku: body.issueSku,
+      issueId: body.issueId,
+      action: body.action === "revoke" ? "revoke" : "grant",
+    });
+    return Response.json(result, { status: result.ok ? 200 : 404 });
   }),
 });
 
