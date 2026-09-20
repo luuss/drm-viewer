@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from .model import AssembledArticle, SourceBlock, SourceImage
-from .textutil import clean_text, first_sentence
+from .textutil import clean_text, first_sentence, is_meaningful
 
 MIN_ARTICLE_CHARS = 280
 AUTHOR_PATTERN = re.compile(
@@ -73,7 +73,8 @@ def assemble(
             )
             # Eine Ueberschrift direkt nach einer Ueberschrift ist eine Dachzeile.
             if body_chars == 0 and current.blocks:
-                current.subtitle = current.title
+                if is_meaningful(current.title):
+                    current.subtitle = current.title
                 current.title = block.text.strip()
                 continue
 
@@ -92,9 +93,10 @@ def assemble(
         if block.kind in ("subheading", "lead") and not any(
             b.kind == "paragraph" for b in current.blocks
         ):
-            if current.subtitle is None:
+            if current.subtitle is None and is_meaningful(block.text):
                 current.subtitle = block.text.strip()
-            current.blocks.append(block)
+            if is_meaningful(block.text):
+                current.blocks.append(block)
             continue
 
         if block.kind == "paragraph" and AUTHOR_PATTERN.match(block.text.strip()):

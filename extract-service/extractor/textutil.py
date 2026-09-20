@@ -59,3 +59,19 @@ def glue_dropcap(text: str) -> str:
     if not m:
         return text
     return m.group(2) + text[m.end():]
+
+
+def is_meaningful(text: str) -> bool:
+    """Taugt der Text als Titel oder Unterzeile?
+
+    Gedrehter Satz kommt als Folge loser Einzelzeichen an. So etwas darf nicht
+    als Unterzeile im Artikel landen, auch wenn es nur ein paar Zeichen sind.
+    """
+    tokens = text.split()
+    if not tokens:
+        return False
+    woerter = [t for t in tokens if len(t) >= 3]
+    if len(woerter) >= 2:
+        return True
+    singles = sum(1 for t in tokens if len(t) <= 2)
+    return singles / len(tokens) < 0.5 and len(text.strip()) >= 12
