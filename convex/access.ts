@@ -39,6 +39,9 @@ export async function hasBookAccess(
 
   const book = await ctx.db.get(bookId);
   if (!book) return false;
+  // Ein gekauftes Heft bleibt lesbar, das Abo greift aber erst ab Erscheinen.
+  // Sonst liest jeder Abonnent die naechste Ausgabe vor dem Verkaufsstart.
+  if (!book.isPublished) return false;
   if (book.includedInSubscription === false) return false;
 
   return await hasActiveSubscription(ctx, userId);

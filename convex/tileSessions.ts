@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { hasBookAccess } from "./access";
 
@@ -7,6 +7,11 @@ const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** Gleichzeitige Lesesitzungen je Konto. Bremst geteilte Zugaenge. */
 const MAX_ACTIVE_SESSIONS = Number(process.env.MAX_ACTIVE_SESSIONS ?? "3");
+
+/** Innerhalb dieser Zeit liefert `issue` dieselbe Sitzung zurueck. */
+const REISSUE_COOLDOWN_MS = Number(
+  process.env.SESSION_REISSUE_COOLDOWN_MS ?? String(5 * 60 * 1000),
+);
 
 function randomToken() {
   const bytes = new Uint8Array(32);
@@ -36,8 +41,15 @@ export const issue = mutation({
     }
     const active = all.filter((o) => o.expiresAt >= now);
 
-    // Sitzung fuer dieselbe Ausgabe erneuern statt neue anzulegen.
+    // Sitzung fuer dieselbe Ausgabe erneuern statt neue anzulegen. Wer das in
+    // kurzer Folge tut, will die Kachelbremse umgehen — dann Bestand zurueckgeben.
     const sameBook = active.filter((o) => o.bookId === bookId);
+    const fresh = sameBook.find(
+      (o) => now - o.createdAt < REISSUE_COOLDOWN_MS,
+    );
+    if (fresh) {
+      return { token: fresh.sessionToken, expiresAt: fresh.expiresAt };
+    }
     for (const o of sameBook) await ctx.db.delete(o._id);
     const others = active.filter((o) => o.bookId !== bookId);
 
@@ -62,12 +74,9 @@ export const issue = mutation({
   },
 });
 
-export const verify = query({
-  args: { sessionToken: v.string(), serviceSecret: v.string() },
-  handler: async (ctx, { sessionToken, serviceSecret }) => {
-    if (serviceSecret !== process.env.TILE_SERVICE_SECRET) {
-      return { ok: false, reason: "bad_secret" as const };
-    }
+export const verify = internalQuery({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
     const row = await ctx.db
       .query("tileSessions")
       .withIndex("by_token", (q) => q.eq("sessionToken", sessionToken))
@@ -85,16 +94,9 @@ export const verify = query({
 });
 
 /** Der Kacheldienst meldet Verbrauch zurueck: Grundlage fuer Missbrauchserkennung. */
-export const reportUsage = mutation({
-  args: {
-    sessionToken: v.string(),
-    serviceSecret: v.string(),
-    tiles: v.number(),
-  },
-  handler: async (ctx, { sessionToken, serviceSecret, tiles }) => {
-    if (serviceSecret !== process.env.TILE_SERVICE_SECRET) {
-      return { ok: false };
-    }
+export const reportUsage = internalMutation({
+  args: { sessionToken: v.string(), tiles: v.number() },
+  handler: async (ctx, { sessionToken, tiles }) => {
     const row = await ctx.db
       .query("tileSessions")
       .withIndex("by_token", (q) => q.eq("sessionToken", sessionToken))

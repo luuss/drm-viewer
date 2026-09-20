@@ -135,6 +135,75 @@ export const getSignedStorageUrl = mutation({
   },
 });
 
+/**
+ * Fahrschein fuer die Aufbereitung einer neuen Ausgabe im Kacheldienst.
+ *
+ * Der Dienst laedt und schreibt ausschliesslich Adressen, die hier
+ * unterschrieben wurden. Damit ist er keine offene Sonde ins interne Netz.
+ *
+ * Aufbereitung heisst: Umschlag und Innenteil zu einer Datei zusammenfuegen
+ * (falls getrennt geliefert) und aus der ersten Seite das Titelbild rendern.
+ */
+export const issuePrepareTicket = mutation({
+  args: {
+    innerStorageId: v.id("_storage"),
+    coverPdfStorageId: v.optional(v.id("_storage")),
+    filetype: v.union(v.literal("pdf"), v.literal("epub")),
+  },
+  handler: async (ctx, { innerStorageId, coverPdfStorageId, filetype }) => {
+    await requireAdmin(ctx);
+    const secret = process.env.TILE_SERVICE_SECRET;
+    if (!secret) throw new Error("TILE_SERVICE_SECRET nicht gesetzt");
+
+    const innerUrl = await ctx.storage.getUrl(innerStorageId);
+    if (!innerUrl) throw new Error("Innenteil nicht gefunden");
+    const coverUrl = coverPdfStorageId
+      ? await ctx.storage.getUrl(coverPdfStorageId)
+      : null;
+    if (coverPdfStorageId && !coverUrl) throw new Error("Umschlag nicht gefunden");
+
+    // Der Dienst laedt das Ergebnis direkt in den Speicher hoch; die
+    // Adressen sind einmalig gueltig.
+    const mergedUploadUrl = coverUrl ? await ctx.storage.generateUploadUrl() : "";
+    const coverImageUploadUrl = await ctx.storage.generateUploadUrl();
+
+    const expiresAt = Date.now() + 30 * 60 * 1000;
+    const sources = coverUrl ? [coverUrl, innerUrl] : [innerUrl];
+    const payload = [
+      sources.join("|"),
+      mergedUploadUrl,
+      coverImageUploadUrl,
+      filetype,
+      String(expiresAt),
+    ].join("~");
+
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(payload),
+    );
+    const ticket = Array.from(new Uint8Array(sig))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    return {
+      sources,
+      mergedUploadUrl,
+      coverImageUploadUrl,
+      filetype,
+      expiresAt,
+      ticket,
+    };
+  },
+});
+
 export const createBook = mutation({
   args: {
     title: v.string(),
@@ -254,12 +323,9 @@ export const grantEntitlementInternal = internalMutation({
   },
 });
 
-export const getStoragePdfUrlForService = query({
-  args: { bookId: v.id("books"), serviceSecret: v.string() },
-  handler: async (ctx, { bookId, serviceSecret }) => {
-    if (serviceSecret !== process.env.TILE_SERVICE_SECRET) {
-      throw new Error("Invalid service secret");
-    }
+export const getStoragePdfUrlForService = internalQuery({
+  args: { bookId: v.id("books") },
+  handler: async (ctx, { bookId }) => {
     const book = await ctx.db.get(bookId);
     if (!book) throw new Error("Book not found");
     const url = await ctx.storage.getUrl(book.pdfStorageId);
@@ -368,16 +434,12 @@ export const setSourceStorageId = mutation({
   },
 });
 
-export const getSourceUrlForService = query({
+export const getSourceUrlForService = internalQuery({
   args: {
     bookId: v.id("books"),
-    serviceSecret: v.string(),
     which: v.union(v.literal("pdf"), v.literal("source")),
   },
-  handler: async (ctx, { bookId, serviceSecret, which }) => {
-    if (serviceSecret !== process.env.TILE_SERVICE_SECRET) {
-      throw new Error("Invalid service secret");
-    }
+  handler: async (ctx, { bookId, which }) => {
     const book = await ctx.db.get(bookId);
     if (!book) throw new Error("Book not found");
     const storageId = which === "pdf" ? book.pdfStorageId : book.sourceStorageId;

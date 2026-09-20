@@ -149,18 +149,18 @@ export const start = action({
     const userId = (await getAuthUserId(ctx)) ?? undefined;
 
     const serviceUrl = process.env.EXTRACT_SERVICE_URL;
-    const secret = process.env.TILE_SERVICE_SECRET;
+    const secret =
+      process.env.EXTRACT_SERVICE_SECRET ?? process.env.TILE_SERVICE_SECRET;
     if (!serviceUrl) throw new Error("EXTRACT_SERVICE_URL nicht gesetzt");
-    if (!secret) throw new Error("TILE_SERVICE_SECRET nicht gesetzt");
+    if (!secret) throw new Error("EXTRACT_SERVICE_SECRET nicht gesetzt");
 
     const jobId: Id<"importJobs"> = await ctx.runMutation(
       internal.imports.createJobInternal,
       { bookId, kind, userId: userId as Id<"users"> | undefined },
     );
 
-    const src: any = await ctx.runQuery(api.books.getSourceUrlForService, {
+    const src: any = await ctx.runQuery(internal.books.getSourceUrlForService, {
       bookId,
-      serviceSecret: secret,
       which: kind === "idml" ? "source" : "pdf",
     });
     if (!src?.url) {

@@ -19,6 +19,17 @@ export const createClaimTokenInternal = internalMutation({
     stripeSessionId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Stripe wiederholt Ereignisse. Ohne diese Pruefung entstuende je
+    // Wiederholung ein weiterer, unabhaengig einloesbarer Gratis-Zugang.
+    if (args.stripeSessionId) {
+      const existing = await ctx.db
+        .query("claimTokens")
+        .withIndex("by_stripe_session", (q) =>
+          q.eq("stripeSessionId", args.stripeSessionId),
+        )
+        .first();
+      if (existing) return existing.token;
+    }
     const token = randomToken();
     const now = Date.now();
     await ctx.db.insert("claimTokens", {
@@ -75,6 +86,16 @@ export const claim = mutation({
     if (!row) throw new Error("Ungültiger Token");
     if (row.claimedByUserId) throw new Error("Token bereits eingelöst");
     if (row.expiresAt < Date.now()) throw new Error("Token abgelaufen");
+
+    // Der Link gehoert zur Kauf-Mailadresse. Ohne diese Bindung waere er ein
+    // frei weitergebbarer Zweitzugang zum selben Heft.
+    const user = await ctx.db.get(userId);
+    const email = ((user as any)?.email ?? "").toLowerCase();
+    if (row.email && email !== row.email.toLowerCase()) {
+      throw new Error(
+        `Dieser Link gehört zu ${row.email}. Bitte mit dieser Adresse anmelden.`,
+      );
+    }
 
     const existing = await ctx.db
       .query("entitlements")

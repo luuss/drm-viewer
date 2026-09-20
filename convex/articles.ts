@@ -98,6 +98,8 @@ export const search = query({
       }
       if (!allowed.get(key)) continue;
       const book = await ctx.db.get(a.bookId);
+      // Unveroeffentlichte Hefte tauchen auch nicht als Treffer auf.
+      if (!book?.isPublished) continue;
       const idx = a.text.toLowerCase().indexOf(term.toLowerCase());
       const start = Math.max(0, idx - 60);
       out.push({

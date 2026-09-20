@@ -61,6 +61,26 @@ export const deleteMyAccount = action({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Nicht eingeloggt");
     const me: any = await ctx.runQuery(api.users.me, {});
+
+    // Erst kuendigen, dann loeschen. Sonst laeuft die Abbuchung weiter,
+    // waehrend der Zugang weg ist — das endet in Rueckbuchungen.
+    const status: any = await ctx.runQuery(api.subscriptions.myStatus, {});
+    for (const sub of status?.subscriptions ?? []) {
+      if (["active", "trialing", "past_due"].includes(sub.status)) {
+        try {
+          await ctx.runAction(api.billing.cancelMySubscription, {
+            stripeSubscriptionId: sub.stripeSubscriptionId,
+            immediately: true,
+          });
+        } catch (err) {
+          console.error("Abo-Kuendigung bei Kontoloeschung fehlgeschlagen", err);
+          throw new Error(
+            "Abo konnte nicht gekündigt werden. Bitte zuerst im Kundenportal kündigen.",
+          );
+        }
+      }
+    }
+
     await invalidateSessions(ctx, { userId });
     await ctx.runMutation(internal.account.purgeUserData, { userId });
     if (me?.email) {
@@ -85,10 +105,11 @@ export const purgeUserData = internalMutation({
       .collect();
     for (const s of sessions) await ctx.db.delete(s._id);
 
-    const progress = await ctx.db.query("readingProgress").collect();
-    for (const p of progress) {
-      if (p.userId === userId) await ctx.db.delete(p._id);
-    }
+    const progress = await ctx.db
+      .query("readingProgress")
+      .withIndex("by_user_book", (q) => q.eq("userId", userId))
+      .collect();
+    for (const p of progress) await ctx.db.delete(p._id);
 
     const subs = await ctx.db
       .query("subscriptions")
@@ -105,14 +126,35 @@ export const purgeUserData = internalMutation({
       await ctx.db.patch(p._id, { userId: undefined, email: "geloescht" });
     }
 
-    const accounts = await ctx.db.query("authAccounts").collect();
-    for (const a of accounts) {
-      if ((a as any).userId === userId) await ctx.db.delete(a._id);
+    // Nicht eingeloeste Gutschein-Links des Kontos entfernen, eingeloeste
+    // Verweise loesen. Beides ueber Index, damit die Loeschung auch bei
+    // vielen Nutzern innerhalb der Leselimits bleibt.
+    const claimed = await ctx.db
+      .query("claimTokens")
+      .withIndex("by_claimed_by", (q) => q.eq("claimedByUserId", userId))
+      .collect();
+    for (const c of claimed) await ctx.db.delete(c._id);
+
+    // Zustimmungen bleiben als Nachweis, aber ohne Personenbezug.
+    const consents = await ctx.db
+      .query("consents")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const c of consents) {
+      await ctx.db.patch(c._id, { userId: undefined, email: undefined });
     }
-    const authSessions = await ctx.db.query("authSessions").collect();
-    for (const s of authSessions) {
-      if ((s as any).userId === userId) await ctx.db.delete(s._id);
-    }
+
+    const accounts = await ctx.db
+      .query("authAccounts")
+      .withIndex("userIdAndProvider", (q) => q.eq("userId", userId))
+      .collect();
+    for (const a of accounts) await ctx.db.delete(a._id);
+
+    const authSessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", userId))
+      .collect();
+    for (const s of authSessions) await ctx.db.delete(s._id);
 
     await ctx.db.delete(userId);
   },

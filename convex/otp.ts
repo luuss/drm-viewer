@@ -3,11 +3,19 @@ import { sendMail, layout, escapeHtml } from "./mail";
 
 /** 8-stelliger Zahlencode. Keine Zusatz-Abhaengigkeit noetig. */
 function numericCode(length = 8): string {
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => (b % 10).toString())
-    .join("");
+  // Werte ab 250 verwerfen: 256 ist nicht durch 10 teilbar, sonst waeren die
+  // Ziffern 0 bis 5 haeufiger.
+  const out: string[] = [];
+  while (out.length < length) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    for (const b of bytes) {
+      if (b >= 250) continue;
+      out.push((b % 10).toString());
+      if (out.length === length) break;
+    }
+  }
+  return out.join("");
 }
 
 export const ResendOTPPasswordReset = Email({

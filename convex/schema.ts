@@ -89,7 +89,9 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_token", ["token"])
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    .index("by_stripe_session", ["stripeSessionId"])
+    .index("by_claimed_by", ["claimedByUserId"]),
 
   readingProgress: defineTable({
     userId: v.id("users"),
@@ -117,6 +119,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_stripe_session", ["stripeSessionId"])
+    .index("by_payment_intent", ["stripePaymentIntentId"])
     .index("by_user", ["userId"]),
 
   // Widerrufsverzicht / AGB-Zustimmung, beweissicher protokolliert.

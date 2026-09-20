@@ -8,7 +8,7 @@ export default function AdminPage() {
   const me = useQuery(api.users.me, {});
   const books = useQuery(api.books.listAllAdmin, {});
   const genUploadUrl = useMutation(api.books.generateUploadUrl);
-  const getSignedStorageUrl = useMutation(api.books.getSignedStorageUrl);
+  const issuePrepareTicket = useMutation(api.books.issuePrepareTicket);
   const createBook = useMutation(api.books.createBook);
   const updateBook = useMutation(api.books.updateBook);
   const deleteBook = useMutation(api.books.deleteBook);
@@ -22,6 +22,7 @@ export default function AdminPage() {
   const [price, setPrice] = useState("9.99");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [coverPdf, setCoverPdf] = useState<File | null>(null);
   const [source, setSourceFile] = useState<File | null>(null);
   const [cover, setCover] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -61,8 +62,14 @@ export default function AdminPage() {
     }
     setBusy(true);
     try {
-      setStep("Lade Druckdatei hoch...");
-      const pdfStorageId = await upload(file);
+      setStep("Lade Innenteil hoch...");
+      const innerStorageId = await upload(file);
+
+      let coverPdfStorageId: Id<"_storage"> | undefined;
+      if (coverPdf) {
+        setStep("Lade Umschlag hoch...");
+        coverPdfStorageId = await upload(coverPdf);
+      }
 
       let coverStorageId: Id<"_storage"> | undefined;
       if (cover) {
@@ -70,28 +77,36 @@ export default function AdminPage() {
         coverStorageId = await upload(cover);
       }
 
-      setStep("Analysiere Seiten...");
-      const signedUrl = await getSignedStorageUrl({ storageId: pdfStorageId });
-      if (!signedUrl) throw new Error("Storage-URL konnte nicht erzeugt werden");
+      setStep(
+        coverPdf ? "Füge Umschlag und Innenteil zusammen..." : "Analysiere Seiten...",
+      );
       const ext = (file.name.split(".").pop() || "").toLowerCase();
       const filetype = ext === "epub" ? "epub" : "pdf";
-      const inspectRes = await fetch(`${TILE_SERVICE_URL}/api/inspect`, {
+      // Der Kacheldienst nimmt nur von Convex unterschriebene Adressen an.
+      const ticket = await issuePrepareTicket({
+        innerStorageId,
+        coverPdfStorageId,
+        filetype,
+      });
+      const prepareRes = await fetch(`${TILE_SERVICE_URL}/api/prepare`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: signedUrl, filetype }),
+        body: JSON.stringify(ticket),
       });
-      if (!inspectRes.ok) {
-        throw new Error(`Analyse fehlgeschlagen: ${await inspectRes.text()}`);
+      if (!prepareRes.ok) {
+        throw new Error(`Aufbereitung fehlgeschlagen: ${await prepareRes.text()}`);
       }
-      const { pageCount, width, height } = await inspectRes.json();
+      const { pageCount, width, height, mergedStorageId, coverStorageId: rendered } =
+        await prepareRes.json();
 
       setStep("Lege Ausgabe an...");
       const bookId = await createBook({
         title,
         filename: file.name,
         description: description || undefined,
-        pdfStorageId,
-        coverStorageId,
+        pdfStorageId: (mergedStorageId ?? innerStorageId) as Id<"_storage">,
+        // Eigenes Titelbild schlaegt das aus der ersten Seite gerenderte.
+        coverStorageId: coverStorageId ?? (rendered as Id<"_storage"> | undefined),
         pageCount,
         pageWidth: width,
         pageHeight: height,
@@ -109,12 +124,17 @@ export default function AdminPage() {
         await setSource({ bookId, sourceStorageId });
       }
 
-      setMsg(`Ausgabe angelegt (${pageCount} Seiten, ${width}×${height}px)`);
+      setMsg(
+        `Ausgabe angelegt (${pageCount} Seiten, ${width}×${height}px${
+          mergedStorageId ? ", Umschlag eingefügt" : ""
+        })`,
+      );
       setTitle("");
       setIssueNumber("");
       setDescription("");
       setPrice("9.99");
       setFile(null);
+      setCoverPdf(null);
       setSourceFile(null);
       setCover(null);
       (document.querySelectorAll<HTMLInputElement>('input[type="file"]') ?? []).forEach(
@@ -178,12 +198,20 @@ export default function AdminPage() {
             />
           </label>
           <label>
-            Druckdatei (PDF oder EPUB)
+            Innenteil (PDF oder EPUB)
             <input
               type="file"
               accept=".pdf,.epub,application/pdf,application/epub+zip"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               required
+            />
+          </label>
+          <label>
+            Umschlag (PDF, optional — wird vorangestellt)
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={(e) => setCoverPdf(e.target.files?.[0] ?? null)}
             />
           </label>
           <label>
@@ -195,7 +223,7 @@ export default function AdminPage() {
             />
           </label>
           <label>
-            Titelbild (optional)
+            Titelbild (optional, sonst aus Seite 1)
             <input
               type="file"
               accept="image/*"

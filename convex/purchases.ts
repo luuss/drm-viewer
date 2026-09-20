@@ -42,10 +42,12 @@ export const recordPaid = internalMutation({
 export const markRefunded = internalMutation({
   args: { stripePaymentIntentId: v.string() },
   handler: async (ctx, { stripePaymentIntentId }) => {
-    const rows = await ctx.db.query("purchases").collect();
-    const row = rows.find(
-      (r) => r.stripePaymentIntentId === stripePaymentIntentId,
-    );
+    const row = await ctx.db
+      .query("purchases")
+      .withIndex("by_payment_intent", (q) =>
+        q.eq("stripePaymentIntentId", stripePaymentIntentId),
+      )
+      .first();
     if (!row) return null;
     await ctx.db.patch(row._id, { status: "refunded" });
     // Rueckerstattung entzieht den Zugriff auf das Einzelheft.
@@ -56,7 +58,19 @@ export const markRefunded = internalMutation({
           q.eq("userId", row.userId!).eq("bookId", row.bookId!),
         )
         .first();
-      if (ent && ent.source === "purchase") await ctx.db.delete(ent._id);
+      if (ent && (ent.source === "purchase" || ent.source === "claim")) {
+        await ctx.db.delete(ent._id);
+      }
+      // Ein noch nicht eingeloester Claim-Link darf nach Rueckbuchung nicht mehr wirken.
+      const claims = await ctx.db
+        .query("claimTokens")
+        .withIndex("by_stripe_session", (q) =>
+          q.eq("stripeSessionId", row.stripeSessionId),
+        )
+        .collect();
+      for (const c of claims) {
+        if (!c.claimedByUserId) await ctx.db.delete(c._id);
+      }
     }
     return row._id;
   },

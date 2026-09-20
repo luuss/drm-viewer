@@ -7,6 +7,7 @@ Hintergrund, weil ein Heft mehrere Minuten braucht.
 
 from __future__ import annotations
 
+import hmac
 import os
 import tempfile
 import traceback
@@ -19,7 +20,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from extractor.idml_extract import extract_idml
 from extractor.pdf_extract import extract_pdf
 
-SERVICE_SECRET = os.environ.get("TILE_SERVICE_SECRET", "")
+# Eigenes Geheimnis; faellt auf das des Kacheldienstes zurueck, damit
+# bestehende Installationen ohne Aenderung weiterlaufen.
+SERVICE_SECRET = os.environ.get("EXTRACT_SERVICE_SECRET") or os.environ.get(
+    "TILE_SERVICE_SECRET", ""
+)
+# Rueckmeldungen gehen nur an das eigene Backend, nie an eine beliebige Adresse.
+CONVEX_SITE_URL = os.environ.get("CONVEX_SITE_URL", "").rstrip("/")
 MAX_SOURCE_BYTES = int(os.environ.get("MAX_SOURCE_BYTES", 400 * 1024 * 1024))
 CORS_ORIGINS = [
     o.strip()
@@ -35,7 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_client = httpx.AsyncClient(timeout=120.0, follow_redirects=True)
+# Keine Weiterleitungen: sonst laesst sich der Dienst ueber einen Redirect auf
+# interne Adressen lenken.
+_client = httpx.AsyncClient(timeout=120.0, follow_redirects=False)
 
 
 @app.get("/health")
@@ -59,7 +68,17 @@ async def _download(url: str, suffix: str) -> str:
     return path
 
 
+def _callback_allowed(url: str) -> bool:
+    if not CONVEX_SITE_URL:
+        # Ohne konfiguriertes Backend nur lokale Ziele erlauben (Entwicklung).
+        return url.startswith("http://localhost") or url.startswith("http://127.0.0.1")
+    return url.startswith(f"{CONVEX_SITE_URL}/")
+
+
 async def _report(callback_url: str, payload: dict) -> None:
+    if not _callback_allowed(callback_url):
+        print(f"Rueckmeldung abgelehnt, fremdes Ziel: {callback_url[:80]}")
+        return
     try:
         await _client.post(
             callback_url,
@@ -118,13 +137,17 @@ async def extract(
     background: BackgroundTasks,
     x_service_secret: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    if not SERVICE_SECRET or x_service_secret != SERVICE_SECRET:
+    if not SERVICE_SECRET or not x_service_secret or not hmac.compare_digest(
+        x_service_secret, SERVICE_SECRET
+    ):
         raise HTTPException(403, "Falsches Service-Geheimnis")
     for field in ("jobId", "bookId", "kind", "url", "callbackUrl"):
         if not payload.get(field):
             raise HTTPException(400, f"Feld fehlt: {field}")
     if payload["kind"] not in ("pdf", "idml"):
         raise HTTPException(400, "kind muss pdf oder idml sein")
+    if not _callback_allowed(payload["callbackUrl"]):
+        raise HTTPException(400, "callbackUrl zeigt nicht auf das Backend")
 
     background.add_task(_run_job, payload)
     return {"accepted": True, "jobId": payload["jobId"]}

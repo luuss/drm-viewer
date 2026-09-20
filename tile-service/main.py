@@ -17,6 +17,8 @@ import hashlib
 import io
 import os
 import random
+import hashlib
+import hmac
 import secrets
 import time
 from collections import OrderedDict, defaultdict, deque
@@ -29,6 +31,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 CONVEX_URL = os.environ.get("CONVEX_URL", "").rstrip("/")
+# HTTP-Endpunkte liegen bei Convex auf einer eigenen Adresse (.convex.site).
+CONVEX_SITE_URL = os.environ.get(
+    "CONVEX_SITE_URL", CONVEX_URL.replace(".convex.cloud", ".convex.site")
+).rstrip("/")
+MAX_SOURCE_BYTES = int(os.environ.get("MAX_SOURCE_BYTES", 400 * 1024 * 1024))
 TILE_SERVICE_SECRET = os.environ.get("TILE_SERVICE_SECRET", "")
 ALLOWED_ORIGINS = [
     o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()
@@ -65,26 +72,21 @@ app.add_middleware(
 _client = httpx.AsyncClient(timeout=30.0)
 
 
-async def convex_query(path: str, args: dict) -> Any:
-    url = f"{CONVEX_URL}/api/query"
-    r = await _client.post(url, json={"path": path, "args": args, "format": "json"})
-    if r.status_code != 200:
-        raise HTTPException(502, f"Convex query failed: {r.status_code} {r.text}")
-    data = r.json()
-    if data.get("status") != "success":
-        raise HTTPException(403, f"Convex query error: {data.get('errorMessage', 'unknown')}")
-    return data.get("value")
+async def service_call(path: str, body: dict) -> Any:
+    """Ruft einen geschuetzten Dienst-Endpunkt in Convex auf.
 
-
-async def convex_mutation(path: str, args: dict) -> Any:
-    url = f"{CONVEX_URL}/api/mutation"
-    r = await _client.post(url, json={"path": path, "args": args, "format": "json"})
+    Das Geheimnis steht im Header, nicht im Argument. Die zugehoerigen
+    Convex-Funktionen sind intern, also nicht oeffentlich aufrufbar.
+    """
+    url = f"{CONVEX_SITE_URL}{path}"
+    r = await _client.post(
+        url, json=body, headers={"x-service-secret": TILE_SERVICE_SECRET}
+    )
     if r.status_code != 200:
-        raise HTTPException(502, f"Convex mutation failed: {r.status_code}")
-    data = r.json()
-    if data.get("status") != "success":
-        raise HTTPException(403, f"Convex mutation error: {data.get('errorMessage', 'unknown')}")
-    return data.get("value")
+        # Fehlertext bleibt im Log, nicht in der Antwort an den Browser.
+        print(f"Dienstaufruf {path} fehlgeschlagen: {r.status_code} {r.text[:200]}")
+        raise HTTPException(502, "Backend nicht erreichbar")
+    return r.json()
 
 
 # --- Rate limiting and usage reporting ---
@@ -112,13 +114,9 @@ async def _flush_usage_loop() -> None:
         _usage_pending.clear()
         for token, tiles in pending.items():
             try:
-                await convex_mutation(
-                    "tileSessions:reportUsage",
-                    {
-                        "sessionToken": token,
-                        "serviceSecret": TILE_SERVICE_SECRET,
-                        "tiles": tiles,
-                    },
+                await service_call(
+                    "/service/session/usage",
+                    {"sessionToken": token, "tiles": tiles},
                 )
             except Exception as exc:
                 print(f"Verbrauchsmeldung fehlgeschlagen: {exc}")
@@ -127,6 +125,22 @@ async def _flush_usage_loop() -> None:
 @app.on_event("startup")
 async def _start_usage_reporter() -> None:
     asyncio.create_task(_flush_usage_loop())
+
+
+async def _download_limited(url: str) -> bytes:
+    """Laedt eine Datei mit hartem Groessendeckel und ohne Weiterleitungen."""
+    chunks: list[bytes] = []
+    size = 0
+    async with _client.stream("GET", url, follow_redirects=False) as res:
+        if res.status_code != 200:
+            print(f"Download fehlgeschlagen: {res.status_code} {url[:80]}")
+            raise HTTPException(502, "Datei nicht ladbar")
+        async for chunk in res.aiter_bytes():
+            size += len(chunk)
+            if size > MAX_SOURCE_BYTES:
+                raise HTTPException(413, "Datei zu gross")
+            chunks.append(chunk)
+    return b"".join(chunks)
 
 
 # --- PDF cache ---
@@ -142,15 +156,9 @@ class PdfCache:
             if book_id in self._items:
                 self._items.move_to_end(book_id)
                 return self._items[book_id]
-        meta = await convex_query(
-            "books:getStoragePdfUrlForService",
-            {"bookId": book_id, "serviceSecret": TILE_SERVICE_SECRET},
-        )
+        meta = await service_call("/service/book/pdf-url", {"bookId": book_id})
         pdf_url = meta["url"]
-        r = await _client.get(pdf_url)
-        if r.status_code != 200:
-            raise HTTPException(502, "Could not fetch PDF from storage")
-        data = r.content
+        data = await _download_limited(pdf_url)
         async with self._lock:
             self._items[book_id] = data
             if len(self._items) > self.size:
@@ -220,15 +228,12 @@ async def require_session(
             result = None
 
     if result is None:
-        result = await convex_query(
-            "tileSessions:verify",
-            {"sessionToken": x_tile_session, "serviceSecret": TILE_SERVICE_SECRET},
+        result = await service_call(
+            "/service/session/verify", {"sessionToken": x_tile_session}
         )
         if not result or not result.get("ok"):
-            raise HTTPException(
-                401,
-                f"Invalid session: {result.get('reason') if result else 'unknown'}",
-            )
+            print(f"Sitzung abgelehnt: {result.get('reason') if result else 'unbekannt'}")
+            raise HTTPException(401, "Sitzung ungueltig")
         async with _session_lock:
             _session_cache[x_tile_session] = (now + SESSION_CACHE_TTL, result)
             # GC old
@@ -261,10 +266,7 @@ _book_meta: dict[str, dict] = {}
 async def get_book_meta(book_id: str) -> dict:
     if book_id in _book_meta:
         return _book_meta[book_id]
-    meta = await convex_query(
-        "books:getStoragePdfUrlForService",
-        {"bookId": book_id, "serviceSecret": TILE_SERVICE_SECRET},
-    )
+    meta = await service_call("/service/book/pdf-url", {"bookId": book_id})
     info = {"pageCount": int(meta["pageCount"]), "filename": meta.get("filename") or ""}
     _book_meta[book_id] = info
     return info
@@ -294,7 +296,12 @@ async def get_tile_tokens(
 ):
     _gc_tokens()
     session = await require_session(x_tile_session, book_id)
-    _check_rate(_rate_pages, x_tile_session or "", MAX_PAGES_PER_MIN, "Seiten")
+    _check_rate(
+        _rate_pages,
+        f'{session.get("userId", "?")}:{book_id}',
+        MAX_PAGES_PER_MIN,
+        "Seiten",
+    )
     meta = await get_book_meta(book_id)
     if page < 0 or page >= meta["pageCount"]:
         raise HTTPException(400, "Invalid page")
@@ -342,8 +349,13 @@ async def get_tile(
     token: str = Query(...),
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ):
-    await require_session(x_tile_session, book_id)
-    _check_rate(_rate_tiles, x_tile_session or "", MAX_TILES_PER_MIN, "Kacheln")
+    session = await require_session(x_tile_session, book_id)
+    _check_rate(
+        _rate_tiles,
+        f'{session.get("userId", "?")}:{book_id}',
+        MAX_TILES_PER_MIN,
+        "Kacheln",
+    )
     _usage_pending[x_tile_session or ""] += 1
     tok = _tile_tokens.pop(token, None)
     if not tok:
@@ -427,37 +439,108 @@ def _slice_tile(
     return pix.tobytes("jpeg", jpg_quality=88)
 
 
-@app.post("/api/inspect")
-async def inspect(payload: dict):
-    """Fetch file via signed URL and return page count + dimensions.
-    Used by the admin page before createBook. The URL is already a
-    short-lived signed Convex storage URL, so no extra auth needed here.
-    """
-    url = payload.get("url")
-    if not url:
-        raise HTTPException(400, "url missing")
-    r = await _client.get(url)
+def _verify_prepare_ticket(payload: dict) -> tuple[list[str], str, str, str]:
+    """Prueft den von Convex unterschriebenen Auftrag und gibt die Teile zurueck."""
+    sources = payload.get("sources") or []
+    merged_upload = payload.get("mergedUploadUrl") or ""
+    cover_upload = payload.get("coverImageUploadUrl") or ""
+    filetype = payload.get("filetype")
+    ticket = payload.get("ticket")
+    expires_at = payload.get("expiresAt")
+
+    if not sources or filetype not in ("pdf", "epub") or not ticket:
+        raise HTTPException(400, "Unvollstaendiger Auftrag")
+    try:
+        expires_at = int(expires_at)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Unvollstaendiger Auftrag")
+    if expires_at < time.time() * 1000:
+        raise HTTPException(403, "Auftrag abgelaufen")
+
+    signed = "~".join(
+        ["|".join(sources), merged_upload, cover_upload, filetype, str(expires_at)]
+    )
+    expected = hmac.new(
+        TILE_SERVICE_SECRET.encode(), signed.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, str(ticket)):
+        raise HTTPException(403, "Auftrag nicht gueltig")
+    return sources, merged_upload, cover_upload, filetype
+
+
+async def _upload_to_storage(upload_url: str, data: bytes, content_type: str) -> str:
+    r = await _client.post(
+        upload_url, content=data, headers={"Content-Type": content_type}
+    )
     if r.status_code != 200:
-        raise HTTPException(400, f"Fetch failed: {r.status_code}")
-    data = r.content
+        print(f"Upload fehlgeschlagen: {r.status_code} {r.text[:200]}")
+        raise HTTPException(502, "Upload in den Speicher fehlgeschlagen")
+    return r.json()["storageId"]
+
+
+def _merge_documents(parts: list[bytes], filetype: str) -> bytes:
+    """Umschlag und Innenteil zu einer Datei zusammenfuegen."""
+    out = fitz.open()
     try:
-        doc = fitz.open(stream=data, filetype=payload.get("filetype"))
-    except Exception as e:
-        raise HTTPException(400, f"Unsupported file: {e}")
+        for part in parts:
+            src = fitz.open(stream=part, filetype=filetype)
+            try:
+                out.insert_pdf(src)
+            finally:
+                src.close()
+        return out.tobytes(garbage=3, deflate=True)
+    finally:
+        out.close()
+
+
+def _render_cover(data: bytes, filetype: str) -> tuple[bytes, int, int, int]:
+    """Erste Seite als Titelbild rendern und Seitenmass ermitteln."""
+    doc = fitz.open(stream=data, filetype=filetype)
     try:
-        page_count = doc.page_count
-        if page_count == 0:
-            raise HTTPException(400, "File has 0 pages")
-        pg = doc.load_page(0)
-        pix = pg.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), alpha=False)
-        w, h = pix.width, pix.height
-        return {
-            "pageCount": page_count,
-            "width": w,
-            "height": h,
-        }
+        if doc.page_count == 0:
+            raise HTTPException(400, "Datei hat keine Seiten")
+        page = doc.load_page(0)
+        pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), alpha=False)
+        cover = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2), alpha=False)
+        return cover.tobytes("jpeg", jpg_quality=82), doc.page_count, pix.width, pix.height
     finally:
         doc.close()
+
+
+@app.post("/api/prepare")
+async def prepare(payload: dict):
+    """Neue Ausgabe aufbereiten: zusammenfuegen, vermessen, Titelbild rendern.
+
+    Aufruf aus der Redaktionsoberflaeche. Quellen und Ablageziele stehen im
+    unterschriebenen Auftrag, der Dienst waehlt sie nicht selbst.
+    """
+    sources, merged_upload, cover_upload, filetype = _verify_prepare_ticket(payload)
+
+    parts = [await _download_limited(u) for u in sources]
+    merged_storage_id: str | None = None
+
+    if len(parts) > 1:
+        if not merged_upload:
+            raise HTTPException(400, "Ziel fuer die zusammengefuegte Datei fehlt")
+        data = await asyncio.to_thread(_merge_documents, parts, filetype)
+        merged_storage_id = await _upload_to_storage(
+            merged_upload, data, "application/pdf"
+        )
+    else:
+        data = parts[0]
+
+    cover_jpeg, page_count, width, height = await asyncio.to_thread(
+        _render_cover, data, filetype
+    )
+    cover_storage_id = await _upload_to_storage(cover_upload, cover_jpeg, "image/jpeg")
+
+    return {
+        "pageCount": page_count,
+        "width": width,
+        "height": height,
+        "mergedStorageId": merged_storage_id,
+        "coverStorageId": cover_storage_id,
+    }
 
 
 @app.get("/api/decoy/{dummy_id}")

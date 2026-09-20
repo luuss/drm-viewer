@@ -45,16 +45,24 @@ export const checkoutCompleted = internalAction({
         });
       }
 
-      const token: string = await ctx.runMutation(
-        internal.claims.createClaimTokenInternal,
-        { bookId, email: args.email, stripeSessionId: args.sessionId },
-      );
-      if (args.email) {
-        await ctx.runAction(internal.email.sendClaimEmail, {
-          email: args.email,
-          bookId,
-          token,
-        });
+      // Claim-Link nur, wenn der Kauf ohne angemeldetes Konto lief. Sonst
+      // haette der Kaeufer sein Heft UND einen weitergebbaren Zweitzugang.
+      if (!userId && args.email) {
+        const token: string = await ctx.runMutation(
+          internal.claims.createClaimTokenInternal,
+          { bookId, email: args.email, stripeSessionId: args.sessionId },
+        );
+        try {
+          await ctx.runAction(internal.email.sendClaimEmail, {
+            email: args.email,
+            bookId,
+            token,
+          });
+        } catch (err) {
+          // Ein Ausfall beim Mailversand darf den Webhook nicht auf 500 setzen;
+          // Stripe wuerde ihn sonst tagelang wiederholen.
+          console.error("Claim-Mail fehlgeschlagen", err);
+        }
       }
       return { ok: true };
     }
@@ -69,9 +77,13 @@ export const checkoutCompleted = internalAction({
         currency: args.currency,
       });
       if (args.email) {
-        await ctx.runAction(internal.email.sendSubscriptionStarted, {
-          email: args.email,
-        });
+        try {
+          await ctx.runAction(internal.email.sendSubscriptionStarted, {
+            email: args.email,
+          });
+        } catch (err) {
+          console.error("Abo-Mail fehlgeschlagen", err);
+        }
       }
       return { ok: true };
     }
@@ -110,6 +122,22 @@ export const subscriptionChanged = internalAction({
       currentPeriodEnd: args.currentPeriodEnd,
       cancelAtPeriodEnd: args.cancelAtPeriodEnd,
     });
+    return { ok: true };
+  },
+});
+
+/** Rueckerstattung oder Chargeback: Zugriff auf das Einzelheft entziehen. */
+export const paymentReversed = internalAction({
+  args: { stripePaymentIntentId: v.string(), reason: v.string() },
+  handler: async (ctx, { stripePaymentIntentId, reason }) => {
+    const purchaseId = await ctx.runMutation(internal.purchases.markRefunded, {
+      stripePaymentIntentId,
+    });
+    console.log(
+      `Zahlung rueckabgewickelt (${reason}) fuer ${stripePaymentIntentId}: ${
+        purchaseId ? "Zugriff entzogen" : "kein Kauf gefunden"
+      }`,
+    );
     return { ok: true };
   },
 });
