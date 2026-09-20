@@ -202,6 +202,19 @@ def _body_font(blocks: list[SourceBlock], body: float) -> str:
     return counter.most_common(1)[0][0] if counter else ""
 
 
+def _looks_shattered(text: str) -> bool:
+    """Erkennt zerfallenen Satz wie "n h e c r e e g r r".
+
+    Gedrehter Text am Umschlagruecken kommt beim Auslesen als lose Einzelzeichen
+    an und mischt sich mit der Nachbarzeile. Als Inhalt ist das wertlos.
+    """
+    tokens = text.split()
+    if len(tokens) < 8:
+        return False
+    singles = sum(1 for t in tokens if len(t) <= 2)
+    return singles / len(tokens) > 0.6
+
+
 def _looks_doubled(text: str) -> bool:
     """Erkennt Ueberdruck wie "zzuueerrsstt": jedes Zeichen steht doppelt."""
     t = re.sub(r"\s+", "", text)
@@ -231,7 +244,7 @@ def mark_furniture(blocks: list[SourceBlock], page_count: int) -> None:
         t = b.text.strip()
         if t.isdigit() and len(t) <= 3:
             b.drop = True
-        elif ".indd" in t.lower() or _looks_doubled(t):
+        elif ".indd" in t.lower() or _looks_doubled(t) or _looks_shattered(t):
             b.drop = True
         elif len(t) <= 2:
             b.drop = True

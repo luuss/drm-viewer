@@ -51,6 +51,13 @@ Je Auftrag:
 Der letzte Schritt ist bewusst eine einzige Mutation: bei einem erneuten Import
 sehen Leser entweder den alten oder den neuen Stand, nie eine Mischung.
 
+Ein erneuter Lauf ersetzt auch redaktionelle Korrekturen an Artikeln, Bloecken,
+Regionen und am automatisch erzeugten Inhaltsverzeichnis. Quellen, Stammdaten,
+Kaeufe und Freischaltungen bleiben. Bei einer veroeffentlichten Ausgabe bleibt
+der Seitenmodus durchgehend nutzbar; die Artikel stehen danach wieder auf
+`pending` und muessen neu entschieden werden, bevor sie im Artikelmodus
+erscheinen.
+
 ### Was der Parser kann und was nicht
 
 Am Musterheft (ZUERST! 3/2026, 84 Seiten) entstehen rund 60 bis 75 Artikel mit

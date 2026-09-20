@@ -283,8 +283,13 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
       <h4>3. Aufbereitung starten</h4>
       <p className="hint">
         {existingPages?.length ?? 0} Seiten hinterlegt. Der Auftrag rendert die
-        Seiten, liest den Text und legt Artikelentwürfe an. Ein erneuter Lauf
-        ersetzt alle abgeleiteten Daten in einem Zug.
+        Seiten, liest den Text und legt Artikelentwürfe an.
+      </p>
+      <p className="hint">
+        Ein erneuter Lauf ersetzt alle abgeleiteten Daten in einem Zug —
+        einschließlich redaktioneller Korrekturen. Bei einer veröffentlichten
+        Ausgabe bleiben die Seiten sichtbar, die Artikel stehen danach wieder
+        auf offen und müssen neu entschieden werden.
       </p>
       <button
         className="btn"
