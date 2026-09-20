@@ -120,19 +120,30 @@ export const resolveForServiceInternal = internalQuery({
       .withIndex("by_issue_index", (q) => q.eq("issueId", issueId).eq("index", index))
       .unique();
     if (!page) return null;
-    const asset = await ctx.db.get(page.sourceAssetId);
-    if (!asset) return null;
-    const url = asset.convexStorageId
-      ? await ctx.storage.getUrl(asset.convexStorageId)
+    // Das Gateway bekommt das fertig gerenderte Seitenbild, nie die Druckdatei.
+    const rendered = page.previewKey
+      ? await ctx.db
+          .query("assets")
+          .withIndex("by_key", (q) => q.eq("key", page.previewKey!))
+          .first()
+      : null;
+    if (!rendered) {
+      return {
+        ready: false as const,
+        width: page.width,
+        height: page.height,
+      };
+    }
+    const url = rendered.convexStorageId
+      ? await ctx.storage.getUrl(rendered.convexStorageId)
       : null;
     return {
-      sourcePageIndex: page.sourcePageIndex,
-      width: page.width,
-      height: page.height,
-      tileManifestKey: page.tileManifestKey ?? null,
-      assetKey: asset.key,
-      assetUrl: url,
-      contentType: asset.contentType,
+      ready: true as const,
+      width: rendered.width ?? page.width,
+      height: rendered.height ?? page.height,
+      key: rendered.key,
+      bucket: rendered.bucket ?? null,
+      url,
     };
   },
 });

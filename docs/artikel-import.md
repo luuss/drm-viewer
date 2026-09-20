@@ -1,71 +1,93 @@
-# Artikel aus Heften gewinnen
+# Von der Druckdatei zur Ausgabe
 
-Der Reader hat zwei Ansichten: die originalgetreue Seite und den Fliesstext je
-Artikel. Fuer den Fliesstext muss das Heft in Artikel zerlegt werden. Dafuer
-gibt es zwei Wege.
+Eine Ausgabe entsteht in vier Schritten: Quellen hochladen, Leserreihenfolge
+festlegen, Aufbereitung starten, redaktionell pruefen. Erst danach laesst sich
+die Ausgabe veroeffentlichen.
 
-## Weg 1: IDML (empfohlen)
+## 1. Quellen
 
-Eine Story im IDML ist genau ein durchgehender Artikeltext — ueber alle
-verketteten Textrahmen und Seiten hinweg. Die Grenze, an der jede PDF-Analyse
-raten muss, steht dort bereits fest. Zusaetzlich liefern die Absatzformate
-Ueberschrift, Vorspann und Autorenzeile.
+| Datei | Rolle | Pflicht |
+|---|---|---|
+| Innenteil-PDF | originalgetreue Seiten und Textebene | ja |
+| Umschlag-PDF | Titel, U2, U3, Rueckseite | nein |
+| IDML | Artikelstruktur aus dem Satz | nein, aber empfohlen |
+| INDD | Archiv | nein |
 
-In InDesign: **Datei → Exportieren → InDesign Markup (IDML)**.
+Eine `.indd`-Datei wird nur abgelegt, nicht ausgewertet. Fuer die automatische
+Auswertung braucht es den IDML-Export aus InDesign (Datei → Exportieren →
+InDesign Markup).
 
-Eine binaere `.indd`-Datei kann der Dienst nicht lesen. Sie ist ein
-Binaerformat; ohne InDesign kommt daraus kein verlaesslicher Text.
+## 2. Leserreihenfolge
 
-Fuer wiederkehrende Ausgaben lohnt ein InDesign-Skript, das den IDML-Export mit
-einem Klick erledigt.
+Ein Umschlag kommt aus der Druckvorstufe in Bogenreihenfolge: die Datei beginnt
+mit der Rueckseite (U4), dann folgt der Titel (U1), danach U2 und U3. Der
+Importdialog schlaegt daraus die Lesereihenfolge U1, U2, Innenteil, U3, U4 vor
+und setzt die gedruckten Seitenzahlen ab dem angegebenen Startwert — beim
+Musterheft beginnt der Innenteil bei 3.
 
-## Weg 2: PDF
+Der Vorschlag ist nur ein Vorschlag. Nichts davon ist fest verdrahtet, die
+Redaktion bestaetigt oder korrigiert ihn. Ergebnis sind `issuePages`: die
+kanonische Seitenliste, auf der der Reader arbeitet. Eine zusammengefuegte
+Riesendatei entsteht nicht.
 
-Satzdateien aus InDesign haben eine saubere Textebene, Texterkennung ist also
-nicht noetig. Der Dienst arbeitet in dieser Reihenfolge:
+## 3. Aufbereitung
 
-1. Bloecke mit Position, Schriftgroesse und Schriftart einlesen.
-2. Beiwerk aussortieren: Seitenzahlen, Kolumnentitel, Setzer-Slug, Bildnachweise.
-3. Initialen aus dem Ueberschriftenblock loesen und an den Textanfang setzen.
-4. Ueber- und Unterschriften anhand der Schriftgroesse klassifizieren.
-5. Spalten erkennen und die Lesereihenfolge herstellen.
-6. Bloecke zu Artikeln gruppieren, auch ueber Seitengrenzen.
-7. Optional: eine KI ordnet die Bloecke nach, wenn `ANTHROPIC_API_KEY` gesetzt ist.
-   An das Modell geht nur ein Verzeichnis der Bloecke mit den ersten Zeichen,
-   nicht der Volltext. Zurueck kommen nur Gruppen und Titel.
+Der Auftrag liegt in der Warteschlange (`importJobs`), ein eigener Worker holt
+ihn mit einer Sperre ab. Stuerzt der Worker ab, laeuft die Sperre aus und der
+Auftrag wird erneut versucht; nach drei Fehlversuchen bleibt er als Fehler
+sichtbar.
 
-Ergebnis am Testheft (ZUERST! 3/2026, 80 Seiten): 57 Artikel, rund 330.000
-Zeichen, ohne KI-Stufe.
+Je Auftrag:
 
-## Bilder
+1. Seiten mit PDFium rendern und im Medienspeicher ablegen.
+2. Titelbild aus Seite 1.
+3. Text mit pdfplumber lesen: Position, Schriftgroesse, Schriftart.
+4. Beiwerk aussortieren: Seitenzahlen, Kolumnentitel, Setzer-Slug, Ueberdruck.
+5. Spalten bestimmen und Lesereihenfolge herstellen.
+6. IDML auswerten, falls vorhanden.
+7. Artikel bauen, Bilder zuschneiden.
+8. Ergebnis in einer Transaktion aktivieren.
 
-Beim PDF-Weg holt der Dienst zusaetzlich die Bilder aus der Seite. Ein Bild
-kommt zu dem Artikel, dessen Textflaeche auf derselben Seite am naechsten
-liegt. Die Bildunterschrift ist der kleingesetzte Textblock direkt darunter,
-sofern er das Bild waagerecht ueberlappt; reine Bildnachweise ("Foto: ...")
-werden nicht als Unterschrift uebernommen.
+Der letzte Schritt ist bewusst eine einzige Mutation: bei einem erneuten Import
+sehen Leser entweder den alten oder den neuen Stand, nie eine Mischung.
 
-Aussortiert werden Dateien unter 200 Pixel Kantenlaenge oder unter 8 KB — das
-sind Logos, Linien und Schmuckelemente. Je Artikel werden hoechstens zwoelf
-Bilder uebernommen.
+### Was der Parser kann und was nicht
 
-Die Bilder landen im Convex-Speicher und haengen als Verweis am Artikel. Im
-Fliesstext-Modus stehen sie ueber dem Text. Am Testheft: 57 Artikel, 166
-zugeordnete Bilder.
+Am Musterheft (ZUERST! 3/2026, 84 Seiten) entstehen rund 60 bis 75 Artikel mit
+sauberen Ueberschriften und zusammenhaengendem Fliesstext ueber Seitengrenzen.
+Nicht jede Grenze sitzt: bei Bildstrecken und Kaesten trennt die Automatik
+gelegentlich zu fein. Dafuer gibt es die Pruefansicht.
 
-## Nacharbeit in der Redaktion
+Jeder Artikel bekommt ein `confidence`-Mass. Alles unter 0,8 ist ein Hinweis,
+zuerst dort hinzuschauen.
 
-Jeder Import landet als **Entwurf**. In der Redaktionsansicht lassen sich
-Artikel zusammenfuehren, an der Cursorstelle teilen, umbenennen, im Text
-korrigieren und freigeben. Erst freigegebene Artikel sieht der Leser.
+### KI-Stufe
 
-Das ist Absicht: eine Erkennung, die in neun von zehn Faellen stimmt, ist ohne
-Korrekturschritt keine Entlastung, sondern eine Fehlerquelle.
+Optional kann ein Sprachmodell die Gruppierung nachbessern. Es ist
+**standardmaessig aus** und wird nur mit `EXTRACT_USE_LLM=true` und einem
+`ANTHROPIC_API_KEY` aktiv. Das Modell bekommt nur ein Verzeichnis der Bloecke
+mit den ersten Zeichen und liefert nur Gruppen zurueck — der Text bleibt so, wie
+er in der Druckdatei steht.
+
+## 4. Redaktionelle Pruefung
+
+Importierte Artikel haben den Reviewstatus `pending`. Die Redaktion kann:
+
+* Titel, Unterzeile, Autor und einzelne Bloecke bearbeiten,
+* Bloecke verschieben, loeschen oder in einen anderen Artikel schieben,
+* Artikel zusammenfuehren,
+* an einer Blockgrenze trennen — dabei wandern Regionen und Seitenbezug mit,
+* Artikel freigeben (`approved`) oder ausschliessen (`excluded`),
+* das Inhaltsverzeichnis korrigieren.
+
+Es gibt **keinen** eigenen Veroeffentlichungsschritt je Artikel. Sichtbar wird
+ein freigegebener Artikel, sobald seine Ausgabe veroeffentlicht ist; Aenderungen
+an ihm sind dann sofort live. Eine Ausgabe laesst sich erst veroeffentlichen,
+wenn kein Artikel mehr offen ist.
 
 ## Auf der Kommandozeile pruefen
 
 ```bash
 cd extract-service
-.venv/bin/python -m extractor.cli "../hefte test/zuerst 3-2026 innenteil.pdf" \
-  --no-llm --out ../_scratch/heft.json
+.venv/bin/python -m pytest tests -q
 ```

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Authenticated, useAction, useQuery } from "convex/react";
-import { api, type Id } from "../lib/convex";
+import { api, formatEuro, type Id } from "../lib/api";
 
-export default function ShopPage() {
-  const books = useQuery(api.books.list, {});
+/** Kiosk: veroeffentlichte Ausgaben und die Abos je Titel. */
+export default function KioskPage() {
+  const issues = useQuery(api.issues.listPublished, {});
   const plans = useQuery(api.plans.list, {});
   const waiver = useQuery(api.consents.currentWaiver, {});
   const subscribe = useAction(api.billing.createSubscriptionCheckout);
@@ -12,7 +13,7 @@ export default function ShopPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  if (books === undefined) return <div className="centered">Laden...</div>;
+  if (issues === undefined) return <div className="centered">Laden...</div>;
 
   async function startAbo(planId: Id<"subscriptionPlans">) {
     setErr(null);
@@ -21,13 +22,13 @@ export default function ShopPage() {
       const origin = window.location.origin;
       const { url } = await subscribe({
         planId,
-        successUrl: `${origin}/checkout/success?abo=1`,
-        cancelUrl: `${origin}/shop`,
+        successUrl: `${origin}/library?abo=1`,
+        cancelUrl: `${origin}/kiosk`,
         withdrawalWaiver: accepted,
       });
       window.location.href = url;
     } catch (e: any) {
-      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") || "Abo-Checkout fehlgeschlagen");
+      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") ?? "Abo fehlgeschlagen");
       setBusy(null);
     }
   }
@@ -40,8 +41,9 @@ export default function ShopPage() {
         <section className="plans">
           <h3>Abo</h3>
           <p className="hint">
-            Das Abo schaltet alle freigegebenen Ausgaben frei, solange es läuft.
-            Kündigung jederzeit zum Laufzeitende im Profil.
+            Das Abo schaltet jede Ausgabe frei, die während der Laufzeit
+            erscheint — und das bei Abschluss aktuelle Heft. Freigeschaltete
+            Ausgaben bleiben auch nach einer Kündigung lesbar.
           </p>
           <Authenticated>
             <label className="consent">
@@ -60,9 +62,10 @@ export default function ShopPage() {
             {plans.map((p) => (
               <div className="plan-card" key={p._id}>
                 <div className="title">{p.name}</div>
+                {p.publication && <div className="meta">{p.publication}</div>}
                 {p.description && <p>{p.description}</p>}
                 <div className="price">
-                  {(p.priceCents / 100).toFixed(2)} {p.currency.toUpperCase()}
+                  {formatEuro(p.priceAmountCents)}
                   {p.interval === "year" ? " / Jahr" : " / Monat"}
                 </div>
                 <Authenticated>
@@ -82,23 +85,22 @@ export default function ShopPage() {
       )}
 
       <h3>Einzelausgaben</h3>
-      <div className="book-grid">
-        {books.map((b) => (
-          <Link key={b._id} to={`/book/${b._id}`} className="book-card">
-            {b.coverUrl ? (
-              <img src={b.coverUrl} alt={b.title} />
+      <div className="issue-grid">
+        {issues.map((i) => (
+          <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
+            {i.coverUrl ? (
+              <img src={i.coverUrl} alt={i.title} loading="lazy" />
             ) : (
-              <div className="cover-placeholder">{b.title[0]}</div>
+              <div className="cover-placeholder">{i.title[0]}</div>
             )}
-            <div className="book-card-body">
-              <div className="title">{b.title}</div>
-              <div className="price">
-                {(b.priceCents / 100).toFixed(2)} {b.currency.toUpperCase()}
-              </div>
+            <div className="issue-card-body">
+              <div className="title">{i.title}</div>
+              <div className="meta">{i.issueNumber ?? ""}</div>
+              <div className="price">{formatEuro(i.priceAmountCents)}</div>
             </div>
           </Link>
         ))}
-        {books.length === 0 && <p>Keine Ausgaben verfügbar.</p>}
+        {issues.length === 0 && <p className="hint">Noch keine Ausgabe veröffentlicht.</p>}
       </div>
     </div>
   );

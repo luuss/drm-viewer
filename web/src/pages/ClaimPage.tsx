@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { api } from "../lib/convex";
+import { api } from "../lib/api";
 import { translateAuthError } from "../lib/authError";
 
 export default function ClaimPage() {
@@ -46,7 +46,7 @@ export default function ClaimPage() {
     setBusy(true);
     try {
       const r = await claim({ token: token! });
-      navigate(`/read/${r.bookId}`);
+      navigate(`/reader/${r.issueId}`);
     } catch (e: any) {
       setErr(e.message || "Einlösen fehlgeschlagen");
       setBusy(false);
@@ -57,14 +57,14 @@ export default function ClaimPage() {
     <div className="centered">
       <div className="claim-box">
         <h2>Buch freischalten</h2>
-        {info.book && (
-          <div className="book-preview">
-            {info.book.coverUrl ? (
-              <img src={info.book.coverUrl} alt={info.book.title} />
+        {info.issue && (
+          <div className="issue-preview">
+            {info.issue.coverUrl ? (
+              <img src={info.issue.coverUrl} alt={info.issue.title} />
             ) : (
-              <div className="cover-placeholder">{info.book.title[0]}</div>
+              <div className="cover-placeholder">{info.issue.title[0]}</div>
             )}
-            <div className="title">{info.book.title}</div>
+            <div className="title">{info.issue.title}</div>
           </div>
         )}
         <p className="hint">

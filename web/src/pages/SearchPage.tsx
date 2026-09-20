@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
-import { api } from "../lib/convex";
+import { api } from "../lib/api";
 
 export default function SearchPage() {
   const [term, setTerm] = useState("");
@@ -29,11 +29,11 @@ export default function SearchPage() {
       <ul className="search-results">
         {results?.map((r) => (
           <li key={r._id}>
-            <Link to={`/read/${r.bookId}?article=${r._id}`}>
+            <Link to={`/read/${r.issueId}?article=${r._id}`}>
               <strong>{r.title}</strong>
             </Link>
             <div className="meta">
-              {r.bookTitle} · Seite {r.pageStart}
+              {r.issueTitle} · Seite {r.pageIndex + 1}
             </div>
             <p>{r.snippet}</p>
           </li>

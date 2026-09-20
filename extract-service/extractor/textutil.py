@@ -44,3 +44,18 @@ def first_sentence(text: str, limit: int = 220) -> str:
     if m:
         return m.group(1).strip()
     return t[:limit].strip()
+
+
+DROPCAP_RE = re.compile(r"^(\d{1,3}\s+)?([A-ZÄÖÜ])\s+(?=[a-zäöüß])")
+
+
+def glue_dropcap(text: str) -> str:
+    """Initiale wieder ans Wort setzen.
+
+    Im Satz steht die Initiale als eigenes Zeichen mit Abstand, beim Auslesen
+    wird daraus "B ürgergeld". Eine vorangestellte Seitenzahl faellt dabei weg.
+    """
+    m = DROPCAP_RE.match(text)
+    if not m:
+        return text
+    return m.group(2) + text[m.end():]

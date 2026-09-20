@@ -40,8 +40,19 @@ Blockverzeichnis:
 """
 
 
-def available() -> bool:
+def enabled() -> bool:
+    """Die KI-Stufe ist aus, solange sie nicht ausdruecklich eingeschaltet wird.
+
+    Sie entscheidet nur ueber die Gruppierung; der Text bleibt so, wie er in der
+    Druckdatei steht.
+    """
+    if os.environ.get("EXTRACT_USE_LLM", "").lower() not in ("1", "true", "ja"):
+        return False
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
+def available() -> bool:
+    return enabled()
 
 
 def _digest(blocks: list[dict], limit: int = 90) -> str:

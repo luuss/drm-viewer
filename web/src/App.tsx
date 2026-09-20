@@ -1,16 +1,15 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthLoading, Authenticated, Unauthenticated } from "convex/react";
 import LoginPage from "./pages/LoginPage";
-import LibraryPage from "./pages/LibraryPage";
-import ShopPage from "./pages/ShopPage";
-import BookDetailPage from "./pages/BookDetailPage";
+import LibraryPage from "./library/LibraryPage";
+import KioskPage from "./library/KioskPage";
+import IssueDetailPage from "./library/IssueDetailPage";
 import ClaimPage from "./pages/ClaimPage";
-import ReaderPage from "./pages/ReaderPage";
-import AdminPage from "./pages/AdminPage";
+import ReaderShell from "./reader/ReaderShell";
+import AdminPage from "./admin/AdminPage";
 import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
 import LegalPage from "./pages/LegalPage";
-import CheckoutSuccessPage from "./pages/CheckoutSuccessPage";
 import AppShell from "./components/AppShell";
 
 export default function App() {
@@ -23,61 +22,39 @@ export default function App() {
       <Unauthenticated>
         <Routes>
           <Route path="/claim/:token" element={<ClaimPage />} />
-          <Route path="/shop" element={<ShopPageWrap />} />
-          <Route path="/book/:id" element={<BookDetailPageWrap />} />
-          <Route path="/impressum" element={<LegalWrap doc="impressum" />} />
-          <Route path="/agb" element={<LegalWrap doc="agb" />} />
-          <Route path="/widerruf" element={<LegalWrap doc="widerruf" />} />
-          <Route path="/datenschutz" element={<LegalWrap doc="datenschutz" />} />
+          <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
+          <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
+          <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
+          <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
+          <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
+          <Route path="/datenschutz" element={<Shell><LegalPage doc="datenschutz" /></Shell>} />
           <Route path="*" element={<LoginPage />} />
         </Routes>
       </Unauthenticated>
 
       <Authenticated>
-        <AppShell>
-          <Routes>
-            <Route path="/" element={<Navigate to="/library" replace />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route path="/shop" element={<ShopPage />} />
-            <Route path="/book/:id" element={<BookDetailPage />} />
-            <Route path="/read/:id" element={<ReaderPage />} />
-            <Route path="/claim/:token" element={<ClaimPage />} />
-            <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/suche" element={<SearchPage />} />
-            <Route path="/impressum" element={<LegalPage doc="impressum" />} />
-            <Route path="/agb" element={<LegalPage doc="agb" />} />
-            <Route path="/widerruf" element={<LegalPage doc="widerruf" />} />
-            <Route path="/datenschutz" element={<LegalPage doc="datenschutz" />} />
-            <Route path="*" element={<Navigate to="/library" replace />} />
-          </Routes>
-        </AppShell>
+        <Routes>
+          {/* Der Reader laeuft ohne Rahmen, damit die Seite den Schirm fuellt. */}
+          <Route path="/reader/:issueId" element={<ReaderShell />} />
+          <Route path="/" element={<Navigate to="/library" replace />} />
+          <Route path="/library" element={<Shell><LibraryPage /></Shell>} />
+          <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
+          <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
+          <Route path="/claim/:token" element={<ClaimPage />} />
+          <Route path="/suche" element={<Shell><SearchPage /></Shell>} />
+          <Route path="/account" element={<Shell><ProfilePage /></Shell>} />
+          <Route path="/admin" element={<Shell><AdminPage /></Shell>} />
+          <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
+          <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
+          <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
+          <Route path="/datenschutz" element={<Shell><LegalPage doc="datenschutz" /></Shell>} />
+          <Route path="*" element={<Navigate to="/library" replace />} />
+        </Routes>
       </Authenticated>
     </>
   );
 }
 
-// Rechtstexte sind auch ohne Login erreichbar — Pflicht im Bestellprozess.
-function LegalWrap({ doc }: { doc: string }) {
-  return (
-    <AppShell>
-      <LegalPage doc={doc} />
-    </AppShell>
-  );
-}
-
-function ShopPageWrap() {
-  return (
-    <AppShell>
-      <ShopPage />
-    </AppShell>
-  );
-}
-function BookDetailPageWrap() {
-  return (
-    <AppShell>
-      <BookDetailPage />
-    </AppShell>
-  );
+function Shell({ children }: { children: React.ReactNode }) {
+  return <AppShell>{children}</AppShell>;
 }

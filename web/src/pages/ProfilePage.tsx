@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "../lib/convex";
+import { api, formatEuro } from "../lib/api";
 
 export default function ProfilePage() {
   const me = useQuery(api.users.me, {});
   const subStatus = useQuery(api.subscriptions.myStatus, {});
   const purchases = useQuery(api.purchases.mine, {});
-  const sessions = useQuery(api.tileSessions.myActiveSessions, {});
+  const sessions = useQuery(api.readerSessions.mine, {});
   const changePassword = useAction(api.account.changePassword);
   const deleteAccount = useAction(api.account.deleteMyAccount);
   const portal = useAction(api.billing.createPortalSession);
   const cancelSub = useAction(api.billing.cancelMySubscription);
-  const revokeSessions = useMutation(api.tileSessions.revokeAllMySessions);
+  const revokeSessions = useMutation(api.readerSessions.revokeAllMine);
   const setName = useMutation(api.account.setName);
 
   const [current, setCurrent] = useState("");
@@ -173,7 +173,7 @@ export default function ProfilePage() {
             <ul className="plain">
               {sessions.map((s) => (
                 <li key={s._id}>
-                  {s.bookTitle} · seit{" "}
+                  {s.issueTitle} · seit{" "}
                   {new Date(s.createdAt).toLocaleString("de-DE")} ·{" "}
                   {s.tileCount} Kacheln
                 </li>
@@ -204,7 +204,7 @@ export default function ProfilePage() {
             <li key={p._id}>
               {new Date(p.createdAt).toLocaleDateString("de-DE")} ·{" "}
               {p.title ?? p.planName ?? "Position"} ·{" "}
-              {(p.amountCents / 100).toFixed(2)} {p.currency.toUpperCase()} ·{" "}
+              {formatEuro(p.amountCents)} ·{" "}
               {p.status}
             </li>
           ))}

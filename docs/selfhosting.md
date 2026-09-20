@@ -70,7 +70,19 @@ export CONVEX_SELF_HOSTED_ADMIN_KEY=<Schluessel aus dem Befehl oben>
 npx convex deploy
 ```
 
-## 5. Umgebungswerte im Backend setzen
+## 5. Medien-Eimer anlegen
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec minio \
+  sh -c 'mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" &&
+         mc mb -p local/emag-media'
+```
+
+Der Eimer bleibt privat. Seitenbilder und Artikelbilder gehen ausschliesslich
+ueber das Kachel-Gateway an den Browser; die Druckdateien verlassen den Server
+gar nicht.
+
+## 6. Umgebungswerte im Backend setzen
 
 ```bash
 npx convex env set STRIPE_SECRET_KEY sk_live_...
@@ -79,13 +91,15 @@ npx convex env set RESEND_API_KEY re_...
 npx convex env set RESEND_FROM_EMAIL "E-Magazin <noreply@example.de>"
 npx convex env set APP_PUBLIC_URL https://lesen.example.de
 npx convex env set TILE_SERVICE_SECRET <derselbe Wert wie in .env.selfhost>
-npx convex env set EXTRACT_SERVICE_URL http://extract-service:8100
+npx convex env set EXTRACT_SERVICE_SECRET <eigener Wert fuer den Worker>
+npx convex env set SHOP_WEBHOOK_SECRET <Wert fuer die Shop-Schnittstelle>
 npx convex env set ADMIN_EMAILS redaktion@example.de
-npx convex env set MAX_ACTIVE_SESSIONS 3
+npx convex env set MAX_ACTIVE_SESSIONS 2
+npx convex env set SUBSCRIPTION_GRACE_MS 259200000
 npx convex env set REQUIRE_EMAIL_VERIFICATION false
 ```
 
-## 6. Stripe
+## 7. Stripe
 
 Webhook-Endpunkt: `https://hooks.example.de/stripe/webhook`
 
@@ -106,7 +120,11 @@ Im Stripe-Konto zusaetzlich einstellen:
   E-Zeitschriften der ermaessigte Satz. Falscher Satz kostet die Differenz.
 * SEPA-Lastschrift als Zahlart freischalten.
 
-## 7. Sicherung
+Die erste Anmeldung mit einer Adresse aus `ADMIN_EMAILS` bekommt die Rolle
+Admin. Danach werden Rollen in der Oberflaeche vergeben; die Liste ist nur
+der Erstzugang.
+
+## 8. Sicherung
 
 `deploy/backup.sh` legt einen Datenbank-Dump und eine Kopie der Dateien ab.
 Als Cron einrichten:
@@ -118,7 +136,7 @@ Als Cron einrichten:
 Wiederherstellung: Dump mit `psql` einspielen, Dateien nach `/data` im
 MinIO-Volumen zurueckschreiben, danach Backend neu starten.
 
-## 8. Pruefen, ob alles laeuft
+## 9. Pruefen, ob alles laeuft
 
 ```bash
 curl -s https://api.example.de/version
@@ -126,3 +144,44 @@ curl -s https://tiles.example.de/health
 docker compose -f docker-compose.selfhost.yml exec extract-service \
   wget -qO- http://localhost:8100/health
 ```
+
+
+## 10. Referenzfall: eigene Subdomain
+
+Der geprueft dokumentierte Fall ist der Betrieb unter einer eigenen Subdomain,
+etwa `digital.lesenundschenken.de`. Im Caddyfile stehen vier Namen:
+
+```
+digital.lesenundschenken.de  -> web:80
+api.lesenundschenken.de      -> convex-backend:3210
+hooks.lesenundschenken.de    -> convex-backend:3211
+tiles.lesenundschenken.de    -> tile-service:8000
+```
+
+In `.env.selfhost` dazu:
+
+```
+WEB_DOMAIN=digital.lesenundschenken.de
+API_DOMAIN=api.lesenundschenken.de
+HOOKS_DOMAIN=hooks.lesenundschenken.de
+TILE_DOMAIN=tiles.lesenundschenken.de
+PUBLIC_WEB_ORIGIN=https://digital.lesenundschenken.de
+PUBLIC_TILE_ORIGIN=https://tiles.lesenundschenken.de
+CONVEX_CLOUD_ORIGIN=https://api.lesenundschenken.de
+CONVEX_SITE_ORIGIN=https://hooks.lesenundschenken.de
+```
+
+Der Betrieb unter einem Unterpfad (`lesenundschenken.de/digital/`) geht auch:
+`VITE_BASE_PATH=/digital/` setzen und im Proxy entsprechend weiterleiten. Die
+Anwendung verdrahtet keine Wurzel-URLs.
+
+## 11. Aufbereitung pruefen
+
+```bash
+docker compose -f docker-compose.selfhost.yml logs -f import-worker
+```
+
+Ein Auftrag meldet Start, Fortschritt je Seite und am Ende, wie viele Artikel
+uebernommen wurden. Bleibt ein Auftrag haengen, laeuft seine Sperre aus und der
+naechste Worker versucht ihn erneut; nach drei Versuchen steht er als Fehler in
+der Redaktionsansicht.

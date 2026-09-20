@@ -68,9 +68,11 @@ Neue Tabellen in `convex/schema.ts`:
 
 * `publications` — Titelreihe. `name`, `slug`, `description?`, `isActive`.
 * `issues` — Ausgabe. `publicationId`, `title`, `slug`, `issueNumber?`,
-  `publicationDate?`, `coverAssetKey?`, `pageCount`, `isPublished`,
-  `includedInSubscription`, `externalSku?`, `priceCents`, `currency`,
-  `stripePriceId?`, `stripeProductId?`.
+  `publicationDate?`, `coverAssetId?`, `pageCount`, `isPublished`,
+  `includedInSubscription`, `externalSku?`, `priceAmountCents`,
+  `stripePriceId?`, `stripeProductId?`. Der lokale Preis in Cent ist die
+  verbindliche, commerce-neutrale Quelle; das MVP fuehrt ausschliesslich Euro,
+  Stripe haelt nur eine Zuordnung.
 * `assets` — Objektspeicher-Eintraege. `key`, `bucket`, `contentType`, `bytes`,
   `kind` (`source|page|tile|image|cover`), `issueId?`, `convexStorageId?`.
   `convexStorageId` ist der Uebergangsweg, solange kein S3 konfiguriert ist.
@@ -79,9 +81,11 @@ Neue Tabellen in `convex/schema.ts`:
 * `issuePages` — kanonische Leserreihenfolge. `issueId`, `index` (0-basiert),
   `printedLabel?`, `role`, `sourceAssetId`, `sourcePageIndex`, `width`, `height`,
   `tileManifestKey?`, `previewKey?`.
-* `articles` — nur Metadaten. `issueId`, `order`, `title`, `subtitle?`,
-  `author?`, `teaser?`, `source`, `status`, `confidence?`, `primaryPageIndex`,
-  `searchText` (denormalisiert fuer die Suche).
+* `articles` — nur Metadaten und interner Reviewstatus. `issueId`, `order`,
+  `title`, `subtitle?`, `author?`, `teaser?`, `source`,
+  `reviewStatus` (`pending|approved|excluded`), `confidence?`,
+  `primaryPageIndex`, `searchText` (denormalisiert fuer die Suche).
+  Artikel werden nicht einzeln veroeffentlicht.
 * `articleBlocks` — Inhalt. `articleId`, `issueId`, `order`, `type`, `text`,
   `sourcePageIndex?`, `sourceStoryId?`, `sourceFrameId?`, `styleName?`,
   `confidence?`.
@@ -111,19 +115,21 @@ aber `issueId` statt `bookId`.
 
 Eine einzige Funktion `hasIssueAccess(ctx, userId, issueId)` in
 `convex/access.ts`. Alle Leserpfade rufen sie auf: Artikel, Bloecke, Regionen,
-Suche, Lesesitzung, Kachel-Gateway.
+Suche, Lesesitzung, Kachel-Gateway. Sie kennt nur eine Quelle: Entitlements.
 
-Regeln:
+Ein Abo liest nicht selbst frei, sondern erzeugt Freischaltungen
+(`subscriptions.syncSubscription`, idempotent):
 
-1. Entitlement mit `source=purchase|claim|admin|gift|external_shop` ohne
-   `validUntil` gilt unbefristet, mit `validUntil` bis dahin.
-2. Abo gilt, solange eine Zeile in `subscriptions` den Status
-   `active|trialing|past_due` hat und `currentPeriodEnd` plus Kulanzfrist
-   (Standard drei Tage) in der Zukunft liegt.
-3. Ueber das Abo sind nur veroeffentlichte Ausgaben zugaenglich, die
-   `includedInSubscription` nicht ausschliessen. Einzelkauf gilt auch vor der
-   Veroeffentlichung, etwa fuer Vorabexemplare.
-4. Rueckerstattung und Chargeback entziehen das Kauf-Entitlement.
+1. Alles, was zwischen `startedAt` und dem Ende des bezahlten Zeitraums (plus
+   Kulanzfrist, Standard drei Tage) erscheint.
+2. Zusaetzlich das beim Abschluss aktuelle Heft, auch wenn es vorher erschien.
+3. Ausgeloest bei Abschluss, Verlaengerung, Kuendigung, Reaktivierung, beim
+   Veroeffentlichen einer Ausgabe und taeglich per Zeitplan.
+4. Eine Kuendigung entzieht nichts. Eine Pause schaltet die Luecke nicht
+   nachtraeglich frei; beim Neustart gibt es wieder das dann aktuelle Heft.
+
+Einzelkauf gilt unbefristet und auch vor der Veroeffentlichung, etwa fuer
+Vorabexemplare. Rueckerstattung und Chargeback entziehen das Kauf-Entitlement.
 
 ## 6. Objektspeicher
 
@@ -160,10 +166,14 @@ nur der Ablageort.
 7. Normalisierung beider Quellen auf `SourceBlock`.
 8. Artikelaufbau aus Spaltenfolge, Schriftgroessen, Fortsetzungssignalen,
    optional LLM-Gruppierung.
-9. Artikel, Bloecke, Regionen, Bilder und Inhaltsverzeichnis werden als
-   Entwurf geschrieben, Auftrag geht auf `review`.
+9. Artikel, Bloecke, Regionen, Bilder und Inhaltsverzeichnis werden in einer
+   einzigen Mutation aktiviert (`imports.activateResultInternal`), Artikel mit
+   Reviewstatus `pending`; der Auftrag geht auf `review`.
 
-Keine automatische Veroeffentlichung.
+Ein erneuter Lauf ersetzt alle abgeleiteten Daten. Weil die Aktivierung eine
+Transaktion ist, sehen Leser entweder den alten oder den neuen Stand.
+Quellen, Stammdaten, Kaeufe und Freischaltungen bleiben unberuehrt. Keine
+automatische Veroeffentlichung.
 
 ## 8. Lizenzentscheidung PDF-Werkzeuge
 
@@ -192,8 +202,10 @@ Lesefortschritt speichert Modus, Seite und Artikel, gedrosselt geschrieben.
 ## 10. Kopierschutz
 
 Wirksam: Originaldatei nie an den Browser, Zugriffspruefung serverseitig,
-kurzlebige Lesesitzungen, Begrenzung gleichzeitiger Sitzungen, Ratenbegrenzung,
-sichtbares Wasserzeichen mit Kontokennung im Reader, getrennte Dienstgeheimnisse.
+kurzlebige Lesesitzungen, hoechstens zwei gleichzeitig je Konto (die aelteste
+weicht und das wird protokolliert), Ratenbegrenzung, sichtbares Wasserzeichen
+mit Kontokennung im Reader, getrennte Geheimnisse fuer Kacheldienst, Worker und
+Shop-Schnittstelle.
 
 Entfernt: DevTools-Erkennung ueber Fenstermasse, PrintScreen-Erkennung,
 Canvas-Vergiftung, Koederanfragen, kuenstliche Verzoegerungen. Sie haben nichts
@@ -202,10 +214,13 @@ verhindert und den Reader zeitweise unbenutzbar gemacht.
 ## 11. Commerce und Shop-Anbindung
 
 Stripe bleibt, gebuendelt in `convex/billing.ts` und `convex/stripeEvents.ts`.
-Zusaetzlich `convex/shopIntegration.ts`: HMAC-signierte Server-Schnittstelle
-unter `/shop/entitlements`, idempotent ueber `externalOrderId`, mit
-Protokoll in `shopGrants` und `auditLog`. Ohne Konto wird ein Claim-Link
-verschickt.
+Abos gelten je Publikation. Zusaetzlich `convex/shopIntegration.ts`:
+HMAC-signierte Server-Schnittstelle unter `/shop/entitlements`, idempotent ueber
+`externalOrderId` und Aktion, mit Protokoll in `shopGrants` und `auditLog`.
+
+Bewusste Grenze: die Schnittstelle legt kein Konto an. Fehlt es, antwortet sie
+mit `account_not_found`, damit der Shop den Kunden zur Registrierung schickt.
+Ein vorhandenes, noch unbestaetigtes Konto bekommt den Zugriff.
 
 ## 12. Rollen
 
@@ -224,8 +239,14 @@ getan hat.
 
 ## 14. Teststrategie
 
-* Convex: Zugriffslogik, Artikeloperationen, Shop-Schnittstelle, Rollen.
-* Python: Seitenreihenfolge, Textbereinigung, Artikelaufbau, IDML-Fixture.
+* Convex (`npm test`, convex-test + vitest): Zugriff bei Einzelkauf, abgelaufenem
+  Entitlement, Abo je Publikation, aktuellem Heft bei Abschluss, Kuendigung,
+  Reaktivierungsluecke, Kulanzfrist, unveroeffentlichter Ausgabe; Import,
+  Re-Import, Trennen an der Blockgrenze, Zusammenfuehren, Veroeffentlichungs-Gate;
+  Shop-Schnittstelle idempotent und ohne Kontoanlage.
+* Python (`pytest`): Trennstriche, Initialen, Beiwerk, Spalten, mehrseitige
+  Artikel, IDML-Fixture inklusive Pfadausbruch, kanonische Seitenreihenfolge,
+  KI-Stufe standardmaessig aus.
 * Ende zu Ende am echten Heft ZUERST! 3/2026.
 * Typecheck und Build fuer Web und Convex, `docker compose config`.
 

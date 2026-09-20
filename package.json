@@ -7,7 +7,10 @@
     "convex": "convex dev",
     "convex:deploy": "convex deploy",
     "web": "cd web && npm run dev",
-    "tile": "cd tile-service && uvicorn main:app --reload --port 8000"
+    "tile": "cd tile-service && uvicorn main:app --reload --port 8000",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "worker": "cd extract-service && .venv/bin/python worker.py"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.95",
@@ -18,7 +21,10 @@
     "stripe": "^22.6.2"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@types/node": "^26.6.2",
-    "typescript": "^7.0.2"
+    "convex-test": "^0.0.59",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   }
 }
