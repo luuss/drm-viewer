@@ -14,25 +14,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <header className="app-header">
         <Link to="/" className="brand">
-          DRM Reader
+          E-Magazin
         </Link>
         <nav>
           <Authenticated>
-            <Link to="/library">Meine Bücher</Link>
-            <Link to="/shop">Shop</Link>
+            <Link to="/library">Meine Ausgaben</Link>
+            <Link to="/shop">Kiosk</Link>
+            <Link to="/suche">Suche</Link>
             <AdminLink />
-            <UserBadge />
+            <Link to="/profile" className="user-badge">
+              <UserBadge />
+            </Link>
             <button className="link-btn" onClick={() => signOut()}>
-              Logout
+              Abmelden
             </button>
           </Authenticated>
           <Unauthenticated>
-            <Link to="/shop">Shop</Link>
-            <Link to="/">Login</Link>
+            <Link to="/shop">Kiosk</Link>
+            <Link to="/">Anmelden</Link>
           </Unauthenticated>
         </nav>
       </header>
       <main>{children}</main>
+      <footer className="app-footer">
+        <Link to="/impressum">Impressum</Link>
+        <Link to="/datenschutz">Datenschutz</Link>
+        <Link to="/agb">AGB</Link>
+        <Link to="/widerruf">Widerruf</Link>
+      </footer>
     </div>
   );
 }
@@ -40,11 +49,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 function UserBadge() {
   const me = useQuery(api.users.me, {});
   if (!me) return null;
-  return <span className="user-badge">{me.email}</span>;
+  return <>{me.email}</>;
 }
 
 function AdminLink() {
   const me = useQuery(api.users.me, {});
   if (!me?.isAdmin) return null;
-  return <Link to="/admin">Admin</Link>;
+  return <Link to="/admin">Redaktion</Link>;
 }

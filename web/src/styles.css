@@ -535,3 +535,178 @@ button.secondary:hover:not(:disabled) {
   .book-detail { gap: 1.5rem; }
   .cover-wrap img, .cover-wrap .cover-placeholder { width: 100%; max-width: 220px; }
 }
+
+/* --- Fussbereich, Rechtstexte, Profil --- */
+
+.app-footer {
+  display: flex;
+  gap: 1.25rem;
+  justify-content: center;
+  padding: 2rem 1rem 2.5rem;
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  font-size: 0.85rem;
+}
+.app-footer a { color: var(--muted); text-decoration: none; }
+.app-footer a:hover { color: var(--accent); }
+
+.legal { max-width: 46rem; }
+.legal h3 { margin: 1.6rem 0 0.4rem; font-size: 1rem; }
+.legal p, .legal li { color: var(--ink-soft); line-height: 1.65; }
+.legal ul { padding-left: 1.2rem; }
+
+.legal-line { margin-top: 1.5rem; font-size: 0.8rem; color: var(--muted); }
+.legal-line a { color: var(--muted); }
+
+.auth-links { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.75rem; }
+
+.profile section {
+  border-top: 1px solid var(--rule);
+  padding: 1.25rem 0;
+}
+.profile section.danger h3 { color: var(--danger); }
+.stack-form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 22rem; }
+.inline-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.inline-form input, .inline-form select { padding: 0.5rem 0.6rem; }
+ul.plain { list-style: none; padding: 0; }
+ul.plain li { padding: 0.35rem 0; color: var(--ink-soft); display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.link-btn.danger { color: var(--danger); }
+
+/* --- Zustimmung im Bestellvorgang --- */
+
+.consent {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 1rem 0;
+  max-width: 34rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.consent input { margin-top: 0.2rem; }
+
+/* --- Abo-Karten --- */
+
+.plans { margin-bottom: 2.5rem; }
+.plan-grid { display: flex; gap: 1rem; flex-wrap: wrap; }
+.plan-card {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  padding: 1.1rem 1.25rem;
+  border-radius: 6px;
+  min-width: 15rem;
+}
+.plan-card .title { font-weight: 600; }
+.plan-card .price { margin: 0.5rem 0 0.9rem; color: var(--accent); }
+
+/* --- Suche --- */
+
+.search-input { width: 100%; max-width: 34rem; padding: 0.7rem 0.8rem; }
+.search-results { list-style: none; padding: 0; margin-top: 1.5rem; }
+.search-results li { padding: 0.9rem 0; border-bottom: 1px solid var(--rule); }
+.search-results .meta { font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0; }
+.search-results p { color: var(--ink-soft); font-size: 0.9rem; }
+
+/* --- Artikel im Reader --- */
+
+.article-hotspots {
+  position: absolute;
+  pointer-events: none;
+}
+.article-hotspots .hotspot {
+  position: absolute;
+  pointer-events: auto;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.article-hotspots .hotspot:hover {
+  background: rgba(138, 90, 59, 0.16);
+  border-color: rgba(138, 90, 59, 0.5);
+}
+
+.article-list {
+  position: absolute;
+  top: 3.5rem;
+  left: 1rem;
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1rem;
+  max-height: 70vh;
+  overflow: auto;
+  max-width: 24rem;
+}
+.article-list ul { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+.article-list li { padding: 0.2rem 0; }
+
+.article-reader {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: var(--paper);
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+}
+.article-reader-inner {
+  max-width: 40rem;
+  padding: 2.5rem 1.25rem 4rem;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+.article-reader-inner h1 { font-size: 1.8rem; line-height: 1.25; }
+.article-reader-inner h2 { font-size: 1.1rem; color: var(--ink-soft); font-weight: 500; }
+.article-reader-inner .byline { color: var(--muted); font-size: 0.9rem; }
+.article-reader-inner .meta { color: var(--muted); font-size: 0.8rem; margin-bottom: 1.5rem; }
+.article-reader-inner p { margin-bottom: 1.1rem; color: var(--ink); }
+.article-reader-inner figure { margin: 1.5rem 0; }
+.article-reader-inner img { width: 100%; border-radius: 4px; }
+.article-reader-inner figcaption { font-size: 0.8rem; color: var(--muted); margin-top: 0.4rem; }
+.article-reader .close {
+  position: sticky;
+  top: 0;
+  float: right;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* --- Redaktion --- */
+
+.admin section { border-top: 1px solid var(--rule); padding: 1.5rem 0; }
+.admin .row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.admin .row.actions { margin-top: 0.4rem; }
+.admin .grow { flex: 1; }
+.article-rows { list-style: none; padding: 0; margin: 1rem 0; }
+.article-rows li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+.article-rows li.draft { opacity: 0.75; }
+.article-editor {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  padding: 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+.article-editor label { display: block; margin-bottom: 0.75rem; }
+.article-editor textarea, .article-editor input {
+  width: 100%;
+  font: inherit;
+  padding: 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper);
+}

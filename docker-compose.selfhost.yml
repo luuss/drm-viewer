@@ -1,0 +1,138 @@
+# Vollstaendig selbst betriebener Aufbau: Convex-Backend, Datenbank, Objektspeicher,
+# Kacheldienst, Extraktionsdienst, Weboberflaeche und TLS-Proxy.
+#
+# Start:  docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost up -d
+# Erster Lauf: siehe docs/selfhosting.md (Admin-Schluessel, Deploy der Funktionen).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: convex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+      POSTGRES_DB: convex_self_hosted
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convex"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-convexminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD fehlt}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  convex-backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      INSTANCE_NAME: ${CONVEX_INSTANCE_NAME:-emagazin}
+      INSTANCE_SECRET: ${CONVEX_INSTANCE_SECRET:?CONVEX_INSTANCE_SECRET fehlt}
+      CONVEX_CLOUD_ORIGIN: ${CONVEX_CLOUD_ORIGIN:?z.B. https://api.example.de}
+      CONVEX_SITE_ORIGIN: ${CONVEX_SITE_ORIGIN:?z.B. https://hooks.example.de}
+      # Postgres statt SQLite: noetig fuer Sicherungen im laufenden Betrieb.
+      DATABASE_URL: postgresql://convex:${POSTGRES_PASSWORD}@postgres:5432
+      POSTGRES_URL: postgresql://convex:${POSTGRES_PASSWORD}@postgres:5432
+      DO_NOT_REQUIRE_SSL: "true"
+      # Dateien (PDF, IDML, Bilder) in MinIO statt im Container.
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_REGION: us-east-1
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_STORAGE_EXPORTS_BUCKET: convex-exports
+      S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET: convex-imports
+      S3_STORAGE_MODULES_BUCKET: convex-modules
+      S3_STORAGE_FILES_BUCKET: convex-files
+      S3_STORAGE_SEARCH_BUCKET: convex-search
+      RUST_LOG: info
+    volumes:
+      - convex-data:/convex/data
+    ports:
+      - "3210:3210"
+      - "3211:3211"
+    restart: unless-stopped
+
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    depends_on:
+      - convex-backend
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${CONVEX_CLOUD_ORIGIN}
+    ports:
+      - "6791:6791"
+    restart: unless-stopped
+
+  tile-service:
+    build:
+      context: ./tile-service
+    environment:
+      CONVEX_URL: ${CONVEX_CLOUD_ORIGIN}
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET:?fehlt}
+      CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN}
+      MAX_PAGES_PER_MIN: ${MAX_PAGES_PER_MIN:-40}
+      MAX_TILES_PER_MIN: ${MAX_TILES_PER_MIN:-900}
+    restart: unless-stopped
+
+  extract-service:
+    build:
+      context: ./extract-service
+    environment:
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET:?fehlt}
+      CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EXTRACT_LLM_MODEL: ${EXTRACT_LLM_MODEL:-claude-sonnet-5}
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_CONVEX_URL: ${CONVEX_CLOUD_ORIGIN}
+        VITE_TILE_SERVICE_URL: ${PUBLIC_TILE_ORIGIN}
+    depends_on:
+      - tile-service
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - web
+      - convex-backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?z.B. lesen.example.de}
+      API_DOMAIN: ${API_DOMAIN:?z.B. api.example.de}
+      HOOKS_DOMAIN: ${HOOKS_DOMAIN:?z.B. hooks.example.de}
+      TILE_DOMAIN: ${TILE_DOMAIN:?z.B. tiles.example.de}
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  minio-data:
+  convex-data:
+  caddy-data:
+  caddy-config:

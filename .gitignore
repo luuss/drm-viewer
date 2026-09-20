@@ -22,3 +22,14 @@ admin.png
 # Build artifacts
 build/
 *.egg-info/
+_scratch/
+
+# Testhefte (Satz- und Druckdateien, gross und nicht oeffentlich)
+hefte test/
+*.indd
+*.idml
+session.txt
+tile-service/session.txt
+extract-service/.venv
+web/tsconfig.tsbuildinfo
+*.tsbuildinfo

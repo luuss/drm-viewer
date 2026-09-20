@@ -10,13 +10,15 @@
     "tile": "cd tile-service && uvicorn main:app --reload --port 8000"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.87",
-    "convex": "^1.17.0",
-    "jszip": "^3.10.1",
+    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/stripe": "^0.1.6",
+    "convex": "^1.46.0",
+    "jszip": "^3.10.2",
     "pdf-lib": "^1.17.1",
-    "stripe": "^17.5.0"
+    "stripe": "^22.6.2"
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
   }
 }

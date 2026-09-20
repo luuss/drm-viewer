@@ -10,6 +10,18 @@ services:
       - "8000:8000"
     restart: unless-stopped
 
+  extract-service:
+    build:
+      context: ./extract-service
+    environment:
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EXTRACT_LLM_MODEL: ${EXTRACT_LLM_MODEL:-claude-sonnet-5}
+    ports:
+      - "8100:8100"
+    restart: unless-stopped
+
   web:
     build:
       context: .

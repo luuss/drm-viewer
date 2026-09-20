@@ -1,33 +1,78 @@
-# DRM Reader (Convex + Stripe)
+# E-Magazin-Plattform (Convex + Stripe)
 
-Standalone Web-App. Nutzer legen Account an, kaufen Bücher via Stripe, bekommen per E-Mail einen einmaligen Claim-Link und lesen via DRM-Tile-Reader. Kein Shopsystem dahinter.
+Verkauf und Online-Lesen digitaler Zeitschriften. Konto, Einzelkauf und Abo,
+Bibliothek, seitengetreuer DRM-Reader mit Kachelauslieferung und ein
+Fliesstext-Modus je Artikel. Artikel entstehen automatisch aus der IDML- oder
+PDF-Satzdatei und werden von der Redaktion freigegeben.
 
-## Architektur
-
-```
- Browser (React SPA, Nginx)
-    │
-    ├── Auth / DB / Storage / Stripe-Webhook / Email  ──► Convex (cloud)
-    │
-    └── Tile-Requests  ──► FastAPI Tile-Service (Docker)
-                              │
-                              └─► holt PDF aus Convex Storage (signed URL)
-```
-
-- **Convex** — Auth (Passwort), DB (`books`, `entitlements`, `claimTokens`, `readingProgress`, `purchases`, `tileSessions`), Storage (PDF + Cover), Stripe-Checkout + Webhook, Resend-E-Mail.
-- **Tile-Service (FastAPI + PyMuPDF)** — stateless. Validiert Session-Token via Convex, holt PDF aus Storage, rendert Tiles on-the-fly mit per-Session Zufallsvarianz (Sub-Pixel-Jitter, Zoom-Jitter, Pixel-Watermark). Zwei Renderings sind nie bytegleich.
-- **Web (React + Vite)** — Login, Shop, Buch-Detail mit Stripe-Checkout, Claim-Seite, Library, Reader (6×6 Tile-Grid, Canvas-Poisoning, Noise-Overlay, DevTools-Guard etc.).
-
-## Verzeichnisstruktur
+## Bestandteile
 
 ```
-drm-demo/
-├── convex/             # Convex Backend (Schema, Queries, Mutations, Actions, HTTP)
-├── tile-service/       # FastAPI + PyMuPDF (Docker)
-├── web/                # React/Vite Frontend (Docker)
-├── docker-compose.yml
-└── .env.example
+ Browser (React SPA)
+    |
+    +-- Konto, Daten, Dateien, Stripe, Mail ---> Convex (Cloud oder selbst betrieben)
+    |
+    +-- Seitenkacheln ------------------------> Kacheldienst (FastAPI + PyMuPDF)
+    |
+    +-- Artikelimport ------------------------> Extraktionsdienst (FastAPI, IDML/PDF)
 ```
+
+* **Convex** — Konten (@convex-dev/auth mit Passwort, Zuruecksetzen per Code),
+  Datenbank, Dateien, Stripe ueber die offizielle Component
+  (`@convex-dev/stripe`), Mailversand ueber Resend, Volltextsuche.
+* **Kacheldienst** — rendert Seiten in 6x6 Kacheln, pro Sitzung leicht
+  veraendert, mit Rate-Begrenzung und Verbrauchsmeldung.
+* **Extraktionsdienst** — zerlegt IDML oder PDF in Artikel; siehe
+  [docs/artikel-import.md](docs/artikel-import.md).
+* **Weboberflaeche** — Kiosk, Bibliothek, Reader, Suche, Profil, Redaktion,
+  Rechtstexte.
+
+## Was der Kunde kann
+
+* Konto anlegen, Passwort zuruecksetzen, Passwort aendern, Konto loeschen.
+* Einzelausgabe kaufen oder Abo abschliessen (Stripe Checkout, Widerrufsverzicht
+  wird abgefragt und protokolliert).
+* Abo im Stripe-Kundenportal selbst verwalten, kuendigen, Rechnungen abrufen.
+* Seiten originalgetreu lesen, auf Artikel klicken und im Fliesstext lesen.
+* Ueber alle freigeschalteten Ausgaben suchen.
+
+## Was die Redaktion kann
+
+* Ausgabe hochladen (PDF plus optional IDML plus Titelbild).
+* Stripe-Preis anlegen, veroeffentlichen, ins Abo geben oder herausnehmen.
+* Artikel importieren, zusammenfuehren, teilen, bearbeiten, freigeben.
+* Abo-Plaene anlegen und schalten.
+
+## Entwicklung
+
+```bash
+npm install
+npx convex dev                       # Backend
+cd web && npm install && npm run dev  # Oberflaeche auf 5173
+cd tile-service && uv venv && uv pip install -r ../requirements.txt
+  .venv/bin/python -m uvicorn main:app --port 8000
+cd extract-service && uv venv && uv pip install -r requirements.txt
+  .venv/bin/python -m uvicorn main:app --port 8100
+```
+
+Werte aus `.env.example` uebernehmen. Die Geheimnisse gehoeren in die
+Convex-Umgebung, nicht ins Repository.
+
+## Selbst betreiben
+
+Vollstaendige Anleitung: [docs/selfhosting.md](docs/selfhosting.md).
+Kurz: `docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost up -d`
+startet Convex-Backend, Postgres, MinIO, beide Dienste, die Oberflaeche und
+einen TLS-Proxy.
+
+## Rechtliches
+
+Die Rechtstexte unter `/impressum`, `/agb`, `/widerruf` und `/datenschutz`
+enthalten Platzhalter `[vom Verlag ausfuellen]`. Diese muessen vor dem Start
+gefuellt werden. Der Widerrufsverzicht wird im Bestellvorgang abgefragt und mit
+Wortlaut und Version gespeichert.
+
+## Altes Setup-Kapitel
 
 ## Setup
 

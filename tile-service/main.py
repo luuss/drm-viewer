@@ -19,7 +19,7 @@ import os
 import random
 import secrets
 import time
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict, deque
 from typing import Any
 
 import httpx
@@ -37,6 +37,10 @@ GRID = 6
 TILE_TOKEN_TTL = 300
 PDF_CACHE_SIZE = 8
 SESSION_CACHE_TTL = 60  # seconds — cache Convex session verify
+# Missbrauchsbremse: ein Mensch blaettert, ein Skript saugt.
+MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "40"))
+MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "900"))
+USAGE_FLUSH_SECONDS = int(os.environ.get("USAGE_FLUSH_SECONDS", "30"))
 PAGE_PIXMAP_CACHE = 40  # rendered full-page pixmaps across books
 
 if not CONVEX_URL:
@@ -70,6 +74,59 @@ async def convex_query(path: str, args: dict) -> Any:
     if data.get("status") != "success":
         raise HTTPException(403, f"Convex query error: {data.get('errorMessage', 'unknown')}")
     return data.get("value")
+
+
+async def convex_mutation(path: str, args: dict) -> Any:
+    url = f"{CONVEX_URL}/api/mutation"
+    r = await _client.post(url, json={"path": path, "args": args, "format": "json"})
+    if r.status_code != 200:
+        raise HTTPException(502, f"Convex mutation failed: {r.status_code}")
+    data = r.json()
+    if data.get("status") != "success":
+        raise HTTPException(403, f"Convex mutation error: {data.get('errorMessage', 'unknown')}")
+    return data.get("value")
+
+
+# --- Rate limiting and usage reporting ---
+
+_rate_pages: dict[str, deque[float]] = defaultdict(deque)
+_rate_tiles: dict[str, deque[float]] = defaultdict(deque)
+_usage_pending: dict[str, int] = defaultdict(int)
+
+
+def _check_rate(bucket: dict[str, deque[float]], key: str, limit: int, what: str) -> None:
+    now = time.time()
+    hits = bucket[key]
+    while hits and now - hits[0] > 60:
+        hits.popleft()
+    if len(hits) >= limit:
+        raise HTTPException(429, f"Zu viele {what} pro Minute")
+    hits.append(now)
+
+
+async def _flush_usage_loop() -> None:
+    """Verbrauch gesammelt an Convex melden, nicht bei jeder Kachel."""
+    while True:
+        await asyncio.sleep(USAGE_FLUSH_SECONDS)
+        pending = {k: v for k, v in _usage_pending.items() if v > 0}
+        _usage_pending.clear()
+        for token, tiles in pending.items():
+            try:
+                await convex_mutation(
+                    "tileSessions:reportUsage",
+                    {
+                        "sessionToken": token,
+                        "serviceSecret": TILE_SERVICE_SECRET,
+                        "tiles": tiles,
+                    },
+                )
+            except Exception as exc:
+                print(f"Verbrauchsmeldung fehlgeschlagen: {exc}")
+
+
+@app.on_event("startup")
+async def _start_usage_reporter() -> None:
+    asyncio.create_task(_flush_usage_loop())
 
 
 # --- PDF cache ---
@@ -237,6 +294,7 @@ async def get_tile_tokens(
 ):
     _gc_tokens()
     session = await require_session(x_tile_session, book_id)
+    _check_rate(_rate_pages, x_tile_session or "", MAX_PAGES_PER_MIN, "Seiten")
     meta = await get_book_meta(book_id)
     if page < 0 or page >= meta["pageCount"]:
         raise HTTPException(400, "Invalid page")
@@ -285,6 +343,8 @@ async def get_tile(
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ):
     await require_session(x_tile_session, book_id)
+    _check_rate(_rate_tiles, x_tile_session or "", MAX_TILES_PER_MIN, "Kacheln")
+    _usage_pending[x_tile_session or ""] += 1
     tok = _tile_tokens.pop(token, None)
     if not tok:
         raise HTTPException(403, "Invalid tile token")

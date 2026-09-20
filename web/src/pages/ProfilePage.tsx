@@ -1,0 +1,241 @@
+import { useState } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { api } from "../lib/convex";
+
+export default function ProfilePage() {
+  const me = useQuery(api.users.me, {});
+  const subStatus = useQuery(api.subscriptions.myStatus, {});
+  const purchases = useQuery(api.purchases.mine, {});
+  const sessions = useQuery(api.tileSessions.myActiveSessions, {});
+  const changePassword = useAction(api.account.changePassword);
+  const deleteAccount = useAction(api.account.deleteMyAccount);
+  const portal = useAction(api.billing.createPortalSession);
+  const cancelSub = useAction(api.billing.cancelMySubscription);
+  const revokeSessions = useMutation(api.tileSessions.revokeAllMySessions);
+  const setName = useMutation(api.account.setName);
+
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [name, setNameValue] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (me === undefined) return <div className="centered">Laden...</div>;
+  if (me === null) return <div className="centered">Nicht eingeloggt</div>;
+
+  async function guard(fn: () => Promise<void>) {
+    setErr(null);
+    setMsg(null);
+    setBusy(true);
+    try {
+      await fn();
+    } catch (e: any) {
+      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") || "Fehler");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="page profile">
+      <h2>Profil</h2>
+      <p className="hint">
+        Angemeldet als <strong>{me.email}</strong>
+        {me.emailVerified ? " (bestätigt)" : ""}
+      </p>
+
+      <section>
+        <h3>Abo</h3>
+        {subStatus?.active ? (
+          <>
+            <p className="ok">Abo aktiv.</p>
+            <ul className="plain">
+              {subStatus.subscriptions.map((s) => (
+                <li key={s._id}>
+                  Status {s.status}
+                  {s.currentPeriodEnd
+                    ? ` · läuft bis ${new Date(s.currentPeriodEnd).toLocaleDateString("de-DE")}`
+                    : ""}
+                  {s.cancelAtPeriodEnd ? " · gekündigt zum Laufzeitende" : ""}
+                  {!s.cancelAtPeriodEnd && (
+                    <button
+                      className="link-btn"
+                      disabled={busy}
+                      onClick={() =>
+                        guard(async () => {
+                          await cancelSub({
+                            stripeSubscriptionId: s.stripeSubscriptionId,
+                          });
+                          setMsg("Kündigung zum Laufzeitende vorgemerkt.");
+                        })
+                      }
+                    >
+                      Kündigen
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p>Kein laufendes Abo.</p>
+        )}
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={() =>
+            guard(async () => {
+              const { url } = await portal({
+                returnUrl: `${window.location.origin}/profile`,
+              });
+              window.location.href = url;
+            })
+          }
+        >
+          Zahlungen und Rechnungen verwalten
+        </button>
+      </section>
+
+      <section>
+        <h3>Name</h3>
+        <form
+          className="inline-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            guard(async () => {
+              await setName({ name });
+              setMsg("Name gespeichert.");
+            });
+          }}
+        >
+          <input
+            value={name}
+            placeholder={me.name ?? "Anzeigename"}
+            onChange={(e) => setNameValue(e.target.value)}
+          />
+          <button className="btn" disabled={busy || !name.trim()}>
+            Speichern
+          </button>
+        </form>
+      </section>
+
+      <section>
+        <h3>Passwort ändern</h3>
+        <form
+          className="stack-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            guard(async () => {
+              await changePassword({
+                currentPassword: current,
+                newPassword: next,
+              });
+              setCurrent("");
+              setNext("");
+              setMsg(
+                "Passwort geändert. Andere Geräte wurden abgemeldet.",
+              );
+            });
+          }}
+        >
+          <label>
+            Aktuelles Passwort
+            <input
+              type="password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </label>
+          <label>
+            Neues Passwort
+            <input
+              type="password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              required
+              minLength={10}
+              autoComplete="new-password"
+            />
+          </label>
+          <button className="btn" disabled={busy}>
+            Passwort ändern
+          </button>
+        </form>
+      </section>
+
+      <section>
+        <h3>Aktive Lesesitzungen</h3>
+        {sessions && sessions.length > 0 ? (
+          <>
+            <ul className="plain">
+              {sessions.map((s) => (
+                <li key={s._id}>
+                  {s.bookTitle} · seit{" "}
+                  {new Date(s.createdAt).toLocaleString("de-DE")} ·{" "}
+                  {s.tileCount} Kacheln
+                </li>
+              ))}
+            </ul>
+            <button
+              className="link-btn"
+              disabled={busy}
+              onClick={() =>
+                guard(async () => {
+                  const n = await revokeSessions({});
+                  setMsg(`${n} Sitzungen beendet.`);
+                })
+              }
+            >
+              Alle Sitzungen beenden
+            </button>
+          </>
+        ) : (
+          <p>Keine offenen Sitzungen.</p>
+        )}
+      </section>
+
+      <section>
+        <h3>Käufe</h3>
+        <ul className="plain">
+          {purchases?.map((p) => (
+            <li key={p._id}>
+              {new Date(p.createdAt).toLocaleDateString("de-DE")} ·{" "}
+              {p.title ?? p.planName ?? "Position"} ·{" "}
+              {(p.amountCents / 100).toFixed(2)} {p.currency.toUpperCase()} ·{" "}
+              {p.status}
+            </li>
+          ))}
+          {purchases?.length === 0 && <li>Noch keine Käufe.</li>}
+        </ul>
+      </section>
+
+      <section className="danger">
+        <h3>Konto löschen</h3>
+        <p className="hint">
+          Löscht Konto, Freischaltungen und Lesefortschritt. Rechnungsbelege
+          bleiben beim Zahlungsdienstleister gespeichert. Ein laufendes Abo
+          bitte vorher kündigen.
+        </p>
+        <button
+          className="link-btn danger"
+          disabled={busy}
+          onClick={() => {
+            if (!confirm("Konto endgültig löschen?")) return;
+            guard(async () => {
+              await deleteAccount({ confirm: "LOESCHEN" });
+              window.location.href = "/";
+            });
+          }}
+        >
+          Konto endgültig löschen
+        </button>
+      </section>
+
+      {msg && <div className="ok">{msg}</div>}
+      {err && <div className="err">{err}</div>}
+    </div>
+  );
+}

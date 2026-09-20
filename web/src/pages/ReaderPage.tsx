@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "../lib/convex";
 import { fetchTile, fetchTokens, fireDecoy } from "../reader/tileClient";
@@ -14,10 +14,21 @@ export default function ReaderPage() {
 
   const owned = useQuery(api.books.hasEntitlement, { bookId });
   const book = useQuery(api.books.getBook, { bookId });
+  const articles = useQuery(api.articles.listForBook, { bookId });
   const progress = useQuery(api.progress.get, { bookId });
   const saveProgress = useMutation(api.progress.save);
   const issueSession = useMutation(api.tileSessions.issue);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [articleId, setArticleId] = useState<Id<"articles"> | null>(
+    (searchParams.get("article") as Id<"articles"> | null) ?? null,
+  );
+  const article = useQuery(
+    api.articles.getArticle,
+    articleId ? { articleId } : "skip",
+  );
+  const [gridBox, setGridBox] = useState<{ w: number; h: number } | null>(null);
+  const [showArticleList, setShowArticleList] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number | null>(null);
   const [spread, setSpread] = useState(false);
@@ -52,9 +63,17 @@ export default function ReaderPage() {
 
   useEffect(() => {
     if (progress !== undefined && currentPage === null) {
+      const deepLink = searchParams.get("article");
+      if (deepLink && articles) {
+        const hit = articles.find((a) => a._id === deepLink);
+        if (hit) {
+          setCurrentPage(hit.pageStart - 1);
+          return;
+        }
+      }
       setCurrentPage(progress ?? 0);
     }
-  }, [progress, currentPage]);
+  }, [progress, currentPage, articles, searchParams]);
 
   const totalPages = book?.pageCount ?? 0;
 
@@ -261,6 +280,10 @@ export default function ReaderPage() {
     noise.style.height = container.style.height;
     guard.style.width = container.style.width;
     guard.style.height = container.style.height;
+    setGridBox({
+      w: parseFloat(container.style.width) || 0,
+      h: parseFloat(container.style.height) || 0,
+    });
   }
 
   useEffect(() => {
@@ -361,6 +384,14 @@ export default function ReaderPage() {
     }
     setSpread((s) => !s);
   }
+  function openArticle(id: Id<"articles"> | null) {
+    setArticleId(id);
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("article", id as string);
+    else next.delete("article");
+    setSearchParams(next, { replace: true });
+  }
+
   function toggleFullscreen() {
     const el = document.getElementById("reader-screen");
     if (!document.fullscreenElement) el?.requestFullscreen().catch(() => {});
@@ -398,11 +429,92 @@ export default function ReaderPage() {
         </button>
         <button onClick={toggleSpread}>{spread ? "Einzelseite" : "Doppelseite"}</button>
         <button onClick={toggleFullscreen}>Vollbild</button>
+        {articles && articles.length > 0 && (
+          <button onClick={() => setShowArticleList((v) => !v)}>
+            Artikel ({articles.length})
+          </button>
+        )}
       </div>
+      {showArticleList && articles && (
+        <div className="article-list">
+          <h4>Artikel dieser Ausgabe</h4>
+          <ul>
+            {articles.map((a) => (
+              <li key={a._id}>
+                <button
+                  className="link-btn"
+                  onClick={() => {
+                    setCurrentPage(a.pageStart - 1);
+                    openArticle(a._id);
+                    setShowArticleList(false);
+                  }}
+                >
+                  S. {a.pageStart} · {a.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="reader-viewport" ref={viewportRef}>
         <div id="tile-grid" ref={gridRef} />
         <canvas id="noise-overlay" ref={noiseRef} />
         <div id="copy-guard" ref={copyGuardRef} />
+        {!spread && gridBox && articles && currentPage !== null && (
+          <div
+            className="article-hotspots"
+            style={{ width: gridBox.w, height: gridBox.h }}
+          >
+            {articles.flatMap((a) =>
+              a.boxes
+                .filter((b) => b.page === currentPage + 1)
+                .map((b, i) => (
+                  <button
+                    key={`${a._id}-${i}`}
+                    className="hotspot"
+                    title={a.title}
+                    style={{
+                      left: `${b.x0 * 100}%`,
+                      top: `${b.y0 * 100}%`,
+                      width: `${(b.x1 - b.x0) * 100}%`,
+                      height: `${(b.y1 - b.y0) * 100}%`,
+                    }}
+                    onClick={() => openArticle(a._id)}
+                  />
+                )),
+            )}
+          </div>
+        )}
+        {article && (
+          <div className="article-reader">
+            <div className="article-reader-inner">
+              <button className="close" onClick={() => openArticle(null)}>
+                Schliessen
+              </button>
+              <h1>{article.title}</h1>
+              {article.subtitle && <h2>{article.subtitle}</h2>}
+              {article.author && <div className="byline">{article.author}</div>}
+              <div className="meta">
+                Seite {article.pageStart}
+                {article.pageEnd !== article.pageStart
+                  ? `–${article.pageEnd}`
+                  : ""}
+              </div>
+              {article.images.map(
+                (img, i) =>
+                  img.url && (
+                    <figure key={i}>
+                      <img src={img.url} alt={img.caption ?? ""} />
+                      {img.caption && <figcaption>{img.caption}</figcaption>}
+                    </figure>
+                  ),
+              )}
+              {article.text.split("\n\n").map((para, i) => (
+                <p key={i}>{para}</p>
+              ))}
+            </div>
+          </div>
+        )}
         {loading && <div className="loading">Laden...</div>}
         {renderError && !loading && (
           <div className="reader-error">

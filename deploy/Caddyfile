@@ -1,0 +1,20 @@
+# TLS holt Caddy selbst. Vier Namen, weil Convex Anwendung und Webhooks trennt.
+
+{$WEB_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:80
+}
+
+{$API_DOMAIN} {
+	reverse_proxy convex-backend:3210
+}
+
+{$HOOKS_DOMAIN} {
+	reverse_proxy convex-backend:3211
+}
+
+{$TILE_DOMAIN} {
+	# Kacheln nie zwischenspeichern: jede Auslieferung ist sitzungsgebunden.
+	header Cache-Control "no-store"
+	reverse_proxy tile-service:8000
+}

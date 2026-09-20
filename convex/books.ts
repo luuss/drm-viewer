@@ -1,9 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query, action, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Id } from "./_generated/dataModel";
 import { requireAdmin } from "./admin";
+import { hasBookAccess, hasActiveSubscription } from "./access";
 
 export const list = query({
   args: {},
@@ -33,13 +34,37 @@ export const myLibrary = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
+    const now = Date.now();
     const ents = await ctx.db
       .query("entitlements")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    const result = [];
+    const bookIds = new Set<string>();
+    const entries: { bookId: Id<"books">; source: string; validUntil?: number }[] = [];
     for (const e of ents) {
+      if (e.validUntil !== undefined && e.validUntil <= now) continue;
+      if (bookIds.has(e.bookId as string)) continue;
+      bookIds.add(e.bookId as string);
+      entries.push({ bookId: e.bookId, source: e.source, validUntil: e.validUntil });
+    }
+
+    // Abo schaltet alle veroeffentlichten Hefte frei, die nicht ausgenommen sind.
+    if (await hasActiveSubscription(ctx, userId)) {
+      const published = await ctx.db
+        .query("books")
+        .withIndex("by_published", (q) => q.eq("isPublished", true))
+        .collect();
+      for (const b of published) {
+        if (b.includedInSubscription === false) continue;
+        if (bookIds.has(b._id as string)) continue;
+        bookIds.add(b._id as string);
+        entries.push({ bookId: b._id, source: "subscription" });
+      }
+    }
+
+    const result = [];
+    for (const e of entries) {
       const book = await ctx.db.get(e.bookId);
       if (!book) continue;
       const progress = await ctx.db
@@ -52,6 +77,8 @@ export const myLibrary = query({
         _id: book._id,
         title: book.title,
         pageCount: book.pageCount,
+        source: e.source,
+        articleCount: book.articleCount ?? 0,
         currentPage: progress?.page ?? 0,
         coverUrl: book.coverStorageId
           ? await ctx.storage.getUrl(book.coverStorageId)
@@ -88,13 +115,7 @@ export const hasEntitlement = query({
   handler: async (ctx, { bookId }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return false;
-    const ent = await ctx.db
-      .query("entitlements")
-      .withIndex("by_user_book", (q) =>
-        q.eq("userId", userId).eq("bookId", bookId),
-      )
-      .first();
-    return ent !== null;
+    return await hasBookAccess(ctx, userId, bookId);
   },
 });
 
@@ -243,5 +264,128 @@ export const getStoragePdfUrlForService = query({
     if (!book) throw new Error("Book not found");
     const url = await ctx.storage.getUrl(book.pdfStorageId);
     return { url, pageCount: book.pageCount, filename: book.filename };
+  },
+});
+
+export const getBookInternal = internalQuery({
+  args: { bookId: v.id("books") },
+  handler: async (ctx, { bookId }) => await ctx.db.get(bookId),
+});
+
+export const setStripeIdsInternal = internalMutation({
+  args: {
+    bookId: v.id("books"),
+    stripeProductId: v.string(),
+    stripePriceId: v.string(),
+  },
+  handler: async (ctx, { bookId, stripeProductId, stripePriceId }) => {
+    await ctx.db.patch(bookId, { stripeProductId, stripePriceId });
+  },
+});
+
+export const setArticleCountInternal = internalMutation({
+  args: { bookId: v.id("books"), articleCount: v.number() },
+  handler: async (ctx, { bookId, articleCount }) => {
+    await ctx.db.patch(bookId, { articleCount });
+  },
+});
+
+/** Admin-Liste: auch unveroeffentlichte Hefte, mit Import- und Preis-Status. */
+export const listAllAdmin = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const books = await ctx.db.query("books").order("desc").collect();
+    return Promise.all(
+      books.map(async (b) => {
+        const articles = await ctx.db
+          .query("articles")
+          .withIndex("by_book", (q) => q.eq("bookId", b._id))
+          .collect();
+        const job = await ctx.db
+          .query("importJobs")
+          .withIndex("by_book", (q) => q.eq("bookId", b._id))
+          .order("desc")
+          .first();
+        return {
+          _id: b._id,
+          title: b.title,
+          issueNumber: b.issueNumber ?? null,
+          description: b.description ?? null,
+          pageCount: b.pageCount,
+          priceCents: b.priceCents,
+          currency: b.currency,
+          isPublished: b.isPublished,
+          includedInSubscription: b.includedInSubscription !== false,
+          stripePriceId: b.stripePriceId ?? null,
+          articleCount: articles.length,
+          publishedArticles: articles.filter((a) => a.status === "published").length,
+          coverUrl: b.coverStorageId ? await ctx.storage.getUrl(b.coverStorageId) : null,
+          lastImport: job
+            ? { status: job.status, message: job.message ?? null, kind: job.kind }
+            : null,
+          createdAt: b.createdAt,
+        };
+      }),
+    );
+  },
+});
+
+export const updateBook = mutation({
+  args: {
+    bookId: v.id("books"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    issueNumber: v.optional(v.string()),
+    priceCents: v.optional(v.number()),
+    isPublished: v.optional(v.boolean()),
+    includedInSubscription: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { bookId, ...patch }) => {
+    await requireAdmin(ctx);
+    const book = await ctx.db.get(bookId);
+    if (!book) throw new Error("Heft nicht gefunden");
+    const clean: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(patch)) {
+      if (val !== undefined) clean[k] = val;
+    }
+    if (patch.isPublished === true && !book.publishedAt) {
+      clean.publishedAt = Date.now();
+    }
+    // Preisaenderung macht den alten Stripe-Preis ungueltig: neu anlegen lassen.
+    if (patch.priceCents !== undefined && patch.priceCents !== book.priceCents) {
+      clean.stripePriceId = undefined;
+    }
+    await ctx.db.patch(bookId, clean);
+  },
+});
+
+export const setSourceStorageId = mutation({
+  args: { bookId: v.id("books"), sourceStorageId: v.id("_storage") },
+  handler: async (ctx, { bookId, sourceStorageId }) => {
+    await requireAdmin(ctx);
+    await ctx.db.patch(bookId, { sourceStorageId });
+  },
+});
+
+export const getSourceUrlForService = query({
+  args: {
+    bookId: v.id("books"),
+    serviceSecret: v.string(),
+    which: v.union(v.literal("pdf"), v.literal("source")),
+  },
+  handler: async (ctx, { bookId, serviceSecret, which }) => {
+    if (serviceSecret !== process.env.TILE_SERVICE_SECRET) {
+      throw new Error("Invalid service secret");
+    }
+    const book = await ctx.db.get(bookId);
+    if (!book) throw new Error("Book not found");
+    const storageId = which === "pdf" ? book.pdfStorageId : book.sourceStorageId;
+    if (!storageId) return null;
+    return {
+      url: await ctx.storage.getUrl(storageId),
+      pageCount: book.pageCount,
+      filename: book.filename,
+    };
   },
 });

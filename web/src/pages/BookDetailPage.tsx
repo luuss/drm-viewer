@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAction, useQuery } from "convex/react";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { api, type Id } from "../lib/convex";
@@ -10,12 +10,14 @@ export default function BookDetailPage() {
   const bookId = id as Id<"books">;
   const book = useQuery(api.books.getBook, { bookId });
   const owned = useQuery(api.books.hasEntitlement, { bookId });
-  const createCheckout = useAction(api.stripe.createCheckoutSession);
+  const waiver = useQuery(api.consents.currentWaiver, {});
+  const createCheckout = useAction(api.billing.createBookCheckout);
   const [busy, setBusy] = useState(false);
+  const [accepted, setAccepted] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   if (book === undefined) return <div className="centered">Laden...</div>;
-  if (book === null) return <div className="centered">Buch nicht gefunden</div>;
+  if (book === null) return <div className="centered">Ausgabe nicht gefunden</div>;
 
   async function buy() {
     setErr(null);
@@ -26,10 +28,11 @@ export default function BookDetailPage() {
         bookId,
         successUrl: `${origin}/checkout/success?book=${bookId}`,
         cancelUrl: `${origin}/book/${bookId}`,
+        withdrawalWaiver: accepted,
       });
       window.location.href = url;
     } catch (e: any) {
-      setErr(e.message || "Checkout fehlgeschlagen");
+      setErr(e?.message?.replace(/^\[.*?\]\s*/, "") || "Checkout fehlgeschlagen");
       setBusy(false);
     }
   }
@@ -49,6 +52,7 @@ export default function BookDetailPage() {
         {book.description && <p>{book.description}</p>}
         <div className="price big">
           {(book.priceCents / 100).toFixed(2)} {book.currency.toUpperCase()}
+          <span className="hint"> inkl. MwSt.</span>
         </div>
 
         <Authenticated>
@@ -57,14 +61,34 @@ export default function BookDetailPage() {
               Jetzt lesen
             </button>
           ) : (
-            <button className="btn" onClick={buy} disabled={busy}>
-              {busy ? "..." : "Kaufen"}
-            </button>
+            <>
+              <label className="consent">
+                <input
+                  type="checkbox"
+                  checked={accepted}
+                  onChange={(e) => setAccepted(e.target.checked)}
+                />
+                <span>
+                  {waiver?.text ??
+                    "Ich verlange den sofortigen Zugriff und verliere damit mein Widerrufsrecht."}{" "}
+                  (<Link to="/widerruf">Widerrufsbelehrung</Link>)
+                </span>
+              </label>
+              <button className="btn" onClick={buy} disabled={busy || !accepted}>
+                {busy ? "..." : "Kaufen"}
+              </button>
+              {!accepted && (
+                <p className="hint">
+                  Ohne diese Zustimmung dürfen wir erst nach 14 Tagen
+                  freischalten.
+                </p>
+              )}
+            </>
           )}
         </Authenticated>
         <Unauthenticated>
           <button className="btn" onClick={() => navigate("/")}>
-            Zum Kauf einloggen
+            Zum Kauf anmelden
           </button>
         </Unauthenticated>
         {err && <div className="err">{err}</div>}
