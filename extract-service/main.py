@@ -7,6 +7,7 @@ Hintergrund, weil ein Heft mehrere Minuten braucht.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import os
 import tempfile
@@ -90,6 +91,80 @@ async def _report(callback_url: str, payload: dict) -> None:
         print(f"Rueckmeldung fehlgeschlagen: {exc}")
 
 
+MIME_BY_EXT = {
+    "png": "image/png",
+    "jpeg": "image/jpeg",
+    "jpg": "image/jpeg",
+    "jpx": "image/jp2",
+    "gif": "image/gif",
+    "tiff": "image/tiff",
+    "bmp": "image/bmp",
+}
+
+
+async def _store_one_image(base: str, ref: dict) -> dict | None:
+    data = ref.get("data")
+    if not data:
+        return None
+    try:
+        res = await _client.post(
+            f"{base}/service/storage/upload-url",
+            json={},
+            headers={"x-service-secret": SERVICE_SECRET},
+            timeout=60.0,
+        )
+        if res.status_code != 200:
+            print(f"Upload-Adresse abgelehnt: {res.status_code}")
+            return None
+        up = await _client.post(
+            res.json()["uploadUrl"],
+            content=data,
+            headers={
+                "Content-Type": MIME_BY_EXT.get(ref.get("ext", "png"), "image/png")
+            },
+            timeout=180.0,
+        )
+        if up.status_code != 200:
+            print(f"Bild-Upload fehlgeschlagen: {up.status_code}")
+            return None
+        entry = {"storageId": up.json()["storageId"], "page": ref["page"]}
+        if ref.get("caption"):
+            entry["caption"] = ref["caption"]
+        return entry
+    except Exception as exc:
+        print(f"Bild uebersprungen: {exc}")
+        return None
+
+
+async def _store_images(articles: list[dict], callback_url: str) -> int:
+    """Artikelbilder in den Convex-Speicher legen und durch Verweise ersetzen.
+
+    Die Bilder kommen aus der Druckdatei, also ohne eigene Rechtepruefung —
+    deshalb landen sie wie die Artikel als Entwurf und werden erst mit der
+    Freigabe sichtbar. Acht Uploads gleichzeitig: ein Heft hat schnell ein paar
+    hundert Bilder, nacheinander dauert das unnoetig lange.
+    """
+    base = callback_url.rsplit("/import/result", 1)[0]
+    limit = asyncio.Semaphore(8)
+
+    async def run(article: dict, ref: dict) -> None:
+        async with limit:
+            entry = await _store_one_image(base, ref)
+        if entry:
+            article.setdefault("images", []).append(entry)
+
+    tasks = []
+    for article in articles:
+        for ref in article.pop("_images", []) or []:
+            tasks.append(run(article, ref))
+    await asyncio.gather(*tasks)
+
+    for article in articles:
+        if article.get("images"):
+            article["images"].sort(key=lambda i: i["page"])
+    return sum(len(a.get("images") or []) for a in articles)
+
+
 async def _run_job(job: dict) -> None:
     kind = job["kind"]
     path = None
@@ -99,6 +174,8 @@ async def _run_job(job: dict) -> None:
             articles = extract_idml(path)
         else:
             articles = extract_pdf(path)
+
+        stored = await _store_images(articles, job["callbackUrl"])
 
         # Grosse Hefte in Teilen melden: eine Nachricht pro 40 Artikel.
         chunk = 40
@@ -110,7 +187,7 @@ async def _run_job(job: dict) -> None:
                     "jobId": job["jobId"],
                     "bookId": job["bookId"],
                     "status": "done" if i + chunk >= len(articles) else "running",
-                    "message": f"{len(articles)} Artikel erkannt",
+                    "message": f"{len(articles)} Artikel, {stored} Bilder",
                     "replace": i == 0,
                     "articles": part,
                 },

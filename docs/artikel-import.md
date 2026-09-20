@@ -37,6 +37,22 @@ nicht noetig. Der Dienst arbeitet in dieser Reihenfolge:
 Ergebnis am Testheft (ZUERST! 3/2026, 80 Seiten): 57 Artikel, rund 330.000
 Zeichen, ohne KI-Stufe.
 
+## Bilder
+
+Beim PDF-Weg holt der Dienst zusaetzlich die Bilder aus der Seite. Ein Bild
+kommt zu dem Artikel, dessen Textflaeche auf derselben Seite am naechsten
+liegt. Die Bildunterschrift ist der kleingesetzte Textblock direkt darunter,
+sofern er das Bild waagerecht ueberlappt; reine Bildnachweise ("Foto: ...")
+werden nicht als Unterschrift uebernommen.
+
+Aussortiert werden Dateien unter 200 Pixel Kantenlaenge oder unter 8 KB — das
+sind Logos, Linien und Schmuckelemente. Je Artikel werden hoechstens zwoelf
+Bilder uebernommen.
+
+Die Bilder landen im Convex-Speicher und haengen als Verweis am Artikel. Im
+Fliesstext-Modus stehen sie ueber dem Text. Am Testheft: 57 Artikel, 166
+zugeordnete Bilder.
+
 ## Nacharbeit in der Redaktion
 
 Jeder Import landet als **Entwurf**. In der Redaktionsansicht lassen sich

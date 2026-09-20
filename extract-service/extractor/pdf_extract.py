@@ -46,6 +46,24 @@ class Block:
 
 
 @dataclass
+class ImageRef:
+    page: int
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    data: bytes
+    ext: str
+    width: int
+    height: int
+    caption: str | None = None
+
+    @property
+    def area(self) -> float:
+        return (self.x1 - self.x0) * (self.y1 - self.y0)
+
+
+@dataclass
 class Article:
     title: str
     text: str
@@ -55,6 +73,7 @@ class Article:
     subtitle: str | None = None
     author: str | None = None
     teaser: str | None = None
+    images: list[ImageRef] = field(default_factory=list)
 
     def to_dict(self, order: int) -> dict[str, Any]:
         return {
@@ -68,7 +87,75 @@ class Article:
             "pageEnd": self.page_end,
             "boxes": self.boxes,
             "source": "pdf",
+            # Rohdaten der Bilder; der Dienst legt sie ab und ersetzt sie
+            # durch Speicher-Verweise, bevor das Ergebnis zurueckgeht.
+            "_images": [
+                {
+                    "page": img.page + 1,
+                    "caption": img.caption,
+                    "data": img.data,
+                    "ext": img.ext,
+                }
+                for img in self.images
+            ],
         }
+
+
+MIN_IMAGE_PIXELS = 200
+MIN_IMAGE_BYTES = 8 * 1024
+# Druckaufloesung ist fuers Netz Verschwendung: kostet Speicher und Leitung.
+MAX_WEB_PIXELS = 1600
+WEB_JPEG_QUALITY = 82
+
+
+def _to_web_image(data: bytes, ext: str) -> tuple[bytes, str]:
+    """Bild auf Bildschirmgroesse bringen. Bei Fehlern bleibt das Original."""
+    try:
+        pix = pymupdf.Pixmap(data)
+        if pix.alpha:
+            pix = pymupdf.Pixmap(pix, 0)
+        if pix.colorspace and pix.colorspace.n > 3:
+            pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+        # shrink halbiert je Schritt; das reicht und ist verlustarm genug.
+        while max(pix.width, pix.height) > MAX_WEB_PIXELS * 2:
+            pix.shrink(1)
+        out = pix.tobytes("jpeg", jpg_quality=WEB_JPEG_QUALITY)
+        if len(out) < len(data):
+            return out, "jpeg"
+        return data, ext
+    except Exception:
+        return data, ext
+
+
+def _collect_images(doc: pymupdf.Document) -> list[ImageRef]:
+    """Bilder mit Position einsammeln. Logos und Trennlinien fliegen raus."""
+    out: list[ImageRef] = []
+    for pno in range(doc.page_count):
+        page = doc[pno]
+        for b in page.get_text("dict")["blocks"]:
+            if b.get("type") != 1:
+                continue
+            data = b.get("image")
+            if not data or len(data) < MIN_IMAGE_BYTES:
+                continue
+            w, h = int(b.get("width", 0)), int(b.get("height", 0))
+            if w < MIN_IMAGE_PIXELS or h < MIN_IMAGE_PIXELS:
+                continue
+            web_data, web_ext = _to_web_image(data, (b.get("ext") or "png").lower())
+            out.append(
+                ImageRef(
+                    page=pno,
+                    x0=b["bbox"][0],
+                    y0=b["bbox"][1],
+                    x1=b["bbox"][2],
+                    y1=b["bbox"][3],
+                    data=web_data,
+                    ext=web_ext,
+                    width=w,
+                    height=h,
+                )
+            )
+    return out
 
 
 def _collect_blocks(doc: pymupdf.Document) -> tuple[list[Block], dict[int, tuple[float, float]]]:
@@ -356,6 +443,61 @@ def _classify(blocks: list[Block], body: float, body_font: str) -> None:
             b.kind = "subheading"
 
 
+def _attach_captions(images: list[ImageRef], blocks: list[Block]) -> None:
+    """Die Unterschrift steht unter dem Bild und ueberlappt es waagerecht."""
+    captions = [b for b in blocks if b.kind == "caption"]
+    for img in images:
+        best = None
+        best_gap = 1e9
+        for c in captions:
+            if c.page != img.page:
+                continue
+            gap = c.y0 - img.y1
+            if gap < -6 or gap > 90:
+                continue
+            overlap = min(c.x1, img.x1) - max(c.x0, img.x0)
+            if overlap < (img.x1 - img.x0) * 0.35:
+                continue
+            if gap < best_gap:
+                best, best_gap = c, gap
+        if best is not None:
+            text = best.text.strip()
+            # Reine Bildnachweise sind als Unterschrift wertlos.
+            if not text.lower().startswith(("foto:", "fotos:", "bild:", "grafik:")):
+                img.caption = text[:400]
+
+
+def _assign_images(
+    articles: list[Article],
+    images: list[ImageRef],
+    page_sizes: dict[int, tuple[float, float]],
+) -> None:
+    """Jedes Bild bekommt den Artikel, dessen Textflaeche auf der Seite am naechsten liegt."""
+    for img in images:
+        w, h = page_sizes.get(img.page, (1.0, 1.0))
+        ix = ((img.x0 + img.x1) / 2) / max(w, 1.0)
+        iy = ((img.y0 + img.y1) / 2) / max(h, 1.0)
+        best: Article | None = None
+        best_dist = 1e9
+        for a in articles:
+            for box in a.boxes:
+                if box["page"] != img.page + 1:
+                    continue
+                bx = (box["x0"] + box["x1"]) / 2
+                by = (box["y0"] + box["y1"]) / 2
+                dist = abs(bx - ix) + abs(by - iy)
+                if dist < best_dist:
+                    best, best_dist = a, dist
+        if best is None:
+            # Kein Text auf der Seite: dem Artikel geben, der die Seite umfasst.
+            for a in articles:
+                if a.page_start <= img.page + 1 <= a.page_end:
+                    best = a
+                    break
+        if best is not None and len(best.images) < 12:
+            best.images.append(img)
+
+
 def _norm_box(b: Block, w: float, h: float) -> dict:
     return {
         "page": b.page + 1,
@@ -487,10 +629,16 @@ def _digest_blocks(ordered: list[Block]) -> list[dict]:
     ]
 
 
-def extract_pdf(path: str, min_chars: int = 320, use_llm: bool = True) -> list[dict]:
+def extract_pdf(
+    path: str,
+    min_chars: int = 320,
+    use_llm: bool = True,
+    with_images: bool = True,
+) -> list[dict]:
     doc = pymupdf.open(path)
     try:
         blocks, page_sizes = _collect_blocks(doc)
+        images = _collect_images(doc) if with_images else []
         page_count = doc.page_count
     finally:
         doc.close()
@@ -529,4 +677,9 @@ def extract_pdf(path: str, min_chars: int = 320, use_llm: bool = True) -> list[d
 
     if articles is None:
         articles = group_articles(ordered, page_sizes, min_chars=min_chars)
+
+    if images:
+        _attach_captions(images, ordered)
+        _assign_images(articles, images, page_sizes)
+
     return [a.to_dict(i + 1) for i, a in enumerate(articles)]

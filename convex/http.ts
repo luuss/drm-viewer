@@ -256,4 +256,17 @@ http.route({
   }),
 });
 
+/** Der Extraktionsdienst legt Artikelbilder selbst im Speicher ab. */
+http.route({
+  path: "/service/storage/upload-url",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (!checkExtractSecret(request.headers.get("x-service-secret"))) {
+      return new Response("forbidden", { status: 403 });
+    }
+    const url = await ctx.runMutation(internal.books.generateUploadUrlInternal, {});
+    return Response.json({ uploadUrl: url });
+  }),
+});
+
 export default http;

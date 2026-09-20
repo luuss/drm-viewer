@@ -23,6 +23,7 @@ export default function AdminPage() {
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [coverPdf, setCoverPdf] = useState<File | null>(null);
+  const [coverPrintOrder, setCoverPrintOrder] = useState(true);
   const [source, setSourceFile] = useState<File | null>(null);
   const [cover, setCover] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,6 +88,7 @@ export default function AdminPage() {
         innerStorageId,
         coverPdfStorageId,
         filetype,
+        coverOrder: coverPrintOrder ? "print" : "asis",
       });
       const prepareRes = await fetch(`${TILE_SERVICE_URL}/api/prepare`, {
         method: "POST",
@@ -213,6 +215,18 @@ export default function AdminPage() {
               accept=".pdf,application/pdf"
               onChange={(e) => setCoverPdf(e.target.files?.[0] ?? null)}
             />
+          </label>
+          <label className="consent">
+            <input
+              type="checkbox"
+              checked={coverPrintOrder}
+              onChange={(e) => setCoverPrintOrder(e.target.checked)}
+            />
+            <span>
+              Umschlag liegt in Druckreihenfolge vor (Datei beginnt mit der
+              Rückseite: U4, U1, U2, U3). Wird für den Leser zu U1, U2,
+              Innenteil, U3, U4 sortiert.
+            </span>
           </label>
           <label>
             Satzdatei IDML (optional, beste Artikelerkennung)

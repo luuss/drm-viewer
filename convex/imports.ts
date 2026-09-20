@@ -24,6 +24,15 @@ const articleValidator = v.object({
     }),
   ),
   source: v.union(v.literal("idml"), v.literal("pdf"), v.literal("manual")),
+  images: v.optional(
+    v.array(
+      v.object({
+        storageId: v.id("_storage"),
+        page: v.number(),
+        caption: v.optional(v.string()),
+      }),
+    ),
+  ),
 });
 
 export const createJobInternal = internalMutation({
@@ -84,6 +93,7 @@ export const applyResult = internalMutation({
           pageStart: a.pageStart,
           pageEnd: a.pageEnd,
           boxes: a.boxes,
+          images: a.images,
           source: a.source,
           status: "draft",
           updatedAt: Date.now(),

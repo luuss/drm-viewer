@@ -127,11 +127,18 @@ async def _start_usage_reporter() -> None:
     asyncio.create_task(_flush_usage_loop())
 
 
+# Grosse Hefte brauchen Minuten, nicht Sekunden. Der Standard-Zeitrahmen des
+# Clients gilt fuer kurze Dienstaufrufe.
+BIG_FILE_TIMEOUT = httpx.Timeout(900.0, connect=15.0)
+
+
 async def _download_limited(url: str) -> bytes:
     """Laedt eine Datei mit hartem Groessendeckel und ohne Weiterleitungen."""
     chunks: list[bytes] = []
     size = 0
-    async with _client.stream("GET", url, follow_redirects=False) as res:
+    async with _client.stream(
+        "GET", url, follow_redirects=False, timeout=BIG_FILE_TIMEOUT
+    ) as res:
         if res.status_code != 200:
             print(f"Download fehlgeschlagen: {res.status_code} {url[:80]}")
             raise HTTPException(502, "Datei nicht ladbar")
@@ -439,12 +446,13 @@ def _slice_tile(
     return pix.tobytes("jpeg", jpg_quality=88)
 
 
-def _verify_prepare_ticket(payload: dict) -> tuple[list[str], str, str, str]:
+def _verify_prepare_ticket(payload: dict) -> tuple[list[str], str, str, str, str]:
     """Prueft den von Convex unterschriebenen Auftrag und gibt die Teile zurueck."""
     sources = payload.get("sources") or []
     merged_upload = payload.get("mergedUploadUrl") or ""
     cover_upload = payload.get("coverImageUploadUrl") or ""
     filetype = payload.get("filetype")
+    cover_order = payload.get("coverOrder") or "print"
     ticket = payload.get("ticket")
     expires_at = payload.get("expiresAt")
 
@@ -458,19 +466,29 @@ def _verify_prepare_ticket(payload: dict) -> tuple[list[str], str, str, str]:
         raise HTTPException(403, "Auftrag abgelaufen")
 
     signed = "~".join(
-        ["|".join(sources), merged_upload, cover_upload, filetype, str(expires_at)]
+        [
+            "|".join(sources),
+            merged_upload,
+            cover_upload,
+            filetype,
+            cover_order,
+            str(expires_at),
+        ]
     )
     expected = hmac.new(
         TILE_SERVICE_SECRET.encode(), signed.encode(), hashlib.sha256
     ).hexdigest()
     if not hmac.compare_digest(expected, str(ticket)):
         raise HTTPException(403, "Auftrag nicht gueltig")
-    return sources, merged_upload, cover_upload, filetype
+    return sources, merged_upload, cover_upload, filetype, cover_order
 
 
 async def _upload_to_storage(upload_url: str, data: bytes, content_type: str) -> str:
     r = await _client.post(
-        upload_url, content=data, headers={"Content-Type": content_type}
+        upload_url,
+        content=data,
+        headers={"Content-Type": content_type},
+        timeout=BIG_FILE_TIMEOUT,
     )
     if r.status_code != 200:
         print(f"Upload fehlgeschlagen: {r.status_code} {r.text[:200]}")
@@ -478,17 +496,46 @@ async def _upload_to_storage(upload_url: str, data: bytes, content_type: str) ->
     return r.json()["storageId"]
 
 
-def _merge_documents(parts: list[bytes], filetype: str) -> bytes:
-    """Umschlag und Innenteil zu einer Datei zusammenfuegen."""
+def _merge_documents(parts: list[bytes], filetype: str, cover_order: str) -> bytes:
+    """Umschlag und Innenteil zu einer Lesefassung zusammenfuegen.
+
+    Ein Umschlag kommt aus der Druckvorstufe in Bogenreihenfolge: die Datei
+    beginnt mit der Rueckseite (U4), dann folgt der Titel (U1), danach die
+    beiden Innenseiten U2 und U3. So gebunden faengt das Heft mit der
+    Rueckseite an. Fuer den Leser wird daraus U1, U2, Innenteil, U3, U4.
+    """
     out = fitz.open()
     try:
-        for part in parts:
-            src = fitz.open(stream=part, filetype=filetype)
+        if len(parts) == 1:
+            src = fitz.open(stream=parts[0], filetype=filetype)
             try:
                 out.insert_pdf(src)
             finally:
                 src.close()
-        return out.tobytes(garbage=3, deflate=True)
+            return out.tobytes(garbage=3, deflate=True)
+
+        cover = fitz.open(stream=parts[0], filetype=filetype)
+        inner = fitz.open(stream=parts[1], filetype=filetype)
+        try:
+            n = cover.page_count
+            if cover_order == "print" and n == 4:
+                # Bogenreihenfolge U4, U1, U2, U3 -> Lesereihenfolge.
+                out.insert_pdf(cover, from_page=1, to_page=2)   # U1, U2
+                out.insert_pdf(inner)
+                out.insert_pdf(cover, from_page=3, to_page=3)   # U3
+                out.insert_pdf(cover, from_page=0, to_page=0)   # U4
+            elif cover_order == "print" and n == 2:
+                # Nur Titel und Rueckseite: Rueckseite steht vorn.
+                out.insert_pdf(cover, from_page=1, to_page=1)
+                out.insert_pdf(inner)
+                out.insert_pdf(cover, from_page=0, to_page=0)
+            else:
+                out.insert_pdf(cover)
+                out.insert_pdf(inner)
+            return out.tobytes(garbage=3, deflate=True)
+        finally:
+            cover.close()
+            inner.close()
     finally:
         out.close()
 
@@ -514,7 +561,9 @@ async def prepare(payload: dict):
     Aufruf aus der Redaktionsoberflaeche. Quellen und Ablageziele stehen im
     unterschriebenen Auftrag, der Dienst waehlt sie nicht selbst.
     """
-    sources, merged_upload, cover_upload, filetype = _verify_prepare_ticket(payload)
+    sources, merged_upload, cover_upload, filetype, cover_order = _verify_prepare_ticket(
+        payload
+    )
 
     parts = [await _download_limited(u) for u in sources]
     merged_storage_id: str | None = None
@@ -522,7 +571,7 @@ async def prepare(payload: dict):
     if len(parts) > 1:
         if not merged_upload:
             raise HTTPException(400, "Ziel fuer die zusammengefuegte Datei fehlt")
-        data = await asyncio.to_thread(_merge_documents, parts, filetype)
+        data = await asyncio.to_thread(_merge_documents, parts, filetype, cover_order)
         merged_storage_id = await _upload_to_storage(
             merged_upload, data, "application/pdf"
         )

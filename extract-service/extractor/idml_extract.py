@@ -129,6 +129,7 @@ def extract_idml(path: str, min_chars: int = 200) -> list[dict]:
                     "pageEnd": page_end,
                     "boxes": [],
                     "source": "idml",
+                    "_images": [],
                 }
             )
     return articles

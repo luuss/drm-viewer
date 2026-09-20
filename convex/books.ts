@@ -149,8 +149,10 @@ export const issuePrepareTicket = mutation({
     innerStorageId: v.id("_storage"),
     coverPdfStorageId: v.optional(v.id("_storage")),
     filetype: v.union(v.literal("pdf"), v.literal("epub")),
+    // "print": Umschlag liegt in Bogenreihenfolge vor (U4, U1, U2, U3).
+    coverOrder: v.optional(v.union(v.literal("print"), v.literal("asis"))),
   },
-  handler: async (ctx, { innerStorageId, coverPdfStorageId, filetype }) => {
+  handler: async (ctx, { innerStorageId, coverPdfStorageId, filetype, coverOrder }) => {
     await requireAdmin(ctx);
     const secret = process.env.TILE_SERVICE_SECRET;
     if (!secret) throw new Error("TILE_SERVICE_SECRET nicht gesetzt");
@@ -169,11 +171,13 @@ export const issuePrepareTicket = mutation({
 
     const expiresAt = Date.now() + 30 * 60 * 1000;
     const sources = coverUrl ? [coverUrl, innerUrl] : [innerUrl];
+    const order = coverOrder ?? "print";
     const payload = [
       sources.join("|"),
       mergedUploadUrl,
       coverImageUploadUrl,
       filetype,
+      order,
       String(expiresAt),
     ].join("~");
 
@@ -198,6 +202,7 @@ export const issuePrepareTicket = mutation({
       mergedUploadUrl,
       coverImageUploadUrl,
       filetype,
+      coverOrder: order,
       expiresAt,
       ticket,
     };
@@ -333,6 +338,12 @@ export const getStoragePdfUrlForService = internalQuery({
   },
 });
 
+/** Upload-Adresse fuer den Extraktionsdienst (Artikelbilder). */
+export const generateUploadUrlInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => await ctx.storage.generateUploadUrl(),
+});
+
 export const getBookInternal = internalQuery({
   args: { bookId: v.id("books") },
   handler: async (ctx, { bookId }) => await ctx.db.get(bookId),
@@ -449,5 +460,25 @@ export const getSourceUrlForService = internalQuery({
       pageCount: book.pageCount,
       filename: book.filename,
     };
+  },
+});
+
+/** Dateien einer Ausgabe ersetzen (Wartung, z.B. neu zusammengefuegter Umschlag). */
+export const setFilesInternal = internalMutation({
+  args: {
+    bookId: v.id("books"),
+    pdfStorageId: v.optional(v.id("_storage")),
+    coverStorageId: v.optional(v.id("_storage")),
+    pageCount: v.optional(v.number()),
+    pageWidth: v.optional(v.number()),
+    pageHeight: v.optional(v.number()),
+  },
+  handler: async (ctx, { bookId, ...patch }) => {
+    const clean: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(patch)) {
+      if (val !== undefined) clean[k] = val;
+    }
+    await ctx.db.patch(bookId, clean);
+    return clean;
   },
 });
