@@ -96,17 +96,6 @@ async function offerFor(
   };
 }
 
-/**
- * Uebergang: das ausgelieferte Frontend fragt noch `list` ab und zeigt jede
- * Zeile als eigene Abo-Karte mit Zustimmungskaestchen im Kiosk. Bis das
- * Frontend mit `offers` und der Abo-Seite draussen ist, bleibt die Liste
- * leer, dann blendet der alte Kiosk seinen Abo-Block aus. Danach loeschen.
- */
-export const list = query({
-  args: {},
-  handler: async () => [] as never[],
-});
-
 /** Kiosk: je Titel ein Abo, sofern er aktive Preisstufen hat. */
 export const offers = query({
   args: {},
