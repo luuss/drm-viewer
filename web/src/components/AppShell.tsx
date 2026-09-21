@@ -27,8 +27,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <header className="app-header">
         <div className="shell-inner">
-          <Link to="/" className="brand">
-            Lesen<span className="amp">&amp;</span>Schenken
+          <Link to="/" className="brand" aria-label="Lesen und Schenken Digital">
+            <img src="/img/lesen-und-schenken.png" alt="Lesen und Schenken" className="brand-logo" />
             <span className="brand-sub">Digital</span>
           </Link>
           <nav>
@@ -67,14 +67,53 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main>{children}</main>
 
       <footer className="app-footer">
-        <div className="shell-inner">
-          <span className="copy">© {new Date().getFullYear()} Lesen und Schenken</span>
-          <nav>
+        <div className="shell-inner footer-main">
+          <div className="footer-brand">
+            <img src="/img/lesen-und-schenken.png" alt="Lesen und Schenken" className="footer-logo" />
+            <ul className="footer-contact">
+              <li>
+                <span className="label">E-Post</span>
+                <a href="mailto:bestellung-netzladen@lesenundschenken.de">
+                  bestellung-netzladen@lesenundschenken.de
+                </a>
+              </li>
+              <li>
+                <span className="label">Telefon</span>
+                <a href="tel:+49438459700">04384 5970-0</a>
+              </li>
+              <li>
+                <span className="label">Fax</span>
+                <span>04384 5970-40</span>
+              </li>
+            </ul>
+          </div>
+          <nav className="footer-links" aria-label="Hinweise">
+            <h4>Hinweise</h4>
             <Link to="/impressum">Impressum</Link>
             <Link to="/datenschutz">Datenschutz</Link>
             <Link to="/agb">AGB</Link>
-            <Link to="/widerruf">Widerruf</Link>
+            <Link to="/widerruf">Vertrag widerrufen</Link>
           </nav>
+          <div className="footer-col">
+            <h4>Lesen &amp; Schenken Digital</h4>
+            <p>
+              Die Zeitschriften des Verlags zum Lesen am Bildschirm: einzelne
+              Ausgaben kaufen oder ein Abo abschließen, lesen auf jedem Gerät.
+              Gedruckt gibt es alles im{" "}
+              <a href="https://lesenundschenken.de/" target="_blank" rel="noopener noreferrer">
+                Verlagsshop
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+        <div className="copyright">
+          <div className="shell-inner">
+            <span>Copyright © {new Date().getFullYear()} Lesen und Schenken GmbH</span>
+            <a href="https://lesenundschenken.de/" target="_blank" rel="noopener noreferrer">
+              lesenundschenken.de
+            </a>
+          </div>
         </div>
       </footer>
     </div>

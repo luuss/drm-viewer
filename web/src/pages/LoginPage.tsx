@@ -55,13 +55,13 @@ export default function LoginPage() {
     <div className="auth-page">
       <div className="auth-box">
         <div className="auth-brand">
-          Lesen<span className="amp">&amp;</span>Schenken
+          <img src="/img/lesen-und-schenken.png" alt="Lesen und Schenken" className="brand-logo" />
           <span className="brand-sub">Digital</span>
         </div>
         <div className="titles">
           <h1>{title}</h1>
           <p className="subtitle">
-            Die Ausgaben von ZUERST! digital lesen — auf jedem Gerät.
+            Die Zeitschriften von Lesen &amp; Schenken digital lesen — auf jedem Gerät.
           </p>
         </div>
         <form onSubmit={submit}>
