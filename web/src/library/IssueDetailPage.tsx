@@ -44,19 +44,22 @@ export default function IssueDetailPage() {
     <div className="page issue-detail">
       <div className="cover-wrap">
         {issue.coverUrl ? (
-          <img src={issue.coverUrl} alt={issue.title} />
+          <img src={issue.coverUrl} alt={issue.displayTitle} />
         ) : (
-          <div className="cover-placeholder">{issue.title[0]}</div>
+          <div className="cover-placeholder">{issue.displayTitle[0]}</div>
         )}
       </div>
       <div className="issue-info">
-        <h2>{issue.title}</h2>
+        <h2>{issue.displayTitle}</h2>
+        {issue.subtitle && <div className="subtitle">{issue.subtitle}</div>}
         <div className="meta">
-          {issue.issueNumber ? `${issue.issueNumber} · ` : ""}
+          {issue.designation ? `${issue.designation} · ` : ""}
           {issue.pageCount} Seiten
           {issue.publicationDate ? ` · ${formatDate(issue.publicationDate)}` : ""}
         </div>
-        {issue.description && <p>{issue.description}</p>}
+        {issue.description && issue.description !== issue.subtitle && (
+          <p>{issue.description}</p>
+        )}
         <div className="price">
           {formatEuro(issue.priceAmountCents)}
           <span className="hint"> inkl. MwSt.</span>

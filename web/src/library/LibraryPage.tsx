@@ -37,18 +37,18 @@ export default function LibraryPage() {
           <Link key={i._id} to={`/reader/${i._id}`} className="issue-card">
             <div className="issue-cover-preview">
               {i.coverUrl ? (
-                <img src={i.coverUrl} alt={i.title} loading="lazy" />
+                <img src={i.coverUrl} alt={i.displayTitle} loading="lazy" />
               ) : (
-                <div className="cover-placeholder">{i.title[0]}</div>
+                <div className="cover-placeholder">{i.displayTitle[0]}</div>
               )}
             </div>
             <div className="issue-card-body">
-              <div className="title">{i.title}</div>
+              <div className="title">{i.displayTitle}</div>
               <div className="meta">
-                {i.publicationName ? `${i.publicationName} · ` : ""}
-                {i.issueNumber ? `${i.issueNumber} · ` : ""}
+                {i.designation ? `${i.designation} · ` : ""}
                 {i.pageCount} Seiten
               </div>
+              {i.subtitle && <div className="meta">{i.subtitle}</div>}
               <div className="cta">
                 {i.progress ? (
                   <>

@@ -977,6 +977,10 @@ button.small, .btn.small {
   color: var(--ink);
 }
 .issue-card-body .meta { font-size: var(--fs-mini); color: var(--muted); }
+/* Name der aktuellen Ausgabe auf der Abo-Karte, wie der Shop ihn fuehrt. */
+.issue-card-body .meta.strong { color: var(--ink); font-weight: 600; }
+/* Abo-Art und Liefergebiet als Beiwort zum Preis. */
+.issue-card-body .price-note { font-size: var(--fs-mini); color: var(--muted); }
 .issue-card-body .price {
   font-size: var(--fs-sub);
   font-weight: 600;
@@ -1156,6 +1160,30 @@ button.small, .btn.small {
   max-width: var(--prose);
 }
 .issue-info h2 { margin: 0; }
+/* Unter-Ueberschrift aus dem Verlagsshop, dicht unter dem Titel. */
+.issue-info .subtitle {
+  font-family: var(--serif);
+  font-size: var(--fs-h3);
+  color: var(--ink-soft);
+  margin-top: calc(var(--s2) * -1);
+}
+/* Aktuelle Ausgabe auf der Abo-Seite: Beschriftung, Name, Unter-Ueberschrift. */
+.current-issue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s1) var(--s3);
+  font-size: var(--fs-sub);
+  color: var(--ink-soft);
+}
+.current-issue .label {
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.current-issue strong { color: var(--ink); }
 .issue-info .meta { color: var(--muted); font-size: var(--fs-sub); }
 .issue-info .price {
   font-family: var(--serif);

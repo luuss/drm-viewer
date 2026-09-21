@@ -84,6 +84,15 @@ export default function SubscriptionDetailPage() {
           {selected.interval === "year" ? "Jahresabonnement" : "Monatsabonnement"}
           {" · Preise inkl. MwSt."}
         </div>
+        {offer.currentIssue && (
+          <div className="current-issue">
+            <span className="label">Aktuelle Ausgabe</span>
+            <strong>{offer.currentIssue.name}</strong>
+            {(offer.currentIssue.subtitle ?? offer.currentIssue.designation) && (
+              <span>{offer.currentIssue.subtitle ?? offer.currentIssue.designation}</span>
+            )}
+          </div>
+        )}
         <p className="hint">
           Das Abo schaltet jede Ausgabe frei, die während der Laufzeit
           erscheint — und das bei Abschluss aktuelle Heft. Freigeschaltete

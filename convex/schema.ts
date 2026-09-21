@@ -79,6 +79,13 @@ export default defineSchema(
     coverSource: v.optional(v.string()),
     coverLabel: v.optional(v.string()),
     coverUpdatedAt: v.optional(v.number()),
+    // Aktuelle Ausgabe der Reihe, wie der Verlagsshop sie bezeichnet:
+    // Name ("Carpiquet 1944"), Heftbezeichnung ("DMZ-ZG Nr. 82") und
+    // Unter-Ueberschrift ("Ausgabe Juli/August 2026").
+    currentIssueName: v.optional(v.string()),
+    currentIssueDesignation: v.optional(v.string()),
+    currentIssueSubtitle: v.optional(v.string()),
+    currentIssueUrl: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_slug", ["slug"]),
 
@@ -100,6 +107,14 @@ export default defineSchema(
     includedInSubscription: v.boolean(),
     publishedAt: v.optional(v.number()),
     articleCount: v.optional(v.number()),
+    // Bezeichnung des Hefts im Verlagsshop (publicationCovers.refreshAll):
+    // Name, Heftbezeichnung, Unter-Ueberschrift und Produktadresse. Die
+    // Oberflaeche zeigt sie vor dem eigenen Titel.
+    shopTitle: v.optional(v.string()),
+    shopDesignation: v.optional(v.string()),
+    shopSubtitle: v.optional(v.string()),
+    shopUrl: v.optional(v.string()),
+    shopSyncedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

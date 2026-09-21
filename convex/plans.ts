@@ -99,6 +99,15 @@ async function offerFor(
       ? (publication.coverLabel ?? publication.name)
       : (latest?.title ?? null),
     latestIssueTitle: latest?.title ?? null,
+    // Die aktuelle Ausgabe, wie der Verlagsshop sie bezeichnet.
+    currentIssue: publication.currentIssueName
+      ? {
+          name: publication.currentIssueName,
+          designation: publication.currentIssueDesignation ?? null,
+          subtitle: publication.currentIssueSubtitle ?? null,
+          url: publication.currentIssueUrl ?? null,
+        }
+      : null,
     ...grouped,
   };
 }

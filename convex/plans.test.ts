@@ -165,6 +165,27 @@ describe("Titelbild der Reihe", () => {
     expect(after!.coverTitle).toBe("ZUERST! September 2026");
     expect(after!.latestIssueTitle).toBe("ZUERST! 3/2026");
   });
+
+  test("die aktuelle Ausgabe traegt die Bezeichnung des Verlagsshops", async () => {
+    const t = convexTest(schema, modules);
+    const { dmz } = await seed(t);
+    expect((await t.query(api.plans.offerBySlug, { slug: "dmz" }))!.currentIssue).toBeNull();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(dmz, {
+        currentIssueName: "Der Schild Japans",
+        currentIssueDesignation: "DMZ Nr. 173",
+        currentIssueSubtitle: "Ausgabe September/Oktober 2026",
+        currentIssueUrl: "https://lesenundschenken.de/10721-der-schild-japans.html",
+      });
+    });
+    const offer = await t.query(api.plans.offerBySlug, { slug: "dmz" });
+    expect(offer!.currentIssue).toEqual({
+      name: "Der Schild Japans",
+      designation: "DMZ Nr. 173",
+      subtitle: "Ausgabe September/Oktober 2026",
+      url: "https://lesenundschenken.de/10721-der-schild-japans.html",
+    });
+  });
 });
 
 describe("Abo-Katalog", () => {

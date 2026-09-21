@@ -52,17 +52,25 @@ export default function KioskPage() {
                 </div>
                 <div className="issue-card-body">
                   <div className="title">{o.publicationName}</div>
-                  <div className="meta">
+                  {o.currentIssue && o.currentIssue.name !== o.publicationName && (
+                    <div className="meta strong">{o.currentIssue.name}</div>
+                  )}
+                  {o.currentIssue && (o.currentIssue.subtitle ?? o.currentIssue.designation) && (
+                    <div className="meta">
+                      {o.currentIssue.subtitle ?? o.currentIssue.designation}
+                    </div>
+                  )}
+                  <div className="price">
+                    {formatEuro(o.headline.priceAmountCents)}
+                    {o.headline.interval === "year" ? " / Jahr" : " / Monat"}
+                  </div>
+                  <div className="price-note">
                     {[
                       o.headline.tier,
                       o.headline.region ? REGION_LABEL[o.headline.region] : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}
-                  </div>
-                  <div className="price">
-                    {formatEuro(o.headline.priceAmountCents)}
-                    {o.headline.interval === "year" ? " / Jahr" : " / Monat"}
                   </div>
                   <div className="card-action">
                     Abo ansehen <Icon name="arrow-right" />
@@ -81,16 +89,15 @@ export default function KioskPage() {
             <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
               <div className="issue-cover-preview">
                 {i.coverUrl ? (
-                  <img src={i.coverUrl} alt={i.title} loading="lazy" />
+                  <img src={i.coverUrl} alt={i.displayTitle} loading="lazy" />
                 ) : (
-                  <div className="cover-placeholder">{i.title[0]}</div>
+                  <div className="cover-placeholder">{i.displayTitle[0]}</div>
                 )}
               </div>
               <div className="issue-card-body">
-                <div className="title">{i.title}</div>
-                <div className="meta">
-                  {[i.publicationName, i.issueNumber].filter(Boolean).join(" · ")}
-                </div>
+                <div className="title">{i.displayTitle}</div>
+                {i.designation && <div className="meta">{i.designation}</div>}
+                {i.subtitle && <div className="meta">{i.subtitle}</div>}
                 <div className="price">{formatEuro(i.priceAmountCents)}</div>
                 <div className="card-action">
                   Ausgabe ansehen <Icon name="arrow-right" />

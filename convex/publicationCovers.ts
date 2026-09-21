@@ -2,9 +2,28 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
-import { SHOP_URL, coverCandidates, parseMagazineStrip } from "./shopCovers";
+import {
+  SHOP_URL,
+  categoryUrl,
+  coverCandidates,
+  designationMatches,
+  parseMagazineStrip,
+  parseProductCards,
+  parseProductPage,
+  searchQueryForIssue,
+  searchUrl,
+  seriesFor,
+  type ProductCard,
+  type Series,
+  type StripEntry,
+} from "./shopCovers";
 
 const USER_AGENT = "LesenUndSchenkenDigital/1.0 (+https://d.chuk.dev)";
+
+async function getText(url: string): Promise<string | null> {
+  const response = await fetch(url, { headers: { "user-agent": USER_AGENT } });
+  return response.ok ? await response.text() : null;
+}
 
 export const listInternal = internalQuery({
   args: {},
@@ -17,7 +36,22 @@ export const listInternal = internalQuery({
         slug: p.slug,
         coverSource: p.coverSource ?? null,
         coverAssetId: p.coverAssetId ?? null,
+        currentIssueUrl: p.currentIssueUrl ?? null,
       }));
+  },
+});
+
+/** Veroeffentlichte Hefte eines Titels, die im Shop noch nicht zugeordnet sind. */
+export const unlabeledIssuesInternal = internalQuery({
+  args: { publicationId: v.id("publications") },
+  handler: async (ctx, { publicationId }) => {
+    const rows = await ctx.db
+      .query("issues")
+      .withIndex("by_publication", (q) => q.eq("publicationId", publicationId))
+      .collect();
+    return rows
+      .filter((i) => i.isPublished && !i.shopUrl && i.issueNumber)
+      .map((i) => ({ _id: i._id, issueNumber: i.issueNumber as string, title: i.title }));
   },
 });
 
@@ -61,37 +95,165 @@ export const setCoverInternal = internalMutation({
   },
 });
 
+export const setCurrentIssueInternal = internalMutation({
+  args: {
+    publicationId: v.id("publications"),
+    name: v.string(),
+    designation: v.optional(v.string()),
+    subtitle: v.optional(v.string()),
+    url: v.string(),
+  },
+  handler: async (ctx, { publicationId, name, designation, subtitle, url }) => {
+    await ctx.db.patch(publicationId, {
+      currentIssueName: name,
+      currentIssueDesignation: designation,
+      currentIssueSubtitle: subtitle,
+      currentIssueUrl: url,
+    });
+  },
+});
+
+export const setIssueShopLabelsInternal = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    title: v.string(),
+    designation: v.optional(v.string()),
+    subtitle: v.optional(v.string()),
+    url: v.string(),
+  },
+  handler: async (ctx, { issueId, title, designation, subtitle, url }) => {
+    await ctx.db.patch(issueId, {
+      shopTitle: title,
+      shopDesignation: designation,
+      shopSubtitle: subtitle,
+      shopUrl: url,
+      shopSyncedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /**
- * Titelbilder aller Reihen mit dem Verlagsshop abgleichen. Laeuft taeglich
- * (crons.ts) und von der Kommandozeile:
+ * Das aktuelle Heft einer Reihe im Shop. Nummerierte Reihen sortiert die
+ * Kategorie nach Artikelnummer, neueste zuerst; bei ZUERST! greift keine
+ * Sortierung, dort findet die Suche nach Jahr die Hefte. Das Bild aus der
+ * Startseiten-Leiste entscheidet, welches Heft gemeint ist.
+ */
+async function findCurrentProduct(series: Series, entry: StripEntry): Promise<ProductCard | null> {
+  const pages: string[] = [];
+  if (series.numbered) {
+    pages.push(categoryUrl(series));
+  } else {
+    const year = new Date().getFullYear();
+    pages.push(searchUrl(`${series.searchPrefix} ${year}`), searchUrl(`${series.searchPrefix} ${year - 1}`));
+  }
+  let first: ProductCard | null = null;
+  for (const url of pages) {
+    const html = await getText(url);
+    if (!html) continue;
+    const cards = parseProductCards(html);
+    const byImage = cards.find((c) => c.imageId === entry.imageId);
+    if (byImage) return byImage;
+    if (series.numbered && !first && cards.length > 0) first = cards[0];
+  }
+  return first;
+}
+
+const MAX_CATEGORY_PAGES = 12;
+
+/**
+ * Das Produkt zu einem eigenen Heft. Nummerierte Reihen: die nach
+ * Artikelnummer sortierte Kategorie, Seite fuer Seite, bis die Nummer
+ * gefunden oder unterschritten ist. ZUERST!: die Suche nach Monat und Jahr,
+ * die eindeutig trifft — die Kategorie sortiert dort nicht.
+ */
+async function findIssueProduct(
+  series: Series,
+  issueNumber: string,
+  pageCache: Map<string, ProductCard[]>,
+): Promise<ProductCard | null> {
+  const cardsOf = async (url: string): Promise<ProductCard[]> => {
+    const cached = pageCache.get(url);
+    if (cached) return cached;
+    const html = await getText(url);
+    const cards = html ? parseProductCards(html) : [];
+    pageCache.set(url, cards);
+    return cards;
+  };
+  if (!series.numbered) {
+    const query = searchQueryForIssue(series, issueNumber);
+    if (!query) return null;
+    const cards = await cardsOf(searchUrl(query));
+    return cards.find((c) => designationMatches(series, c.designation, issueNumber)) ?? null;
+  }
+  const wanted = Number(/^(\d+)/.exec(issueNumber.trim())?.[1]);
+  if (!wanted) return null;
+  for (let page = 1; page <= MAX_CATEGORY_PAGES; page++) {
+    const cards = await cardsOf(categoryUrl(series, page));
+    if (cards.length === 0) break;
+    const hit = cards.find((c) => designationMatches(series, c.designation, issueNumber));
+    if (hit) return hit;
+    const numbers = cards
+      .map((c) => Number(/(?:Nr\.?|Heft)\s*(\d+)\b/i.exec(c.designation)?.[1]))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (numbers.length > 0 && Math.max(...numbers) < wanted) break;
+  }
+  return null;
+}
+
+/**
+ * Titelbilder und Heftbezeichnungen aller Reihen mit dem Verlagsshop
+ * abgleichen. Laeuft taeglich (crons.ts) und von der Kommandozeile:
  *
  *     npx convex run publicationCovers:refreshAll
  *
- * Geholt wird nur, was sich geaendert hat: Adresse und Kennzeichen des Bilds
- * (ETag oder Aenderungsdatum) stehen an der Publikation.
+ * Je Reihe: das Titelbild der aktuellen Ausgabe (nur wenn Adresse oder
+ * Kennzeichen sich geaendert haben), Name, Heftbezeichnung und
+ * Unter-Ueberschrift der aktuellen Ausgabe, und fuer eigene Hefte ohne
+ * Zuordnung dieselben Angaben vom passenden Produkt, gefunden ueber die Suche
+ * nach der Heftbezeichnung.
  */
 export const refreshAll = internalAction({
   args: {},
   handler: async (
     ctx,
-  ): Promise<{ updated: string[]; unchanged: string[]; missing: string[]; failed: string[] }> => {
-    const page = await fetch(`${SHOP_URL}/`, { headers: { "user-agent": USER_AGENT } });
-    if (!page.ok) throw new Error(`Startseite des Shops: HTTP ${page.status}`);
-    const entries = parseMagazineStrip(await page.text());
+  ): Promise<{
+    updated: string[];
+    unchanged: string[];
+    missing: string[];
+    failed: string[];
+    currentIssues: string[];
+    issues: string[];
+  }> => {
+    const homepage = await getText(`${SHOP_URL}/`);
+    if (!homepage) throw new Error("Startseite des Shops nicht erreichbar");
+    const entries = parseMagazineStrip(homepage);
     const publications: {
       _id: Id<"publications">;
       slug: string;
       coverSource: string | null;
       coverAssetId: Id<"assets"> | null;
+      currentIssueUrl: string | null;
     }[] = await ctx.runQuery(internal.publicationCovers.listInternal, {});
 
-    const result = { updated: [] as string[], unchanged: [] as string[], missing: [] as string[], failed: [] as string[] };
+    const result = {
+      updated: [] as string[],
+      unchanged: [] as string[],
+      missing: [] as string[],
+      failed: [] as string[],
+      currentIssues: [] as string[],
+      issues: [] as string[],
+    };
+    const pageCache = new Map<string, ProductCard[]>();
     for (const publication of publications) {
+      const series = seriesFor(publication.slug);
       const entry = entries.find((e) => e.slug === publication.slug);
-      if (!entry) {
+      if (!series || !entry) {
         result.missing.push(publication.slug);
         continue;
       }
+
+      // 1. Titelbild
       try {
         let done = false;
         for (const url of coverCandidates(entry)) {
@@ -122,13 +284,58 @@ export const refreshAll = internalAction({
           done = true;
           break;
         }
-        if (!done) result.failed.push(publication.slug);
+        if (!done) result.failed.push(`${publication.slug}: Titelbild`);
       } catch (error) {
         console.error(`Titelbild ${publication.slug}`, error);
-        result.failed.push(publication.slug);
+        result.failed.push(`${publication.slug}: Titelbild`);
+      }
+
+      // 2. Aktuelle Ausgabe
+      try {
+        const product = await findCurrentProduct(series, entry);
+        if (product && product.url !== publication.currentIssueUrl) {
+          const page = await getText(product.url);
+          const parsed = page ? parseProductPage(page) : null;
+          await ctx.runMutation(internal.publicationCovers.setCurrentIssueInternal, {
+            publicationId: publication._id,
+            name: parsed?.name ?? product.name,
+            designation: parsed?.designation ?? product.designation ?? undefined,
+            subtitle: parsed?.subtitle ?? undefined,
+            url: product.url,
+          });
+          result.currentIssues.push(`${publication.slug}: ${parsed?.name ?? product.name}`);
+        }
+      } catch (error) {
+        console.error(`Aktuelle Ausgabe ${publication.slug}`, error);
+        result.failed.push(`${publication.slug}: aktuelle Ausgabe`);
+      }
+
+      // 3. Eigene Hefte ohne Zuordnung
+      const issues: { _id: Id<"issues">; issueNumber: string; title: string }[] =
+        await ctx.runQuery(internal.publicationCovers.unlabeledIssuesInternal, {
+          publicationId: publication._id,
+        });
+      for (const issue of issues) {
+        try {
+          const card = await findIssueProduct(series, issue.issueNumber, pageCache);
+          if (!card) continue;
+          const page = await getText(card.url);
+          const parsed = page ? parseProductPage(page) : null;
+          await ctx.runMutation(internal.publicationCovers.setIssueShopLabelsInternal, {
+            issueId: issue._id,
+            title: parsed?.name ?? card.name,
+            designation: parsed?.designation ?? card.designation ?? undefined,
+            subtitle: parsed?.subtitle ?? undefined,
+            url: card.url,
+          });
+          result.issues.push(`${issue.title} → ${parsed?.name ?? card.name} (${parsed?.designation ?? card.designation})`);
+        } catch (error) {
+          console.error(`Heft ${issue.title}`, error);
+          result.failed.push(`${publication.slug}: ${issue.title}`);
+        }
       }
     }
-    console.log(JSON.stringify({ event: "covers.refresh", ...result }));
+    console.log(JSON.stringify({ event: "shop.refresh", ...result }));
     return result;
   },
 });

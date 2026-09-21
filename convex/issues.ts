@@ -15,6 +15,30 @@ import { syncSubscription } from "./subscriptions";
 import { subscriptionIsActive } from "./access";
 import { Id } from "./_generated/dataModel";
 
+/**
+ * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
+ * Unter-Ueberschrift aus dem Verlagsshop, sonst eigener Titel, Titel der
+ * Publikation und Heftnummer.
+ */
+export function shopLabels(
+  issue: {
+    title: string;
+    issueNumber?: string;
+    shopTitle?: string;
+    shopDesignation?: string;
+    shopSubtitle?: string;
+  },
+  publicationName: string | null,
+) {
+  return {
+    displayTitle: issue.shopTitle ?? issue.title,
+    designation:
+      issue.shopDesignation ??
+      ([publicationName, issue.issueNumber].filter(Boolean).join(" · ") || null),
+    subtitle: issue.shopSubtitle ?? null,
+  };
+}
+
 /** Kiosk: alle veroeffentlichten Ausgaben. */
 export const listPublished = query({
   args: { publicationId: v.optional(v.id("publications")) },
@@ -44,6 +68,7 @@ export const listPublished = query({
           publicationName: publication?.name ?? null,
           publicationSlug: publication?.slug ?? null,
           coverUrl: await assetUrl(ctx, i.coverAssetId),
+          ...shopLabels(i, publication?.name ?? null),
         };
       }),
     );
@@ -60,9 +85,11 @@ export const getPublic = query({
       ? await hasIssueAccess(ctx, userId as Id<"users">, issueId)
       : false;
     if (!issue.isPublished && !owned) return null;
+    const publication = await ctx.db.get(issue.publicationId);
     return {
       _id: issue._id,
       title: issue.title,
+      ...shopLabels(issue, publication?.name ?? null),
       slug: issue.slug,
       issueNumber: issue.issueNumber ?? null,
       description: issue.description ?? null,
@@ -117,6 +144,7 @@ export const myLibrary = query({
       out.push({
         _id: issue._id,
         title: issue.title,
+        ...shopLabels(issue, publication?.name ?? null),
         issueNumber: issue.issueNumber ?? null,
         pageCount: issue.pageCount,
         articleCount: issue.articleCount ?? 0,
