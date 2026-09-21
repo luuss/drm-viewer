@@ -17,6 +17,17 @@ Jeder Push auf `main` laeuft durch eine einzige Kette in GitHub Actions
 Die Reihenfolge ist nicht beliebig: waere die Oberflaeche vor dem Backend neu,
 riefe sie Funktionen auf, die es noch nicht gibt.
 
+Der Webhook bestaetigt nur, dass Dokploy den Auftrag angenommen hat. Ob der Bau
+gelingt, sagt er nicht. Deshalb wartet der Lauf danach, bis die Seite genau das
+JavaScript-Bundle ausliefert, das die Pruefung gebaut hat — Vite benennt es nach
+dem Inhalt, es ist also ein Fingerabdruck des Standes. Erst dann gilt die
+Auslieferung als gelungen.
+
+Eine Grenze hat das: aendert ein Commit nur das Backend oder die Extraktion,
+bleibt der Fingerabdruck der Oberflaeche derselbe und die Wartezeit entfaellt.
+Ein fehlgeschlagener Bau von Kacheldienst oder Import-Worker faellt dann nicht
+auf. Fuer diese Faelle bleibt das Bauprotokoll in Dokploy die Wahrheit.
+
 **Dokploy hat bewusst keinen eigenen Auto-Deploy.** Wuerde es selbst auf jeden
 Push reagieren, liefe es an den Tests vorbei; ein roter Test wuerde ein kaputtes
 Deployment nicht mehr aufhalten. Stattdessen stoesst der Workflow Dokploy ueber
@@ -40,12 +51,19 @@ eine HTTPS-Domain oder ein VPN erreichbar machen.
    `./docker-compose.dokploy.yml` eintragen.
 4. **Docker Compose** verwenden, nicht Docker Stack: Die Images werden direkt
    aus dem Checkout gebaut.
-5. **Auto Deploy ausgeschaltet lassen.** Den Rollout stoesst GitHub Actions an,
-   nachdem die Tests durchgelaufen sind. Die Adresse dafuer steht unter
-   **Compose → Deployments → Webhook URL** und gehoert als Secret
-   `DOKPLOY_DEPLOY_URL` ins Repository. Sie enthaelt ein Merkmal, das nur diesen
-   einen Dienst ausloesen kann — ein Dokploy-API-Schluessel mit Vollzugriff hat
-   in einem oeffentlichen Repository nichts zu suchen.
+5. **Auto Deploy eingeschaltet lassen, aber als Trigger `tag` waehlen.** Das
+   sieht widerspruechlich aus und ist es nicht: in Dokploy haengt der
+   Deploy-Webhook am selben Schalter wie der Push-Trigger. Ist Auto Deploy aus,
+   antwortet der Webhook mit
+   `{"message":"Automatic deployments are disabled for this compose"}`. Mit dem
+   Trigger `tag` bleibt der Webhook nutzbar, waehrend ein gewoehnlicher Push auf
+   `main` Dokploy nicht mehr selbst starten laesst — genau das soll er nicht,
+   denn er wuerde an den Tests vorbeilaufen.
+6. Die Webhook-Adresse steht unter **Compose → Deployments → Webhook URL** und
+   gehoert als Secret `DOKPLOY_DEPLOY_URL` ins Repository. Sie traegt ein
+   Merkmal, das nur diesen einen Dienst ausloesen kann — ein Dokploy-API-
+   Schluessel mit Vollzugriff haette in einem oeffentlichen Repository nichts zu
+   suchen.
 
 Dokploy klont den Quellstand bei jedem Deployment neu. Persistente Dateien
 duerfen deshalb spaeter nur in benannten Volumes oder Dokploy File Mounts

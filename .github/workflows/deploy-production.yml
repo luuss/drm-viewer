@@ -25,6 +25,10 @@ jobs:
     name: Tests und Bau
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      # Vite benennt das Bundle nach dem Inhalt. Damit laesst sich spaeter
+      # feststellen, ob die Seite wirklich den neuen Stand ausliefert.
+      bundle: ${{ steps.bauen.outputs.bundle }}
     steps:
       - uses: actions/checkout@v5
 
@@ -45,6 +49,7 @@ jobs:
         run: npm test
 
       - name: Weboberflaeche bauen
+        id: bauen
         env:
           VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
         run: |
@@ -54,6 +59,9 @@ jobs:
           fi
           npm ci --prefix web
           npm run build --prefix web
+          bundle=$(grep -oE 'src="[^"]+\.js"' web/dist/index.html | head -1 | cut -d'"' -f2)
+          echo "Erwartetes Bundle: $bundle"
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v5
         with:
@@ -133,38 +141,50 @@ jobs:
 
       # Der Webhook bestaetigt nur die Annahme, nicht den Erfolg. Deshalb wird
       # danach die laufende Seite selbst befragt.
+      # Der Webhook bestaetigt nur die Annahme, nicht den Erfolg. Ohne die
+      # folgende Pruefung waere der Lauf schon nach Sekunden gruen — und haette
+      # dabei nur den alten, noch laufenden Stand bestaetigt.
+      - name: Warten bis der neue Stand ausgeliefert wird
+        env:
+          PUBLIC_WEB_ORIGIN: ${{ vars.PUBLIC_WEB_ORIGIN }}
+          ERWARTET: ${{ needs.pruefen.outputs.bundle }}
+        run: |
+          basis="${PUBLIC_WEB_ORIGIN:-https://d.chuk.dev}"
+          echo "Erwartet wird $ERWARTET auf $basis"
+
+          # Dokploy baut drei Images neu; das dauert einige Minuten.
+          for versuch in $(seq 1 90); do
+            geliefert=$(curl -s --max-time 10 "$basis/" \
+                        | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2 || true)
+            if [[ -n "$ERWARTET" && "$geliefert" == "$ERWARTET" ]]; then
+              echo "Neuer Stand steht nach $((versuch * 10)) s."
+              fertig=ja
+              break
+            fi
+            sleep 10
+          done
+
+          if [[ "${fertig:-nein}" != "ja" ]]; then
+            echo "::error::Nach 15 Minuten liefert $basis noch '$geliefert' statt '$ERWARTET'. Der Bau in Dokploy ist vermutlich fehlgeschlagen; Protokoll dort pruefen."
+            exit 1
+          fi
+
       - name: Rauchtest an der ausgelieferten Seite
         env:
           PUBLIC_WEB_ORIGIN: ${{ vars.PUBLIC_WEB_ORIGIN }}
           ERWARTETE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
         run: |
           basis="${PUBLIC_WEB_ORIGIN:-https://d.chuk.dev}"
-          echo "Warte auf $basis"
 
-          # Dokploy baut drei Images; bis die neuen Container stehen, antwortet
-          # kurzzeitig noch der alte Stand oder gar nichts.
-          for versuch in $(seq 1 60); do
-            gesund=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$basis/api/health" || echo 000)
-            seite=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$basis/" || echo 000)
-            if [[ "$gesund" == "200" && "$seite" == "200" ]]; then
-              echo "Seite und Kacheldienst antworten nach $((versuch * 10)) s."
-              erreichbar=ja
-              break
-            fi
-            sleep 10
-          done
-          if [[ "${erreichbar:-nein}" != "ja" ]]; then
-            echo "::error::$basis antwortet nach 10 Minuten nicht (Seite $seite, Kacheldienst $gesund). Bauprotokoll in Dokploy pruefen."
+          gesund=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$basis/api/health" || echo 000)
+          if [[ "$gesund" != "200" ]]; then
+            echo "::error::Das Kachel-Gateway antwortet nicht (HTTP $gesund). Ohne es bleibt die Seitenansicht leer."
             exit 1
           fi
 
           # Ein abgebrochener Bau hinterlaesst eine index.html, deren Bundle
           # fehlt. Das faellt sonst erst dem Leser auf.
           bundle=$(curl -s --max-time 10 "$basis/" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)
-          if [[ -z "$bundle" ]]; then
-            echo "::error::In der ausgelieferten Seite steht kein JavaScript-Bundle."
-            exit 1
-          fi
           bundle_code=$(curl -s -o /tmp/bundle.js -w '%{http_code}' --max-time 30 "$basis$bundle")
           if [[ "$bundle_code" != "200" ]]; then
             echo "::error::Das Bundle $bundle fehlt (HTTP $bundle_code)."
@@ -177,4 +197,4 @@ jobs:
             exit 1
           fi
 
-          echo "Rauchtest bestanden: Seite, Kacheldienst, Bundle und Backend-Adresse stimmen."
+          echo "Rauchtest bestanden: neuer Stand, Kacheldienst erreichbar, Bundle vollstaendig, Backend-Adresse stimmt."
