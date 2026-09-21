@@ -27,20 +27,11 @@ export default function KioskPage() {
     <div className="page">
       <div className="page-head">
         <h2>Kiosk</h2>
-        <p className="hint">
-          Einzelne Ausgaben kaufen oder ein Abo abschließen. Gekaufte Ausgaben
-          bleiben dauerhaft lesbar.
-        </p>
       </div>
 
       {offers.length > 0 && (
         <section>
           <h3>Abonnements</h3>
-          <p className="hint">
-            Das Abo schaltet jede Ausgabe frei, die während der Laufzeit
-            erscheint — und das bei Abschluss aktuelle Heft. Freigeschaltete
-            Ausgaben bleiben auch nach einer Kündigung lesbar.
-          </p>
           <div className="issue-grid">
             {offers.map((o) => (
               <Link
@@ -85,9 +76,6 @@ export default function KioskPage() {
 
       <section>
         <h3>Einzelausgaben</h3>
-        <p className="hint">
-          Eine gekaufte Ausgabe bleibt dauerhaft in Ihrer Bibliothek.
-        </p>
         <div className="issue-grid">
           {issues.map((i) => (
             <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
