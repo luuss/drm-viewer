@@ -6,8 +6,16 @@ import PageMode from "./PageMode";
 import ArticleMode from "./ArticleMode";
 import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
+import Icon from "../components/Icon";
 
 type Mode = "page" | "article";
+type PageLayout = "single" | "spread";
+
+/** Umschlag allein, danach echte linke/rechte Magazinpaare. */
+function spreadStart(index: number) {
+  if (index <= 0) return 0;
+  return index % 2 === 1 ? index : index - 1;
+}
 
 /**
  * Rahmen des Readers: Modus, Navigation, Lesefortschritt, Inhaltsverzeichnis.
@@ -34,6 +42,11 @@ export default function ReaderShell() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [watermark, setWatermark] = useState("");
   const [mode, setMode] = useState<Mode>("page");
+  const [pageLayout, setPageLayout] = useState<PageLayout>(() =>
+    window.localStorage.getItem("reader-page-layout") === "spread"
+      ? "spread"
+      : "single",
+  );
   const [pageIndex, setPageIndex] = useState(0);
   const [articleId, setArticleId] = useState<Id<"articles"> | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
@@ -104,6 +117,18 @@ export default function ReaderShell() {
     [articleList, articleId],
   );
   const pageCount = pages?.length ?? issue?.pageCount ?? 0;
+  const visiblePageIndexes = useMemo(() => {
+    if (pageLayout === "single") return [pageIndex];
+    const start = spreadStart(pageIndex);
+    // Der Titel ist bei einem echten Heft die alleinstehende rechte Seite.
+    // U2 beginnt erst die naechste Doppelseite und darf nicht zweimal erscheinen.
+    if (start === 0) return [0];
+    return start + 1 < pageCount ? [start, start + 1] : [start];
+  }, [pageLayout, pageIndex, pageCount]);
+
+  useEffect(() => {
+    window.localStorage.setItem("reader-page-layout", pageLayout);
+  }, [pageLayout]);
 
   const persist = useCallback(
     (next: { mode: Mode; pageIndex: number; articleId: Id<"articles"> | null }) => {
@@ -194,14 +219,43 @@ export default function ReaderShell() {
   }, [articleList, articleId, pageIndex, persist]);
 
   const prev = useCallback(() => {
-    if (mode === "page") goPage(pageIndex - 1);
-    else goArticle(articleIndex - 1);
-  }, [mode, pageIndex, articleIndex, goPage, goArticle]);
+    if (mode === "article") {
+      goArticle(articleIndex - 1);
+      return;
+    }
+    if (pageLayout === "single") {
+      goPage(pageIndex - 1);
+      return;
+    }
+    const start = spreadStart(pageIndex);
+    goPage(start <= 1 ? 0 : start - 2);
+  }, [mode, pageLayout, pageIndex, articleIndex, goPage, goArticle]);
 
   const next = useCallback(() => {
-    if (mode === "page") goPage(pageIndex + 1);
-    else goArticle(articleIndex + 1);
-  }, [mode, pageIndex, articleIndex, goPage, goArticle]);
+    if (mode === "article") {
+      goArticle(articleIndex + 1);
+      return;
+    }
+    if (pageLayout === "single") {
+      goPage(pageIndex + 1);
+      return;
+    }
+    const start = spreadStart(pageIndex);
+    goPage(start === 0 ? 1 : start + 2);
+  }, [mode, pageLayout, pageIndex, articleIndex, goPage, goArticle]);
+
+  const canPrev =
+    mode === "page"
+      ? pageLayout === "spread"
+        ? spreadStart(pageIndex) > 0
+        : pageIndex > 0
+      : articleIndex > 0;
+  const canNext =
+    mode === "page"
+      ? pageLayout === "spread"
+        ? visiblePageIndexes[visiblePageIndexes.length - 1] < pageCount - 1
+        : pageIndex < pageCount - 1
+      : articleIndex >= 0 && articleIndex < articleList.length - 1;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -222,12 +276,21 @@ export default function ReaderShell() {
       ) {
         return;
       }
-      if (e.key === "ArrowLeft") prev();
-      if (e.key === "ArrowRight") next();
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+
+      // Die Pfeile sind ausschliesslich Blaettertasten. In der Capture-Phase
+      // stoppen wir das Ereignis vor OpenSeadragon; gehaltene Tasten springen
+      // nicht unkontrolliert ueber mehrere Seiten.
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (e.repeat) return;
+      if (e.key === "ArrowLeft" && canPrev) prev();
+      if (e.key === "ArrowRight" && canNext) next();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [prev, next]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [prev, next, canPrev, canNext]);
 
   if (access === undefined || issue === undefined) {
     return <div className="centered">Laden...</div>;
@@ -240,21 +303,31 @@ export default function ReaderShell() {
   const printed = pages?.[pageIndex]?.printedLabel ?? "";
   const label =
     mode === "page"
-      ? printed === String(pageIndex + 1)
-        ? ""
-        : printed
+      ? pageLayout === "spread"
+        ? visiblePageIndexes.map(pageLabel).join("–")
+        : printed === String(pageIndex + 1)
+          ? ""
+          : printed
       : (articleList[articleIndex]?.title ?? "").slice(0, 40);
 
   return (
     <div
       className="reader-screen"
       onTouchStart={(e) => {
+        // Im Seitenmodus gehoert die Geste dem gemeinsamen Zoom-/Pan-Viewport.
+        // Geblaettert wird dort ueber die Randtasten; sonst loest horizontales
+        // Verschieben einer vergroesserten Doppelseite zugleich einen Wechsel aus.
+        if (mode === "page") return;
         touchStart.current = {
           x: e.touches[0].clientX,
           y: e.touches[0].clientY,
         };
       }}
       onTouchEnd={(e) => {
+        if (mode === "page") {
+          touchStart.current = null;
+          return;
+        }
         const start = touchStart.current;
         if (!start) return;
         const dx = e.changedTouches[0].clientX - start.x;
@@ -268,7 +341,8 @@ export default function ReaderShell() {
     >
       <header className="reader-bar">
         <button className="btn quiet small" onClick={() => navigate("/library")}>
-          Bibliothek
+          <Icon name="arrow-left" />
+          <span className="button-label">Bibliothek</span>
         </button>
         <span className="issue-title">{issue?.title}</span>
         <div className="mode-switch" role="group" aria-label="Ansicht">
@@ -276,6 +350,7 @@ export default function ReaderShell() {
             className={mode === "page" ? "active" : ""}
             onClick={switchToPages}
           >
+            <Icon name="pages" />
             Seiten
           </button>
           <button
@@ -283,11 +358,37 @@ export default function ReaderShell() {
             onClick={switchToArticles}
             disabled={articleList.length === 0}
           >
+            <Icon name="book-open" />
             Artikel
           </button>
         </div>
+        {mode === "page" && (
+          <div className="mode-switch page-layout-switch" role="group" aria-label="Seitenlayout">
+            <button
+              className={pageLayout === "single" ? "active" : ""}
+              onClick={() => setPageLayout("single")}
+              aria-pressed={pageLayout === "single"}
+              aria-label="Einzelseite anzeigen"
+              title="Einzelseite"
+            >
+              <Icon name="pages" />
+              <span>1</span>
+            </button>
+            <button
+              className={pageLayout === "spread" ? "active" : ""}
+              onClick={() => setPageLayout("spread")}
+              aria-pressed={pageLayout === "spread"}
+              aria-label="Doppelseite anzeigen"
+              title="Doppelseite"
+            >
+              <Icon name="spread" />
+              <span>2</span>
+            </button>
+          </div>
+        )}
         <button className="btn quiet small" onClick={() => setTocOpen(true)}>
-          Inhalt
+          <Icon name="list" />
+          <span className="button-label">Inhalt</span>
         </button>
       </header>
 
@@ -296,13 +397,17 @@ export default function ReaderShell() {
           sessionToken ? (
             <PageMode
               issueId={issueId}
-              pageIndex={pageIndex}
+              pageIndexes={visiblePageIndexes}
+              spread={pageLayout === "spread"}
               sessionToken={sessionToken}
               regions={regions ?? []}
               watermark={watermark}
               onOpenArticle={openArticle}
+              onNavigatePage={goPage}
               onPrev={prev}
               onNext={next}
+              canPrev={canPrev}
+              canNext={canNext}
             />
           ) : (
             <div className="page-hint">Lesesitzung wird geöffnet...</div>
@@ -314,6 +419,8 @@ export default function ReaderShell() {
             pageLabel={pageLabel}
             onPrev={prev}
             onNext={next}
+            canPrev={canPrev}
+            canNext={canNext}
           />
         )}
       </main>

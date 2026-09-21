@@ -22,15 +22,17 @@ from dataclasses import asdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import render
-from extractor.article_assembler import assemble
+from extractor.article_assembler import assemble, flow_text_blocks
 from extractor.idml_extract import (
     extract_idml_blocks,
     extract_idml_image_frames,
     frames_to_images,
 )
 from extractor.image_regions import read_trim_boxes
+from extractor.llm import postprocess_issue
 from extractor.model import SourceBlock
 from extractor.pdf_extract import extract_pdf_pages, prepare_blocks
+from extractor.publication_profiles import apply_profile
 from storage import ConvexClient, Storage, issue_key
 
 CONVEX_SITE_URL = os.environ.get("CONVEX_SITE_URL", "").rstrip("/")
@@ -39,6 +41,7 @@ SERVICE_SECRET = (
 )
 WORKER_ID = os.environ.get("WORKER_ID") or f"{socket.gethostname()}-{os.getpid()}"
 POLL_SECONDS = float(os.environ.get("WORKER_POLL_SECONDS", "5"))
+IDLE_POLL_MAX_SECONDS = float(os.environ.get("WORKER_IDLE_POLL_MAX_SECONDS", "60"))
 MAX_SOURCE_BYTES = int(os.environ.get("MAX_SOURCE_BYTES", 400 * 1024 * 1024))
 
 
@@ -46,6 +49,21 @@ def log(event: str, **detail) -> None:
     import json
 
     print(json.dumps({"event": event, "worker": WORKER_ID, **detail}), flush=True)
+
+
+def idle_poll_delay(empty_polls: int) -> float:
+    """Leerlaufabfragen exponentiell ausduennen.
+
+    Eine Abfrage trifft in Convex sowohl die HTTP Action als auch die interne
+    Mutation. Ein festes Fuenf-Sekunden-Intervall verbraucht deshalb schon ohne
+    einen einzigen Import gut eine Million Funktionsaufrufe pro Monat. Nach
+    einem bearbeiteten Auftrag beginnt die Folge wieder bei der kurzen
+    Wartezeit; im dauerhaften Leerlauf wird nur noch einmal pro Minute gefragt.
+    """
+    minimum = max(1.0, POLL_SECONDS)
+    maximum = max(minimum, IDLE_POLL_MAX_SECONDS)
+    exponent = max(0, min(empty_polls, 20))
+    return min(maximum, minimum * (2**exponent))
 
 
 class Job:
@@ -93,11 +111,31 @@ class Job:
         log("job.sources", jobId=self.job_id, count=len(blobs))
 
         page_images = self._render_pages(pages, blobs)
-        blocks, images = self._extract(pages, blobs, sources)
-        articles = assemble(blocks, images)
+        blocks, images, toc_hints = self._extract(pages, blobs, sources)
+        articles = assemble(blocks, images, toc_hints=toc_hints)
         log("job.assembled", jobId=self.job_id, articles=len(articles))
 
+        llm_report = postprocess_issue(
+            articles,
+            blocks,
+            images,
+            page_images,
+            heartbeat=lambda message: self.beat(86, message),
+            event_log=lambda event, **detail: log(
+                event, jobId=self.job_id, **detail
+            ),
+        )
+        if llm_report.attempted_chunks:
+            log(
+                "job.llm",
+                jobId=self.job_id,
+                attempted=llm_report.attempted_chunks,
+                applied=llm_report.applied_chunks,
+                fallback=llm_report.failed_chunks,
+            )
+
         payload_articles = self._build_payload(articles, page_images)
+        toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
         self.beat(92, "Ergebnis wird uebernommen")
         result = self.convex.post(
             "/service/jobs/result",
@@ -106,6 +144,7 @@ class Job:
                 "workerId": WORKER_ID,
                 "issueId": self.issue_id,
                 "articles": payload_articles,
+                **({"tocEntries": toc_entries} if toc_entries else {}),
             },
         )
         log(
@@ -214,6 +253,15 @@ class Job:
                 idml_bytes, idml_source, sources, blobs, by_asset, images
             )
 
+        # Publikationskonventionen greifen vor der Klassifikation: Umschlag und
+        # gedrucktes Inhaltsverzeichnis sollen weder Artikel noch Bilder liefern.
+        blocks, images, toc_hints = apply_profile(
+            blocks,
+            images,
+            pages,
+            self.data.get("publicationSlug"),
+        )
+
         # Erst jetzt aufraeumen, damit die Bildunterschriften an den endgueltigen
         # Bildbereichen haengen.
         ordered = prepare_blocks(blocks, images, len(pages))
@@ -226,7 +274,7 @@ class Job:
                     log("job.idml", jobId=self.job_id, blocks=len(idml_blocks))
             except Exception as exc:
                 log("job.idmlFailed", jobId=self.job_id, error=str(exc)[:200])
-        return ordered, images
+        return ordered, images, toc_hints
 
     def _images_from_idml(
         self, idml_bytes, idml_source, sources, blobs, by_asset, images
@@ -282,6 +330,9 @@ class Job:
     def _build_payload(self, articles, page_images: dict[int, bytes]) -> list[dict]:
         payload = []
         for order, article in enumerate(articles, start=1):
+            # `flow_text_blocks` laesst KI-gepruefte Seiten unveraendert und
+            # greift nur auf Seiten zurueck, deren LLM-Chunk fehlgeschlagen ist.
+            reader_blocks = flow_text_blocks(article.blocks)
             blocks = [
                 {
                     "order": i + 1,
@@ -290,10 +341,11 @@ class Job:
                     else "other",
                     "text": b.text,
                     "sourcePageIndex": b.page_index,
+                    "sourceY": round(max(0.0, min(1.0, b.y0)), 5),
                     **({"sourceStoryId": b.story_id} if b.story_id else {}),
                     **({"styleName": b.style_name} if b.style_name else {}),
                 }
-                for i, b in enumerate(article.blocks)
+                for i, b in enumerate(reader_blocks)
             ]
             regions = [
                 {
@@ -306,7 +358,21 @@ class Job:
                 }
                 for b in article.blocks
             ]
-            images = self._store_images(article, page_images)
+            # Auch das Bild selbst gehoert zur Artikel-Trefferflaeche. Damit
+            # bleibt die Zuordnung im Debugger sichtbar und Leser koennen nicht
+            # nur auf den danebenliegenden Text klicken.
+            regions.extend(
+                {
+                    "pageIndex": img.page_index,
+                    "x0": round(max(0.0, img.x0), 5),
+                    "y0": round(max(0.0, img.y0), 5),
+                    "x1": round(min(1.0, img.x1), 5),
+                    "y1": round(min(1.0, img.y1), 5),
+                    "kind": "image",
+                }
+                for img in article.images
+            )
+            images = self._store_images(article, page_images, reader_blocks)
             pages = article.pages
             payload.append(
                 {
@@ -315,7 +381,7 @@ class Job:
                     **({"subtitle": article.subtitle} if article.subtitle else {}),
                     **({"author": article.author} if article.author else {}),
                     **({"teaser": article.teaser} if article.teaser else {}),
-                    "source": "pdf",
+                    "source": "hybrid" if article.llm_refined else "pdf",
                     "confidence": article.confidence,
                     "primaryPageIndex": pages[0],
                     "pageStart": pages[0],
@@ -327,9 +393,47 @@ class Job:
             )
         return payload
 
-    def _store_images(self, article, page_images: dict[int, bytes]) -> list[dict]:
+    def _build_toc_entries(self, hints, articles, payload_articles) -> list[dict]:
+        """Gedruckten Inhalt mit Artikeln und Seitensprung-Regionen verbinden."""
         out = []
-        for img in article.images[:8]:
+        for order, hint in enumerate(hints, start=1):
+            article_order = next(
+                (
+                    index + 1
+                    for index, article in enumerate(articles)
+                    if article.pages and article.pages[0] == hint.page_index
+                ),
+                None,
+            )
+            entry = {
+                "order": order,
+                "label": hint.label,
+                "pageIndex": hint.page_index,
+                "level": 1,
+            }
+            if hint.section:
+                entry["section"] = hint.section
+            if article_order is not None:
+                entry["articleOrder"] = article_order
+                payload_articles[article_order - 1]["regions"].append(
+                    {
+                        "pageIndex": hint.toc_page_index,
+                        "x0": round(hint.x0, 5),
+                        "y0": round(hint.y0, 5),
+                        "x1": round(hint.x1, 5),
+                        "y1": round(hint.y1, 5),
+                        "kind": "other",
+                        "targetPageIndex": hint.page_index,
+                    }
+                )
+            out.append(entry)
+        return out
+
+    def _store_images(
+        self, article, page_images: dict[int, bytes], reader_blocks
+    ) -> list[dict]:
+        out = []
+        for img in article.images:
             page_jpeg = page_images.get(img.page_index)
             if not page_jpeg:
                 continue
@@ -356,9 +460,28 @@ class Job:
                     "bytes": stored.bytes,
                 },
             )
-            entry = {"assetId": asset_id, "sourcePageIndex": img.page_index}
+            entry = {
+                "assetId": asset_id,
+                "sourcePageIndex": img.page_index,
+                "sourceY": round(max(0.0, min(1.0, img.y0)), 5),
+            }
             if img.caption:
                 entry["caption"] = img.caption
+            if img.after_block_order is not None:
+                entry["afterBlockOrder"] = img.after_block_order
+            elif img.after_block is not None:
+                # Erst jetzt ist nach eventuellen Fallback-Merges die endgueltige
+                # 1-basierte Reihenfolge der Reader-Bloecke bekannt.
+                anchor = next(
+                    (
+                        index + 1
+                        for index, block in enumerate(reader_blocks)
+                        if block is img.after_block
+                    ),
+                    None,
+                )
+                if anchor is not None:
+                    entry["afterBlockOrder"] = anchor
             out.append(entry)
         return out
 
@@ -439,14 +562,18 @@ def main() -> int:
     convex = ConvexClient(CONVEX_SITE_URL, SERVICE_SECRET)
     storage = Storage(convex)
     log("worker.start", storage="s3" if storage.uses_s3 else "convex")
+    empty_polls = 0
     while True:
         try:
             worked = run_once(convex, storage)
         except Exception as exc:
             log("worker.error", error=str(exc)[:300])
             worked = False
-        if not worked:
-            time.sleep(POLL_SECONDS)
+        if worked:
+            empty_polls = 0
+            continue
+        time.sleep(idle_poll_delay(empty_polls))
+        empty_polls += 1
 
 
 if __name__ == "__main__":

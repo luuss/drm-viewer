@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "../lib/api";
+import Icon from "../components/Icon";
 
 export default function SearchPage() {
   const [term, setTerm] = useState("");
@@ -21,13 +22,16 @@ export default function SearchPage() {
       <section>
         <label>
           Suchbegriff
-          <input
-            className="search-input"
-            placeholder="z.B. Energiepolitik"
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            autoFocus
-          />
+          <span className="search-field">
+            <Icon name="search" />
+            <input
+              className="search-input"
+              placeholder="z.B. Energiepolitik"
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              autoFocus
+            />
+          </span>
         </label>
 
         {/* Jeder Zustand der Suche bekommt eine eigene Zeile an derselben
@@ -53,7 +57,7 @@ export default function SearchPage() {
             {results?.map((r) => (
               <li key={r._id}>
                 <Link to={`/reader/${r.issueId}?article=${r._id}`}>
-                  <span className="title">{r.title}</span>
+                  <span className="title">{r.title} <Icon name="arrow-right" /></span>
                 </Link>
                 <div className="meta">
                   {r.issueTitle} · Seite {r.pageIndex + 1}

@@ -12,6 +12,8 @@ import io
 import pypdfium2 as pdfium
 from PIL import Image
 
+from extractor.page_geometry import visible_page_box
+
 # Breite der abgelegten Seitenfassung. Daraus schneidet das Kachel-Gateway
 # seine Kacheln; das reicht fuer scharfen Zoom auf Magazinseiten.
 PAGE_WIDTH_PX = int(__import__("os").environ.get("PAGE_RENDER_WIDTH", "2400"))
@@ -20,13 +22,27 @@ COVER_WIDTH_PX = 900
 
 
 def render_page(pdf_bytes: bytes, page_index: int, width_px: int = PAGE_WIDTH_PX):
-    """Gibt (jpeg_bytes, breite, hoehe) der gerenderten Seite zurueck."""
+    """Gibt die sichtbare Druckseite als (jpeg_bytes, breite, hoehe) zurueck.
+
+    Gerendert wird die TrimBox, nicht die volle MediaBox. Letztere enthaelt bei
+    Druckdaten Anschnitt, Marken und auf Umschlagboegen mitunter einen Streifen
+    der Nachbarseite.
+    """
     doc = pdfium.PdfDocument(pdf_bytes)
     try:
         page = doc[page_index]
-        point_width = page.get_width()
+        left, bottom, right, top = visible_page_box(page)
+        point_width = right - left
         scale = max(0.2, width_px / point_width)
-        bitmap = page.render(scale=scale)
+        bitmap = page.render(
+            scale=scale,
+            crop=(
+                left,
+                bottom,
+                max(0.0, page.get_width() - right),
+                max(0.0, page.get_height() - top),
+            ),
+        )
         image = bitmap.to_pil().convert("RGB")
         buf = io.BytesIO()
         image.save(buf, format="JPEG", quality=PAGE_JPEG_QUALITY, optimize=True)

@@ -141,6 +141,7 @@ export const claimNextInternal = internalMutation({
     });
 
     const issue = await ctx.db.get(queued.issueId);
+    const publication = issue ? await ctx.db.get(issue.publicationId) : null;
     const sources = await ctx.db
       .query("issueSources")
       .withIndex("by_issue", (q) => q.eq("issueId", queued.issueId))
@@ -171,6 +172,8 @@ export const claimNextInternal = internalMutation({
       jobId: queued._id,
       issueId: queued.issueId,
       publicationId: issue?.publicationId ?? null,
+      publicationSlug: publication?.slug ?? null,
+      publicationName: publication?.name ?? null,
       kind: queued.kind,
       payload: queued.payload ?? null,
       attempts: queued.attempts + 1,
@@ -333,6 +336,7 @@ export const activateResultInternal = internalMutation({
           type: b.type,
           text: b.text,
           sourcePageIndex: b.sourcePageIndex,
+          sourceY: b.sourceY,
           sourceStoryId: b.sourceStoryId,
           sourceFrameId: b.sourceFrameId,
           styleName: b.styleName,
@@ -349,6 +353,7 @@ export const activateResultInternal = internalMutation({
           x1: r.x1,
           y1: r.y1,
           kind: r.kind ?? "body",
+          targetPageIndex: r.targetPageIndex,
           order: i,
         });
       }
@@ -360,6 +365,8 @@ export const activateResultInternal = internalMutation({
           order: i,
           caption: img.caption,
           sourcePageIndex: img.sourcePageIndex,
+          sourceY: img.sourceY,
+          afterBlockOrder: img.afterBlockOrder,
         });
       }
     }

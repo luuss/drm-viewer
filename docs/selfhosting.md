@@ -33,7 +33,14 @@ PUBLIC_WEB_ORIGIN=https://lesen.example.de
 PUBLIC_TILE_ORIGIN=https://tiles.example.de
 
 TILE_SERVICE_SECRET=<32 Byte hex>
-ANTHROPIC_API_KEY=            # optional, nur fuer die KI-Gruppierung beim PDF-Import
+EXTRACT_USE_LLM=false
+EXTRACT_LLM_PROVIDER=anthropic
+EXTRACT_LLM_MODEL=
+EXTRACT_LLM_API_KEY=          # optional; Secret nur fuer den Import-Worker
+EXTRACT_LLM_ROUTING_ONLY=     # z.B. together bei OpenRouter
+EXTRACT_LLM_ZDR=true
+EXTRACT_LLM_DATA_COLLECTION=deny
+EXTRACT_LLM_ALLOW_FALLBACKS=false
 ```
 
 Zufallswerte erzeugen:
@@ -185,3 +192,9 @@ Ein Auftrag meldet Start, Fortschritt je Seite und am Ende, wie viele Artikel
 uebernommen wurden. Bleibt ein Auftrag haengen, laeuft seine Sperre aus und der
 naechste Worker versucht ihn erneut; nach drei Versuchen steht er als Fehler in
 der Redaktionsansicht.
+
+Ohne wartenden Auftrag vergroessert der Worker sein Abfrageintervall von
+`WORKER_POLL_SECONDS` (Standard 5 Sekunden) schrittweise bis
+`WORKER_IDLE_POLL_MAX_SECONDS` (Standard 60 Sekunden). Das senkt die Convex-
+Funktionsaufrufe im Leerlauf um mehr als 90 Prozent. Nach einem bearbeiteten
+Auftrag beginnt er wieder mit dem kurzen Intervall.

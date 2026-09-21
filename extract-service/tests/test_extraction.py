@@ -16,7 +16,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import render  # noqa: E402
-from extractor.article_assembler import assemble  # noqa: E402
+from extractor.article_assembler import assemble, flow_text_blocks  # noqa: E402
 from extractor.idml_extract import (  # noqa: E402
     extract_idml_blocks,
     extract_idml_image_frames,
@@ -31,9 +31,11 @@ from extractor.image_regions import (  # noqa: E402
     select_regions,
     text_spread,
 )
-from extractor.model import SourceBlock, SourceImage  # noqa: E402
+from extractor.page_geometry import rect_on_visible_page  # noqa: E402
+from extractor.model import SourceBlock, SourceImage, TocHint  # noqa: E402
 from extractor.pdf_extract import (  # noqa: E402
     _split_line_at_gaps,
+    _words_on_visible_page,
     _words_to_lines,
     attach_captions,
     extract_pdf_pages,
@@ -41,6 +43,10 @@ from extractor.pdf_extract import (  # noqa: E402
     prepare_blocks,
 )
 from extractor.textutil import clean_text, glue_dropcap  # noqa: E402
+from extractor.publication_profiles import (  # noqa: E402
+    apply_profile,
+    extract_zuerst_toc,
+)
 from tests import idml_fixture  # noqa: E402
 
 HEFT = os.path.join(
@@ -152,6 +158,83 @@ def test_artikel_beginnt_an_der_ueberschrift():
     assert [a.title for a in articles] == ["Erste Meldung", "Zweite Meldung"]
 
 
+def test_inhaltsanker_halten_mehrseitigen_artikel_zusammen():
+    blocks = [
+        block("Grosser Titel", page=7, kind="heading"),
+        block("Anfang. " * 80, page=7, y=0.2),
+        block("Zwischenruf", page=9, kind="heading"),
+        block("Fortsetzung. " * 80, page=9, y=0.2),
+        block("Naechster Artikel", page=17, kind="heading"),
+        block("Neuer Text. " * 40, page=17, y=0.2),
+    ]
+    hints = [
+        TocHint("Vergiftete Nachbarschaft", 7, 3, 0.05, 0.1, 0.3, 0.14),
+        TocHint("Slawischer Landraub", 17, 3, 0.05, 0.2, 0.3, 0.24),
+    ]
+    image = bild(page=9)
+    articles = assemble(blocks, [image], toc_hints=hints)
+
+    assert [a.title for a in articles] == [
+        "Vergiftete Nachbarschaft",
+        "Slawischer Landraub",
+    ]
+    assert articles[0].pages == [7, 9]
+    assert articles[0].images == [image]
+
+
+def test_rubrikhint_laesst_einzelmeldungen_getrennt():
+    blocks = [
+        block("Erste Meldung", page=4, kind="heading", y=0.1),
+        block("Text der ersten Meldung. " * 20, page=4, y=0.2),
+        block("Zweite Meldung", page=4, kind="heading", y=0.5),
+        block("Text der zweiten Meldung. " * 20, page=4, y=0.6),
+        block("Grosser Folgeartikel", page=7, kind="heading", y=0.1),
+        block("Text des Folgeartikels. " * 20, page=7, y=0.2),
+    ]
+    hints = [
+        TocHint(
+            "Politikmeldungen", 4, 3, 0.05, 0.1, 0.3, 0.14,
+            split_headings=True,
+        ),
+        TocHint("Grosser Folgeartikel", 7, 3, 0.05, 0.2, 0.3, 0.24),
+    ]
+
+    articles = assemble(blocks, toc_hints=hints)
+
+    assert [a.title for a in articles] == [
+        "Erste Meldung",
+        "Zweite Meldung",
+        "Grosser Folgeartikel",
+    ]
+
+
+def test_zuerst_profil_entfernt_umschlag_und_inhaltsseite():
+    pages = [
+        {"index": 0, "role": "front_cover", "printedLabel": "U1"},
+        {"index": 1, "role": "inside_front", "printedLabel": "U2"},
+        {"index": 2, "role": "content", "printedLabel": "3"},
+        {"index": 3, "role": "content", "printedLabel": "4"},
+        {"index": 4, "role": "content", "printedLabel": "5"},
+    ]
+    blocks = [block("Umschlag", page=0), block("Editorial", page=2),
+              block("Inhalt", page=3), block("Politik", page=4)]
+    images = [bild(page=0), bild(page=2), bild(page=3), bild(page=4)]
+    kept_blocks, kept_images, _toc = apply_profile(blocks, images, pages, "zuerst")
+
+    assert [b.page_index for b in kept_blocks] == [2, 4]
+    assert [i.page_index for i in kept_images] == [2, 4]
+
+
+def test_andere_publikation_bleibt_unveraendert():
+    pages = [{"index": 0, "role": "content", "printedLabel": "1"}]
+    blocks = [block("Im Vorfeld von Bologna")]
+    images = [bild()]
+    kept_blocks, kept_images, toc = apply_profile(blocks, images, pages, "weltkrieg")
+    assert kept_blocks == blocks
+    assert kept_images == images
+    assert toc == []
+
+
 def test_idml_liest_stories_mit_absatzformat():
     idml = io.BytesIO()
     story = """<?xml version="1.0"?>
@@ -191,6 +274,101 @@ def test_mehrspaltige_seite_wird_nicht_verzahnt():
     body = " ".join(b.text for b in ordered if b.kind == "paragraph" and not b.drop)
     # Zwei Spalten duerfen sich nicht im selben Satz mischen.
     assert "durchgeführt A S te Partei" not in body
+
+
+@has_heft
+def test_zuerst_seite_fuenf_trennt_fuenf_meldungen_mit_bildern():
+    data = open(HEFT, "rb").read()
+    # Gedruckte Seite 4 (TOC) bis Seite 14 des grossen Titelartikels.
+    blocks, images = extract_pdf_pages(data, [(i, i + 2) for i in range(1, 12)])
+    pages = [
+        {"index": 0, "role": "front_cover", "printedLabel": "U1"},
+        {"index": 1, "role": "inside_front", "printedLabel": "U2"},
+        *[
+            {"index": i + 2, "role": "content", "printedLabel": str(i + 3)}
+            for i in range(80)
+        ],
+    ]
+    blocks, images, hints = apply_profile(blocks, images, pages, "zuerst")
+    articles = assemble(
+        prepare_blocks(blocks, images, 84), images, toc_hints=hints
+    )
+    page_five = [article for article in articles if 4 in article.pages]
+
+    assert [article.title for article in page_five] == [
+        "Abschiebungen in NRW: Chronik des Scheiterns",
+        "Arbeitsagentur bleibt auf Milliardenschulden sitzen",
+        "50 Prozent der Russen sehen Deutschland als „Feind“",
+        "„Team Freiheit“ scheitert: Nur 82 statt 2.080 Unterschriften",
+        "Grüne machen AfD-Verbot zur Koalitionsbedingung",
+    ]
+    assert [len(article.images) for article in page_five] == [1, 1, 1, 1, 1]
+    assert all(
+        block.text != "POLITIK"
+        for article in page_five
+        for block in article.blocks
+    )
+    russia = next(
+        article for article in page_five if article.title.startswith("50 Prozent")
+    )
+    flowed = flow_text_blocks(russia.blocks)
+    paragraphs = [block for block in flowed if block.kind == "paragraph"]
+    assert len(paragraphs) == 1
+    assert "Stimmungsbild" in paragraphs[0].text
+    assert "Sacharow-Gesellschaft" in paragraphs[0].text
+
+    # Die feste Karikatur unten auf gedruckter Seite 6 bleibt nur im
+    # originalgetreuen Seitenmodus; die drei redaktionellen Bilder bleiben.
+    page_six_images = [image for image in images if image.page_index == 5]
+    assert len(page_six_images) == 3
+    assert all(image.y0 < 0.59 for image in page_six_images)
+    page_six = [article for article in articles if 5 in article.pages]
+    assert page_six
+    assert all(not article.title.startswith("POLITIK ") for article in page_six)
+
+    # Seiten 8–14 wurden einzeln gegen den Satz kontrolliert. Die Karte auf
+    # Seite 9 ist Vektorgrafik und braucht den Profilrahmen; alle zehn Bilder
+    # stehen danach seitenweise und innerhalb der Seite von oben nach unten.
+    title_story = next(
+        article for article in articles if article.title == "Vergiftete Nachbarschaft"
+    )
+    checked = [
+        image for image in title_story.images if 7 <= image.page_index <= 13
+    ]
+    assert [image.page_index for image in checked] == [
+        7, 8, 8, 9, 9, 10, 11, 12, 12, 13, 13
+    ]
+    for page_index in range(7, 14):
+        ys = [image.y0 for image in checked if image.page_index == page_index]
+        assert ys == sorted(ys)
+    page_nine = [image for image in checked if image.page_index == 8]
+    assert len(page_nine) == 2
+    assert page_nine[1].caption == "Deutsche Gebietsverluste 1919/1945"
+
+
+@has_heft
+def test_zuerst_inhaltsverzeichnis_liefert_ziele_und_flaechen():
+    data = open(HEFT, "rb").read()
+    blocks, _images = extract_pdf_pages(data, [(1, 3)])
+    pages = [
+        {"index": 0, "role": "front_cover", "printedLabel": "U1"},
+        {"index": 1, "role": "inside_front", "printedLabel": "U2"},
+        *[
+            {"index": i + 2, "role": "content", "printedLabel": str(i + 3)}
+            for i in range(80)
+        ],
+    ]
+    hints = extract_zuerst_toc(blocks, pages, "zuerst")
+    by_title = {hint.label: hint for hint in hints}
+
+    assert len(hints) >= 35
+    assert by_title["Editorial"].page_index == 2
+    assert by_title["Politikmeldungen"].page_index == 4
+    assert by_title["Politikmeldungen"].split_headings is True
+    assert by_title["Vergiftete Nachbarschaft"].page_index == 7
+    assert by_title["Migrantifa gegen Connewitz"].page_index == 34
+    assert all(hint.toc_page_index == 3 for hint in hints)
+    assert all(hint.x1 > hint.x0 and hint.y1 > hint.y0 for hint in hints)
 
 
 @has_heft
@@ -431,6 +609,16 @@ def test_bilder_stehen_in_lesereihenfolge():
     assert [round(i.y0, 2) for i in artikel[0].images] == [0.35, 0.70]
 
 
+def test_mehrseitenartikel_verliert_nicht_nach_zwoelf_bildern_den_rest():
+    kopf = SourceBlock(page_index=0, text="Lange Titelstrecke", x0=0.08, y0=0.05,
+                       x1=0.92, y1=0.09, kind="heading", max_size=20, size=20)
+    text = SourceBlock(page_index=0, text="Viel Text. " * 80, x0=0.08, y0=0.10,
+                       x1=0.92, y1=0.90, kind="paragraph")
+    bilder = [bild(x0=0.1, y0=0.12 + i * 0.01, x1=0.4, y1=0.2 + i * 0.01) for i in range(18)]
+    [artikel] = assemble([kopf, text], bilder)
+    assert len(artikel.images) == 18
+
+
 # --- Weisser Rand im Rendering --------------------------------------------
 
 
@@ -438,6 +626,62 @@ def _jpeg(image) -> bytes:
     buf = io.BytesIO()
     image.save(buf, format="JPEG", quality=95)
     return buf.getvalue()
+
+
+def _pdf_with_trimbox() -> bytes:
+    import pypdfium2
+
+    document = pypdfium2.PdfDocument.new()
+    page = document.new_page(220, 140)
+    page.set_trimbox(10, 20, 210, 120)
+    output = io.BytesIO()
+    document.save(output)
+    document.close()
+    return output.getvalue()
+
+
+def test_seitenrendering_verwendet_die_trimbox():
+    from PIL import Image
+
+    jpeg, width, height = render.render_page(_pdf_with_trimbox(), 0, width_px=400)
+    image = Image.open(io.BytesIO(jpeg))
+    assert (width, height) == (400, 200)
+    assert image.size == (400, 200)
+
+
+def test_pdf_rechtecke_werden_auf_die_trimbox_umgerechnet():
+    visible = (10.0, 20.0, 210.0, 120.0)
+    assert rect_on_visible_page((30.0, 40.0, 110.0, 100.0), visible) == pytest.approx(
+        (0.1, 0.2, 0.5, 0.8)
+    )
+
+
+def test_textkoordinaten_werden_auf_die_trimbox_umgerechnet():
+    from types import SimpleNamespace
+
+    page = SimpleNamespace(
+        trimbox=(10.0, 20.0, 210.0, 120.0),
+        cropbox=(0.0, 0.0, 220.0, 140.0),
+        mediabox=(0.0, 0.0, 220.0, 140.0),
+        bbox=(0.0, 0.0, 220.0, 140.0),
+        width=220.0,
+        height=140.0,
+    )
+    words, width, height = _words_on_visible_page(
+        page,
+        [
+            {"text": "sichtbar", "x0": 30.0, "x1": 110.0, "top": 40.0, "bottom": 100.0},
+            {"text": "Druckmarke", "x0": 0.0, "x1": 5.0, "top": 5.0, "bottom": 10.0},
+        ],
+    )
+    assert (width, height) == (200.0, 100.0)
+    assert len(words) == 1
+    assert (words[0]["x0"], words[0]["top"], words[0]["x1"], words[0]["bottom"]) == (
+        20.0,
+        20.0,
+        100.0,
+        80.0,
+    )
 
 
 def test_weisser_rand_wird_nachgemessen_und_abgeschnitten():

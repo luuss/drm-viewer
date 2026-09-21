@@ -1,5 +1,6 @@
 import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
+import Icon from "../components/Icon";
 
 type Props = {
   issueId: Id<"issues">;
@@ -35,7 +36,7 @@ export default function TocDrawer({
         <header>
           <h3>Inhalt</h3>
           <button className="btn quiet small" onClick={onClose}>
-            Schliessen
+            <Icon name="close" /> Schließen
           </button>
         </header>
         {entries === undefined && <p className="hint">Laden...</p>}

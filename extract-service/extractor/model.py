@@ -16,6 +16,29 @@ BlockType = Literal[
 ]
 
 
+@dataclass(frozen=True)
+class LayoutLine:
+    """Eine sichtbare Satzzeile, bevor sie zu einem PDF-Block verschmilzt.
+
+    Diese Daten verlassen den Import-Worker nicht. Sie erhalten die
+    Absatzgrenzen und die genaue Geometrie fuer eine optionale, texttreue
+    LLM-Nachbearbeitung.
+    """
+
+    page_index: int
+    text: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    size: float = 0.0
+    max_size: float = 0.0
+    font: str = ""
+    bold: bool = False
+    column: int = 0
+    continues_word: bool = False
+
+
 @dataclass
 class SourceBlock:
     """Ein zusammenhaengendes Stueck Text mit Herkunft."""
@@ -38,6 +61,12 @@ class SourceBlock:
     column: int = 0
     drop: bool = False        # Beiwerk: Seitenzahl, Kolumnentitel, Slug
     confidence: float = 1.0
+    # Das PDF markiert eine Silbentrennung am Zeilenende mit einem weichen
+    # Trennstrich. Beim spaeteren Zusammenziehen einzelner Satzzeilen muss
+    # bekannt bleiben, dass das Folgewort ohne Leerzeichen anschliesst.
+    continues_word: bool = False
+    layout_lines: tuple[LayoutLine, ...] = field(default_factory=tuple)
+    llm_refined: bool = False
 
     @property
     def char_count(self) -> int:
@@ -52,6 +81,28 @@ class SourceImage:
     x1: float
     y1: float
     caption: str | None = None
+    # 1-basierte Position des Reader-Blocks, nach dem das Bild stehen soll.
+    # None laesst die bisherige geometrische Rueckfalllogik aktiv.
+    after_block_order: int | None = None
+    after_block: SourceBlock | None = field(default=None, repr=False, compare=False)
+
+
+@dataclass
+class TocHint:
+    """Ein Eintrag des gedruckten Inhaltsverzeichnisses mit Klickflaeche."""
+
+    label: str
+    page_index: int
+    toc_page_index: int
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    section: str | None = None
+    # Rubrikeintraege wie "Politikmeldungen" markieren einen Seitenbereich,
+    # in dem mehrere kurze Artikel stehen. Deren eigene Ueberschriften duerfen
+    # nicht vom TOC-Anker zu einem einzigen Artikel zusammengezogen werden.
+    split_headings: bool = False
 
 
 @dataclass
@@ -63,6 +114,7 @@ class AssembledArticle:
     author: str | None = None
     teaser: str | None = None
     confidence: float = 1.0
+    llm_refined: bool = False
 
     @property
     def pages(self) -> list[int]:

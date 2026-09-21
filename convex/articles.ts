@@ -17,6 +17,7 @@ const regionInput = v.object({
   y0: v.number(),
   x1: v.number(),
   y1: v.number(),
+  targetPageIndex: v.optional(v.number()),
   kind: v.optional(
     v.union(
       v.literal("body"),
@@ -32,6 +33,7 @@ const blockInput = v.object({
   type: blockType,
   text: v.string(),
   sourcePageIndex: v.optional(v.number()),
+  sourceY: v.optional(v.number()),
   sourceStoryId: v.optional(v.string()),
   sourceFrameId: v.optional(v.string()),
   styleName: v.optional(v.string()),
@@ -62,6 +64,8 @@ export const articleInput = v.object({
         assetId: v.id("assets"),
         caption: v.optional(v.string()),
         sourcePageIndex: v.optional(v.number()),
+        sourceY: v.optional(v.number()),
+        afterBlockOrder: v.optional(v.number()),
       }),
     ),
   ),
@@ -148,7 +152,18 @@ export const regionsForReader = query({
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
     const published = new Map<string, boolean>();
-    const out = [];
+    type ReaderRegion = {
+      articleId: Id<"articles">;
+      pageIndex: number;
+      x0: number;
+      y0: number;
+      x1: number;
+      y1: number;
+      kind: "body" | "title" | "image" | "other";
+      targetPageIndex: number | null;
+    };
+    const navigation: ReaderRegion[] = [];
+    const articleAreas = new Map<string, ReaderRegion>();
     for (const r of regions) {
       const key = r.articleId as string;
       if (!published.has(key)) {
@@ -165,7 +180,7 @@ export const regionsForReader = query({
       const y0 = clamp01(Math.min(r.y0, r.y1));
       const y1 = clamp01(Math.max(r.y0, r.y1));
       if (x1 - x0 < MIN_REGION_SIZE || y1 - y0 < MIN_REGION_SIZE) continue;
-      out.push({
+      const normalized: ReaderRegion = {
         articleId: r.articleId,
         pageIndex: r.pageIndex,
         x0,
@@ -173,9 +188,31 @@ export const regionsForReader = query({
         x1,
         y1,
         kind: r.kind,
-      });
+        targetPageIndex: r.targetPageIndex ?? null,
+      };
+      if (r.targetPageIndex !== undefined) {
+        // Jeder TOC-Eintrag hat sein eigenes Sprungziel und darf nicht mit
+        // benachbarten Zeilen zusammenfallen.
+        navigation.push(normalized);
+        continue;
+      }
+
+      // Die Debugansicht behaelt alle feinen Rohregionen. Im Reader bilden sie
+      // dagegen genau eine ruhige Klickflaeche je Artikel und Seite. Besonders
+      // mehrspaltige Kaesten erzeugten sonst Dutzende schmale Zeilenstreifen.
+      const areaKey = `${r.articleId}:${r.pageIndex}`;
+      const area = articleAreas.get(areaKey);
+      if (area) {
+        area.x0 = Math.min(area.x0, x0);
+        area.y0 = Math.min(area.y0, y0);
+        area.x1 = Math.max(area.x1, x1);
+        area.y1 = Math.max(area.y1, y1);
+        area.kind = "body";
+      } else {
+        articleAreas.set(areaKey, { ...normalized, kind: "body" });
+      }
     }
-    return out;
+    return [...navigation, ...articleAreas.values()];
   },
 });
 
@@ -209,7 +246,13 @@ export const getForReader = query({
         ? await ctx.storage.getUrl(asset.convexStorageId)
         : null;
       if (url) {
-        withUrls.push({ url, caption: img.caption ?? null, page: img.sourcePageIndex ?? null });
+        withUrls.push({
+          url,
+          caption: img.caption ?? null,
+          page: img.sourcePageIndex ?? null,
+          sourceY: img.sourceY ?? null,
+          afterBlockOrder: img.afterBlockOrder ?? null,
+        });
       }
     }
     return {
@@ -223,7 +266,12 @@ export const getForReader = query({
       primaryPageIndex: article.primaryPageIndex,
       pageStart: article.pageStart,
       pageEnd: article.pageEnd,
-      blocks: blocks.map((b) => ({ type: b.type, text: b.text })),
+      blocks: blocks.map((b) => ({
+        type: b.type,
+        text: b.text,
+        page: b.sourcePageIndex ?? null,
+        sourceY: b.sourceY ?? null,
+      })),
       images: withUrls,
     };
   },
@@ -288,6 +336,10 @@ export const listForEditors = query({
           .query("articleRegions")
           .withIndex("by_article", (q) => q.eq("articleId", a._id))
           .collect();
+        const images = await ctx.db
+          .query("articleAssets")
+          .withIndex("by_article", (q) => q.eq("articleId", a._id))
+          .collect();
         return {
           _id: a._id,
           order: a.order,
@@ -295,6 +347,7 @@ export const listForEditors = query({
           subtitle: a.subtitle ?? null,
           author: a.author ?? null,
           teaser: a.teaser ?? null,
+          source: a.source,
           reviewStatus: a.reviewStatus,
           confidence: a.confidence ?? null,
           primaryPageIndex: a.primaryPageIndex,
@@ -316,7 +369,16 @@ export const listForEditors = query({
             x1: r.x1,
             y1: r.y1,
             kind: r.kind,
+            targetPageIndex: r.targetPageIndex ?? null,
           })),
+          images: images
+            .sort((left, right) => left.order - right.order)
+            .map((image) => ({
+              order: image.order,
+              caption: image.caption ?? null,
+              sourcePageIndex: image.sourcePageIndex ?? null,
+              afterBlockOrder: image.afterBlockOrder ?? null,
+            })),
         };
       }),
     );
@@ -714,6 +776,7 @@ export const replaceForIssueInternal = internalMutation({
           type: b.type,
           text: b.text,
           sourcePageIndex: b.sourcePageIndex,
+          sourceY: b.sourceY,
           sourceStoryId: b.sourceStoryId,
           sourceFrameId: b.sourceFrameId,
           styleName: b.styleName,
@@ -741,6 +804,8 @@ export const replaceForIssueInternal = internalMutation({
           order: i,
           caption: img.caption,
           sourcePageIndex: img.sourcePageIndex,
+          sourceY: img.sourceY,
+          afterBlockOrder: img.afterBlockOrder,
         });
       }
     }

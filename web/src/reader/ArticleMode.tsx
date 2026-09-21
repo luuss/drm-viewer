@@ -1,5 +1,6 @@
 import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
+import ReaderTurnButton from "./ReaderTurnButton";
 
 type Props = {
   articleId: Id<"articles"> | null;
@@ -8,6 +9,8 @@ type Props = {
   pageLabel: (index: number) => string;
   onPrev: () => void;
   onNext: () => void;
+  canPrev: boolean;
+  canNext: boolean;
 };
 
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
@@ -17,6 +20,8 @@ export default function ArticleMode({
   pageLabel,
   onPrev,
   onNext,
+  canPrev,
+  canNext,
 }: Props) {
   const article = useQuery(
     api.articles.getForReader,
@@ -41,10 +46,80 @@ export default function ArticleMode({
     );
   }
 
+  // Bilder und Text werden nicht in zwei getrennten Stapeln ausgegeben. Die
+  // Druckseite und die senkrechte Position aus der Extraktion ergeben eine
+  // stabile Lesereihenfolge — auch bei langen, mehrseitigen Artikeln.
+  const visibleBlocks = article.blocks
+    .map((block, index) => ({
+      kind: "block" as const,
+      block,
+      index,
+      page: block.page ?? article.pageStart,
+      y: block.sourceY ?? 0.5,
+      order: index + 1,
+    }))
+    .filter(({ block, index }) => !(block.type === "heading" && index === 0));
+  const visibleImages = article.images.map((image, index) => ({
+    kind: "image" as const,
+    image,
+    index,
+    page: image.page ?? article.pageStart,
+    y: image.sourceY ?? 0.5,
+    afterBlockOrder: image.afterBlockOrder ?? null,
+  }));
+  const flow = [...new Set([
+    ...visibleBlocks.map((item) => item.page),
+    ...visibleImages.map((item) => item.page),
+  ])]
+    .sort((a, b) => a - b)
+    .flatMap((page) => {
+      // Ein KI-geprueftes Bild traegt einen exakten Absatzanker. Nur alte,
+      // ungepruefte Importe fallen auf die geometrische Seitenlogik zurueck.
+      const blocks = visibleBlocks.filter((item) => item.page === page);
+      const images = visibleImages
+        .filter((item) => item.page === page)
+        .sort((a, b) => a.y - b.y || a.index - b.index);
+      const anchored = images.filter((item) => item.afterBlockOrder !== null);
+      if (anchored.length) {
+        const hiddenTitleOrder = article.blocks[0]?.type === "heading" ? 1 : null;
+        const before = anchored.filter((item) => {
+          const anchor = item.afterBlockOrder ?? 0;
+          return anchor === 0 || anchor === hiddenTitleOrder;
+        });
+        const after = new Map<number, typeof anchored>();
+        for (const image of anchored) {
+          const anchor = image.afterBlockOrder ?? 0;
+          if (anchor === 0 || anchor === hiddenTitleOrder) continue;
+          after.set(anchor, [...(after.get(anchor) ?? []), image]);
+        }
+        return [
+          ...before,
+          ...blocks.flatMap((block) => [block, ...(after.get(block.order) ?? [])]),
+          ...images.filter((item) => item.afterBlockOrder === null),
+        ];
+      }
+      const firstTextY = Math.min(...blocks.map((item) => item.y), 1);
+      return [
+        ...images.filter((item) => item.y < firstTextY),
+        ...blocks,
+        ...images.filter((item) => item.y >= firstTextY),
+      ];
+    });
+
   return (
     <div className="article-mode">
-      <button className="page-edge left" onClick={onPrev} aria-label="Vorheriger Artikel" />
-      <button className="page-edge right" onClick={onNext} aria-label="Nächster Artikel" />
+      <ReaderTurnButton
+        direction="previous"
+        label="Vorheriger Artikel"
+        disabled={!canPrev}
+        onClick={onPrev}
+      />
+      <ReaderTurnButton
+        direction="next"
+        label="Nächster Artikel"
+        disabled={!canNext}
+        onClick={onNext}
+      />
       <article className="article-body">
         <h1>{article.title}</h1>
         {article.subtitle && <p className="subtitle">{article.subtitle}</p>}
@@ -55,19 +130,31 @@ export default function ArticleMode({
             ? `–${pageLabel(article.pageEnd)}`
             : ""}
         </p>
-        {article.images.map((img, i) => (
-          <figure key={i}>
-            <img src={img.url ?? ""} alt={img.caption ?? ""} loading="lazy" />
-            {img.caption && <figcaption>{img.caption}</figcaption>}
-          </figure>
-        ))}
-        {article.blocks.map((b, i) => {
-          if (b.type === "heading" && i === 0) return null;
-          if (b.type === "subheading") return <h2 key={i}>{b.text}</h2>;
-          if (b.type === "quote") return <blockquote key={i}>{b.text}</blockquote>;
-          if (b.type === "lead") return <p key={i} className="lead">{b.text}</p>;
-          if (b.type === "caption") return <p key={i} className="caption">{b.text}</p>;
-          return <p key={i}>{b.text}</p>;
+        {flow.map((item) => {
+          if (item.kind === "image") {
+            const img = item.image;
+            return (
+              <figure key={`image-${item.index}`} data-source-page={item.page}>
+                <img src={img.url ?? ""} alt={img.caption ?? ""} loading="lazy" />
+                {img.caption && <figcaption>{img.caption}</figcaption>}
+              </figure>
+            );
+          }
+          const b = item.block;
+          const key = `block-${item.index}`;
+          if (b.type === "heading" || b.type === "subheading") {
+            return <h2 key={key} data-source-page={item.page}>{b.text}</h2>;
+          }
+          if (b.type === "quote") {
+            return <blockquote key={key} data-source-page={item.page}>{b.text}</blockquote>;
+          }
+          if (b.type === "lead") {
+            return <p key={key} className="lead" data-source-page={item.page}>{b.text}</p>;
+          }
+          if (b.type === "caption") {
+            return <p key={key} className="caption" data-source-page={item.page}>{b.text}</p>;
+          }
+          return <p key={key} data-source-page={item.page}>{b.text}</p>;
         })}
       </article>
       {watermark && <div className="watermark">{watermark}</div>}

@@ -1,0 +1,14 @@
+# Der Web-Container braucht ausschliesslich diese beiden Quellbaeume. So gehen
+# weder Secrets/Testhefte noch lokale Abhaengigkeiten an den Docker-Daemon.
+*
+!package.json
+!package-lock.json
+!web/
+!web/**
+!convex/
+!convex/**
+
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+convex/_generated/ai/

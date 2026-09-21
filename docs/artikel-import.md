@@ -71,10 +71,40 @@ zuerst dort hinzuschauen.
 ### KI-Stufe
 
 Optional kann ein Sprachmodell die Gruppierung nachbessern. Es ist
-**standardmaessig aus** und wird nur mit `EXTRACT_USE_LLM=true` und einem
-`ANTHROPIC_API_KEY` aktiv. Das Modell bekommt nur ein Verzeichnis der Bloecke
-mit den ersten Zeichen und liefert nur Gruppen zurueck — der Text bleibt so, wie
-er in der Druckdatei steht.
+**standardmaessig aus**. Der Import-Worker sendet jeweils hoechstens zwei
+gerenderte Druckseiten sowie vollstaendige Zeilen-, Geometrie- und Bild-IDs an
+ein Vision-Modell. Die Antwort darf nur vorhandene IDs ordnen: Absaetze,
+Lesereihenfolge, Rollen, Bildunterschriften und Bild-zu-Artikel-Zuordnung. Der
+Text wird lokal aus den PDF-Zeilen rekonstruiert; unbekannte, doppelte oder
+ausgelassene IDs verwerfen den ganzen Seiten-Chunk und nutzen automatisch das
+deterministische Ergebnis.
+
+Aktivierung im **Secret-Store des Import-Workers** (nicht in Convex-Daten und
+nicht im Frontend):
+
+```dotenv
+EXTRACT_USE_LLM=true
+EXTRACT_LLM_PROVIDER=anthropic   # oder openai/openrouter
+EXTRACT_LLM_MODEL=<Vision-Modell>
+EXTRACT_LLM_API_KEY=<geheim>
+```
+
+Bei OpenRouter lassen sich Provider und Datenschutz pro Request hart begrenzen:
+
+```dotenv
+EXTRACT_LLM_ROUTING_ONLY=together
+EXTRACT_LLM_ZDR=true
+EXTRACT_LLM_DATA_COLLECTION=deny
+EXTRACT_LLM_ALLOW_FALLBACKS=false
+```
+
+Damit wird nicht auf einen anderen Endpoint ausgewichen, falls Together die
+angeforderten Datenschutzbedingungen oder das Modell gerade nicht anbieten
+kann. Der betroffene Chunk nutzt dann das deterministische Ergebnis.
+
+Ein mit `npx convex env set` gesetzter Provider-Key ist fuer den separaten
+Worker nicht sichtbar. Er gehoert deshalb in dessen Deployment-Secrets bzw. in
+die nicht eingecheckte `.env.selfhost`.
 
 ## 4. Redaktionelle Pruefung
 

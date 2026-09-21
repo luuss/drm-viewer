@@ -2,6 +2,48 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Authenticated, useAction, useQuery } from "convex/react";
 import { api, formatEuro, type Id , cleanError } from "../lib/api";
+import Icon from "../components/Icon";
+
+const printSubscriptions = [
+  {
+    name: "Normalabonnement",
+    note: null,
+    prices: [
+      ["Inland", "104,40 €"],
+      ["Ausland", "133,20 €"],
+      ["Ausland Luftpost", "153,60 €"],
+    ],
+  },
+  {
+    name: "Schüler- und Studentenabonnement",
+    note: "Kopie des Schüler- oder Studentenausweises erforderlich",
+    prices: [
+      ["Inland", "90,00 €"],
+      ["Ausland", "118,80 €"],
+      ["Ausland Luftpost", "141,60 €"],
+    ],
+  },
+  {
+    name: "Kombi-Abonnement",
+    note: "Zusammen mit einem Abonnement der Deutschen Militärzeitschrift",
+    prices: [
+      ["Inland", "96,00 €"],
+      ["Ausland", "124,80 €"],
+    ],
+  },
+  {
+    name: "Förderabonnement",
+    note: "Der Förderbetrag fließt in die Werbung von ZUERST!",
+    prices: [
+      ["Inland", "126,00 €"],
+      ["Ausland", "153,00 €"],
+      ["Ausland Luftpost", "177,00 €"],
+    ],
+  },
+] as const;
+
+const PRINT_ORDER_URL = "https://zuerst.de/abo/";
+const SAMPLE_ORDER_URL = "https://zuerst.de/probeexemplar/";
 
 /** Kiosk: veroeffentlichte Ausgaben und die Abos je Titel. */
 export default function KioskPage() {
@@ -43,9 +85,66 @@ export default function KioskPage() {
         </p>
       </div>
 
+      <section className="subscription-overview" aria-labelledby="print-subscriptions-title">
+        <div className="subscription-heading">
+          <div>
+            <span className="eyebrow">Bezugsmöglichkeiten</span>
+            <h3 id="print-subscriptions-title">Abos</h3>
+          </div>
+          <a
+            className="sample-copy"
+            href={SAMPLE_ORDER_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Icon name="book-open" size={22} />
+            <div>
+              <strong>Kostenloses Leseexemplar</strong>
+              <span>
+                Jetzt kostenloses aktuelles Leseexemplar anfordern
+                <Icon name="arrow-right" size={15} />
+              </span>
+            </div>
+          </a>
+        </div>
+
+        <div className="subscription-grid">
+          {printSubscriptions.map((subscription) => (
+            <article className="subscription-card" key={subscription.name}>
+              <div>
+                <h4>{subscription.name}</h4>
+                {subscription.note && <p>{subscription.note}</p>}
+              </div>
+              <div className="subscription-prices" aria-label={`Preise ${subscription.name}`}>
+                {subscription.prices.map(([region, price]) => (
+                  <a
+                    key={region}
+                    href={PRINT_ORDER_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${subscription.name}, ${region}, ${price} bestellen`}
+                  >
+                    <span>{region}</span>
+                    <strong>{price}</strong>
+                    <span className="subscription-buy">
+                      Bestellen <Icon name="arrow-right" size={15} />
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+        <p className="subscription-order-note">
+          Die Bestellung öffnet den offiziellen ZUERST!-Bestellprozess mit
+          Rechnungsanschrift und Auswahl zwischen Rechnung, SEPA-Lastschrift und
+          sicherer Online-Zahlung.
+        </p>
+      </section>
+
       {plans && plans.length > 0 && (
         <section>
-          <h3>Abo</h3>
+          <h3>Digitale Abos</h3>
           <p className="hint">
             Das Abo schaltet jede Ausgabe frei, die während der Laufzeit
             erscheint — und das bei Abschluss aktuelle Heft. Freigeschaltete
@@ -81,7 +180,7 @@ export default function KioskPage() {
                     aria-busy={busy === p._id}
                     onClick={() => startAbo(p._id)}
                   >
-                    {busy === p._id ? "Wird geöffnet..." : "Abo starten"}
+                    {busy === p._id ? "Wird geöffnet..." : <><Icon name="arrow-right" /> Abo starten</>}
                   </button>
                 </Authenticated>
               </div>
@@ -99,15 +198,20 @@ export default function KioskPage() {
         <div className="issue-grid">
           {issues.map((i) => (
             <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
-              {i.coverUrl ? (
-                <img src={i.coverUrl} alt={i.title} loading="lazy" />
-              ) : (
-                <div className="cover-placeholder">{i.title[0]}</div>
-              )}
+              <div className="issue-cover-preview">
+                {i.coverUrl ? (
+                  <img src={i.coverUrl} alt={i.title} loading="lazy" />
+                ) : (
+                  <div className="cover-placeholder">{i.title[0]}</div>
+                )}
+              </div>
               <div className="issue-card-body">
                 <div className="title">{i.title}</div>
                 <div className="meta">{i.issueNumber ?? ""}</div>
                 <div className="price">{formatEuro(i.priceAmountCents)}</div>
+                <div className="card-action">
+                  Ausgabe ansehen <Icon name="arrow-right" />
+                </div>
               </div>
             </Link>
           ))}

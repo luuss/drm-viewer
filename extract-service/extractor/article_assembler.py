@@ -9,8 +9,9 @@ vorhanden, die Story-Zuordnung aus IDML.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
-from .model import AssembledArticle, SourceBlock, SourceImage
+from .model import AssembledArticle, SourceBlock, SourceImage, TocHint
 from .textutil import clean_text, first_sentence, is_meaningful
 
 MIN_ARTICLE_CHARS = 280
@@ -54,14 +55,28 @@ def assemble(
     blocks: list[SourceBlock],
     images: list[SourceImage] | None = None,
     story_hints: dict[str, str] | None = None,
+    toc_hints: list[TocHint] | None = None,
 ) -> list[AssembledArticle]:
     """Bloecke in Lesereihenfolge zu Artikeln gruppieren."""
     usable = _merge_heading_runs([b for b in blocks if not b.drop])
+    if toc_hints:
+        grouped = _assemble_by_toc(usable, toc_hints)
+        if grouped:
+            _attach_images(grouped, images or [])
+            return _finish(grouped)
+
+    articles = _assemble_by_headings(usable)
+    _attach_images(articles, images or [])
+    return _finish(articles)
+
+
+def _assemble_by_headings(blocks: list[SourceBlock]) -> list[AssembledArticle]:
+    """Generische Gruppierung innerhalb eines frei waehlbaren Seitenbereichs."""
     articles: list[AssembledArticle] = []
     current: AssembledArticle | None = None
     prev_body: SourceBlock | None = None
 
-    for block in usable:
+    for block in blocks:
         if block.kind == "caption":
             # Bildunterschriften gehoeren nicht in den Fliesstext.
             continue
@@ -113,15 +128,122 @@ def assemble(
         if block.kind == "paragraph":
             prev_body = block
 
-    merged = _merge_small(articles)
-    _attach_images(merged, images or [])
-    for a in merged:
+    return _merge_small(articles)
+
+
+def _finish(articles: list[AssembledArticle]) -> list[AssembledArticle]:
+    for a in articles:
         body = "\n\n".join(b.text for b in a.blocks if b.kind == "paragraph")
         a.teaser = first_sentence(clean_text(body)) if body else None
         if not a.title:
             a.title = (body[:80] or "Ohne Titel").split("\n")[0]
         a.confidence = _confidence(a)
-    return merged
+    return articles
+
+
+def flow_text_blocks(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Kurze Satzzeilen eines mehrspaltigen Kastens zu Fliesstext verbinden.
+
+    Die PDF-Textebene liefert bei Text, der um ein Bild herumlaeuft, teilweise
+    jede Druckzeile als eigenen Block. Fuer Geometrie und Debugging bleiben die
+    Originalbloecke erhalten. Nur die Artikelansicht bekommt hier je Seite
+    einen lesbaren Absatz in Spaltenreihenfolge.
+    """
+    out: list[SourceBlock] = []
+    pages = sorted({block.page_index for block in blocks})
+    for page in pages:
+        page_blocks = [block for block in blocks if block.page_index == page]
+        # Diese Seite enthaelt bereits validierte Absatzgruppen. Andere Seiten
+        # desselben Artikels duerfen bei einem Chunk-Fallback weiterhin die
+        # deterministische Zeilen-Heuristik nutzen.
+        if any(block.llm_refined for block in page_blocks):
+            out.extend(page_blocks)
+            continue
+        paragraphs = [block for block in page_blocks if block.kind == "paragraph"]
+        short_lines = [
+            block
+            for block in paragraphs
+            if block.char_count < 90 and block.y1 - block.y0 < 0.04
+        ]
+        if len(short_lines) < 8 or len(short_lines) < len(paragraphs) * 0.7:
+            out.extend(page_blocks)
+            continue
+
+        centers = sorted((block.x0 + block.x1) / 2 for block in paragraphs)
+        gaps = [(right - left, (right + left) / 2) for left, right in zip(centers, centers[1:])]
+        largest_gap, split = max(gaps, default=(0.0, 0.5))
+        if largest_gap > 0.1:
+            ordered = sorted(
+                paragraphs,
+                key=lambda block: (
+                    0 if (block.x0 + block.x1) / 2 < split else 1,
+                    block.y0,
+                    block.x0,
+                ),
+            )
+        else:
+            ordered = sorted(paragraphs, key=lambda block: (block.y0, block.x0))
+
+        text = ""
+        previous: SourceBlock | None = None
+        for block in ordered:
+            if not text:
+                text = block.text.strip()
+            elif previous and previous.continues_word:
+                text += block.text.lstrip()
+            else:
+                text += " " + block.text.strip()
+            previous = block
+
+        merged = replace(
+            ordered[0],
+            text=text,
+            x0=min(block.x0 for block in paragraphs),
+            y0=min(block.y0 for block in paragraphs),
+            x1=max(block.x1 for block in paragraphs),
+            y1=max(block.y1 for block in paragraphs),
+            kind="paragraph",
+            continues_word=False,
+        )
+        # Ueberschrift, Unterzeile und Zitate bleiben erhalten. Der neue
+        # Fliesstext nimmt die Stelle der vielen einzelnen Druckzeilen ein.
+        non_paragraphs = [block for block in page_blocks if block.kind != "paragraph"]
+        out.extend(non_paragraphs)
+        out.append(merged)
+    return out
+
+
+def _assemble_by_toc(
+    blocks: list[SourceBlock], toc_hints: list[TocHint]
+) -> list[AssembledArticle]:
+    """Artikel anhand der redaktionellen Startseiten des Inhalts gruppieren.
+
+    Das gedruckte Inhaltsverzeichnis ist fuer ein Magazin das staerkste Signal:
+    ein Eintrag beginnt auf seiner Zielseite und laeuft bis zum naechsten
+    Eintrag. Dadurch zerlegen Zwischenueberschriften oder Aufmacher auf den
+    Folgeseiten einen langen Artikel nicht mehr in zufaellige Fragmente.
+    """
+    starts: list[TocHint] = []
+    for hint in sorted(toc_hints, key=lambda h: (h.page_index, h.y0)):
+        if starts and starts[-1].page_index == hint.page_index:
+            # Mehrere echte Artikel auf derselben Seite brauchen Geometrie aus
+            # dem Satz. Ohne sie bleibt die generische Gruppierung sicherer.
+            return []
+        starts.append(hint)
+
+    articles: list[AssembledArticle] = []
+    for index, hint in enumerate(starts):
+        end = starts[index + 1].page_index if index + 1 < len(starts) else 10**9
+        article_blocks = [
+            block for block in blocks if hint.page_index <= block.page_index < end
+        ]
+        if not article_blocks:
+            continue
+        if hint.split_headings:
+            articles.extend(_assemble_by_headings(article_blocks))
+        else:
+            articles.append(AssembledArticle(title=hint.label, blocks=article_blocks))
+    return articles
 
 
 def _merge_small(articles: list[AssembledArticle]) -> list[AssembledArticle]:
@@ -136,7 +258,10 @@ def _merge_small(articles: list[AssembledArticle]) -> list[AssembledArticle]:
     return out
 
 
-MAX_IMAGES_PER_ARTICLE = 12
+# Lange Titelstrecken laufen bei ZUERST! ueber zehn Seiten und tragen deutlich
+# mehr als zwoelf redaktionelle Bilder. Die alte Grenze kappte genau diese
+# Mehrseitenartikel; die Speicherung erfolgt ohnehin als einzelne Datensaetze.
+MAX_IMAGES_PER_ARTICLE = 40
 NEAR_GAP = 0.22  # senkrechter Abstand, ab dem ein Block nichts mehr mit dem Bild zu tun hat
 
 

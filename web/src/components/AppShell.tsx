@@ -2,6 +2,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Authenticated, Unauthenticated, useQuery } from "convex/react";
 import { api } from "../lib/api";
+import Icon from "./Icon";
 
 /**
  * Rahmen der Anwendung. Mit `?embed=1` faellt er weg — fuer die Einbettung in
@@ -32,20 +33,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <nav>
             <Authenticated>
-              <Link to="/library" className={here("/library")}>Meine Ausgaben</Link>
-              <Link to="/kiosk" className={here("/kiosk")}>Kiosk</Link>
-              <Link to="/suche" className={here("/suche")}>Suche</Link>
+              <Link to="/library" className={here("/library")}>
+                <Icon name="library" /> Meine Ausgaben
+              </Link>
+              <Link to="/kiosk" className={here("/kiosk")}>
+                <Icon name="kiosk" /> Kiosk
+              </Link>
+              <Link to="/suche" className={here("/suche")}>
+                <Icon name="search" /> Suche
+              </Link>
               <EditorLink active={here("/admin")} />
               <Link to="/account" className="user-badge">
+                <Icon name="user" />
                 <UserBadge />
               </Link>
               <button className="btn secondary small" onClick={() => signOut()}>
+                <Icon name="logout" />
                 Abmelden
               </button>
             </Authenticated>
             <Unauthenticated>
-              <Link to="/kiosk" className={here("/kiosk")}>Kiosk</Link>
-              <Link to="/" className="btn secondary small">Anmelden</Link>
+              <Link to="/kiosk" className={here("/kiosk")}>
+                <Icon name="kiosk" /> Kiosk
+              </Link>
+              <Link to="/" className="btn secondary small">
+                <Icon name="login" /> Anmelden
+              </Link>
             </Unauthenticated>
           </nav>
         </div>
@@ -78,6 +91,7 @@ function EditorLink({ active }: { active?: string }) {
   if (!me?.isEditor) return null;
   return (
     <Link to="/admin" className={active}>
+      <Icon name="edit" />
       Redaktion
     </Link>
   );

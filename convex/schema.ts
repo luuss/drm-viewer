@@ -188,6 +188,7 @@ export default defineSchema(
     type: blockType,
     text: v.string(),
     sourcePageIndex: v.optional(v.number()),
+    sourceY: v.optional(v.number()),
     sourceStoryId: v.optional(v.string()),
     sourceFrameId: v.optional(v.string()),
     styleName: v.optional(v.string()),
@@ -208,6 +209,9 @@ export default defineSchema(
       v.literal("image"),
       v.literal("other"),
     ),
+    // Inhaltsverzeichnis-Flaechen gehoeren logisch zum Zielartikel, wechseln
+    // im Seitenmodus aber auf dessen Druckseite statt in den Fliesstextmodus.
+    targetPageIndex: v.optional(v.number()),
     order: v.optional(v.number()),
   })
     .index("by_article", ["articleId"])
@@ -221,6 +225,8 @@ export default defineSchema(
     order: v.number(),
     caption: v.optional(v.string()),
     sourcePageIndex: v.optional(v.number()),
+    sourceY: v.optional(v.number()),
+    afterBlockOrder: v.optional(v.number()),
   })
     .index("by_article", ["articleId"])
     .index("by_issue", ["issueId"]),
@@ -420,4 +426,3 @@ export default defineSchema(
   // Die Altbestaende sind migriert und entfernt, das Schema gilt wieder streng.
   { schemaValidation: true },
 );
-

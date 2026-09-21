@@ -38,7 +38,11 @@ import pdfplumber  # noqa: E402
 
 import render  # noqa: E402
 from extractor.article_assembler import assemble  # noqa: E402
-from extractor.pdf_extract import extract_pdf_pages, prepare_blocks  # noqa: E402
+from extractor.pdf_extract import (  # noqa: E402
+    _words_on_visible_page,
+    extract_pdf_pages,
+    prepare_blocks,
+)
 
 WURZEL = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Fuer Vergleichslaeufe gegen einen aelteren Stand laesst sich der Ordner mit
@@ -79,7 +83,8 @@ def _wortkasten(
                 for w in p.extract_words(extra_attrs=["size"], keep_blank_chars=False)
                 if float(w.get("size", 0) or 0) >= 4.5
             ]
-            roh[kanonisch] = (worte, p.width, p.height)
+            worte, breite, hoehe = _words_on_visible_page(p, worte)
+            roh[kanonisch] = (worte, breite, hoehe)
             for w in worte:
                 gezaehlt[round(float(w["size"]), 1)] += len(w["text"])
     grund = gezaehlt.most_common(1)[0][0] if gezaehlt else 10.0

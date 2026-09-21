@@ -4,8 +4,9 @@ import { api, formatEuro, type Id , cleanError } from "../lib/api";
 import ImportWizard from "./ImportWizard";
 import ArticleReview from "./ArticleReview";
 import TocEditor from "./TocEditor";
+import ExtractionDebug from "./ExtractionDebug";
 
-type Tab = "import" | "articles" | "toc";
+type Tab = "import" | "debug" | "articles" | "toc";
 
 export default function AdminPage() {
   const me = useQuery(api.users.me, {});
@@ -265,6 +266,12 @@ export default function AdminPage() {
                       Import
                     </button>
                     <button
+                      className={tab === "debug" ? "active" : ""}
+                      onClick={() => setTab("debug")}
+                    >
+                      Extraktion
+                    </button>
+                    <button
                       className={tab === "articles" ? "active" : ""}
                       onClick={() => setTab("articles")}
                     >
@@ -278,6 +285,7 @@ export default function AdminPage() {
                     </button>
                   </nav>
                   {tab === "import" && <ImportWizard issueId={i._id} />}
+                  {tab === "debug" && <ExtractionDebug issueId={i._id} />}
                   {tab === "articles" && <ArticleReview issueId={i._id} />}
                   {tab === "toc" && <TocEditor issueId={i._id} />}
                 </div>

@@ -39,6 +39,49 @@ export const listForEditors = query({
 });
 
 /**
+ * Diagnoseansicht fuer die Redaktion. Anders als der Reader liefert sie die
+ * gerenderten Seiten direkt aus der Ablage und behaelt Quellindex, Rohmasse
+ * und Renderstatus bei. So kann ein fehlerhafter Import untersucht werden,
+ * ohne der angemeldeten Person erst eine Leserfreigabe zu geben.
+ */
+export const debugForEditors = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requireEditor(ctx);
+    const pages = await ctx.db
+      .query("issuePages")
+      .withIndex("by_issue_index", (q) => q.eq("issueId", issueId))
+      .collect();
+
+    const out = [];
+    for (const page of pages) {
+      const preview = page.previewKey
+        ? await ctx.db
+            .query("assets")
+            .withIndex("by_key", (q) => q.eq("key", page.previewKey!))
+            .first()
+        : null;
+      const previewUrl = preview?.convexStorageId
+        ? await ctx.storage.getUrl(preview.convexStorageId)
+        : null;
+      out.push({
+        _id: page._id,
+        index: page.index,
+        printedLabel: page.printedLabel ?? null,
+        role: page.role,
+        sourceAssetId: page.sourceAssetId,
+        sourcePageIndex: page.sourcePageIndex,
+        width: preview?.width ?? page.width,
+        height: preview?.height ?? page.height,
+        previewKey: page.previewKey ?? null,
+        previewUrl,
+      });
+    }
+    return out;
+  },
+});
+
+/**
  * Setzt die Leserreihenfolge. Die Redaktion bestaetigt oder korrigiert den
  * Vorschlag aus dem Wizard; hartcodierte Annahmen gibt es keine.
  */

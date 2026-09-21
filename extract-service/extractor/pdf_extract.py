@@ -16,8 +16,14 @@ from collections import Counter, defaultdict
 import pdfplumber
 
 from .image_regions import drop_repeating, read_raw_images, select_regions
-from .model import SourceBlock, SourceImage
-from .textutil import clean_text, glue_dropcap, is_probably_heading, normalize_compare
+from .model import LayoutLine, SourceBlock, SourceImage
+from .textutil import (
+    SOFT_HYPHEN,
+    clean_text,
+    glue_dropcap,
+    is_probably_heading,
+    normalize_compare,
+)
 
 LINE_TOLERANCE = 2.2       # Punkte: Zeilen mit dieser Abweichung gelten als eine
 BLOCK_GAP_FACTOR = 1.45    # Zeilenabstand, ab dem ein neuer Block beginnt
@@ -200,7 +206,8 @@ def _lines_to_blocks(lines: list[dict], page_width: float, page_height: float,
     def flush() -> None:
         if not current:
             return
-        text = glue_dropcap(clean_text("\n".join(l["text"] for l in current)))
+        raw_text = "\n".join(l["text"] for l in current)
+        text = glue_dropcap(clean_text(raw_text))
         if not text:
             current.clear()
             return
@@ -220,6 +227,23 @@ def _lines_to_blocks(lines: list[dict], page_width: float, page_height: float,
                 max_size=max(maxes) if maxes else 0.0,
                 font=fonts.most_common(1)[0][0] if fonts else "",
                 bold=bold_chars > 0.6 * max(1, sum(len(l["text"]) for l in current)),
+                continues_word=raw_text.rstrip().endswith(SOFT_HYPHEN),
+                layout_lines=tuple(
+                    LayoutLine(
+                        page_index=page_index,
+                        text=l["text"],
+                        x0=l["x0"] / page_width,
+                        y0=l["top"] / page_height,
+                        x1=l["x1"] / page_width,
+                        y1=l["bottom"] / page_height,
+                        size=l["size"],
+                        max_size=l["max_size"],
+                        font=l["font"],
+                        bold=l["bold"],
+                        continues_word=l["text"].rstrip().endswith(SOFT_HYPHEN),
+                    )
+                    for l in current
+                ),
             )
         )
         current.clear()
@@ -233,7 +257,16 @@ def _lines_to_blocks(lines: list[dict], page_width: float, page_height: float,
         line_height = max(prev["bottom"] - prev["top"], 1.0)
         same_column = not (line["x1"] < prev["x0"] - 5 or line["x0"] > prev["x1"] + 5)
         similar_size = abs(line["size"] - prev["size"]) < max(1.2, prev["size"] * 0.25)
-        if gap > line_height * BLOCK_GAP_FACTOR or not same_column or not similar_size:
+        # Im kompakten Meldungssatz steht eine farbige, fette Ueberschrift oft
+        # fast ohne Abstand ueber dem Fliesstext und nur 1,2 pt groesser. Der
+        # Wechsel der Betonung ist dort das verlaesslichere Trennsignal.
+        same_emphasis = line["bold"] == prev["bold"]
+        if (
+            gap > line_height * BLOCK_GAP_FACTOR
+            or not same_column
+            or not similar_size
+            or not same_emphasis
+        ):
             flush()
         current.append(line)
     flush()
@@ -345,6 +378,10 @@ def split_drop_caps(blocks: list[SourceBlock], body: float) -> list[SourceBlock]
             c.text = t + c.text
             c.x0 = min(c.x0, b.x0)
             c.y0 = min(c.y0, b.y0)
+            # Die optionale LLM-Stufe rekonstruiert ausschliesslich aus diesen
+            # Zeilen. Die grosse Initiale darf deshalb beim deterministischen
+            # Zusammenkleben nicht aus dem Zeileninventar verschwinden.
+            c.layout_lines = b.layout_lines + c.layout_lines
             used.add(i)
     return [b for k, b in enumerate(blocks) if k not in used]
 
@@ -355,23 +392,50 @@ def classify(blocks: list[SourceBlock], body: float, body_font: str) -> None:
             continue
         t = b.text.strip().lower()
         foreign_font = bool(body_font) and body_font != b.font
+        # Ein Initialbuchstabe treibt nur max_size hoch. Median, Schrift und
+        # Gewicht bleiben die des Fliesstexts; daraus darf weder eine neue
+        # Ueberschrift noch eine Unterzeile entstehen.
+        drop_cap_paragraph = (
+            b.max_size >= body * 1.7
+            and b.size <= body * 1.15
+            and not b.bold
+            and not foreign_font
+        )
+        compact_heading = (
+            b.bold
+            and foreign_font
+            and b.size >= body * 1.08
+            and b.char_count <= 140
+            and is_probably_heading(b.text)
+        )
         if t.startswith(("foto:", "fotos:", "bild:", "grafik:", "abb.:")):
             b.kind = "caption"
         elif b.max_size <= body * 0.9:
             b.kind = "caption"
+        elif compact_heading:
+            # ZUERST!-Meldungen nutzen rechts eine nur wenig groessere, fette
+            # Grotesk. Sie ist typografisch eindeutig, obwohl 12 zu 10,8 pt
+            # die allgemeine Groessenschwelle knapp unterschreitet.
+            b.kind = "heading"
         elif foreign_font and b.max_size <= body * 1.12 and b.char_count <= 400:
             # Schmuckzitat oder Bildunterschrift im Hausfont, kein Fliesstext.
             b.kind = "quote" if b.char_count < 200 else "caption"
         elif (
-            b.max_size >= body * 1.45
+            not drop_cap_paragraph
+            and b.max_size >= body * 1.45
             # Eine Initiale am Absatzanfang treibt die groesste Schriftgroesse
             # hoch, ohne dass der Absatz eine Ueberschrift waere. Eine echte
-            # Ueberschrift ist durchgaengig gross oder wenigstens kurz.
-            and (b.size >= body * 1.25 or b.char_count <= 120)
+            # Ueberschrift ist durchgaengig gross oder typografisch betont.
+            and (b.size >= body * 1.25 or b.bold or foreign_font)
             and is_probably_heading(b.text)
         ):
             b.kind = "heading"
-        elif b.max_size >= body * 1.12 and b.char_count <= 260 and is_probably_heading(b.text):
+        elif (
+            not drop_cap_paragraph
+            and b.max_size >= body * 1.12
+            and b.char_count <= 260
+            and is_probably_heading(b.text)
+        ):
             b.kind = "subheading" if b.char_count <= 120 else "lead"
         else:
             b.kind = "paragraph"
@@ -421,6 +485,34 @@ def _body_word_size(words_by_page: dict[int, list[dict]]) -> float:
         for w in words:
             counter[round(float(w.get("size", 0) or 0), 1)] += len(w.get("text", ""))
     return counter.most_common(1)[0][0] if counter else 10.0
+
+
+def _words_on_visible_page(page, words: list[dict]) -> tuple[list[dict], float, float]:
+    """Woerter auf die sichtbare TrimBox verschieben und daran abschneiden.
+
+    pdfplumber verwendet bereits Koordinaten mit Ursprung oben links. Seine
+    TrimBox ist deshalb ebenfalls (links, oben, rechts, unten).
+    """
+    box = page.trimbox or page.cropbox or page.mediabox or page.bbox
+    left, top, right, bottom = (float(value) for value in box)
+    width = right - left
+    height = bottom - top
+    if width <= 0 or height <= 0:
+        left, top, right, bottom = (0.0, 0.0, float(page.width), float(page.height))
+        width, height = float(page.width), float(page.height)
+
+    visible: list[dict] = []
+    for word in words:
+        x0 = max(left, float(word["x0"]))
+        x1 = min(right, float(word["x1"]))
+        y0 = max(top, float(word["top"]))
+        y1 = min(bottom, float(word["bottom"]))
+        if x1 <= x0 or y1 <= y0:
+            continue
+        local = dict(word)
+        local.update(x0=x0 - left, x1=x1 - left, top=y0 - top, bottom=y1 - top)
+        visible.append(local)
+    return visible, width, height
 
 
 def extract_images(
@@ -534,10 +626,11 @@ def extract_pdf_pages(
             # Winzige Zeichen sind gedrehte Bildnachweise am Rand. Sie zerreissen
             # sonst die Zeilen des Fliesstextes daneben.
             words = [w for w in words if float(w.get("size", 0) or 0) >= 4.5]
+            words, page_width, page_height = _words_on_visible_page(page, words)
             raw_words_by_page[canonical_index] = words
-            page_sizes[canonical_index] = (page.width, page.height)
+            page_sizes[canonical_index] = (page_width, page_height)
             starts = _column_starts(words)
-            gutters = [] if starts else _detect_gutters(words, page.width)
+            gutters = [] if starts else _detect_gutters(words, page_width)
             # Erst Zeilen ueber die ganze Seite, dann an echtem Weissraum in
             # Spaltenstuecke zerlegen. Die umgekehrte Reihenfolge zerschnitt
             # jede Ueberschrift, die ueber mehrere Spalten laeuft.
@@ -555,10 +648,20 @@ def extract_pdf_pages(
             for column in sorted(by_column):
                 lines = sorted(by_column[column], key=lambda l: (round(l["top"], 1), l["x0"]))
                 column_blocks = _lines_to_blocks(
-                    lines, page.width, page.height, canonical_index
+                    lines, page_width, page_height, canonical_index
                 )
                 for b in column_blocks:
                     b.column = column
+                    if b.layout_lines:
+                        b.layout_lines = tuple(
+                            LayoutLine(
+                                **{
+                                    **line.__dict__,
+                                    "column": column,
+                                }
+                            )
+                            for line in b.layout_lines
+                        )
                 blocks.extend(column_blocks)
 
     # Die Bildgeometrie kommt aus PDFium, weil dort der Beschnittpfad steht.

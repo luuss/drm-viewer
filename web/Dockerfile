@@ -1,9 +1,10 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY web/package.json web/package-lock.json* /app/web/
-COPY convex/package.json /app/convex/
 WORKDIR /app/web
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 COPY web /app/web
 COPY convex /app/convex
 ARG VITE_CONVEX_URL

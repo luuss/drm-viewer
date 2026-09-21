@@ -61,6 +61,7 @@ function article(order: number, page: number, blocks: string[]) {
       type: (i === 0 ? "heading" : "paragraph") as const,
       text,
       sourcePageIndex: page,
+      sourceY: Number((0.1 + i * 0.2).toFixed(2)),
     })),
     regions: [
       { pageIndex: page, x0: 0.1, y0: 0.1, x1: 0.9, y1: 0.5, kind: "body" as const },
@@ -82,23 +83,55 @@ describe("Artikeloperationen", () => {
         createdAt: Date.now(),
       }),
     );
+    const imageAssetId = await t.run(async (ctx: any) =>
+      ctx.db.insert("assets", {
+        key: "images/test.jpg",
+        contentType: "image/jpeg",
+        kind: "image",
+        issueId,
+        createdAt: Date.now(),
+      }),
+    );
+    const first = {
+      ...article(1, 0, ["Titel A", "Absatz eins"]),
+      source: "hybrid" as const,
+      images: [{
+        assetId: imageAssetId,
+        caption: "Passendes Bild",
+        sourcePageIndex: 0,
+        sourceY: 0.4,
+        afterBlockOrder: 2,
+      }],
+    };
     const result = await t.mutation(internal.imports.activateResultInternal, {
       jobId,
       workerId: "w1",
       issueId,
-      articles: [article(1, 0, ["Titel A", "Absatz eins"]), article(2, 1, ["Titel B", "Absatz zwei"])],
+      articles: [first, article(2, 1, ["Titel B", "Absatz zwei"])],
     });
     expect(result.articles).toBe(2);
     expect(result.toc).toBe(2);
 
-    const rows = await t.run(async (ctx: any) =>
-      ctx.db
+    const imported = await t.run(async (ctx: any) => {
+      const rows = await ctx.db
         .query("articles")
         .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
-        .collect(),
-    );
+        .collect();
+      const blocks = await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect();
+      const images = await ctx.db
+        .query("articleAssets")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect();
+      return { rows, blocks, images };
+    });
+    const rows = imported.rows;
     expect(rows.every((r: any) => r.reviewStatus === "pending")).toBe(true);
     expect(rows[0].searchText).toContain("Absatz eins");
+    expect(imported.blocks.map((b: any) => b.sourceY)).toEqual([0.1, 0.3, 0.1, 0.3]);
+    expect(imported.images[0].afterBlockOrder).toBe(2);
   });
 
   test("Re-Import ersetzt alle abgeleiteten Daten", async () => {
@@ -322,6 +355,18 @@ describe("Artikeloperationen", () => {
         y1: 0.4,
         kind: "title",
       });
+      // Zweiter Teil desselben Artikels: kommt im Reader als eine gemeinsame
+      // ruhige Flaeche an, nicht als weiterer schmaler Streifen.
+      await ctx.db.insert("articleRegions", {
+        articleId,
+        issueId,
+        pageIndex: 0,
+        x0: 0.2,
+        y0: 0.35,
+        x1: 0.8,
+        y1: 0.9,
+        kind: "body",
+      });
       // entartet: ohne Breite, taugt nur als unsichtbare Fehlklickflaeche
       await ctx.db.insert("articleRegions", {
         articleId,
@@ -333,6 +378,18 @@ describe("Artikeloperationen", () => {
         y1: 0.9,
         kind: "body",
       });
+      // Ein Inhaltsverzeichnis-Ziel bleibt trotz desselben Artikels separat.
+      await ctx.db.insert("articleRegions", {
+        articleId,
+        issueId,
+        pageIndex: 0,
+        x0: 0.1,
+        y0: 0.92,
+        x1: 0.4,
+        y1: 0.98,
+        kind: "other",
+        targetPageIndex: 5,
+      });
       return userId;
     });
 
@@ -341,9 +398,14 @@ describe("Artikeloperationen", () => {
       .withIdentity({ subject: leserId, email: "leser@example.de" })
       .query(api.articles.regionsForReader, { issueId });
 
-    expect(regions).toHaveLength(1);
-    expect(regions[0].x0).toBeCloseTo(0.6);
-    expect(regions[0].x1).toBeCloseTo(1);
+    expect(regions).toHaveLength(2);
+    const area = regions.find((region) => region.targetPageIndex === null)!;
+    const jump = regions.find((region) => region.targetPageIndex === 5)!;
+    expect(area.x0).toBeCloseTo(0.2);
+    expect(area.x1).toBeCloseTo(1);
+    expect(area.y0).toBeCloseTo(0.1);
+    expect(area.y1).toBeCloseTo(0.9);
+    expect(jump.x0).toBeCloseTo(0.1);
   });
 
   test("Veroeffentlichen erst, wenn alle Artikel entschieden sind", async () => {

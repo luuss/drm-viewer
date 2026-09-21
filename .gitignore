@@ -2,7 +2,13 @@ node_modules
 dist
 .env
 .env.local
-convex/_generated
+.env.production
+.env.dokploy
+.env.selfhost
+# Convex empfiehlt, die Kern-Typen einzuchecken, damit frische CI-Runner und
+# Docker-Builds ohne laufendes Dev-Deployment typechecken. Nur die lokalen
+# AI-Hinweise bleiben unversioniert.
+convex/_generated/ai/
 __pycache__
 *.pyc
 .venv

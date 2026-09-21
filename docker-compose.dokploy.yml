@@ -1,0 +1,84 @@
+# Dokploy baut diese drei Dienste direkt aus dem Git-Checkout. TLS und Routing
+# werden in Dokploy unter "Domains" konfiguriert; deshalb gibt es hier weder
+# Host-Ports noch einen zweiten Reverse Proxy.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  tile-service:
+    build:
+      context: ./tile-service
+      dockerfile: Dockerfile
+    environment:
+      CONVEX_SITE_URL: ${CONVEX_SITE_URL:?CONVEX_SITE_URL fehlt}
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET:?TILE_SERVICE_SECRET fehlt}
+      CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN fehlt}
+      MAX_PAGES_PER_MIN: ${MAX_PAGES_PER_MIN:-80}
+      MAX_TILES_PER_MIN: ${MAX_TILES_PER_MIN:-1200}
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  import-worker:
+    build:
+      context: ./extract-service
+      dockerfile: Dockerfile
+    environment:
+      CONVEX_SITE_URL: ${CONVEX_SITE_URL:?CONVEX_SITE_URL fehlt}
+      EXTRACT_SERVICE_SECRET: ${EXTRACT_SERVICE_SECRET:?EXTRACT_SERVICE_SECRET fehlt}
+      PAGE_RENDER_WIDTH: ${PAGE_RENDER_WIDTH:-2400}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
+      WORKER_IDLE_POLL_MAX_SECONDS: ${WORKER_IDLE_POLL_MAX_SECONDS:-60}
+      EXTRACT_USE_LLM: ${EXTRACT_USE_LLM:-false}
+      EXTRACT_LLM_PROVIDER: ${EXTRACT_LLM_PROVIDER:-openrouter}
+      EXTRACT_LLM_MODEL: ${EXTRACT_LLM_MODEL:-}
+      EXTRACT_LLM_API_KEY: ${EXTRACT_LLM_API_KEY:-}
+      EXTRACT_LLM_BASE_URL: ${EXTRACT_LLM_BASE_URL:-}
+      EXTRACT_LLM_ROUTING_ONLY: ${EXTRACT_LLM_ROUTING_ONLY:-}
+      EXTRACT_LLM_ZDR: ${EXTRACT_LLM_ZDR:-true}
+      EXTRACT_LLM_DATA_COLLECTION: ${EXTRACT_LLM_DATA_COLLECTION:-deny}
+      EXTRACT_LLM_ALLOW_FALLBACKS: ${EXTRACT_LLM_ALLOW_FALLBACKS:-false}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_CONVEX_URL: ${VITE_CONVEX_URL:?VITE_CONVEX_URL fehlt}
+        VITE_TILE_SERVICE_URL: ${VITE_TILE_SERVICE_URL:?VITE_TILE_SERVICE_URL fehlt}
+    depends_on:
+      tile-service:
+        condition: service_healthy
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging

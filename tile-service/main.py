@@ -183,7 +183,15 @@ async def page_info(
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> dict:
     session = await require_session(x_tile_session, issue_id)
-    check_rate(f'{session.get("userId")}:{issue_id}', MAX_PAGES_PER_MIN, "Seiten")
+    # Metadaten und Bildkacheln brauchen getrennte Zaehler. Mit demselben Key
+    # fuellten die vielen Kacheln einer einzigen Seite auch das deutlich
+    # kleinere Seitenlimit; danach lieferte bereits der naechste /info-Aufruf
+    # faelschlich 429 und der Reader blieb leer.
+    check_rate(
+        f'pages:{session.get("userId")}:{issue_id}',
+        MAX_PAGES_PER_MIN,
+        "Seiten",
+    )
     _, meta = await load_page(issue_id, index)
     levels = 1
     while max(meta["width"], meta["height"]) >> levels > TILE_SIZE:
@@ -206,7 +214,11 @@ async def tile(
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> Response:
     session = await require_session(x_tile_session, issue_id)
-    check_rate(f'{session.get("userId")}:{issue_id}', MAX_TILES_PER_MIN, "Kacheln")
+    check_rate(
+        f'tiles:{session.get("userId")}:{issue_id}',
+        MAX_TILES_PER_MIN,
+        "Kacheln",
+    )
     _usage[x_tile_session or ""] += 1
 
     image, meta = await load_page(issue_id, index)

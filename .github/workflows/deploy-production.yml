@@ -1,0 +1,80 @@
+name: Validate and deploy Convex
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Test Convex functions
+        run: |
+          npm ci
+          npm test
+
+      - name: Build web application
+        env:
+          VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+          VITE_TILE_SERVICE_URL: ${{ vars.VITE_TILE_SERVICE_URL }}
+        run: |
+          test -n "$VITE_CONVEX_URL"
+          test -n "$VITE_TILE_SERVICE_URL"
+          npm ci --prefix web
+          npm run build --prefix web
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: extract-service/requirements.txt
+
+      - name: Test extraction service
+        run: |
+          python -m pip install --disable-pip-version-check -r extract-service/requirements.txt pytest
+          python -m pytest -q extract-service/tests
+
+      - name: Validate Dokploy Compose
+        env:
+          PUBLIC_WEB_ORIGIN: https://digital.example.test
+          VITE_CONVEX_URL: https://example.convex.cloud
+          VITE_TILE_SERVICE_URL: https://tiles.example.test
+          CONVEX_SITE_URL: https://example.convex.site
+          TILE_SERVICE_SECRET: validation-only
+          EXTRACT_SERVICE_SECRET: validation-only
+        run: docker compose -f docker-compose.dokploy.yml config --quiet
+
+  deploy-convex:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Deploy Convex production functions
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          test -n "$CONVEX_DEPLOY_KEY"
+          npm ci
+          npx convex deploy --typecheck enable --message "GitHub ${GITHUB_SHA}"

@@ -32,6 +32,8 @@ from dataclasses import dataclass
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_raw
 
+from .page_geometry import rect_on_visible_page, visible_page_box
+
 Rect = tuple[float, float, float, float]
 
 # --- Schwellen -------------------------------------------------------------
@@ -125,10 +127,11 @@ def _metadata(obj, page) -> tuple[bool, int]:
 
 
 def read_trim_boxes(pdf_bytes: bytes, page_map: list[tuple[int, int]]) -> dict[int, Rect]:
-    """Netzformat je kanonischer Seite, normiert auf die volle Seite.
+    """Netzformat je kanonischer Seite im Koordinatensystem des Renderings.
 
     Der IDML-Weg braucht nur das, nicht die Bildobjekte: der Satz kennt die
-    Seite ohne Anschnitt, das PDF bringt ihn mit.
+    Seite ohne Anschnitt. Weil das Rendering nun ebenfalls genau die TrimBox
+    zeigt, ist deren normiertes Rechteck immer die volle sichtbare Seite.
     """
     trims: dict[int, Rect] = {}
     doc = pdfium.PdfDocument(io.BytesIO(pdf_bytes))
@@ -137,16 +140,10 @@ def read_trim_boxes(pdf_bytes: bytes, page_map: list[tuple[int, int]]) -> dict[i
             if source_index >= len(doc):
                 continue
             page = doc[source_index]
-            width, height = page.get_width(), page.get_height()
-            if width <= 0 or height <= 0:
+            left, bottom, right, top = visible_page_box(page)
+            if right <= left or top <= bottom:
                 continue
-            box = page.get_trimbox() or page.get_cropbox() or page.get_mediabox()
-            trims[canonical_index] = (
-                box[0] / width,
-                (height - box[3]) / height,
-                box[2] / width,
-                (height - box[1]) / height,
-            )
+            trims[canonical_index] = (0.0, 0.0, 1.0, 1.0)
     finally:
         doc.close()
     return trims
@@ -158,7 +155,7 @@ def read_raw_images(
     """Bildobjekte und Netzformat je kanonischer Seite lesen.
 
     Rueckgabe: (Bilder je Seite, Trimbox je Seite) — beides normiert auf die
-    volle Seite, y von oben.
+    gerenderte TrimBox, y von oben.
     """
     images: dict[int, list[RawImage]] = {}
     trims: dict[int, Rect] = {}
@@ -168,22 +165,14 @@ def read_raw_images(
             if source_index >= len(doc):
                 continue
             page = doc[source_index]
-            width = page.get_width()
-            height = page.get_height()
-            if width <= 0 or height <= 0:
+            visible = visible_page_box(page)
+            if visible[2] <= visible[0] or visible[3] <= visible[1]:
                 continue
 
             def norm(box) -> Rect:
-                # PDF zaehlt y von unten, das Seitenbild von oben.
-                return (
-                    box[0] / width,
-                    (height - box[3]) / height,
-                    box[2] / width,
-                    (height - box[1]) / height,
-                )
+                return rect_on_visible_page(box, visible)
 
-            trim = page.get_trimbox() or page.get_cropbox() or page.get_mediabox()
-            trims[canonical_index] = norm(trim)
+            trims[canonical_index] = (0.0, 0.0, 1.0, 1.0)
 
             found: list[RawImage] = []
             for obj in page.get_objects(max_depth=6):

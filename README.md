@@ -11,15 +11,15 @@ prüft und gibt frei.
 ```
 Browser (React + Vite)
    |
-   |-- Konto, Katalog, Zugriffe, Commerce, Suche ---> Convex (selbst betrieben)
-   |                                                    +-- PostgreSQL
-   |                                                    +-- MinIO (Medien)
+   |-- Konto, Katalog, Zugriffe, Commerce, Suche ---> Convex
+   |                                                    +-- aktuell EU Cloud
+   |                                                    +-- spaeter selbst betrieben
    |-- Seitenkacheln ------------------------------> Kachel-Gateway (FastAPI)
    |
    +-- (nur intern) Aufbereitung -----------------> Import-Worker (Python)
 ```
 
-* **Convex**, selbst betrieben — Anmeldung, Rollen, Publikationen, Ausgaben,
+* **Convex** — Anmeldung, Rollen, Publikationen, Ausgaben,
   Seiten, Artikel, Entitlements, Stripe, Suche, Warteschlange.
 * **Kachel-Gateway** — prüft die Lesesitzung und liefert Ausschnitte der beim
   Import gerenderten Seiten. Die Druckdatei verlässt den Server nie.
@@ -77,7 +77,21 @@ startet Convex-Backend, PostgreSQL, MinIO, Kachel-Gateway, Import-Worker,
 Oberfläche und TLS-Proxy. Vollständige Anleitung inklusive Referenzfall unter
 eigener Subdomain: [docs/selfhosting.md](docs/selfhosting.md).
 
-Convex Cloud ist für den Betrieb nicht vorgesehen.
+Dieser vollständige Stack ist das langfristige Ziel; bis zur kontrollierten
+Datenmigration bleibt das bestehende Convex-EU-Cloud-Deployment aktiv.
+
+## Automatisches Produktionsdeployment
+
+Die sofort einsetzbare Produktionsstufe verwendet das bestehende Convex-EU-
+Cloud-Backend und betreibt Oberfläche, Kachel-Gateway sowie Import-Worker über
+Dokploy auf einem EU-VPS. Ein Push auf `main` startet den nativen Dokploy-
+Rollout; GitHub Actions testet denselben Stand und spielt die Convex-Funktionen
+aus.
+Anleitung: [docs/deployment.md](docs/deployment.md).
+
+Der vollständige Umzug von Convex Cloud auf den Self-Hosting-Stack erfolgt
+separat mit Datenexport und Wiederherstellung; dadurch bleibt die bestehende
+Bibliothek beim ersten Produktions-Rollout erhalten.
 
 ## Dokumentation
 
@@ -85,6 +99,7 @@ Convex Cloud ist für den Betrieb nicht vorgesehen.
 |---|---|
 | [docs/PROGRAMMIERPLAN.md](docs/PROGRAMMIERPLAN.md) | verbindliche technische Spezifikation |
 | [docs/selfhosting.md](docs/selfhosting.md) | Betrieb, Umgebungswerte, Sicherung |
+| [docs/deployment.md](docs/deployment.md) | GitHub-Autodeployment mit Dokploy auf einem EU-Server |
 | [docs/artikel-import.md](docs/artikel-import.md) | Importweg, Grenzen der Automatik, Redaktion |
 | [docs/shop-integration.md](docs/shop-integration.md) | Anbindung eines bestehenden Shops |
 
