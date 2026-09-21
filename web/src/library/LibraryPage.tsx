@@ -43,12 +43,14 @@ export default function LibraryPage() {
               )}
             </div>
             <div className="issue-card-body">
-              <div className="title">{i.displayTitle}</div>
+              <div className="title">{i.publicationName ?? i.displayTitle}</div>
+              {i.publicationName && i.displayTitle !== i.publicationName && (
+                <div className="meta strong">{i.displayTitle}</div>
+              )}
               <div className="meta">
-                {i.designation ? `${i.designation} · ` : ""}
+                {i.edition ? `${i.edition} · ` : ""}
                 {i.pageCount} Seiten
               </div>
-              {i.subtitle && <div className="meta">{i.subtitle}</div>}
               <div className="cta">
                 {i.progress ? (
                   <>

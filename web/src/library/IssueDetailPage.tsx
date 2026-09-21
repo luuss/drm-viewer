@@ -50,6 +50,9 @@ export default function IssueDetailPage() {
         )}
       </div>
       <div className="issue-info">
+        {issue.publicationName && issue.publicationName !== issue.displayTitle && (
+          <div className="kicker">{issue.publicationName}</div>
+        )}
         <h2>{issue.displayTitle}</h2>
         {issue.subtitle && <div className="subtitle">{issue.subtitle}</div>}
         <div className="meta">

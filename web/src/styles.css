@@ -1160,6 +1160,15 @@ button.small, .btn.small {
   max-width: var(--prose);
 }
 .issue-info h2 { margin: 0; }
+/* Die Reihe als Vorzeile ueber dem Heftnamen. */
+.issue-info .kicker {
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: calc(var(--s2) * -1);
+}
 /* Unter-Ueberschrift aus dem Verlagsshop, dicht unter dem Titel. */
 .issue-info .subtitle {
   font-family: var(--serif);

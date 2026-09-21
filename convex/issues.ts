@@ -30,12 +30,22 @@ export function shopLabels(
   },
   publicationName: string | null,
 ) {
+  const displayTitle = issue.shopTitle ?? issue.title;
   return {
-    displayTitle: issue.shopTitle ?? issue.title,
+    displayTitle,
     designation:
       issue.shopDesignation ??
       ([publicationName, issue.issueNumber].filter(Boolean).join(" · ") || null),
     subtitle: issue.shopSubtitle ?? null,
+    // Zeile unter dem Heftnamen auf den Karten, wie bei der aktuellen
+    // Ausgabe der Abo-Karte: Unter-Ueberschrift, sonst Heftbezeichnung,
+    // sonst die eigene Nummer.
+    edition:
+      issue.shopSubtitle ??
+      (issue.shopDesignation && issue.shopDesignation !== displayTitle
+        ? issue.shopDesignation
+        : null) ??
+      (issue.issueNumber ? `Nr. ${issue.issueNumber}` : null),
   };
 }
 
@@ -89,6 +99,7 @@ export const getPublic = query({
     return {
       _id: issue._id,
       title: issue.title,
+      publicationName: publication?.name ?? null,
       ...shopLabels(issue, publication?.name ?? null),
       slug: issue.slug,
       issueNumber: issue.issueNumber ?? null,

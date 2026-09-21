@@ -95,9 +95,11 @@ export default function KioskPage() {
                 )}
               </div>
               <div className="issue-card-body">
-                <div className="title">{i.displayTitle}</div>
-                {i.designation && <div className="meta">{i.designation}</div>}
-                {i.subtitle && <div className="meta">{i.subtitle}</div>}
+                <div className="title">{i.publicationName ?? i.displayTitle}</div>
+                {i.publicationName && i.displayTitle !== i.publicationName && (
+                  <div className="meta strong">{i.displayTitle}</div>
+                )}
+                {i.edition && <div className="meta">{i.edition}</div>}
                 <div className="price">{formatEuro(i.priceAmountCents)}</div>
                 <div className="card-action">
                   Ausgabe ansehen <Icon name="arrow-right" />
