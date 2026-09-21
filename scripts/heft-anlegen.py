@@ -50,9 +50,13 @@ def convex_run(function: str, args: dict | None = None) -> object:
         sys.stderr.write(result.stdout)
         sys.stderr.write(result.stderr)
         raise SystemExit(f"convex run {function} ist fehlgeschlagen")
-    # Die Kommandozeile gibt den Rueckgabewert als letzte Zeile aus.
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
-    return json.loads(lines[-1]) if lines else None
+    # Die Kommandozeile gibt den Rueckgabewert als JSON aus, Objekte und
+    # Listen mehrzeilig eingerueckt. Alles davor sind Meldungen.
+    lines = result.stdout.splitlines()
+    for index, line in enumerate(lines):
+        if line[:1] in "{[\"0123456789-tfn":
+            return json.loads("\n".join(lines[index:]))
+    return None
 
 
 def page_count(path: str) -> int:
