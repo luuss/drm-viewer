@@ -53,9 +53,12 @@ Leserreihenfolge bestätigen, Aufbereitung starten, Artikel prüfen
 ausschließen), Inhaltsverzeichnis pflegen, Ausgabe veröffentlichen.
 Veröffentlichen geht erst, wenn jeder Artikel entschieden ist.
 
-Für Titel mit fester Heftstruktur (ZUERST!, Deutsche Militärzeitschrift) kennt
-der Import Publikationsprofile; alternativ legt `scripts/heft-anlegen.py` ein
-Heft samt Importauftrag von der Kommandozeile an.
+Für Titel mit fester Heftstruktur (ZUERST!, Deutsche Militärzeitschrift, DMZ
+Zeitgeschichte) kennt der Import Publikationsprofile; Umschlagseiten liefern
+auch ohne Profil keine Artikel. Alternativ legt `scripts/heft-anlegen.py` ein
+Heft samt Importauftrag von der Kommandozeile an und veröffentlicht es mit
+`--freigeben` gleich nach dem Import. Einen Umschlag-Bogen mit Klappe zerlegt
+`scripts/umschlag-zerlegen.py` vorher in vier Einzelseiten.
 
 Das Abo-Angebot eines Titels (Abo-Arten mal Liefergebiete, Preise in
 `convex/subscriptionCatalog.ts`) legt eine Kommandozeile samt Stripe-Produkten

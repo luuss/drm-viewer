@@ -263,6 +263,25 @@ export const articlesInternal = internalQuery({
   },
 });
 
+/** Einen Artikel nach dem Import ausschliessen oder freigeben, von der Kommandozeile. */
+export const setArticleStatusInternal = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    order: v.number(),
+    reviewStatus: v.union(v.literal("approved"), v.literal("excluded"), v.literal("pending")),
+  },
+  handler: async (ctx, { issueId, order, reviewStatus }) => {
+    const article = await ctx.db
+      .query("articles")
+      .withIndex("by_issue_order", (q) => q.eq("issueId", issueId).eq("order", order))
+      .unique();
+    if (!article) throw new Error(`Kein Artikel mit Nummer ${order}`);
+    await ctx.db.patch(article._id, { reviewStatus, updatedAt: Date.now() });
+    await audit(ctx, "article.setReviewStatus", article._id, `${reviewStatus} (Kommandozeile)`);
+    return { title: article.title, reviewStatus };
+  },
+});
+
 /** Die juengsten Importauftraege, um den Worker von aussen zu beobachten. */
 export const recentJobsInternal = internalQuery({
   args: {},
