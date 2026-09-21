@@ -35,10 +35,16 @@ export default function KioskPage() {
 
   return (
     <div className="page">
-      <h2>Kiosk</h2>
+      <div className="page-head">
+        <h2>Kiosk</h2>
+        <p className="hint">
+          Einzelne Ausgaben kaufen oder ein Abo abschließen. Gekaufte Ausgaben
+          bleiben dauerhaft lesbar.
+        </p>
+      </div>
 
       {plans && plans.length > 0 && (
-        <section className="plans">
+        <section>
           <h3>Abo</h3>
           <p className="hint">
             Das Abo schaltet jede Ausgabe frei, die während der Laufzeit
@@ -72,9 +78,10 @@ export default function KioskPage() {
                   <button
                     className="btn"
                     disabled={!accepted || busy !== null}
+                    aria-busy={busy === p._id}
                     onClick={() => startAbo(p._id)}
                   >
-                    {busy === p._id ? "..." : "Abo starten"}
+                    {busy === p._id ? "Wird geöffnet..." : "Abo starten"}
                   </button>
                 </Authenticated>
               </div>
@@ -84,24 +91,33 @@ export default function KioskPage() {
         </section>
       )}
 
-      <h3>Einzelausgaben</h3>
-      <div className="issue-grid">
-        {issues.map((i) => (
-          <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
-            {i.coverUrl ? (
-              <img src={i.coverUrl} alt={i.title} loading="lazy" />
-            ) : (
-              <div className="cover-placeholder">{i.title[0]}</div>
-            )}
-            <div className="issue-card-body">
-              <div className="title">{i.title}</div>
-              <div className="meta">{i.issueNumber ?? ""}</div>
-              <div className="price">{formatEuro(i.priceAmountCents)}</div>
-            </div>
-          </Link>
-        ))}
-        {issues.length === 0 && <p className="hint">Noch keine Ausgabe veröffentlicht.</p>}
-      </div>
+      <section>
+        <h3>Einzelausgaben</h3>
+        <p className="hint">
+          Eine gekaufte Ausgabe bleibt dauerhaft in Ihrer Bibliothek.
+        </p>
+        <div className="issue-grid">
+          {issues.map((i) => (
+            <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
+              {i.coverUrl ? (
+                <img src={i.coverUrl} alt={i.title} loading="lazy" />
+              ) : (
+                <div className="cover-placeholder">{i.title[0]}</div>
+              )}
+              <div className="issue-card-body">
+                <div className="title">{i.title}</div>
+                <div className="meta">{i.issueNumber ?? ""}</div>
+                <div className="price">{formatEuro(i.priceAmountCents)}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+        {issues.length === 0 && (
+          <div className="empty">
+            <p>Noch keine Ausgabe veröffentlicht.</p>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

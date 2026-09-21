@@ -39,8 +39,10 @@ export default function ReaderRail({ mode, position, total, label, onSeek }: Pro
     <div className="reader-rail">
       <span className="rail-label">
         {mode === "page" ? "Seite" : "Artikel"} {shown + 1} / {Math.max(total, 1)}
-        {label ? ` · ${label}` : ""}
       </span>
+      {/* Zaehler und Titel stehen getrennt: der Zaehler haelt eine feste
+          Breite, sonst wandert der Regler bei jedem Blaettern seitwaerts. */}
+      {label && <span className="rail-title">{label}</span>}
       <input
         type="range"
         min={0}

@@ -26,7 +26,7 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
   const [mergeSource, setMergeSource] = useState<Id<"articles"> | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  if (articles === undefined) return <p>Laden...</p>;
+  if (articles === undefined) return <p className="hint">Laden...</p>;
   if (articles.length === 0)
     return <p className="hint">Noch keine Artikel. Erst den Import starten.</p>;
 
@@ -43,13 +43,13 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
 
   return (
     <div className="review">
-      <div className="row">
-        <strong>{summary?.total ?? articles.length} Artikel</strong>
+      <div className="review-summary">
+        <span className="count">{summary?.total ?? articles.length} Artikel</span>
         <span className="hint">
           {summary?.approved ?? 0} freigegeben · {summary?.pending ?? 0} offen ·{" "}
           {summary?.excluded ?? 0} ausgeschlossen
         </span>
-        <button className="btn secondary" onClick={() => guard(() => approveAll({ issueId }))}>
+        <button className="btn" onClick={() => guard(() => approveAll({ issueId }))}>
           Alle offenen freigeben
         </button>
       </div>
@@ -61,10 +61,13 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
         <ul className="article-rows">
           {articles.map((a) => (
             <li key={a._id} className={a.reviewStatus}>
-              <button className="grow link-btn" onClick={() => setOpenId(a._id)}>
-                <strong>{a.order}.</strong> {a.title || "(ohne Titel)"}
-                <span className="hint">
-                  {" "}
+              <span className="num">{a.order}.</span>
+              <button
+                className={openId === a._id ? "row-title open" : "row-title"}
+                onClick={() => setOpenId(a._id)}
+              >
+                <span className="title">{a.title || "(ohne Titel)"}</span>
+                <span className="meta">
                   S. {a.pageStart + 1}
                   {a.pageEnd !== a.pageStart ? `–${a.pageEnd + 1}` : ""} ·{" "}
                   {a.charCount} Zeichen · {a.blocks.length} Blöcke
@@ -80,53 +83,55 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
                     ? "ausgeschlossen"
                     : "offen"}
               </span>
-              <button
-                className="link-btn"
-                onClick={() =>
-                  guard(() => setReview({ articleId: a._id, reviewStatus: "approved" }))
-                }
-              >
-                freigeben
-              </button>
-              <button
-                className="link-btn"
-                onClick={() =>
-                  guard(() => setReview({ articleId: a._id, reviewStatus: "excluded" }))
-                }
-              >
-                ausschliessen
-              </button>
-              {mergeSource === null ? (
-                <button className="link-btn" onClick={() => setMergeSource(a._id)}>
-                  zusammenführen ab hier
-                </button>
-              ) : mergeSource === a._id ? (
-                <button className="link-btn" onClick={() => setMergeSource(null)}>
-                  abbrechen
-                </button>
-              ) : (
+              <span className="row-actions">
                 <button
-                  className="link-btn"
+                  className="btn quiet small"
                   onClick={() =>
-                    guard(async () => {
-                      await merge({ targetId: a._id, sourceId: mergeSource! });
-                      setMergeSource(null);
-                    })
+                    guard(() => setReview({ articleId: a._id, reviewStatus: "approved" }))
                   }
                 >
-                  hierher zusammenführen
+                  Freigeben
                 </button>
-              )}
-              <button
-                className="link-btn danger"
-                onClick={() => {
-                  if (confirm(`"${a.title}" löschen?`)) {
-                    guard(() => removeArticle({ articleId: a._id }));
+                <button
+                  className="btn quiet small"
+                  onClick={() =>
+                    guard(() => setReview({ articleId: a._id, reviewStatus: "excluded" }))
                   }
-                }}
-              >
-                löschen
-              </button>
+                >
+                  Ausschliessen
+                </button>
+                {mergeSource === null ? (
+                  <button className="btn quiet small" onClick={() => setMergeSource(a._id)}>
+                    Ab hier zusammenführen
+                  </button>
+                ) : mergeSource === a._id ? (
+                  <button className="btn quiet small" onClick={() => setMergeSource(null)}>
+                    Abbrechen
+                  </button>
+                ) : (
+                  <button
+                    className="btn quiet small"
+                    onClick={() =>
+                      guard(async () => {
+                        await merge({ targetId: a._id, sourceId: mergeSource! });
+                        setMergeSource(null);
+                      })
+                    }
+                  >
+                    Hierher zusammenführen
+                  </button>
+                )}
+                <button
+                  className="btn quiet small danger"
+                  onClick={() => {
+                    if (confirm(`"${a.title}" löschen?`)) {
+                      guard(() => removeArticle({ articleId: a._id }));
+                    }
+                  }}
+                >
+                  Löschen
+                </button>
+              </span>
             </li>
           ))}
         </ul>
@@ -179,19 +184,19 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
                   />
                   <span className="block-actions">
                     <button
-                      className="link-btn"
+                      className="btn quiet small"
                       onClick={() => guard(() => moveBlock({ blockId: b._id, direction: "up" }))}
                     >
-                      hoch
+                      Hoch
                     </button>
                     <button
-                      className="link-btn"
+                      className="btn quiet small"
                       onClick={() => guard(() => moveBlock({ blockId: b._id, direction: "down" }))}
                     >
-                      runter
+                      Runter
                     </button>
                     <button
-                      className="link-btn"
+                      className="btn quiet small"
                       onClick={() =>
                         guard(async () => {
                           await split({
@@ -202,19 +207,19 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
                         })
                       }
                     >
-                      ab hier trennen
+                      Ab hier trennen
                     </button>
                     <button
-                      className="link-btn danger"
+                      className="btn quiet small danger"
                       onClick={() => guard(() => deleteBlock({ blockId: b._id }))}
                     >
-                      löschen
+                      Löschen
                     </button>
                   </span>
                 </li>
               ))}
             </ol>
-            <button className="link-btn" onClick={() => setOpenId(null)}>
+            <button className="btn secondary" onClick={() => setOpenId(null)}>
               Schliessen
             </button>
           </div>

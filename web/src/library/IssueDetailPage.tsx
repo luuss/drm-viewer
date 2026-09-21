@@ -46,7 +46,7 @@ export default function IssueDetailPage() {
         {issue.coverUrl ? (
           <img src={issue.coverUrl} alt={issue.title} />
         ) : (
-          <div className="cover-placeholder big">{issue.title[0]}</div>
+          <div className="cover-placeholder">{issue.title[0]}</div>
         )}
       </div>
       <div className="issue-info">
@@ -57,7 +57,7 @@ export default function IssueDetailPage() {
           {issue.publicationDate ? ` · ${formatDate(issue.publicationDate)}` : ""}
         </div>
         {issue.description && <p>{issue.description}</p>}
-        <div className="price big">
+        <div className="price">
           {formatEuro(issue.priceAmountCents)}
           <span className="hint"> inkl. MwSt.</span>
         </div>
@@ -81,8 +81,13 @@ export default function IssueDetailPage() {
                   (<Link to="/widerruf">Widerrufsbelehrung</Link>)
                 </span>
               </label>
-              <button className="btn" onClick={buy} disabled={busy || !accepted}>
-                {busy ? "..." : "Kaufen"}
+              <button
+                className="btn"
+                onClick={buy}
+                disabled={busy || !accepted}
+                aria-busy={busy}
+              >
+                {busy ? "Wird geöffnet..." : "Kaufen"}
               </button>
             </>
           )}

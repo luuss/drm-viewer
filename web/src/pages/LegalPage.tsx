@@ -138,9 +138,11 @@ export default function LegalPage({ doc }: { doc?: string }) {
 
   return (
     <div className="page legal">
-      <h2>{entry.title}</h2>
+      <div className="page-head">
+        <h2>{entry.title}</h2>
+      </div>
       {entry.body.map((sec, i) => (
-        <div key={i}>
+        <div className="legal-section" key={i}>
           {sec.h && <h3>{sec.h}</h3>}
           {sec.p && <p>{sec.p}</p>}
           {sec.list && (

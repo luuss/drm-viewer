@@ -54,8 +54,16 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-box">
-        <h1>E-Magazin</h1>
-        <p className="subtitle">{title}</p>
+        <div className="auth-brand">
+          Lesen<span className="amp">&amp;</span>Schenken
+          <span className="brand-sub">Digital</span>
+        </div>
+        <div className="titles">
+          <h1>{title}</h1>
+          <p className="subtitle">
+            Die Ausgaben von ZUERST! digital lesen — auf jedem Gerät.
+          </p>
+        </div>
         <form onSubmit={submit}>
           <label>
             E-Mail
@@ -106,7 +114,7 @@ export default function LoginPage() {
 
           {err && <div className="err">{err}</div>}
           {info && <div className="ok">{info}</div>}
-          <button type="submit" disabled={busy}>
+          <button type="submit" className="btn" disabled={busy} aria-busy={busy}>
             {busy
               ? "..."
               : mode === "signIn"
@@ -122,17 +130,17 @@ export default function LoginPage() {
         <div className="auth-links">
           {mode === "signIn" && (
             <>
-              <button className="link-btn" onClick={() => setMode("signUp")}>
-                Noch kein Konto? Registrieren
+              <button className="btn secondary" onClick={() => setMode("signUp")}>
+                Konto erstellen
               </button>
-              <button className="link-btn" onClick={() => setMode("reset")}>
+              <button className="btn secondary" onClick={() => setMode("reset")}>
                 Passwort vergessen
               </button>
             </>
           )}
           {mode !== "signIn" && (
-            <button className="link-btn" onClick={() => setMode("signIn")}>
-              Zurück zum Login
+            <button className="btn secondary" onClick={() => setMode("signIn")}>
+              Zurück zur Anmeldung
             </button>
           )}
         </div>

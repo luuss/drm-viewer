@@ -34,7 +34,7 @@ export default function TocDrawer({
       <aside className="toc-drawer" onClick={(e) => e.stopPropagation()}>
         <header>
           <h3>Inhalt</h3>
-          <button className="link-btn" onClick={onClose}>
+          <button className="btn quiet small" onClick={onClose}>
             Schliessen
           </button>
         </header>
@@ -56,7 +56,9 @@ export default function TocDrawer({
               >
                 <span className="label">{e.label}</span>
                 {e.pageIndex !== null && (
-                  <span className="page">{pageLabel(e.pageIndex)}</span>
+                  /* Nicht `page`: diese Klasse gehoert dem Seitenrahmen und
+                     zog die Seitenzahl auf die volle Breite der Schublade. */
+                  <span className="page-num">{pageLabel(e.pageIndex)}</span>
                 )}
               </button>
             </li>

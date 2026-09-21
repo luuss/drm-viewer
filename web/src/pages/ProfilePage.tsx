@@ -39,55 +39,59 @@ export default function ProfilePage() {
 
   return (
     <div className="page profile">
-      <h2>Profil</h2>
-      <p className="hint">
-        Angemeldet als <strong>{me.email}</strong>
-        {me.emailVerified ? " (bestätigt)" : ""}
-      </p>
+      <div className="page-head">
+        <h2>Profil</h2>
+        <p className="hint">
+          Angemeldet als <strong>{me.email}</strong>
+          {me.emailVerified ? " · E-Mail bestätigt" : " · E-Mail nicht bestätigt"}
+        </p>
+      </div>
+
+      {msg && <div className="ok">{msg}</div>}
+      {err && <div className="err">{err}</div>}
 
       <section>
         <h3>Abo</h3>
         {subStatus?.active ? (
-          <>
-            <p className="ok">Abo aktiv.</p>
-            <ul className="plain">
-              {subStatus.subscriptions.map((s) => (
-                <li key={s._id}>
+          <ul className="plain">
+            {subStatus.subscriptions.map((s) => (
+              <li key={s._id} className="sub-line">
+                <span>
                   Status {s.status}
                   {s.currentPeriodEnd
                     ? ` · läuft bis ${new Date(s.currentPeriodEnd).toLocaleDateString("de-DE")}`
                     : ""}
                   {s.cancelAtPeriodEnd ? " · gekündigt zum Laufzeitende" : ""}
-                  {!s.cancelAtPeriodEnd && (
-                    <button
-                      className="link-btn"
-                      disabled={busy}
-                      onClick={() =>
-                        guard(async () => {
-                          await cancelSub({
-                            stripeSubscriptionId: s.stripeSubscriptionId,
-                          });
-                          setMsg("Kündigung zum Laufzeitende vorgemerkt.");
-                        })
-                      }
-                    >
-                      Kündigen
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </>
+                </span>
+                {!s.cancelAtPeriodEnd && (
+                  <button
+                    className="btn secondary small"
+                    disabled={busy}
+                    onClick={() =>
+                      guard(async () => {
+                        await cancelSub({
+                          stripeSubscriptionId: s.stripeSubscriptionId,
+                        });
+                        setMsg("Kündigung zum Laufzeitende vorgemerkt.");
+                      })
+                    }
+                  >
+                    Kündigen
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
         ) : (
-          <p>Kein laufendes Abo.</p>
+          <p className="hint">Kein laufendes Abo.</p>
         )}
         <button
-          className="btn"
+          className="btn secondary"
           disabled={busy}
           onClick={() =>
             guard(async () => {
               const { url } = await portal({
-                returnUrl: `${window.location.origin}/profile`,
+                returnUrl: `${window.location.origin}/account`,
               });
               window.location.href = url;
             })
@@ -100,7 +104,7 @@ export default function ProfilePage() {
       <section>
         <h3>Name</h3>
         <form
-          className="inline-form"
+          className="inline-form short"
           onSubmit={(e) => {
             e.preventDefault();
             guard(async () => {
@@ -113,6 +117,7 @@ export default function ProfilePage() {
             value={name}
             placeholder={me.name ?? "Anzeigename"}
             onChange={(e) => setNameValue(e.target.value)}
+            aria-label="Anzeigename"
           />
           <button className="btn" disabled={busy || !name.trim()}>
             Speichern
@@ -133,9 +138,7 @@ export default function ProfilePage() {
               });
               setCurrent("");
               setNext("");
-              setMsg(
-                "Passwort geändert. Andere Geräte wurden abgemeldet.",
-              );
+              setMsg("Passwort geändert. Andere Geräte wurden abgemeldet.");
             });
           }}
         >
@@ -170,17 +173,17 @@ export default function ProfilePage() {
         <h3>Aktive Lesesitzungen</h3>
         {sessions && sessions.length > 0 ? (
           <>
-            <ul className="plain">
+            <ul className="session-list">
               {sessions.map((s) => (
                 <li key={s._id}>
                   {s.issueTitle} · seit{" "}
-                  {new Date(s.createdAt).toLocaleString("de-DE")} ·{" "}
-                  {s.tileCount} Kacheln
+                  {new Date(s.createdAt).toLocaleString("de-DE")} · {s.tileCount}{" "}
+                  Kacheln
                 </li>
               ))}
             </ul>
             <button
-              className="link-btn"
+              className="btn secondary"
               disabled={busy}
               onClick={() =>
                 guard(async () => {
@@ -193,26 +196,28 @@ export default function ProfilePage() {
             </button>
           </>
         ) : (
-          <p>Keine offenen Sitzungen.</p>
+          <p className="hint">Keine offenen Sitzungen.</p>
         )}
       </section>
 
       <section>
         <h3>Käufe</h3>
-        <ul className="plain">
-          {purchases?.map((p) => (
-            <li key={p._id}>
-              {new Date(p.createdAt).toLocaleDateString("de-DE")} ·{" "}
-              {p.title ?? p.planName ?? "Position"} ·{" "}
-              {formatEuro(p.amountCents)} ·{" "}
-              {p.status}
-            </li>
-          ))}
-          {purchases?.length === 0 && <li>Noch keine Käufe.</li>}
-        </ul>
+        {purchases && purchases.length > 0 ? (
+          <ul className="plain">
+            {purchases.map((p) => (
+              <li key={p._id}>
+                {new Date(p.createdAt).toLocaleDateString("de-DE")} ·{" "}
+                {p.title ?? p.planName ?? "Position"} · {formatEuro(p.amountCents)} ·{" "}
+                {p.status}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="hint">Noch keine Käufe.</p>
+        )}
       </section>
 
-      <section className="danger">
+      <section>
         <h3>Konto löschen</h3>
         <p className="hint">
           Löscht Konto, Freischaltungen und Lesefortschritt. Rechnungsbelege
@@ -220,7 +225,7 @@ export default function ProfilePage() {
           bitte vorher kündigen.
         </p>
         <button
-          className="link-btn danger"
+          className="btn secondary danger"
           disabled={busy}
           onClick={() => {
             if (!confirm("Konto endgültig löschen?")) return;
@@ -233,9 +238,6 @@ export default function ProfilePage() {
           Konto endgültig löschen
         </button>
       </section>
-
-      {msg && <div className="ok">{msg}</div>}
-      {err && <div className="err">{err}</div>}
     </div>
   );
 }

@@ -7,34 +7,41 @@ export default function TocEditor({ issueId }: { issueId: Id<"issues"> }) {
   const upsert = useMutation(api.toc.upsert);
   const remove = useMutation(api.toc.remove);
 
-  if (entries === undefined) return <p>Laden...</p>;
+  if (entries === undefined) return <p className="hint">Laden...</p>;
 
   return (
     <div className="toc-editor">
-      <ul className="plain">
+      {/* Jede Zeile traegt vier Angaben von sehr verschiedener Laenge. Die
+          Breiten kommen deshalb aus der Feldskala, nicht aus dem Platz, den
+          der Kasten gerade uebrig hat. */}
+      <ul className="toc-rows plain">
         {entries.map((e) => (
-          <li key={e._id}>
+          <li key={e._id} className="toc-row">
             <input
+              className="narrow"
               defaultValue={String(e.order)}
-              size={3}
+              aria-label="Reihenfolge"
               onBlur={(ev) =>
                 upsert({ entryId: e._id, issueId, order: Number(ev.target.value) })
               }
             />
             <input
               defaultValue={e.label}
+              aria-label="Beschriftung"
               onBlur={(ev) => upsert({ entryId: e._id, issueId, label: ev.target.value })}
             />
             <input
+              className="mid"
               defaultValue={e.section ?? ""}
               placeholder="Rubrik"
-              size={12}
+              aria-label="Rubrik"
               onBlur={(ev) => upsert({ entryId: e._id, issueId, section: ev.target.value })}
             />
             <input
+              className="narrow"
               defaultValue={e.pageIndex !== undefined ? String(e.pageIndex + 1) : ""}
-              placeholder="Seite"
-              size={4}
+              placeholder="S."
+              aria-label="Seite"
               onBlur={(ev) =>
                 upsert({
                   entryId: e._id,
@@ -43,16 +50,21 @@ export default function TocEditor({ issueId }: { issueId: Id<"issues"> }) {
                 })
               }
             />
-            <button className="link-btn danger" onClick={() => remove({ entryId: e._id })}>
-              löschen
+            <button
+              className="btn quiet small danger"
+              onClick={() => remove({ entryId: e._id })}
+            >
+              Löschen
             </button>
           </li>
         ))}
         {entries.length === 0 && (
-          <li className="hint">Noch kein Inhalt. Wird beim Import vorbefüllt.</li>
+          <li className="empty">
+            <p>Noch kein Inhalt. Wird beim Import vorbefüllt.</p>
+          </li>
         )}
       </ul>
-      <button className="link-btn" onClick={() => upsert({ issueId })}>
+      <button className="btn secondary" onClick={() => upsert({ issueId })}>
         Eintrag hinzufügen
       </button>
     </div>

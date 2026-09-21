@@ -156,156 +156,175 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
 
   return (
     <div className="wizard">
-      <h4>1. Quellen</h4>
-      <div className="upload-row">
-        <label className="upload">
-          Innenteil (PDF)
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) =>
-              e.target.files?.[0] && upload(e.target.files[0], "pdf", "inner")
-            }
-          />
-        </label>
-        <label className="upload">
-          Umschlag (PDF)
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) =>
-              e.target.files?.[0] && upload(e.target.files[0], "pdf", "cover")
-            }
-          />
-        </label>
-        <label className="upload">
-          Satzdatei (IDML)
-          <input
-            type="file"
-            accept=".idml"
-            onChange={(e) =>
-              e.target.files?.[0] && upload(e.target.files[0], "idml", "supplemental")
-            }
-          />
-        </label>
-        <label className="upload">
-          Archiv (INDD)
-          <input
-            type="file"
-            accept=".indd"
-            onChange={(e) =>
-              e.target.files?.[0] && upload(e.target.files[0], "indd", "archive")
-            }
-          />
-        </label>
-      </div>
-      <p className="hint">
-        Eine .indd-Datei wird nur archiviert. Für die automatische Auswertung in
-        InDesign bitte zusätzlich als IDML exportieren (Datei → Exportieren →
-        InDesign Markup).
-      </p>
-      <ul className="plain">
-        {sources?.map((s: any) => (
-          <li key={s._id}>
-            {s.filename} · {s.kind} · {s.role} · {s.pageCount ?? "?"} Seiten
-          </li>
-        ))}
-        {sources?.length === 0 && <li className="hint">Noch keine Quelle.</li>}
-      </ul>
-
-      <h4>2. Leserreihenfolge</h4>
-      <div className="inline-form">
-        <label className="consent">
-          <input
-            type="checkbox"
-            checked={coverPrintOrder}
-            onChange={(e) => setCoverPrintOrder(e.target.checked)}
-          />
-          <span>Umschlag liegt in Bogenreihenfolge vor (U4, U1, U2, U3)</span>
-        </label>
-        <label>
-          Erste Innenseite trägt Seitenzahl
-          <input
-            value={printedStart}
-            onChange={(e) => setPrintedStart(e.target.value)}
-            size={4}
-          />
-        </label>
-        <button className="btn secondary" onClick={buildProposal}>
-          Vorschlag erzeugen
-        </button>
-      </div>
-
-      {pages && (
-        <>
-          <p className="hint">
-            {pages.length} Seiten. Reihenfolge und Rollen bitte prüfen, dann
-            speichern.
-          </p>
-          <ol className="page-order">
-            {pages.slice(0, 8).map((p, i) => (
-              <li key={i}>
-                {i + 1}. {p.role} · Quelle S.{p.sourcePageIndex + 1} ·{" "}
-                {p.printedLabel ?? "—"}
-                <button className="link-btn" onClick={() => move(i, -1)}>
-                  hoch
-                </button>
-                <button className="link-btn" onClick={() => move(i, 1)}>
-                  runter
-                </button>
-              </li>
-            ))}
-            {pages.length > 8 && (
-              <li className="hint">
-                … {pages.length - 8} weitere Seiten (Innenteil in Dateireihenfolge),
-                zuletzt {pages[pages.length - 1].role}
-              </li>
-            )}
-          </ol>
-          <button
-            className="btn"
-            disabled={busy !== null}
-            onClick={async () => {
-              setErr(null);
-              try {
-                const n = await setOrder({ issueId, pages });
-                setMsg(`${n} Seiten gespeichert`);
-              } catch (e: any) {
-                setErr(cleanError(e));
+      {/* Jeder Schritt ist ein eigener Abschnitt mit fester Luecke. Vorher
+          standen Ueberschrift, Felder und Hinweise aller drei Schritte in
+          einem Stapel und waren nicht auseinanderzuhalten. */}
+      <section>
+        <h4>1. Quellen</h4>
+        <div className="upload-row">
+          <label className="upload">
+            Innenteil (PDF)
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) =>
+                e.target.files?.[0] && upload(e.target.files[0], "pdf", "inner")
               }
-            }}
-          >
-            Reihenfolge speichern
-          </button>
-        </>
-      )}
+            />
+          </label>
+          <label className="upload">
+            Umschlag (PDF)
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) =>
+                e.target.files?.[0] && upload(e.target.files[0], "pdf", "cover")
+              }
+            />
+          </label>
+          <label className="upload">
+            Satzdatei (IDML)
+            <input
+              type="file"
+              accept=".idml"
+              onChange={(e) =>
+                e.target.files?.[0] && upload(e.target.files[0], "idml", "supplemental")
+              }
+            />
+          </label>
+          <label className="upload">
+            Archiv (INDD)
+            <input
+              type="file"
+              accept=".indd"
+              onChange={(e) =>
+                e.target.files?.[0] && upload(e.target.files[0], "indd", "archive")
+              }
+            />
+          </label>
+        </div>
+        <p className="hint">
+          Eine .indd-Datei wird nur archiviert. Für die automatische Auswertung in
+          InDesign bitte zusätzlich als IDML exportieren (Datei → Exportieren →
+          InDesign Markup).
+        </p>
+        <ul className="source-list">
+          {sources?.map((s: any) => (
+            <li key={s._id}>
+              <span className="badge">{s.role}</span>
+              <span className="grow">{s.filename}</span>
+              <span className="muted">
+                {s.kind} · {s.pageCount ?? "?"} Seiten
+              </span>
+            </li>
+          ))}
+          {sources?.length === 0 && (
+            <li className="empty">Noch keine Quelle hochgeladen.</li>
+          )}
+        </ul>
+      </section>
 
-      <h4>3. Aufbereitung starten</h4>
-      <p className="hint">
-        {existingPages?.length ?? 0} Seiten hinterlegt. Der Auftrag rendert die
-        Seiten, liest den Text und legt Artikelentwürfe an.
-      </p>
-      <p className="hint">
-        Ein erneuter Lauf ersetzt alle abgeleiteten Daten in einem Zug —
-        einschließlich redaktioneller Korrekturen. Bei einer veröffentlichten
-        Ausgabe bleiben die Seiten sichtbar, die Artikel stehen danach wieder
-        auf offen und müssen neu entschieden werden.
-      </p>
-      <button
-        className="btn"
-        disabled={busy !== null || (existingPages?.length ?? 0) === 0}
-        onClick={async () => {
-          setErr(null);
-          try {
-            await enqueue({ issueId, kind: "full" });
-            setMsg("Auftrag eingestellt. Der Worker übernimmt ihn in Kürze.");
-          } catch (e: any) {
-            setErr(cleanError(e) ?? "Fehler");
-          }
-        }}
-      >
-        Import starten
-      </button>
+      <section>
+        <h4>2. Leserreihenfolge</h4>
+        <div className="order-row">
+          <label className="consent">
+            <input
+              type="checkbox"
+              checked={coverPrintOrder}
+              onChange={(e) => setCoverPrintOrder(e.target.checked)}
+            />
+            <span>Umschlag liegt in Bogenreihenfolge vor (U4, U1, U2, U3)</span>
+          </label>
+          <label className="narrow-field">
+            Erste Innenseite trägt Seitenzahl
+            <input
+              value={printedStart}
+              onChange={(e) => setPrintedStart(e.target.value)}
+              inputMode="numeric"
+            />
+          </label>
+          <button className="btn" onClick={buildProposal}>
+            Vorschlag erzeugen
+          </button>
+        </div>
+
+        {pages && (
+          <>
+            <p className="hint">
+              {pages.length} Seiten. Reihenfolge und Rollen bitte prüfen, dann
+              speichern.
+            </p>
+            <ol className="page-order">
+              {pages.slice(0, 8).map((p, i) => (
+                <li key={i}>
+                  {i + 1}. {p.role} · Quelle S.{p.sourcePageIndex + 1} ·{" "}
+                  {p.printedLabel ?? "—"}
+                  <span className="row">
+                    <button className="btn quiet small" onClick={() => move(i, -1)}>
+                      Hoch
+                    </button>
+                    <button className="btn quiet small" onClick={() => move(i, 1)}>
+                      Runter
+                    </button>
+                  </span>
+                </li>
+              ))}
+              {pages.length > 8 && (
+                <li className="hint">
+                  … {pages.length - 8} weitere Seiten (Innenteil in Dateireihenfolge),
+                  zuletzt {pages[pages.length - 1].role}
+                </li>
+              )}
+            </ol>
+            <button
+              className="btn"
+              disabled={busy !== null}
+              aria-busy={busy !== null}
+              onClick={async () => {
+                setErr(null);
+                try {
+                  const n = await setOrder({ issueId, pages });
+                  setMsg(`${n} Seiten gespeichert`);
+                } catch (e: any) {
+                  setErr(cleanError(e));
+                }
+              }}
+            >
+              Reihenfolge speichern
+            </button>
+          </>
+        )}
+      </section>
+
+      <section>
+        <h4>3. Aufbereitung starten</h4>
+        <p className="hint">
+          {existingPages?.length ?? 0} Seiten hinterlegt. Der Auftrag rendert die
+          Seiten, liest den Text und legt Artikelentwürfe an.
+        </p>
+        <p className="hint">
+          Ein erneuter Lauf ersetzt alle abgeleiteten Daten in einem Zug —
+          einschließlich redaktioneller Korrekturen. Bei einer veröffentlichten
+          Ausgabe bleiben die Seiten sichtbar, die Artikel stehen danach wieder
+          auf offen und müssen neu entschieden werden.
+        </p>
+        <button
+          className="btn"
+          disabled={busy !== null || (existingPages?.length ?? 0) === 0}
+          aria-busy={busy !== null}
+          onClick={async () => {
+            setErr(null);
+            try {
+              await enqueue({ issueId, kind: "full" });
+              setMsg("Auftrag eingestellt. Der Worker übernimmt ihn in Kürze.");
+            } catch (e: any) {
+              setErr(cleanError(e) ?? "Fehler");
+            }
+          }}
+        >
+          Import starten
+        </button>
+      </section>
 
       {busy && <div className="hint">{busy}...</div>}
       {msg && <div className="ok">{msg}</div>}

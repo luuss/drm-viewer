@@ -10,21 +10,26 @@ export default function LibraryPage() {
   if (issues.length === 0) {
     return (
       <div className="page">
-        <h2>Meine Ausgaben</h2>
-        <p className="hint">
-          Noch keine Ausgabe freigeschaltet. Im Kiosk finden Sie die verfügbaren
-          Hefte.
-        </p>
-        <Link className="btn" to="/kiosk">
-          Zum Kiosk
-        </Link>
+        <div className="page-head">
+          <h2>Meine Ausgaben</h2>
+          <p className="hint">Freigeschaltete Hefte, dauerhaft lesbar.</p>
+        </div>
+        <div className="empty">
+          <p>Noch keine Ausgabe freigeschaltet.</p>
+          <Link className="btn" to="/kiosk">
+            Zum Kiosk
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="page">
-      <h2>Meine Ausgaben</h2>
+      <div className="page-head">
+        <h2>Meine Ausgaben</h2>
+        <p className="hint">Freigeschaltete Hefte, dauerhaft lesbar.</p>
+      </div>
       <div className="issue-grid">
         {issues.map((i) => (
           <Link key={i._id} to={`/reader/${i._id}`} className="issue-card">
@@ -40,11 +45,18 @@ export default function LibraryPage() {
                 {i.pageCount} Seiten
               </div>
               <div className="cta">
-                {i.progress
-                  ? `Weiterlesen · ${
-                      i.progress.mode === "article" ? "Artikel" : "Seite " + (i.progress.pageIndex + 1)
-                    } · ${formatDate(i.progress.updatedAt)}`
-                  : "Lesen"}
+                {i.progress ? (
+                  <>
+                    <span className="go">Weiterlesen</span>
+                    <span className="where">
+                      {i.progress.mode === "article"
+                        ? "Artikel"
+                        : `Seite ${i.progress.pageIndex + 1} von ${i.pageCount}`}
+                    </span>
+                  </>
+                ) : (
+                  <span className="go">Lesen</span>
+                )}
               </div>
             </div>
           </Link>

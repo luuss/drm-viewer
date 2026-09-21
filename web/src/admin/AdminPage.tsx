@@ -52,23 +52,29 @@ export default function AdminPage() {
 
   return (
     <div className="page admin">
-      <h2>Redaktion</h2>
-      <p className="hint">
-        Angemeldet als <strong>{me.email}</strong> ({me.roles.join(", ")}).
-      </p>
+      <div className="page-head">
+        <h2>Redaktion</h2>
+        <p className="hint">
+          Angemeldet als <strong>{me.email}</strong> · {me.roles.join(", ")}
+        </p>
+      </div>
+
+      {msg && <div className="ok">{msg}</div>}
+      {err && <div className="err">{err}</div>}
 
       <section>
         <h3>Titel</h3>
-        <ul className="plain">
+        <ul className="chip-list">
           {publications?.map((p) => (
             <li key={p._id}>
-              {p.name} · {p.slug} {p.isActive ? "" : "· inaktiv"}
+              {p.name} <span className="muted">/{p.slug}</span>
+              {p.isActive ? "" : " · inaktiv"}
             </li>
           ))}
         </ul>
         {me.isAdmin && (
           <form
-            className="inline-form"
+            className="inline-form short"
             onSubmit={(e) => {
               e.preventDefault();
               const name = (e.currentTarget.elements.namedItem("name") as HTMLInputElement)
@@ -77,7 +83,7 @@ export default function AdminPage() {
             }}
           >
             <input name="name" placeholder="Neuer Titel, z.B. ZUERST!" required />
-            <button className="btn secondary">Anlegen</button>
+            <button className="btn">Anlegen</button>
           </form>
         )}
       </section>
@@ -127,58 +133,67 @@ export default function AdminPage() {
             value={issueNumber}
             onChange={(e) => setIssueNumber(e.target.value)}
             placeholder="Heftnummer"
-            size={8}
+            className="narrow"
           />
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            required
-            size={6}
-          />
+          <div className="money">
+            <span>€</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              required
+              aria-label="Preis in Euro"
+            />
+          </div>
           <button className="btn">Anlegen</button>
         </form>
       </section>
-
-      {msg && <div className="ok">{msg}</div>}
-      {err && <div className="err">{err}</div>}
 
       <section>
         <h3>Ausgaben</h3>
         <ul className="admin-issues">
           {issues?.map((i) => (
             <li key={i._id}>
-              <div className="row">
-                <span className="grow">
-                  <strong>{i.title}</strong>
-                  {i.issueNumber ? ` · ${i.issueNumber}` : ""} · {i.pageCount} Seiten ·{" "}
-                  {formatEuro(i.priceAmountCents)}
-                  <span className="hint">
-                    {" "}
-                    · {i.isPublished ? "veröffentlicht" : "unveröffentlicht"} ·{" "}
-                    {i.approvedArticles}/{i.articleCount} freigegeben
-                    {i.pendingArticles > 0 ? ` · ${i.pendingArticles} offen` : ""}
-                    {i.stripePriceId ? " · Preis in Stripe" : ""}
-                    {i.lastJob
-                      ? ` · Auftrag ${i.lastJob.status}${
-                          i.lastJob.message ? `: ${i.lastJob.message}` : ""
-                        }`
-                      : ""}
+              <div className="issue-line">
+                <div className="name">
+                  {i.title}
+                  {i.issueNumber ? <span className="number"> {i.issueNumber}</span> : null}
+                </div>
+                <div className="facts">
+                  <span className={`badge ${i.isPublished ? "live" : ""}`}>
+                    {i.isPublished ? "veröffentlicht" : "Entwurf"}
                   </span>
-                </span>
+                  <span>{i.pageCount} Seiten</span>
+                  <span className="sep">·</span>
+                  <span>{formatEuro(i.priceAmountCents)}</span>
+                  <span className="sep">·</span>
+                  <span>
+                    {i.approvedArticles}/{i.articleCount} freigegeben
+                  </span>
+                  {i.pendingArticles > 0 && (
+                    <span className="badge pending">{i.pendingArticles} offen</span>
+                  )}
+                  {i.stripePriceId && <span className="badge">Stripe</span>}
+                  {i.lastJob && (
+                    <span className={`badge ${i.lastJob.status === "error" ? "excluded" : ""}`}>
+                      Import: {i.lastJob.status}
+                    </span>
+                  )}
+                </div>
+                {i.lastJob?.message && <div className="job-note">{i.lastJob.message}</div>}
               </div>
               <div className="row actions">
                 <button
-                  className="link-btn"
+                  className={openIssue === i._id ? "btn secondary small" : "btn small"}
                   onClick={() => setOpenIssue(openIssue === i._id ? null : i._id)}
                 >
-                  {openIssue === i._id ? "schliessen" : "bearbeiten"}
+                  {openIssue === i._id ? "Schliessen" : "Bearbeiten"}
                 </button>
                 {me.isPublisher && (
                   <button
-                    className="link-btn"
+                    className="btn secondary small"
                     onClick={() =>
                       guard(
                         () => setPublished({ issueId: i._id, isPublished: !i.isPublished }),
@@ -186,11 +201,11 @@ export default function AdminPage() {
                       )
                     }
                   >
-                    {i.isPublished ? "zurückziehen" : "veröffentlichen"}
+                    {i.isPublished ? "Zurückziehen" : "Veröffentlichen"}
                   </button>
                 )}
                 <button
-                  className="link-btn"
+                  className="btn secondary small"
                   onClick={() =>
                     guard(
                       () =>
@@ -202,25 +217,25 @@ export default function AdminPage() {
                     )
                   }
                 >
-                  {i.includedInSubscription ? "aus Abo nehmen" : "ins Abo geben"}
+                  {i.includedInSubscription ? "Aus Abo nehmen" : "Ins Abo geben"}
                 </button>
                 {me.isPublisher && (
                   <button
-                    className="link-btn"
+                    className="btn secondary small"
                     onClick={() => guard(() => ensurePrice({ issueId: i._id }), "Preis angelegt")}
                   >
                     Stripe-Preis
                   </button>
                 )}
                 <button
-                  className="link-btn"
+                  className="btn secondary small"
                   onClick={() => guard(() => grantSelf({ issueId: i._id }), "Freigeschaltet")}
                 >
-                  mir freischalten
+                  Mir freischalten
                 </button>
                 {i.lastJob?.status === "error" && (
                   <button
-                    className="link-btn"
+                    className="btn secondary small"
                     onClick={() => guard(() => retryJob({ jobId: i.lastJob!._id }), "Erneut eingestellt")}
                   >
                     Auftrag wiederholen
@@ -228,14 +243,14 @@ export default function AdminPage() {
                 )}
                 {me.isPublisher && (
                   <button
-                    className="link-btn danger"
+                    className="btn secondary small danger"
                     onClick={() => {
                       if (confirm(`"${i.title}" endgültig löschen?`)) {
                         guard(() => removeIssue({ issueId: i._id }), "Gelöscht");
                       }
                     }}
                   >
-                    löschen
+                    Löschen
                   </button>
                 )}
               </div>
@@ -269,7 +284,11 @@ export default function AdminPage() {
               )}
             </li>
           ))}
-          {issues?.length === 0 && <li className="hint">Noch keine Ausgabe.</li>}
+          {issues?.length === 0 && (
+            <li className="empty">
+              <p>Noch keine Ausgabe angelegt.</p>
+            </li>
+          )}
         </ul>
       </section>
     </div>

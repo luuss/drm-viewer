@@ -234,9 +234,15 @@ export default function ReaderShell() {
   }
   if (!access) return <div className="centered">Kein Zugriff auf diese Ausgabe.</div>;
 
+  // Im Seitenmodus zaehlt die untere Leiste schon die laufende Nummer. Die
+  // gedruckte Seitenzahl kommt nur dazu, wenn sie davon abweicht — auf dem
+  // Umschlag steht U1, nicht 1. Sonst stand dort zweimal dieselbe Zahl.
+  const printed = pages?.[pageIndex]?.printedLabel ?? "";
   const label =
     mode === "page"
-      ? (pages?.[pageIndex]?.printedLabel ?? "")
+      ? printed === String(pageIndex + 1)
+        ? ""
+        : printed
       : (articleList[articleIndex]?.title ?? "").slice(0, 40);
 
   return (
@@ -261,7 +267,7 @@ export default function ReaderShell() {
       }}
     >
       <header className="reader-bar">
-        <button className="link-btn" onClick={() => navigate("/library")}>
+        <button className="btn quiet small" onClick={() => navigate("/library")}>
           Bibliothek
         </button>
         <span className="issue-title">{issue?.title}</span>
@@ -280,7 +286,7 @@ export default function ReaderShell() {
             Artikel
           </button>
         </div>
-        <button className="link-btn" onClick={() => setTocOpen(true)}>
+        <button className="btn quiet small" onClick={() => setTocOpen(true)}>
           Inhalt
         </button>
       </header>

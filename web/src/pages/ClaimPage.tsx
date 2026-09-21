@@ -28,7 +28,7 @@ export default function ClaimPage() {
     return (
       <div className="centered">
         <h2>Link abgelaufen</h2>
-        <p>Bitte wende dich an den Support.</p>
+        <p>Bitte wenden Sie sich an den Support.</p>
       </div>
     );
   }
@@ -73,10 +73,10 @@ export default function ClaimPage() {
 
         <Authenticated>
           <p className="hint">
-            Das Buch wird mit deinem Account verknüpft und ist danach dauerhaft
-            in deiner Bibliothek.
+            Das Buch wird mit Ihrem Konto verknüpft und ist danach dauerhaft
+            in Ihrer Bibliothek.
           </p>
-          <button className="btn" onClick={doClaim} disabled={busy}>
+          <button className="btn" onClick={doClaim} disabled={busy} aria-busy={busy}>
             {busy ? "..." : "Jetzt freischalten"}
           </button>
           {err && <div className="err">{err}</div>}
@@ -84,9 +84,9 @@ export default function ClaimPage() {
 
         <Unauthenticated>
           <p className="hint">
-            Logge dich ein oder erstelle einen Account, um das Buch zu deiner
-            Bibliothek hinzuzufügen. Der Link ist einmalig einlösbar —
-            geteilte Links funktionieren danach nicht mehr.
+            Melden Sie sich an oder legen Sie ein Konto an, um das Buch in Ihre
+            Bibliothek aufzunehmen. Der Link ist einmalig einlösbar — geteilte
+            Links funktionieren danach nicht mehr.
           </p>
           <InlineAuth defaultEmail={info.email} onDone={doClaim} />
           {err && <div className="err">{err}</div>}
@@ -144,12 +144,12 @@ function InlineAuth({
           minLength={8}
         />
       </label>
-      <button type="submit" disabled={busy} className="btn">
+      <button type="submit" disabled={busy} aria-busy={busy} className="btn">
         {busy ? "..." : mode === "signIn" ? "Einloggen & einlösen" : "Account erstellen & einlösen"}
       </button>
       <button
         type="button"
-        className="link-btn"
+        className="btn secondary"
         onClick={() => setMode(mode === "signIn" ? "signUp" : "signIn")}
       >
         {mode === "signIn" ? "Account erstellen" : "Schon registriert? Einloggen"}
