@@ -487,11 +487,14 @@ def _body_word_size(words_by_page: dict[int, list[dict]]) -> float:
     return counter.most_common(1)[0][0] if counter else 10.0
 
 
-def _words_on_visible_page(page, words: list[dict]) -> tuple[list[dict], float, float]:
+def _words_on_visible_page(
+    page, words: list[dict], half: str | None = None
+) -> tuple[list[dict], float, float]:
     """Woerter auf die sichtbare TrimBox verschieben und daran abschneiden.
 
     pdfplumber verwendet bereits Koordinaten mit Ursprung oben links. Seine
-    TrimBox ist deshalb ebenfalls (links, oben, rechts, unten).
+    TrimBox ist deshalb ebenfalls (links, oben, rechts, unten). Bei einer
+    Umschlag-Doppelseite ist nur die mit `half` benannte Haelfte die Seite.
     """
     box = page.trimbox or page.cropbox or page.mediabox or page.bbox
     left, top, right, bottom = (float(value) for value in box)
@@ -500,6 +503,15 @@ def _words_on_visible_page(page, words: list[dict]) -> tuple[list[dict], float, 
     if width <= 0 or height <= 0:
         left, top, right, bottom = (0.0, 0.0, float(page.width), float(page.height))
         width, height = float(page.width), float(page.height)
+    if half:
+        middle = left + width / 2
+        if half == "left":
+            right = middle
+        elif half == "right":
+            left = middle
+        else:
+            raise ValueError(f"Unbekannte Seitenhaelfte: {half!r}")
+        width = right - left
 
     visible: list[dict] = []
     for word in words:
@@ -520,6 +532,7 @@ def extract_images(
     page_map: list[tuple[int, int]],
     words_by_page: dict[int, list[tuple[float, float, float, float]]],
     body_words_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
+    halves: dict[int, str] | None = None,
 ) -> list[SourceImage]:
     """Bildbereiche aller Seiten bestimmen.
 
@@ -528,7 +541,7 @@ def extract_images(
     bleibt nur die Klammer ueber alle Seiten, weil Seitenschmuck erst im
     Vergleich mehrerer Seiten auffaellt.
     """
-    raw_by_page, trims = read_raw_images(pdf_bytes, page_map)
+    raw_by_page, trims = read_raw_images(pdf_bytes, page_map, halves)
     regions: dict[int, list[tuple]] = {}
     for canonical_index, raw_images in raw_by_page.items():
         words = words_by_page.get(canonical_index, [])
@@ -598,10 +611,14 @@ def attach_captions(images: list[SourceImage], blocks: list[SourceBlock]) -> Non
 def extract_pdf_pages(
     pdf_bytes: bytes,
     page_map: list[tuple[int, int]],
+    halves: dict[int, str] | None = None,
 ) -> tuple[list[SourceBlock], list[SourceImage]]:
     """Bloecke und Bilder fuer die angegebenen Seiten lesen.
 
     `page_map` bildet Quellseite (0-basiert) auf kanonische Leserseite ab.
+    `halves` nennt je kanonischer Seite die Haelfte einer Doppelseite
+    ("left" oder "right"), die als Leserseite gilt; fehlt der Eintrag, zaehlt
+    die ganze Quellseite.
     """
     import io
 
@@ -610,10 +627,11 @@ def extract_pdf_pages(
     # Hintergruende von echten Bildern zu unterscheiden.
     raw_words_by_page: dict[int, list[dict]] = {}
     page_sizes: dict[int, tuple[float, float]] = {}
-    wanted = dict(page_map)
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for source_index, canonical_index in sorted(wanted.items()):
+        # Kein dict(page_map): eine Doppelseite des Umschlags ist eine
+        # Quellseite, die zwei Leserseiten liefert (U4 links, U1 rechts).
+        for source_index, canonical_index in sorted(page_map):
             if source_index >= len(pdf.pages):
                 continue
             page = pdf.pages[source_index]
@@ -626,7 +644,9 @@ def extract_pdf_pages(
             # Winzige Zeichen sind gedrehte Bildnachweise am Rand. Sie zerreissen
             # sonst die Zeilen des Fliesstextes daneben.
             words = [w for w in words if float(w.get("size", 0) or 0) >= 4.5]
-            words, page_width, page_height = _words_on_visible_page(page, words)
+            words, page_width, page_height = _words_on_visible_page(
+                page, words, (halves or {}).get(canonical_index)
+            )
             raw_words_by_page[canonical_index] = words
             page_sizes[canonical_index] = (page_width, page_height)
             starts = _column_starts(words)
@@ -688,7 +708,9 @@ def extract_pdf_pages(
                 satz.append(rect)
         words_by_page[canonical_index] = alle
         body_words_by_page[canonical_index] = satz
-    images = extract_images(pdf_bytes, page_map, words_by_page, body_words_by_page)
+    images = extract_images(
+        pdf_bytes, page_map, words_by_page, body_words_by_page, halves
+    )
     return blocks, images
 
 

@@ -41,11 +41,16 @@ nichts weg, eine Pause holt nichts nach.
 
 ## Für die Redaktion
 
-Titel und Ausgaben anlegen, Quellen hochladen (Innenteil-PDF, Umschlag-PDF,
-optional IDML, INDD als Archiv), Leserreihenfolge bestätigen, Aufbereitung
-starten, Artikel prüfen (zusammenführen, an Blockgrenzen trennen, Blöcke
-verschieben, freigeben oder ausschließen), Inhaltsverzeichnis pflegen, Ausgabe
-veröffentlichen. Veröffentlichen geht erst, wenn jeder Artikel entschieden ist.
+Titel und Ausgaben anlegen, Quellen hochladen (Innenteil-PDF, Umschlag-PDF als
+Einzelseiten oder Doppelseiten, optional IDML, INDD als Archiv),
+Leserreihenfolge bestätigen, Aufbereitung starten, Artikel prüfen
+(zusammenführen, an Blockgrenzen trennen, Blöcke verschieben, freigeben oder
+ausschließen), Inhaltsverzeichnis pflegen, Ausgabe veröffentlichen.
+Veröffentlichen geht erst, wenn jeder Artikel entschieden ist.
+
+Für Titel mit fester Heftstruktur (ZUERST!, Deutsche Militärzeitschrift) kennt
+der Import Publikationsprofile; alternativ legt `scripts/heft-anlegen.py` ein
+Heft samt Importauftrag von der Kommandozeile an.
 
 ## Entwicklung
 

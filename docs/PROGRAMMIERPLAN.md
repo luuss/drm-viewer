@@ -156,8 +156,10 @@ nur der Ablageort.
 1. Redaktion legt Ausgabe an und laedt Quellen hoch (Innenteil-PDF,
    Umschlag-PDF, optional IDML, optional INDD als Archiv).
 2. Wizard schlaegt die kanonische Seitenreihenfolge vor: Umschlag in
-   Bogenreihenfolge wird zu U1, U2, Innenteil, U3, U4 sortiert. Der Vorschlag
-   ist aenderbar, nichts ist hartcodiert.
+   Bogenreihenfolge (vier Einzelseiten) oder als zwei Doppelseiten wird zu
+   U1, U2, Innenteil, U3, U4 sortiert; bei Doppelseiten traegt jede Leserseite
+   die Haelfte ihrer Quellseite (`sourceHalf`). Der Vorschlag ist aenderbar,
+   nichts ist hartcodiert.
 3. Auftrag geht als `queued` in `importJobs`.
 4. Worker holt den Auftrag mit Lease, rendert jede kanonische Seite mit PDFium,
    erzeugt Kachelpyramide, legt Vorschaubild und Cover an.
@@ -247,7 +249,8 @@ getan hat.
 * Python (`pytest`): Trennstriche, Initialen, Beiwerk, Spalten, mehrseitige
   Artikel, IDML-Fixture inklusive Pfadausbruch, kanonische Seitenreihenfolge,
   KI-Stufe standardmaessig aus.
-* Ende zu Ende am echten Heft ZUERST! 3/2026.
+* Ende zu Ende an den echten Heften ZUERST! 3/2026 (Umschlag als
+  Einzelseiten) und DMZ 170 (Umschlag als Doppelseiten, eigenes Profil).
 * Typecheck und Build fuer Web und Convex, `docker compose config`.
 
 ## 15. Akzeptanzkriterien

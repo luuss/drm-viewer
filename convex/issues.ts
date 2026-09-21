@@ -29,17 +29,22 @@ export const listPublished = query({
       (a, b) => (b.publicationDate ?? b.createdAt) - (a.publicationDate ?? a.createdAt),
     );
     return Promise.all(
-      filtered.map(async (i) => ({
-        _id: i._id,
-        title: i.title,
-        slug: i.slug,
-        issueNumber: i.issueNumber ?? null,
-        description: i.description ?? null,
-        pageCount: i.pageCount,
-        priceAmountCents: i.priceAmountCents,
-        publicationDate: i.publicationDate ?? null,
-        coverUrl: await assetUrl(ctx, i.coverAssetId),
-      })),
+      filtered.map(async (i) => {
+        const publication = await ctx.db.get(i.publicationId);
+        return {
+          _id: i._id,
+          title: i.title,
+          slug: i.slug,
+          issueNumber: i.issueNumber ?? null,
+          description: i.description ?? null,
+          pageCount: i.pageCount,
+          priceAmountCents: i.priceAmountCents,
+          publicationDate: i.publicationDate ?? null,
+          publicationName: publication?.name ?? null,
+          publicationSlug: publication?.slug ?? null,
+          coverUrl: await assetUrl(ctx, i.coverAssetId),
+        };
+      }),
     );
   },
 });
@@ -107,12 +112,14 @@ export const myLibrary = query({
           q.eq("userId", userId as Id<"users">).eq("issueId", issue._id),
         )
         .unique();
+      const publication = await ctx.db.get(issue.publicationId);
       out.push({
         _id: issue._id,
         title: issue.title,
         issueNumber: issue.issueNumber ?? null,
         pageCount: issue.pageCount,
         articleCount: issue.articleCount ?? 0,
+        publicationName: publication?.name ?? null,
         coverUrl: await assetUrl(ctx, issue.coverAssetId),
         progress: progress
           ? {

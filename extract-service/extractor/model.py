@@ -93,7 +93,10 @@ class TocHint:
 
     label: str
     page_index: int
-    toc_page_index: int
+    # Seite des gedruckten Inhaltsverzeichnisses mit der Klickflaeche. None,
+    # wenn der Eintrag dort nicht steht (etwa ein Editorial, das ein Profil
+    # nur aus der Heftkonvention kennt): dann gibt es keine Trefferflaeche.
+    toc_page_index: int | None
     x0: float
     y0: float
     x1: float

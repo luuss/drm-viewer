@@ -11,19 +11,33 @@ die Ausgabe veroeffentlichen.
 | Innenteil-PDF | originalgetreue Seiten und Textebene | ja |
 | Umschlag-PDF | Titel, U2, U3, Rueckseite | nein |
 | IDML | Artikelstruktur aus dem Satz | nein, aber empfohlen |
-| INDD | Archiv | nein |
+| INDD | Archiv, mehrere moeglich | nein |
 
-Eine `.indd`-Datei wird nur abgelegt, nicht ausgewertet. Fuer die automatische
+Eine `.indd`-Datei wird nur abgelegt, nicht ausgewertet. Innenteil und
+Umschlag haben in der Regel je eine eigene; beide werden behalten, nur eine
+Datei gleichen Namens ersetzt ihre Vorgaengerin. Fuer die automatische
 Auswertung braucht es den IDML-Export aus InDesign (Datei → Exportieren →
 InDesign Markup).
 
+Die Seitenzahl eines PDF bestimmt der Importdialog beim Hochladen selbst.
+Gelingt das nicht (komprimierte Objektstroeme), bleibt das Feld leer und die
+Redaktion traegt sie in der Quellenliste ein.
+
 ## 2. Leserreihenfolge
 
-Ein Umschlag kommt aus der Druckvorstufe in Bogenreihenfolge: die Datei beginnt
-mit der Rueckseite (U4), dann folgt der Titel (U1), danach U2 und U3. Der
-Importdialog schlaegt daraus die Lesereihenfolge U1, U2, Innenteil, U3, U4 vor
-und setzt die gedruckten Seitenzahlen ab dem angegebenen Startwert — beim
-Musterheft beginnt der Innenteil bei 3.
+Ein Umschlag kommt aus der Druckvorstufe in einer von zwei Formen:
+
+* **Vier Einzelseiten in Bogenreihenfolge** (ZUERST!): die Datei beginnt mit
+  der Rueckseite (U4), dann folgt der Titel (U1), danach U2 und U3.
+* **Zwei Doppelseiten** (DMZ): der erste Bogen zeigt links U4 und rechts U1,
+  der zweite links U2 und rechts U3. Jede Leserseite ist dann eine Haelfte
+  der Quellseite (`issuePages.sourceHalf`). Der Worker rendert und liest nur
+  diese Haelfte des Netzformats; eine zerschnittene Datei entsteht nicht.
+
+Der Importdialog erkennt die Form an der Seitenzahl der Umschlagdatei (2 oder
+4) und laesst sie ausdruecklich waehlen. Daraus schlaegt er die Lesereihenfolge
+U1, U2, Innenteil, U3, U4 vor und setzt die gedruckten Seitenzahlen ab dem
+angegebenen Startwert — bei beiden Musterheften beginnt der Innenteil bei 3.
 
 Der Vorschlag ist nur ein Vorschlag. Nichts davon ist fest verdrahtet, die
 Redaktion bestaetigt oder korrigiert ihn. Ergebnis sind `issuePages`: die
@@ -58,12 +72,29 @@ der Seitenmodus durchgehend nutzbar; die Artikel stehen danach wieder auf
 `pending` und muessen neu entschieden werden, bevor sie im Artikelmodus
 erscheinen.
 
+### Publikationsprofile
+
+Die allgemeine Erkennung kennt kein Heft. Fuer Titel mit fester Heftstruktur
+gibt es Profile in `extract-service/extractor/publication_profiles.py`; welches
+greift, entscheidet die Kennung (`slug`) der Publikation:
+
+| Kennung | Konvention |
+|---|---|
+| `zuerst` | Seite 3 Editorial, Seite 4 Inhalt, Rubriken als Versalien im Kolumnentitel; das Inhaltsverzeichnis liefert Artikelanker und Klickflaechen |
+| `dmz` | Seite 3 Editorial, Seite 4 Inhalt in zwei Spalten (fette Seitenzahl, Rubrik 13 pt, Titel 11,5 pt); Kolumnentitel in Gross- und Kleinschreibung, 16 pt fett; Rubrikseiten wie Kalenderblatt, Nachrichten, Buchbesprechungen werden an ihren Ueberschriften getrennt |
+
+Beide Profile entfernen Umschlag und Inhaltsseite aus dem Artikelmodus und
+bauen Artikel entlang des gedruckten Inhaltsverzeichnisses. Ein Editorial, das
+im Verzeichnis nicht steht, bekommt einen eigenen Eintrag ohne Klickflaeche.
+
 ### Was der Parser kann und was nicht
 
-Am Musterheft (ZUERST! 3/2026, 84 Seiten) entstehen rund 60 bis 75 Artikel mit
+Am Musterheft ZUERST! 3/2026 (84 Seiten) entstehen rund 60 bis 75 Artikel mit
 sauberen Ueberschriften und zusammenhaengendem Fliesstext ueber Seitengrenzen.
-Nicht jede Grenze sitzt: bei Bildstrecken und Kaesten trennt die Automatik
-gelegentlich zu fein. Dafuer gibt es die Pruefansicht.
+Am Musterheft DMZ 170 (84 Seiten, A4) sind es rund 43 Artikel: 25 Eintraege
+des Inhaltsverzeichnisses plus Editorial, dazu die Einzelmeldungen der
+Rubrikseiten. Nicht jede Grenze sitzt: bei Bildstrecken und Kaesten trennt die
+Automatik gelegentlich zu fein. Dafuer gibt es die Pruefansicht.
 
 Jeder Artikel bekommt ein `confidence`-Mass. Alles unter 0,8 ist ein Hinweis,
 zuerst dort hinzuschauen.
@@ -128,3 +159,27 @@ wenn kein Artikel mehr offen ist.
 cd extract-service
 .venv/bin/python -m pytest tests -q
 ```
+
+Die Tests am echten Heft laufen, wenn die Druckdateien im nicht eingecheckten
+Ordner `hefte test/` im Wurzelverzeichnis des Repositories liegen (`zuerst 3-2026 innenteil.pdf`,
+`umschlag zuerst 3-2026.pdf`, `dmz 170 innenteil.pdf`, `umschlag dmz 170.pdf`);
+sonst werden sie uebersprungen.
+
+## Heft auf der Kommandozeile anlegen
+
+`scripts/heft-anlegen.py` laedt die Dateien in die Convex-Ablage, legt Titel,
+Ausgabe, Quellen und Leserreihenfolge an, stellt den Importauftrag ein und
+wartet auf den Worker. Fuer Produktion muss `CONVEX_DEPLOY_KEY` gesetzt sein
+(Umgebung oder `.env.local`); ohne Key gilt das verknuepfte Dev-Deployment.
+
+```bash
+CONVEX_DEPLOY_KEY=... scripts/heft-anlegen.py \
+  --publikation "Deutsche Militärzeitschrift" --kennung dmz \
+  --titel "DMZ 170" --nummer 170 --preis 9,80 \
+  --innen "hefte test/dmz 170 innenteil.pdf" \
+  --umschlag "hefte test/umschlag dmz 170.pdf" --umschlag-layout spreads \
+  --archiv "hefte test/dmz 170.indd" --archiv "hefte test/umschlag dmz 170.indd"
+```
+
+Danach steht die Ausgabe als Entwurf in der Redaktion; Pruefung und
+Veroeffentlichung bleiben ein redaktioneller Schritt.

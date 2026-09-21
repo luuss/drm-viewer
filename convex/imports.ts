@@ -182,6 +182,7 @@ export const claimNextInternal = internalMutation({
         index: p.index,
         sourceAssetId: p.sourceAssetId,
         sourcePageIndex: p.sourcePageIndex,
+        sourceHalf: p.sourceHalf ?? null,
         role: p.role,
         printedLabel: p.printedLabel ?? null,
       })),

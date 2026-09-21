@@ -226,12 +226,24 @@ def _assemble_by_toc(
     starts: list[TocHint] = []
     for hint in sorted(toc_hints, key=lambda h: (h.page_index, h.y0)):
         if starts and starts[-1].page_index == hint.page_index:
+            if starts[-1].split_headings and hint.split_headings:
+                # Zwei Rubrikeintraege auf derselben Seite, etwa "Nachrichten
+                # aus Deutschland" und "Nachrichten aus aller Welt": die Seite
+                # wird ohnehin an ihren Ueberschriften getrennt, ein zweiter
+                # Anker aendert daran nichts.
+                continue
             # Mehrere echte Artikel auf derselben Seite brauchen Geometrie aus
             # dem Satz. Ohne sie bleibt die generische Gruppierung sicherer.
             return []
         starts.append(hint)
 
     articles: list[AssembledArticle] = []
+    # Text vor dem ersten Eintrag des Inhaltsverzeichnisses darf nicht
+    # verschwinden, nur weil ihn das Verzeichnis nicht nennt. Er wird generisch
+    # gruppiert, so wie ein Heft ohne Verzeichnis.
+    leading = [block for block in blocks if block.page_index < starts[0].page_index]
+    if leading:
+        articles.extend(_assemble_by_headings(leading))
     for index, hint in enumerate(starts):
         end = starts[index + 1].page_index if index + 1 < len(starts) else 10**9
         article_blocks = [
@@ -240,7 +252,13 @@ def _assemble_by_toc(
         if not article_blocks:
             continue
         if hint.split_headings:
-            articles.extend(_assemble_by_headings(article_blocks))
+            parts = _assemble_by_headings(article_blocks)
+            # Beginnt die Rubrikseite ohne eigene Ueberschrift (Kalenderblatt,
+            # Buchbesprechungen), heisst der erste Teil wie der Eintrag im
+            # Inhalt statt wie seine erste Textzeile.
+            if parts and parts[0].blocks and parts[0].blocks[0].kind != "heading":
+                parts[0].title = hint.label
+            articles.extend(parts)
         else:
             articles.append(AssembledArticle(title=hint.label, blocks=article_blocks))
     return articles

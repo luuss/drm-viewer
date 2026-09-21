@@ -3,7 +3,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor } from "./roles";
 import { hasIssueAccess } from "./access";
-import { pageRole } from "./schema";
+import { pageHalf, pageRole } from "./schema";
 import { Id } from "./_generated/dataModel";
 
 /** Kanonische Seitenliste fuer den Reader. Ohne Zugriff kommt nichts zurueck. */
@@ -71,6 +71,7 @@ export const debugForEditors = query({
         role: page.role,
         sourceAssetId: page.sourceAssetId,
         sourcePageIndex: page.sourcePageIndex,
+        sourceHalf: page.sourceHalf ?? null,
         width: preview?.width ?? page.width,
         height: preview?.height ?? page.height,
         previewKey: page.previewKey ?? null,
@@ -92,6 +93,8 @@ export const setOrder = mutation({
       v.object({
         sourceAssetId: v.id("assets"),
         sourcePageIndex: v.number(),
+        // Nur bei Doppelseiten gesetzt: welche Haelfte die Leserseite ist.
+        sourceHalf: v.optional(pageHalf),
         role: pageRole,
         printedLabel: v.optional(v.string()),
         width: v.optional(v.number()),
@@ -116,6 +119,7 @@ export const setOrder = mutation({
         role: p.role,
         sourceAssetId: p.sourceAssetId,
         sourcePageIndex: p.sourcePageIndex,
+        sourceHalf: p.sourceHalf,
         width: p.width ?? 0,
         height: p.height ?? 0,
       });

@@ -126,7 +126,11 @@ def _metadata(obj, page) -> tuple[bool, int]:
     return meta.bits_per_pixel <= 1, min(int(meta.width), int(meta.height))
 
 
-def read_trim_boxes(pdf_bytes: bytes, page_map: list[tuple[int, int]]) -> dict[int, Rect]:
+def read_trim_boxes(
+    pdf_bytes: bytes,
+    page_map: list[tuple[int, int]],
+    halves: dict[int, str] | None = None,
+) -> dict[int, Rect]:
     """Netzformat je kanonischer Seite im Koordinatensystem des Renderings.
 
     Der IDML-Weg braucht nur das, nicht die Bildobjekte: der Satz kennt die
@@ -136,11 +140,13 @@ def read_trim_boxes(pdf_bytes: bytes, page_map: list[tuple[int, int]]) -> dict[i
     trims: dict[int, Rect] = {}
     doc = pdfium.PdfDocument(io.BytesIO(pdf_bytes))
     try:
-        for source_index, canonical_index in sorted(dict(page_map).items()):
+        for source_index, canonical_index in sorted(page_map):
             if source_index >= len(doc):
                 continue
             page = doc[source_index]
-            left, bottom, right, top = visible_page_box(page)
+            left, bottom, right, top = visible_page_box(
+                page, (halves or {}).get(canonical_index)
+            )
             if right <= left or top <= bottom:
                 continue
             trims[canonical_index] = (0.0, 0.0, 1.0, 1.0)
@@ -150,22 +156,27 @@ def read_trim_boxes(pdf_bytes: bytes, page_map: list[tuple[int, int]]) -> dict[i
 
 
 def read_raw_images(
-    pdf_bytes: bytes, page_map: list[tuple[int, int]]
+    pdf_bytes: bytes,
+    page_map: list[tuple[int, int]],
+    halves: dict[int, str] | None = None,
 ) -> tuple[dict[int, list[RawImage]], dict[int, Rect]]:
     """Bildobjekte und Netzformat je kanonischer Seite lesen.
 
     Rueckgabe: (Bilder je Seite, Trimbox je Seite) — beides normiert auf die
-    gerenderte TrimBox, y von oben.
+    gerenderte TrimBox, y von oben. Bei einer Doppelseite nennt `halves` die
+    Haelfte, die als Seite zaehlt; Objekte der anderen Haelfte fallen beim
+    Schnitt mit dem Netzformat weg.
     """
     images: dict[int, list[RawImage]] = {}
     trims: dict[int, Rect] = {}
     doc = pdfium.PdfDocument(io.BytesIO(pdf_bytes))
     try:
-        for source_index, canonical_index in sorted(dict(page_map).items()):
+        # Eine Quellseite kann zwei Leserseiten liefern (Umschlag-Doppelseite).
+        for source_index, canonical_index in sorted(page_map):
             if source_index >= len(doc):
                 continue
             page = doc[source_index]
-            visible = visible_page_box(page)
+            visible = visible_page_box(page, (halves or {}).get(canonical_index))
             if visible[2] <= visible[0] or visible[3] <= visible[1]:
                 continue
 

@@ -36,8 +36,13 @@ export const add = mutation({
       .withIndex("by_issue", (q) => q.eq("issueId", args.issueId))
       .collect();
     // Dieselbe Rolle ersetzt die vorherige Datei, damit kein Wildwuchs entsteht.
+    // Archive (.indd) duerfen mehrfach vorliegen, weil Innenteil und Umschlag
+    // je eine eigene Satzdatei haben; ersetzt wird dort nur dieselbe Datei.
     for (const e of existing) {
-      if (e.kind === args.kind && e.role === args.role) await ctx.db.delete(e._id);
+      const sameSlot = e.kind === args.kind && e.role === args.role;
+      const replaces =
+        args.kind === "indd" ? sameSlot && e.filename === args.filename : sameSlot;
+      if (replaces) await ctx.db.delete(e._id);
     }
     const id = await ctx.db.insert("issueSources", {
       ...args,

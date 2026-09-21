@@ -45,6 +45,7 @@ export default function LibraryPage() {
             <div className="issue-card-body">
               <div className="title">{i.title}</div>
               <div className="meta">
+                {i.publicationName ? `${i.publicationName} · ` : ""}
                 {i.issueNumber ? `${i.issueNumber} · ` : ""}
                 {i.pageCount} Seiten
               </div>

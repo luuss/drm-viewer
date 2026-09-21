@@ -20,6 +20,12 @@ export const pageRole = v.union(
   v.literal("other"),
 );
 
+/**
+ * Haelfte einer Quellseite. Umschlaege kommen aus der Druckvorstufe oft als
+ * Doppelseite (U4|U1, U2|U3); die Leserseite ist dann nur eine Haelfte davon.
+ */
+export const pageHalf = v.union(v.literal("left"), v.literal("right"));
+
 export const blockType = v.union(
   v.literal("heading"),
   v.literal("subheading"),
@@ -138,6 +144,7 @@ export default defineSchema(
     role: pageRole,
     sourceAssetId: v.id("assets"),
     sourcePageIndex: v.number(),
+    sourceHalf: v.optional(pageHalf),
     width: v.number(),
     height: v.number(),
     tileManifestKey: v.optional(v.string()),

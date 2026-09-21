@@ -11,6 +11,7 @@ type DebugPage = {
   printedLabel: string | null;
   role: string;
   sourcePageIndex: number;
+  sourceHalf: "left" | "right" | null;
   width: number;
   height: number;
   previewKey: string | null;
@@ -218,7 +219,12 @@ export default function ExtractionDebug({ issueId }: { issueId: Id<"issues"> }) 
         </div>
         <div className="debug-page-meta">
           <span>{page.width} × {page.height}px</span>
-          <span>Quelle S. {page.sourcePageIndex + 1}</span>
+          <span>
+            Quelle S. {page.sourcePageIndex + 1}
+            {page.sourceHalf
+              ? ` (${page.sourceHalf === "left" ? "linke" : "rechte"} Hälfte)`
+              : ""}
+          </span>
           <span>{pageRegions.length} Regionen</span>
           {!page.previewUrl && <span className="debug-warning">nicht gerendert</span>}
         </div>

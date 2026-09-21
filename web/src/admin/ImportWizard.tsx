@@ -5,9 +5,49 @@ import { api, type Id , cleanError } from "../lib/api";
 type PageDraft = {
   sourceAssetId: Id<"assets">;
   sourcePageIndex: number;
+  // Nur bei Umschlag-Doppelseiten: welche Haelfte die Leserseite ist.
+  sourceHalf?: "left" | "right";
   role: "front_cover" | "inside_front" | "content" | "inside_back" | "back_cover" | "other";
   printedLabel?: string;
 };
+
+/**
+ * Wie die Umschlagdatei aufgebaut ist.
+ * sheets:  vier Einzelseiten in Bogenreihenfolge (U4, U1, U2, U3)
+ * spreads: zwei Doppelseiten (U4|U1, U2|U3), gelesen als Haelften
+ * reading: Einzelseiten bereits in Leserreihenfolge (U1 ... U4)
+ * auto:    nach Seitenzahl der Datei entscheiden (2 -> spreads, 4 -> sheets)
+ */
+type CoverLayout = "auto" | "sheets" | "spreads" | "reading";
+
+/**
+ * Seitenzahl eines PDF ohne Bibliothek bestimmen: zaehlt die Seitenobjekte in
+ * der Datei, stueckweise, damit ein 150-MB-Heft nicht am Stueck im Speicher
+ * liegt. Bei komprimierten Objektstroemen findet sich nichts; dann bleibt das
+ * Feld leer und die Redaktion traegt die Zahl selbst ein.
+ */
+async function countPdfPages(file: File): Promise<number | undefined> {
+  const pattern = /\/Type\s*\/Page(?![s\w])/g;
+  const chunkBytes = 8 * 1024 * 1024;
+  const decoder = new TextDecoder("latin1");
+  let count = 0;
+  let tail = "";
+  try {
+    for (let offset = 0; offset < file.size; offset += chunkBytes) {
+      const bytes = await file.slice(offset, offset + chunkBytes).arrayBuffer();
+      const text = tail + decoder.decode(bytes);
+      count += text.match(pattern)?.length ?? 0;
+      // Ein Treffer am Stueckrand darf weder verloren gehen noch doppelt zaehlen.
+      const carry = text.slice(-24);
+      count -= carry.match(pattern)?.length ?? 0;
+      tail = carry;
+    }
+    count += tail.match(pattern)?.length ?? 0;
+  } catch {
+    return undefined;
+  }
+  return count > 0 ? count : undefined;
+}
 
 type SourceDraft = {
   assetId: Id<"assets">;
@@ -27,6 +67,7 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
   const presignUpload = useAction(api.uploads.presignUpload);
   const registerUpload = useMutation(api.assets.registerUpload);
   const addSource = useMutation(api.issueSources.add);
+  const setPageCount = useMutation(api.issueSources.setPageCount);
   const sources = useQuery(api.issueSources.listForIssue, { issueId });
   const setOrder = useMutation(api.issuePages.setOrder);
   const enqueue = useMutation(api.imports.enqueue);
@@ -37,7 +78,7 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
   const [err, setErr] = useState<string | null>(null);
   const [pages, setPages] = useState<PageDraft[] | null>(null);
   const [printedStart, setPrintedStart] = useState("3");
-  const [coverPrintOrder, setCoverPrintOrder] = useState(true);
+  const [coverLayout, setCoverLayout] = useState<CoverLayout>("auto");
 
   async function upload(
     file: File,
@@ -93,8 +134,13 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
           filename: file.name,
         });
       }
-      await addSource({ issueId, assetId, kind, role, filename: file.name });
-      setMsg(`${file.name} hochgeladen`);
+      const pageCount = kind === "pdf" ? await countPdfPages(file) : undefined;
+      await addSource({ issueId, assetId, kind, role, filename: file.name, pageCount });
+      setMsg(
+        pageCount
+          ? `${file.name} hochgeladen, ${pageCount} Seiten`
+          : `${file.name} hochgeladen – Seitenzahl bitte eintragen`,
+      );
     } catch (e: any) {
       setErr(cleanError(e));
     } finally {
@@ -112,8 +158,22 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
     }
     const draft: PageDraft[] = [];
     const start = Number(printedStart) || 1;
+    const layout: CoverLayout =
+      coverLayout !== "auto"
+        ? coverLayout
+        : cover?.pageCount === 2
+          ? "spreads"
+          : cover?.pageCount === 4
+            ? "sheets"
+            : "reading";
+    const spreads = !!cover && layout === "spreads" && cover.pageCount >= 2;
+    const sheets = !!cover && layout === "sheets" && cover.pageCount === 4;
 
-    if (cover && cover.pageCount === 4 && coverPrintOrder) {
+    if (cover && spreads) {
+      // Erster Bogen: links U4, rechts U1. Zweiter Bogen: links U2, rechts U3.
+      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, sourceHalf: "right", role: "front_cover", printedLabel: "U1" });
+      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 1, sourceHalf: "left", role: "inside_front", printedLabel: "U2" });
+    } else if (cover && sheets) {
       // Bogenreihenfolge U4, U1, U2, U3 -> Lesereihenfolge.
       draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 1, role: "front_cover", printedLabel: "U1" });
       draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 2, role: "inside_front", printedLabel: "U2" });
@@ -131,7 +191,10 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
       });
     }
 
-    if (cover && cover.pageCount === 4 && coverPrintOrder) {
+    if (cover && spreads) {
+      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 1, sourceHalf: "right", role: "inside_back", printedLabel: "U3" });
+      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, sourceHalf: "left", role: "back_cover", printedLabel: "U4" });
+    } else if (cover && sheets) {
       draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 3, role: "inside_back", printedLabel: "U3" });
       draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, role: "back_cover", printedLabel: "U4" });
     } else if (cover && cover.pageCount > 1) {
@@ -204,18 +267,36 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
           </label>
         </div>
         <p className="hint">
-          Eine .indd-Datei wird nur archiviert. Für die automatische Auswertung in
-          InDesign bitte zusätzlich als IDML exportieren (Datei → Exportieren →
-          InDesign Markup).
+          Eine .indd-Datei wird nur archiviert; Innenteil und Umschlag dürfen je
+          eine eigene haben. Für die automatische Auswertung in InDesign bitte
+          zusätzlich als IDML exportieren (Datei → Exportieren → InDesign Markup).
         </p>
         <ul className="source-list">
           {sources?.map((s: any) => (
             <li key={s._id}>
               <span className="badge">{s.role}</span>
               <span className="grow">{s.filename}</span>
-              <span className="muted">
-                {s.kind} · {s.pageCount ?? "?"} Seiten
-              </span>
+              <span className="muted">{s.kind}</span>
+              {s.kind === "pdf" && (
+                <label className="muted">
+                  <input
+                    className="narrow"
+                    inputMode="numeric"
+                    defaultValue={s.pageCount ?? ""}
+                    placeholder="?"
+                    aria-label={`Seitenzahl von ${s.filename}`}
+                    onBlur={(e) => {
+                      const n = Number(e.target.value);
+                      if (n > 0 && n !== s.pageCount) {
+                        setPageCount({ sourceId: s._id, pageCount: n }).catch((err) =>
+                          setErr(cleanError(err)),
+                        );
+                      }
+                    }}
+                  />{" "}
+                  Seiten
+                </label>
+              )}
             </li>
           ))}
           {sources?.length === 0 && (
@@ -227,13 +308,17 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
       <section>
         <h4>2. Leserreihenfolge</h4>
         <div className="order-row">
-          <label className="consent">
-            <input
-              type="checkbox"
-              checked={coverPrintOrder}
-              onChange={(e) => setCoverPrintOrder(e.target.checked)}
-            />
-            <span>Umschlag liegt in Bogenreihenfolge vor (U4, U1, U2, U3)</span>
+          <label className="narrow-field">
+            Umschlagdatei
+            <select
+              value={coverLayout}
+              onChange={(e) => setCoverLayout(e.target.value as CoverLayout)}
+            >
+              <option value="auto">Automatisch nach Seitenzahl</option>
+              <option value="sheets">Vier Einzelseiten in Bogenreihenfolge (U4, U1, U2, U3)</option>
+              <option value="spreads">Zwei Doppelseiten (U4|U1, U2|U3)</option>
+              <option value="reading">Einzelseiten in Leserreihenfolge (U1 … U4)</option>
+            </select>
           </label>
           <label className="narrow-field">
             Erste Innenseite trägt Seitenzahl
@@ -257,7 +342,8 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
             <ol className="page-order">
               {pages.slice(0, 8).map((p, i) => (
                 <li key={i}>
-                  {i + 1}. {p.role} · Quelle S.{p.sourcePageIndex + 1} ·{" "}
+                  {i + 1}. {p.role} · Quelle S.{p.sourcePageIndex + 1}
+                  {p.sourceHalf ? (p.sourceHalf === "left" ? " links" : " rechts") : ""} ·{" "}
                   {p.printedLabel ?? "—"}
                   <span className="row">
                     <button className="btn quiet small" onClick={() => move(i, -1)}>

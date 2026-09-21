@@ -21,17 +21,23 @@ PAGE_JPEG_QUALITY = int(__import__("os").environ.get("PAGE_JPEG_QUALITY", "88"))
 COVER_WIDTH_PX = 900
 
 
-def render_page(pdf_bytes: bytes, page_index: int, width_px: int = PAGE_WIDTH_PX):
+def render_page(
+    pdf_bytes: bytes,
+    page_index: int,
+    width_px: int = PAGE_WIDTH_PX,
+    half: str | None = None,
+):
     """Gibt die sichtbare Druckseite als (jpeg_bytes, breite, hoehe) zurueck.
 
     Gerendert wird die TrimBox, nicht die volle MediaBox. Letztere enthaelt bei
     Druckdaten Anschnitt, Marken und auf Umschlagboegen mitunter einen Streifen
-    der Nachbarseite.
+    der Nachbarseite. Liegt der Umschlag als Doppelseite vor, benennt `half`
+    die Haelfte, die als Leserseite gilt.
     """
     doc = pdfium.PdfDocument(pdf_bytes)
     try:
         page = doc[page_index]
-        left, bottom, right, top = visible_page_box(page)
+        left, bottom, right, top = visible_page_box(page, half)
         point_width = right - left
         scale = max(0.2, width_px / point_width)
         bitmap = page.render(

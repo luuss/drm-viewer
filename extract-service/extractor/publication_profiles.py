@@ -2,25 +2,56 @@
 
 Publikationsprofile beschreiben nur belastbare, redaktionell bestaetigte
 Konventionen. Die allgemeine PDF-Erkennung bleibt fuer andere Titel unveraendert.
+Welches Profil greift, entscheidet die Kennung der Publikation (`slug`).
+
 ZUERST! hat vorne immer dieselbe Semantik: Umschlagseiten sind kein Artikel,
 gedruckte Seite 3 ist das Editorial, Seite 4 das Inhaltsverzeichnis und ab Seite
-5 beginnt der regulaere Inhalt.
+5 beginnt der regulaere Inhalt. Rubriken stehen als Versalien im Kolumnentitel.
+
+Die DMZ (Deutsche Militaerzeitschrift) folgt vorne derselben Seitenlogik:
+Seite 3 Editorial, Seite 4 Inhalt, ab Seite 5 Inhalt. Das Inhaltsverzeichnis
+steht in zwei Spalten mit fetter Seitenzahl links, darueber die Rubrik in 13 pt,
+darunter der Titel in 11,5 pt und ein Anreisser in Grundschrift. Jede Seite
+traegt oben den Rubriknamen als Kolumnentitel in Gross- und Kleinschreibung,
+16 pt fett. Der Umschlag liegt als zwei Doppelseiten vor (U4|U1, U2|U3); das
+Einlesen halber Quellseiten regelt die Seitenliste, nicht dieses Profil.
+Alle Masse sind am Musterheft DMZ 170 (A4, 84 Seiten) genommen.
 """
 
 from __future__ import annotations
 
 import re
+import statistics
 from dataclasses import replace
 
-from .model import SourceBlock, SourceImage, TocHint
+from .model import LayoutLine, SourceBlock, SourceImage, TocHint
 
 _NUMBER = re.compile(r"^\s*(\d{1,3})\s*$")
 _TRAILING_NUMBER = re.compile(r"^(.*?)\s+(\d{1,3})\s*$")
+_LEADING_NUMBER = re.compile(r"^\s*(\d{1,3})\s+(.+?)\s*$")
 
 
 def is_zuerst(publication_slug: str | None) -> bool:
     slug = (publication_slug or "").strip().lower()
     return slug == "zuerst" or slug.startswith("zuerst-")
+
+
+def is_dmz(publication_slug: str | None) -> bool:
+    slug = (publication_slug or "").strip().lower()
+    return (
+        slug == "dmz"
+        or slug.startswith("dmz-")
+        or slug.startswith("deutsche-militaerzeitschrift")
+    )
+
+
+def profile_for(publication_slug: str | None) -> str | None:
+    """Name des Profils, das fuer diese Publikation gilt, sonst None."""
+    if is_zuerst(publication_slug):
+        return "zuerst"
+    if is_dmz(publication_slug):
+        return "dmz"
+    return None
 
 
 def _numeric_pages(pages: list[dict]) -> dict[int, int]:
@@ -142,20 +173,13 @@ def extract_zuerst_toc(
     return hints
 
 
-def apply_profile(
-    blocks: list[SourceBlock],
-    images: list[SourceImage],
-    pages: list[dict],
-    publication_slug: str | None,
-) -> tuple[list[SourceBlock], list[SourceImage], list[TocHint]]:
-    """Nicht-inhaltliche Seiten entfernen und Strukturhinweise liefern."""
-    if not is_zuerst(publication_slug):
-        return blocks, images, []
+def _content_pages(pages: list[dict]) -> set[int]:
+    """Kanonische Seiten, die Artikel tragen: ab gedruckter Seite 3, ohne Inhalt.
 
-    toc = extract_zuerst_toc(blocks, pages, publication_slug)
-    numeric = _numeric_pages(pages)
-    toc_page = numeric.get(4)
-    allowed = {
+    Beide Profile teilen diese Konvention: Umschlagseiten und das gedruckte
+    Inhaltsverzeichnis (Seite 4) liefern weder Artikel noch Bilder.
+    """
+    return {
         int(page["index"])
         for page in pages
         if page.get("role") == "content"
@@ -163,6 +187,36 @@ def apply_profile(
         and int(str(page["printedLabel"])) >= 3
         and int(str(page["printedLabel"])) != 4
     }
+
+
+def apply_profile(
+    blocks: list[SourceBlock],
+    images: list[SourceImage],
+    pages: list[dict],
+    publication_slug: str | None,
+) -> tuple[list[SourceBlock], list[SourceImage], list[TocHint]]:
+    """Nicht-inhaltliche Seiten entfernen und Strukturhinweise liefern."""
+    profile = profile_for(publication_slug)
+    if profile == "zuerst":
+        return _apply_zuerst(blocks, images, pages, publication_slug)
+    if profile == "dmz":
+        return _apply_dmz(blocks, images, pages, publication_slug)
+    return blocks, images, []
+
+
+# --- ZUERST! ---------------------------------------------------------------
+
+
+def _apply_zuerst(
+    blocks: list[SourceBlock],
+    images: list[SourceImage],
+    pages: list[dict],
+    publication_slug: str | None,
+) -> tuple[list[SourceBlock], list[SourceImage], list[TocHint]]:
+    toc = extract_zuerst_toc(blocks, pages, publication_slug)
+    numeric = _numeric_pages(pages)
+    toc_page = numeric.get(4)
+    allowed = _content_pages(pages)
     # Wenn die Labels unvollstaendig sind, bleibt die generische Erkennung
     # besser als ein leeres Heft.
     if not allowed:
@@ -247,4 +301,272 @@ def apply_profile(
     if toc_page is not None:
         filtered_blocks = [b for b in filtered_blocks if b.page_index != toc_page]
         filtered_images = [i for i in filtered_images if i.page_index != toc_page]
+    return filtered_blocks, filtered_images, toc
+
+
+# --- DMZ -------------------------------------------------------------------
+
+# Kolumnentitel: eine Zeile, 16 pt fett, Oberkante bei 3,7 % der Seitenhoehe.
+_DMZ_HEAD_MAX_Y = 0.06
+_DMZ_HEAD_SIZE = (14.5, 17.5)
+# Inhaltsverzeichnis: Seitenzahl 18 pt, Rubrik 13 pt, Titel 11,5 pt, alle fett.
+_DMZ_TOC_NUMBER_SIZE = 16.0
+_DMZ_TOC_RUBRIC_SIZE = (12.5, 13.5)
+_DMZ_TOC_TITLE_SIZE = (11.0, 12.5)
+_DMZ_TOC_LINE_TOLERANCE = 0.014     # Titelzeile und Seitenzahl auf einer Hoehe
+_DMZ_TOC_RUBRIC_GAP = 0.012         # Rubrik steht unmittelbar ueber dem Titel
+_DMZ_TOC_COLUMNS = ((0.045, 0.49), (0.51, 0.96))   # Klickflaechen je Spalte
+_DMZ_TOC_BOTTOM = 0.84              # darunter steht die Eigenanzeige
+# Rubrikseiten mit vielen kurzen Meldungen; ihre Ueberschriften bleiben getrennt.
+_DMZ_SPLIT_SECTION = "rubriken"
+_DMZ_SPLIT_WORDS = {"nachrichten", "kalenderblatt", "buchbesprechungen", "leserbriefe"}
+
+
+def _letters(text: str) -> str:
+    return re.sub(r"[^A-Za-zÄÖÜäöüß]", "", text)
+
+
+def _lines_of(block: SourceBlock) -> tuple[LayoutLine, ...]:
+    """Satzzeilen eines Blocks; ohne Zeileninventar gilt der Block als Zeile."""
+    if block.layout_lines:
+        return block.layout_lines
+    return (
+        LayoutLine(
+            page_index=block.page_index,
+            text=block.text,
+            x0=block.x0,
+            y0=block.y0,
+            x1=block.x1,
+            y1=block.y1,
+            size=block.size,
+            max_size=block.max_size,
+            font=block.font,
+            bold=block.bold,
+            column=block.column,
+        ),
+    )
+
+
+def _dmz_is_running_head_line(line: LayoutLine) -> bool:
+    letters = _letters(line.text)
+    return (
+        line.y0 < _DMZ_HEAD_MAX_Y
+        and line.bold
+        and _DMZ_HEAD_SIZE[0] <= line.max_size <= _DMZ_HEAD_SIZE[1]
+        and 3 <= len(letters) <= 40
+        and len(line.text.strip()) <= 40
+    )
+
+
+def _dmz_is_running_head(block: SourceBlock) -> bool:
+    lines = _lines_of(block)
+    return len(lines) == 1 and _dmz_is_running_head_line(lines[0])
+
+
+def _dmz_without_running_head(block: SourceBlock) -> SourceBlock:
+    """Kolumnentitel abtrennen, wenn er mit der Schlagzeile darunter verschmolz.
+
+    Steht die Schlagzeile dicht unter dem Kolumnentitel und in aehnlicher
+    Schrift, liefert die Zeilenbildung beides als einen Block. Der Rest bleibt
+    mit seiner eigenen Geometrie stehen.
+    """
+    lines = block.layout_lines
+    if len(lines) < 2 or not _dmz_is_running_head_line(lines[0]):
+        return block
+    head = lines[0].text.strip()
+    text = block.text
+    if text.startswith(head):
+        text = text[len(head) :].lstrip()
+    rest = lines[1:]
+    sizes = [line.size for line in rest if line.size]
+    return replace(
+        block,
+        text=text,
+        x0=min(line.x0 for line in rest),
+        y0=min(line.y0 for line in rest),
+        x1=max(line.x1 for line in rest),
+        size=statistics.median(sizes) if sizes else block.size,
+        max_size=max(line.max_size for line in rest),
+        layout_lines=rest,
+    )
+
+
+def _dmz_is_rubric_line(line: LayoutLine) -> bool:
+    text = line.text.strip()
+    return (
+        line.bold
+        and _DMZ_TOC_RUBRIC_SIZE[0] <= line.size <= _DMZ_TOC_RUBRIC_SIZE[1]
+        and line.max_size < _DMZ_TOC_NUMBER_SIZE
+        and not any(ch.isdigit() for ch in text)
+        and 3 <= len(_letters(text)) <= 40
+    )
+
+
+def _dmz_is_title_line(line: LayoutLine) -> bool:
+    return (
+        line.bold
+        and _DMZ_TOC_TITLE_SIZE[0] <= line.size < _DMZ_TOC_TITLE_SIZE[1]
+        # Eine Zeile mit eingebauter Seitenzahl traegt die 18 pt der Zahl und
+        # wird als eigener Eintrag gelesen, nicht als Titel einer anderen Zahl.
+        and line.max_size < _DMZ_TOC_NUMBER_SIZE
+        and not _NUMBER.match(line.text)
+    )
+
+
+def _dmz_splits(section: str | None, title: str) -> bool:
+    if (section or "").casefold() == _DMZ_SPLIT_SECTION:
+        return True
+    first = title.split()[0].casefold() if title.split() else ""
+    return first.split("/")[0] in _DMZ_SPLIT_WORDS
+
+
+def extract_dmz_toc(
+    blocks: list[SourceBlock], pages: list[dict], publication_slug: str | None
+) -> list[TocHint]:
+    """Eintraege samt Zielseite und Trefferflaeche aus gedruckter Seite 4 lesen.
+
+    Gelesen wird zeilenweise, weil der PDF-Export Rubrik und Titel meist zu
+    einem Block verbindet und die Seitenzahl daneben als eigenen Block liefert.
+    Eine Seitenzahl gehoert zu den fetten Titelzeilen auf gleicher Hoehe rechts
+    von ihr; ein mehrzeiliger Titel wird zusammengesetzt. In der Rubrikenliste
+    steht die Zahl mit in der Zeile ("24 Kalenderblatt Ereignisse").
+
+    Das Editorial auf Seite 3 nennt das Verzeichnis nicht. Es kommt als
+    Eintrag ohne Klickflaeche dazu, damit die Seite ein eigener Artikel bleibt.
+    """
+    if not is_dmz(publication_slug):
+        return []
+    page_by_print = _numeric_pages(pages)
+    toc_page = page_by_print.get(4)
+    if toc_page is None:
+        return []
+
+    lines = [
+        line
+        for block in blocks
+        if block.page_index == toc_page
+        for line in _lines_of(block)
+        if not _dmz_is_running_head_line(line) and line.y0 < _DMZ_TOC_BOTTOM
+    ]
+    columns: tuple[list[LayoutLine], list[LayoutLine]] = ([], [])
+    for line in lines:
+        columns[0 if line.x0 < 0.5 else 1].append(line)
+
+    # (Spalte, Oberkante, Unterkante, gedruckte Seite, Titel, Rubrik)
+    found: list[tuple[int, float, float, int, str, str | None]] = []
+    for column_index, column in enumerate(columns):
+        column.sort(key=lambda line: (line.y0, line.x0))
+        section: str | None = None
+        consumed: set[int] = set()
+        for line in column:
+            text = line.text.strip()
+            if _NUMBER.match(text) and line.max_size >= _DMZ_TOC_NUMBER_SIZE:
+                center = (line.y0 + line.y1) / 2
+                titles = sorted(
+                    (
+                        other
+                        for other in column
+                        if other is not line
+                        and id(other) not in consumed
+                        and other.x0 > line.x1
+                        and _dmz_is_title_line(other)
+                        and abs((other.y0 + other.y1) / 2 - center)
+                        <= _DMZ_TOC_LINE_TOLERANCE
+                    ),
+                    key=lambda other: other.y0,
+                )
+                if not titles:
+                    continue
+                consumed.update(id(other) for other in titles)
+                title = " ".join(other.text.strip() for other in titles)
+                top = min([line.y0] + [other.y0 for other in titles])
+                bottom = max([line.y1] + [other.y1 for other in titles])
+                rubric = next(
+                    (
+                        other
+                        for other in column
+                        if _dmz_is_rubric_line(other)
+                        and 0 <= titles[0].y0 - other.y1 <= _DMZ_TOC_RUBRIC_GAP
+                    ),
+                    None,
+                )
+                if rubric is not None:
+                    top = min(top, rubric.y0)
+                found.append((column_index, top, bottom, int(text), title, section))
+            elif (
+                (match := _LEADING_NUMBER.match(text))
+                and line.bold
+                and line.max_size >= _DMZ_TOC_NUMBER_SIZE
+            ):
+                found.append(
+                    (column_index, line.y0, line.y1, int(match.group(1)),
+                     match.group(2).strip(), section)
+                )
+            elif _dmz_is_rubric_line(line):
+                # Gilt fuer alle folgenden Eintraege der Spalte, bis eine neue
+                # Rubrikzeile kommt — ob sie allein steht oder direkt ueber dem
+                # naechsten Titel.
+                section = text
+
+    unique: dict[tuple[int, str], tuple[int, float, float, int, str, str | None]] = {}
+    for row in found:
+        if row[3] in page_by_print and row[4]:
+            unique[(row[3], row[4].casefold())] = row
+    rows = sorted(unique.values(), key=lambda row: (row[0], row[1]))
+
+    hints: list[TocHint] = []
+    editorial = page_by_print.get(3)
+    if editorial is not None and any(b.page_index == editorial for b in blocks):
+        hints.append(TocHint("Editorial", editorial, None, 0.0, 0.0, 0.0, 0.0))
+    for index, (column_index, top, bottom, printed, title, section) in enumerate(rows):
+        next_in_column = next(
+            (row for row in rows[index + 1 :] if row[0] == column_index), None
+        )
+        y1 = (
+            next_in_column[1] - 0.003
+            if next_in_column is not None
+            else min(bottom + 0.06, _DMZ_TOC_BOTTOM)
+        )
+        x0, x1 = _DMZ_TOC_COLUMNS[column_index]
+        hints.append(
+            TocHint(
+                label=title[:300],
+                page_index=page_by_print[printed],
+                toc_page_index=toc_page,
+                x0=x0,
+                y0=max(0.0, top - 0.004),
+                x1=x1,
+                y1=max(bottom, y1),
+                section=section,
+                split_headings=_dmz_splits(section, title),
+            )
+        )
+    return hints
+
+
+def _apply_dmz(
+    blocks: list[SourceBlock],
+    images: list[SourceImage],
+    pages: list[dict],
+    publication_slug: str | None,
+) -> tuple[list[SourceBlock], list[SourceImage], list[TocHint]]:
+    toc = extract_dmz_toc(blocks, pages, publication_slug)
+    numeric = _numeric_pages(pages)
+    toc_page = numeric.get(4)
+    allowed = _content_pages(pages)
+    if not allowed:
+        return blocks, images, toc
+
+    filtered_blocks = [
+        _dmz_without_running_head(block)
+        for block in blocks
+        if block.page_index in allowed
+        and block.page_index != toc_page
+        and not _dmz_is_running_head(block)
+    ]
+    filtered_images = [
+        image
+        for image in images
+        if image.page_index in allowed and image.page_index != toc_page
+    ]
     return filtered_blocks, filtered_images, toc

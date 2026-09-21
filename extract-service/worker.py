@@ -163,7 +163,9 @@ class Job:
             blob = blobs.get(page["sourceAssetId"])
             if blob is None:
                 continue
-            jpeg, width, height = render.render_page(blob, page["sourcePageIndex"])
+            jpeg, width, height = render.render_page(
+                blob, page["sourcePageIndex"], half=page.get("sourceHalf") or None
+            )
             key = issue_key(
                 self.publication_id, self.issue_id, "pages", page["index"], "full.jpg"
             )
@@ -228,10 +230,17 @@ class Job:
     def _extract(self, pages: list[dict], blobs: dict[str, bytes], sources: list[dict]):
         self.beat(70, "Text wird gelesen")
         by_asset: dict[str, list[tuple[int, int]]] = {}
+        # Umschlag-Doppelseiten: je kanonischer Seite die Haelfte der Quellseite.
+        halves_by_asset: dict[str, dict[int, str]] = {}
         for page in pages:
             by_asset.setdefault(page["sourceAssetId"], []).append(
                 (page["sourcePageIndex"], page["index"])
             )
+            if page.get("sourceHalf"):
+                halves_by_asset.setdefault(page["sourceAssetId"], {})[page["index"]] = (
+                    page["sourceHalf"]
+                )
+        self._halves_by_asset = halves_by_asset
 
         blocks: list[SourceBlock] = []
         images = []
@@ -239,7 +248,7 @@ class Job:
             blob = blobs.get(asset_id)
             if blob is None:
                 continue
-            b, i = extract_pdf_pages(blob, page_map)
+            b, i = extract_pdf_pages(blob, page_map, halves_by_asset.get(asset_id))
             blocks.extend(b)
             images.extend(i)
 
@@ -309,7 +318,11 @@ class Job:
             frames = extract_idml_image_frames(idml_bytes)
             if not frames:
                 return images
-            trims = read_trim_boxes(blobs[partner["assetId"]], page_map)
+            trims = read_trim_boxes(
+                blobs[partner["assetId"]],
+                page_map,
+                getattr(self, "_halves_by_asset", {}).get(partner["assetId"]),
+            )
             ersatz = frames_to_images(frames, page_map, trims)
         except Exception as exc:
             log("job.idmlImagesFailed", jobId=self.job_id, error=str(exc)[:200])
@@ -415,6 +428,9 @@ class Job:
                 entry["section"] = hint.section
             if article_order is not None:
                 entry["articleOrder"] = article_order
+            # Ein Eintrag ohne Stelle im gedruckten Verzeichnis (etwa ein
+            # Editorial aus der Heftkonvention) bekommt keine Klickflaeche.
+            if article_order is not None and hint.toc_page_index is not None:
                 payload_articles[article_order - 1]["regions"].append(
                     {
                         "pageIndex": hint.toc_page_index,

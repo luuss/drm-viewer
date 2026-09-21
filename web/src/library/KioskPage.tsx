@@ -207,7 +207,9 @@ export default function KioskPage() {
               </div>
               <div className="issue-card-body">
                 <div className="title">{i.title}</div>
-                <div className="meta">{i.issueNumber ?? ""}</div>
+                <div className="meta">
+                  {[i.publicationName, i.issueNumber].filter(Boolean).join(" · ")}
+                </div>
                 <div className="price">{formatEuro(i.priceAmountCents)}</div>
                 <div className="card-action">
                   Ausgabe ansehen <Icon name="arrow-right" />
