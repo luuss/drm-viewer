@@ -28,10 +28,14 @@ bleibt der Fingerabdruck der Oberflaeche derselbe und die Wartezeit entfaellt.
 Ein fehlgeschlagener Bau von Kacheldienst oder Import-Worker faellt dann nicht
 auf. Fuer diese Faelle bleibt das Bauprotokoll in Dokploy die Wahrheit.
 
-**Dokploy hat bewusst keinen eigenen Auto-Deploy.** Wuerde es selbst auf jeden
-Push reagieren, liefe es an den Tests vorbei; ein roter Test wuerde ein kaputtes
-Deployment nicht mehr aufhalten. Stattdessen stoesst der Workflow Dokploy ueber
-dessen Deploy-Webhook an.
+**Dokploy erfaehrt bewusst nichts von Pushes.** Der Dienst ist nicht ueber die
+Dokploy-GitHub-App angebunden, sondern klont das oeffentliche Repository direkt
+(`sourceType: git`). Solange die App angebunden war, startete Dokploy bei jedem
+Push von selbst — gemessen am 21.09.2026 liefen dadurch zwei Rollouts
+nebeneinander, einer um 16:53:44 direkt beim Push und einer um 16:54:46 nach den
+Tests. Der erste lief an den Tests vorbei; ein roter Test haette ein kaputtes
+Deployment nicht mehr aufgehalten. Jetzt loest ausschliesslich der Workflow aus,
+ueber den Deploy-Webhook des Dienstes.
 
 ## 1. Dokploy auf einem EU-Server
 
@@ -42,12 +46,14 @@ Installation erfolgt nach der offiziellen Dokploy-Anleitung. Vor dem echten
 Betrieb SSH absichern, nur 22/80/443 oeffnen und die Dokploy-Oberflaeche ueber
 eine HTTPS-Domain oder ein VPN erreichbar machen.
 
-## 2. GitHub und Compose in Dokploy verbinden
+## 2. Compose-Dienst in Dokploy anlegen
 
-1. Unter **Git → GitHub** eine GitHub App fuer Dokploy erstellen und nur fuer
-   dieses Repository freigeben.
-2. Ein Projekt und darin einen Dienst vom Typ **Docker Compose** erstellen.
-3. Als Repository `luuss/drm-viewer`, Branch `main` und als Compose-Pfad
+1. Ein Projekt und darin einen Dienst vom Typ **Docker Compose** erstellen.
+2. Als Quelle **Git** waehlen, nicht GitHub: Adresse
+   `https://github.com/luuss/drm-viewer.git`, Zweig `main`. Das Repository ist
+   oeffentlich, ein Schluessel ist nicht noetig. Die Dokploy-GitHub-App bleibt
+   bewusst aussen vor, weil Dokploy sonst bei jedem Push von selbst startet.
+3. Als Compose-Pfad
    `./docker-compose.dokploy.yml` eintragen.
 4. **Docker Compose** verwenden, nicht Docker Stack: Die Images werden direkt
    aus dem Checkout gebaut.
