@@ -2,6 +2,15 @@ import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api, formatEuro } from "../lib/api";
 
+/** Der Zahlungsdienst liefert die Zustaende englisch; im Konto stehen sie
+ *  deutsch. */
+const KAUFSTATUS: Record<string, string> = {
+  pending: "in Bearbeitung",
+  paid: "bezahlt",
+  failed: "fehlgeschlagen",
+  refunded: "erstattet",
+};
+
 export default function ProfilePage() {
   const me = useQuery(api.users.me, {});
   const subStatus = useQuery(api.subscriptions.myStatus, {});
@@ -208,7 +217,7 @@ export default function ProfilePage() {
               <li key={p._id}>
                 {new Date(p.createdAt).toLocaleDateString("de-DE")} ·{" "}
                 {p.title ?? p.planName ?? "Position"} · {formatEuro(p.amountCents)} ·{" "}
-                {p.status}
+                {KAUFSTATUS[p.status] ?? p.status}
               </li>
             ))}
           </ul>
