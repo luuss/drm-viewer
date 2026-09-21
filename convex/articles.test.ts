@@ -58,7 +58,7 @@ function article(order: number, page: number, blocks: string[]) {
     pageEnd: page,
     blocks: blocks.map((text, i) => ({
       order: i + 1,
-      type: (i === 0 ? "heading" : "paragraph") as const,
+      type: i === 0 ? ("heading" as const) : ("paragraph" as const),
       text,
       sourcePageIndex: page,
       sourceY: Number((0.1 + i * 0.2).toFixed(2)),

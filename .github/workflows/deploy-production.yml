@@ -36,6 +36,11 @@ jobs:
       - name: Abhaengigkeiten
         run: npm ci
 
+      # Faellt hier auf, nicht erst beim Ausliefern: `convex deploy` prueft die
+      # Typen mit derselben Konfiguration und bricht sonst ab.
+      - name: Convex-Funktionen typpruefen
+        run: npx tsc --noEmit -p convex
+
       - name: Convex-Funktionen testen
         run: npm test
 
