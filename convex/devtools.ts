@@ -226,6 +226,43 @@ export const releaseIssueInternal = internalMutation({
   },
 });
 
+/** Ausgabe aus dem Kiosk nehmen oder wieder hineinstellen, von der Kommandozeile. */
+export const setPublishedInternal = internalMutation({
+  args: { issueId: v.id("issues"), isPublished: v.boolean() },
+  handler: async (ctx, { issueId, isPublished }) => {
+    if (isPublished) {
+      await publishIssue(ctx, issueId);
+    } else {
+      const issue = await ctx.db.get(issueId);
+      if (!issue) throw new Error("Ausgabe nicht gefunden");
+      await ctx.db.patch(issueId, { isPublished: false, updatedAt: Date.now() });
+      await audit(ctx, "issue.unpublish", issueId, "Kommandozeile");
+    }
+    const issue = await ctx.db.get(issueId);
+    return { title: issue?.title ?? null, isPublished: issue?.isPublished ?? null };
+  },
+});
+
+/** Artikelentwuerfe einer Ausgabe, um ein Importergebnis von aussen zu pruefen. */
+export const articlesInternal = internalQuery({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    const rows = await ctx.db
+      .query("articles")
+      .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
+      .collect();
+    return rows.map((a) => ({
+      order: a.order,
+      title: a.title,
+      subtitle: a.subtitle ?? null,
+      pageStart: a.pageStart,
+      pageEnd: a.pageEnd,
+      chars: a.searchText.length,
+      reviewStatus: a.reviewStatus,
+    }));
+  },
+});
+
 /** Die juengsten Importauftraege, um den Worker von aussen zu beobachten. */
 export const recentJobsInternal = internalQuery({
   args: {},

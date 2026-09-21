@@ -907,12 +907,12 @@ def test_woerter_der_anderen_haelfte_fallen_weg():
 
 # --- DMZ-Profil --------------------------------------------------------------
 
-def test_dmz_zeitgeschichte_faellt_nicht_unter_das_dmz_profil():
+def test_dmz_zeitgeschichte_hat_ein_eigenes_profil():
     from extractor.publication_profiles import profile_for
 
     assert profile_for("dmz") == "dmz"
     assert profile_for("dmz-170") == "dmz"
-    assert profile_for("dmz-zeitgeschichte") is None
+    assert profile_for("dmz-zeitgeschichte") == "dmz-zeitgeschichte"
     assert profile_for("schwertertraeger") is None
 
 
@@ -1167,3 +1167,90 @@ def test_dmz_artikel_folgen_dem_inhaltsverzeichnis():
     assert all(
         b.text.strip() not in kolumnentitel for article in articles for b in article.blocks
     )
+
+
+
+# --- DMZ-Zeitgeschichte-Profil -------------------------------------------------
+
+def zg_head(text, page):
+    """Kolumnentitel oben auf einer Inhaltsseite, 20 pt, nicht fett."""
+    return dmz_block([zeile(text, 0.39, 0.03, 0.61, 0.06, 20.7, bold=False, font="Rotis", page=page)], page=page)
+
+
+def zg_toc_blocks():
+    """Verkleinertes Verzeichnis von Seite 3 des Musterhefts Nr. 80 (Seitenindex 2)."""
+    z = lambda text, x0, y0, x1, size=11.0, bold=True: zeile(text, x0, y0, x1, y0 + 0.012, size, bold=bold, page=2)
+    return [
+        dmz_block([zeile("Editorial", 0.45, 0.03, 0.55, 0.06, 20.7, bold=False, page=2)], page=2),
+        dmz_block([zeile("80 Jahre nach Bildung der Kampfgruppe. " * 8, 0.06, 0.11, 0.62, 0.57, 11.0, bold=False, page=2)], page=2),
+        dmz_block([zeile("Guido Kraus", 0.79, 0.55, 0.88, 0.57, 11.0, bold=False, page=2)], page=2),
+        dmz_block([zeile("Inhalt", 0.06, 0.67, 0.15, 0.70, 20.0, page=2)], page=2),
+        # Spalte 1: Rubrik und Titel in einem Block, Seitenzahl daneben.
+        dmz_block([z("Waffen\u2011SS im Bild", 0.06, 0.72, 0.20), z("Neuaufstellung", 0.06, 0.733, 0.20)], page=2),
+        dmz_block([z("4", 0.30, 0.733, 0.31)], page=2),
+        dmz_block([z("An den Fronten", 0.06, 0.76, 0.18)], page=2),
+        dmz_block([z("Russen verteidigen das Elsaß", 0.06, 0.78, 0.28)], page=2),
+        dmz_block([z("6", 0.30, 0.78, 0.31)], page=2),
+        dmz_block([z("Die 30. Waffen-Grenadier-Division der SS", 0.06, 0.793, 0.29, size=8.0)], page=2),
+        dmz_block([z("Vorstoß über den Mscha", 0.06, 0.83, 0.25)], page=2),
+        dmz_block([z("18", 0.30, 0.83, 0.31)], page=2),
+        # Spalte 2: zweizeiliger Titel unter einer Rubrik, Seitenzahl an der letzten Zeile.
+        dmz_block([z("Soldatenporträt", 0.36, 0.64, 0.50), z("Standartenführer", 0.36, 0.653, 0.50), z("Alfons Rebane", 0.36, 0.666, 0.50)], page=2),
+        dmz_block([z("10", 0.60, 0.666, 0.61)], page=2),
+        dmz_block([z("Ein Porträt zum 50. Todestag", 0.36, 0.68, 0.52, size=8.0)], page=2),
+        dmz_block([z("Kalenderblatt Personen", 0.36, 0.70, 0.54)], page=2),
+        dmz_block([z("16", 0.60, 0.70, 0.61)], page=2),
+        # Spalte 3: Bildzeile ohne Seitenzahl ist kein Eintrag.
+        dmz_block([z("Titelseite: Panzerkampfwagen IV", 0.67, 0.88, 0.89, size=10.0)], page=2),
+        dmz_block([zeile("DMZ ZEITGESCHICHTE Nr. 80", 0.40, 0.95, 0.60, 0.97, 13.2, bold=False, page=2)], page=2),
+        # Inhaltsseiten mit Kolumnentiteln und Fliesstext.
+        zg_head("Waffen\u2011SS im Bild", 3),
+        block("Das Foto zeigt den ersten Moerser. " * 10, page=3, y=0.2),
+        dmz_block([zeile("DMZ ZEITGESCHICHTE Nr. 80", 0.40, 0.95, 0.60, 0.97, 13.2, bold=False, page=3)], page=3),
+        zg_head("An den Fronten", 5),
+        block("Die Division kaempfte im Elsass. " * 10, page=5, y=0.2),
+        zg_head("Soldatenporträt", 9),
+        block("Alfons Rebane wurde geboren. " * 10, page=9, y=0.2),
+    ]
+
+
+def test_dmz_zeitgeschichte_liest_das_verzeichnis_von_seite_3():
+    from extractor.publication_profiles import extract_dmz_zeitgeschichte_toc
+
+    hints = extract_dmz_zeitgeschichte_toc(zg_toc_blocks(), DMZ_PAGES, "dmz-zeitgeschichte")
+    by_label = {hint.label: hint for hint in hints}
+    assert list(by_label) == [
+        "Editorial",
+        "Neuaufstellung",
+        "Russen verteidigen das Elsaß",
+        "Vorstoß über den Mscha",
+        "Standartenführer Alfons Rebane",
+        "Kalenderblatt Personen",
+    ]
+    assert by_label["Editorial"].page_index == 2
+    assert by_label["Editorial"].toc_page_index is None
+    assert by_label["Neuaufstellung"].page_index == 3
+    assert by_label["Neuaufstellung"].section == "Waffen\u2011SS im Bild"
+    assert by_label["Russen verteidigen das Elsaß"].page_index == 5
+    assert by_label["Russen verteidigen das Elsaß"].section == "An den Fronten"
+    # Die Rubrik gilt weiter, bis eine neue kommt.
+    assert by_label["Vorstoß über den Mscha"].page_index == 17
+    assert by_label["Vorstoß über den Mscha"].section == "An den Fronten"
+    assert by_label["Standartenführer Alfons Rebane"].page_index == 9
+    assert by_label["Standartenführer Alfons Rebane"].section == "Soldatenporträt"
+    assert by_label["Kalenderblatt Personen"].page_index == 15
+    assert by_label["Kalenderblatt Personen"].split_headings is True
+    # Trefferflaechen liegen auf Seite 3 in der jeweiligen Spalte.
+    neu = by_label["Neuaufstellung"]
+    assert neu.toc_page_index == 2
+    assert neu.x0 < 0.1 and neu.x1 < 0.34
+    assert 0.71 <= neu.y0 <= 0.72 and neu.y1 < by_label["Russen verteidigen das Elsaß"].y0 + 0.01
+
+
+def test_dmz_zeitgeschichte_behaelt_editorial_und_seite_4_und_streicht_verzeichnis():
+    kept_blocks, _images, hints = apply_profile(zg_toc_blocks(), [], DMZ_PAGES, "dmz-zeitgeschichte")
+    seite_3 = [b.text[:12] for b in kept_blocks if b.page_index == 2]
+    assert seite_3 == ["80 Jahre nac", "Guido Kraus"]
+    # Seite 4 ist eine Inhaltsseite, nur Kolumnentitel und Fusszeile fallen weg.
+    assert [b.text[:12] for b in kept_blocks if b.page_index == 3] == ["Das Foto zei"]
+    assert len(hints) == 6

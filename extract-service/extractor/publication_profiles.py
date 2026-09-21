@@ -16,6 +16,14 @@ traegt oben den Rubriknamen als Kolumnentitel in Gross- und Kleinschreibung,
 16 pt fett. Der Umschlag liegt als zwei Doppelseiten vor (U4|U1, U2|U3); das
 Einlesen halber Quellseiten regelt die Seitenliste, nicht dieses Profil.
 Alle Masse sind am Musterheft DMZ 170 (A4, 84 Seiten) genommen.
+
+DMZ Zeitgeschichte teilt Verlag und Satz, nicht die Seitenlogik: Seite 3 traegt
+oben das Editorial und darunter das Inhaltsverzeichnis in drei Spalten, der
+Inhalt beginnt auf Seite 4. Rubrik und Titel stehen 11 pt fett, der Anreisser
+8 pt fett, die Seitenzahl 11 pt fett rechts in der Spalte auf Hoehe der letzten
+Titelzeile. Die Rubriken kehren als Kolumnentitel (20 pt) oben auf den
+Inhaltsseiten wieder; daran werden sie im Verzeichnis erkannt. Masse am
+Musterheft Nr. 80 (A4, 64 Seiten).
 """
 
 from __future__ import annotations
@@ -59,6 +67,8 @@ def profile_for(publication_slug: str | None) -> str | None:
     """Name des Profils, das fuer diese Publikation gilt, sonst None."""
     if is_zuerst(publication_slug):
         return "zuerst"
+    if is_dmz_zeitgeschichte(publication_slug):
+        return "dmz-zeitgeschichte"
     if is_dmz(publication_slug):
         return "dmz"
     return None
@@ -211,6 +221,8 @@ def apply_profile(
         return _apply_zuerst(blocks, images, pages, publication_slug)
     if profile == "dmz":
         return _apply_dmz(blocks, images, pages, publication_slug)
+    if profile == "dmz-zeitgeschichte":
+        return _apply_dmz_zeitgeschichte(blocks, images, pages, publication_slug)
     return blocks, images, []
 
 
@@ -578,5 +590,237 @@ def _apply_dmz(
         image
         for image in images
         if image.page_index in allowed and image.page_index != toc_page
+    ]
+    return filtered_blocks, filtered_images, toc
+
+
+# --- DMZ Zeitgeschichte ------------------------------------------------------
+
+_ZG_TOC_LINE_SIZE = (10.5, 11.6)    # Rubrik, Titel und Seitenzahl im Verzeichnis
+_ZG_TOC_HEADING_SIZE = 16.0         # "Inhalt" steht 20 pt fett
+_ZG_TOC_ABOVE = 0.05                # Spalten beginnen etwas ueber "Inhalt"
+_ZG_TOC_COLUMNS = ((0.04, 0.335), (0.335, 0.645), (0.645, 0.96))
+_ZG_LINE_TOLERANCE = 0.012          # Seitenzahl und Titelzeile auf einer Hoehe
+_ZG_HEAD_MAX_Y = 0.07               # Kolumnentitel oben
+_ZG_HEAD_MIN_SIZE = 17.0
+_ZG_FOOT_MIN_Y = 0.94               # Heftname und Seitenzahl unten
+
+
+def _zg_norm(text: str) -> str:
+    """Vergleichsform: Bindestrich-Varianten und Leerraum vereinheitlicht."""
+    return re.sub(r"[\s\u2010\u2011\u2012\u2013-]+", " ", text).strip().casefold()
+
+
+def _zg_content_pages(pages: list[dict]) -> set[int]:
+    """Ab gedruckter Seite 3; anders als bei der DMZ traegt Seite 4 Inhalt."""
+    return {
+        int(page["index"])
+        for page in pages
+        if page.get("role") == "content"
+        and str(page.get("printedLabel") or "").isdigit()
+        and int(str(page["printedLabel"])) >= 3
+    }
+
+
+def _zg_is_running_head_line(line: LayoutLine) -> bool:
+    return (
+        line.y1 <= _ZG_HEAD_MAX_Y
+        and line.max_size >= _ZG_HEAD_MIN_SIZE
+        and 3 <= len(_letters(line.text)) <= 40
+    )
+
+
+def _zg_is_running_head(block: SourceBlock) -> bool:
+    lines = _lines_of(block)
+    return len(lines) == 1 and _zg_is_running_head_line(lines[0])
+
+
+def _zg_running_heads(blocks: list[SourceBlock], content_pages: set[int]) -> set[str]:
+    """Rubriknamen, wie sie oben auf den Inhaltsseiten stehen."""
+    heads: set[str] = set()
+    for block in blocks:
+        if block.page_index not in content_pages:
+            continue
+        for line in _lines_of(block):
+            if _zg_is_running_head_line(line):
+                heads.add(_zg_norm(line.text))
+    return heads
+
+
+def _zg_toc_top(blocks: list[SourceBlock], toc_page: int | None) -> float | None:
+    """Oberkante des Verzeichnisses: knapp ueber der Ueberschrift "Inhalt"."""
+    if toc_page is None:
+        return None
+    for block in blocks:
+        if block.page_index != toc_page:
+            continue
+        for line in _lines_of(block):
+            if (
+                line.bold
+                and line.max_size >= _ZG_TOC_HEADING_SIZE
+                and _zg_norm(line.text) == "inhalt"
+            ):
+                return max(0.0, line.y0 - _ZG_TOC_ABOVE)
+    return None
+
+
+def _zg_column(x0: float) -> int:
+    for index, (_left, right) in enumerate(_ZG_TOC_COLUMNS):
+        if x0 < right:
+            return index
+    return len(_ZG_TOC_COLUMNS) - 1
+
+
+def extract_dmz_zeitgeschichte_toc(
+    blocks: list[SourceBlock], pages: list[dict], publication_slug: str | None
+) -> list[TocHint]:
+    """Eintraege samt Zielseite und Trefferflaeche aus gedruckter Seite 3 lesen.
+
+    Je Spalte werden die fetten Zeilen in Titelgroesse von oben nach unten
+    gesammelt; die Seitenzahl auf Hoehe einer Zeile schliesst den Eintrag ab.
+    Zeilen des Eintrags, die als Kolumnentitel im Heft vorkommen, sind die
+    Rubrik, der Rest ist der Titel. Eine Rubrik ohne Seitenzahl gilt fuer die
+    folgenden Eintraege der Spalte. Anreisser in 8 pt trennen die Eintraege.
+    Das Editorial oben auf derselben Seite wird ein eigener Eintrag ohne
+    Trefferflaeche.
+    """
+    if not is_dmz_zeitgeschichte(publication_slug):
+        return []
+    page_by_print = _numeric_pages(pages)
+    toc_page = page_by_print.get(3)
+    toc_top = _zg_toc_top(blocks, toc_page)
+    if toc_page is None or toc_top is None:
+        return []
+    heads = _zg_running_heads(blocks, _zg_content_pages(pages))
+
+    columns: tuple[list[LayoutLine], ...] = tuple([] for _ in _ZG_TOC_COLUMNS)
+    for block in blocks:
+        if block.page_index != toc_page:
+            continue
+        for line in _lines_of(block):
+            if line.y0 < toc_top or line.y0 >= _ZG_FOOT_MIN_Y or not line.bold:
+                continue
+            if _zg_norm(line.text) == "inhalt":
+                continue
+            columns[_zg_column(line.x0)].append(line)
+
+    def in_title_size(line: LayoutLine) -> bool:
+        return _ZG_TOC_LINE_SIZE[0] <= line.size <= _ZG_TOC_LINE_SIZE[1]
+
+    # (Spalte, Oberkante, Unterkante, gedruckte Seite, Titel, Rubrik)
+    found: list[tuple[int, float, float, int, str, str | None]] = []
+    for column_index, column in enumerate(columns):
+        column.sort(key=lambda line: (line.y0, line.x0))
+        numbers = [
+            line for line in column if _NUMBER.match(line.text) and in_title_size(line)
+        ]
+
+        def number_at(line: LayoutLine) -> LayoutLine | None:
+            center = (line.y0 + line.y1) / 2
+            return next(
+                (
+                    number
+                    for number in numbers
+                    if number.x0 > line.x0
+                    and abs((number.y0 + number.y1) / 2 - center) <= _ZG_LINE_TOLERANCE
+                ),
+                None,
+            )
+
+        section: str | None = None
+        run: list[LayoutLine] = []
+        for line in column:
+            if line in numbers:
+                continue
+            if not in_title_size(line):
+                # Anreisser oder Bildzeile: eine offene Rubrik gilt weiter.
+                if run and all(_zg_norm(l.text) in heads for l in run):
+                    section = " ".join(l.text.strip() for l in run)
+                run = []
+                continue
+            run.append(line)
+            number = number_at(line)
+            if number is None:
+                continue
+            rubric = [l for l in run if l is not line and _zg_norm(l.text) in heads]
+            title_lines = [l for l in run if l not in rubric]
+            if rubric:
+                section = " ".join(l.text.strip() for l in rubric)
+            title = " ".join(l.text.strip() for l in title_lines)
+            found.append(
+                (
+                    column_index,
+                    min(l.y0 for l in run),
+                    max(l.y1 for l in run + [number]),
+                    int(number.text.strip()),
+                    title,
+                    section,
+                )
+            )
+            run = []
+        if run and all(_zg_norm(l.text) in heads for l in run):
+            section = " ".join(l.text.strip() for l in run)
+
+    unique: dict[tuple[int, str], tuple[int, float, float, int, str, str | None]] = {}
+    for row in found:
+        if row[3] in page_by_print and row[4]:
+            unique[(row[3], row[4].casefold())] = row
+    rows = sorted(unique.values(), key=lambda row: (row[0], row[1]))
+
+    hints: list[TocHint] = [TocHint("Editorial", toc_page, None, 0.0, 0.0, 0.0, 0.0)]
+    for index, (column_index, top, bottom, printed, title, section) in enumerate(rows):
+        next_in_column = next(
+            (row for row in rows[index + 1 :] if row[0] == column_index), None
+        )
+        y1 = (
+            next_in_column[1] - 0.003
+            if next_in_column is not None
+            else min(bottom + 0.04, _ZG_FOOT_MIN_Y)
+        )
+        x0, x1 = _ZG_TOC_COLUMNS[column_index]
+        hints.append(
+            TocHint(
+                label=title[:300],
+                page_index=page_by_print[printed],
+                toc_page_index=toc_page,
+                x0=x0,
+                y0=max(0.0, top - 0.004),
+                x1=x1,
+                y1=max(bottom, y1),
+                section=section,
+                split_headings=_dmz_splits(section, title),
+            )
+        )
+    return hints
+
+
+def _apply_dmz_zeitgeschichte(
+    blocks: list[SourceBlock],
+    images: list[SourceImage],
+    pages: list[dict],
+    publication_slug: str | None,
+) -> tuple[list[SourceBlock], list[SourceImage], list[TocHint]]:
+    toc = extract_dmz_zeitgeschichte_toc(blocks, pages, publication_slug)
+    allowed = _zg_content_pages(pages)
+    if not allowed:
+        return blocks, images, toc
+    toc_page = _numeric_pages(pages).get(3)
+    toc_top = _zg_toc_top(blocks, toc_page)
+
+    def in_toc(page_index: int, y0: float) -> bool:
+        return toc_top is not None and page_index == toc_page and y0 >= toc_top
+
+    filtered_blocks = [
+        block
+        for block in blocks
+        if block.page_index in allowed
+        and not in_toc(block.page_index, block.y0)
+        and block.y0 < _ZG_FOOT_MIN_Y
+        and not _zg_is_running_head(block)
+    ]
+    filtered_images = [
+        image
+        for image in images
+        if image.page_index in allowed and not in_toc(image.page_index, image.y0)
     ]
     return filtered_blocks, filtered_images, toc
