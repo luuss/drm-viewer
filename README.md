@@ -126,6 +126,7 @@ Bibliothek beim ersten Produktions-Rollout erhalten.
 | [docs/deployment.md](docs/deployment.md) | GitHub-Autodeployment mit Dokploy auf einem EU-Server |
 | [docs/artikel-import.md](docs/artikel-import.md) | Importweg, Grenzen der Automatik, Redaktion |
 | [docs/shop-integration.md](docs/shop-integration.md) | Anbindung eines bestehenden Shops |
+| [docs/indesign-idml.md](docs/indesign-idml.md) | Warum IDML und nicht INDD, Stapelexport fuer den Verlag |
 
 ## Kopierschutz
 

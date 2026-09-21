@@ -19,6 +19,9 @@ Datei gleichen Namens ersetzt ihre Vorgaengerin. Fuer die automatische
 Auswertung braucht es den IDML-Export aus InDesign (Datei → Exportieren →
 InDesign Markup).
 
+Warum die `.indd` nicht ausgewertet werden kann und wie der Verlag mehrere
+Dateien auf einmal exportiert: [indesign-idml.md](indesign-idml.md).
+
 Die Seitenzahl eines PDF bestimmt der Importdialog beim Hochladen selbst.
 Gelingt das nicht (komprimierte Objektstroeme), bleibt das Feld leer und die
 Redaktion traegt sie in der Quellenliste ein.

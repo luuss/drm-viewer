@@ -1,0 +1,66 @@
+# Der Weg aus InDesign: IDML, nicht INDD
+
+Der Leseweg soll den Satz auswerten und nicht nur das fertige PDF, weil im Satz
+steht, was zusammengehoert: eine Story laeuft ueber alle verketteten Rahmen,
+jeder Absatz traegt sein Format, jeder Bildrahmen seine Koordinaten. Aus dem PDF
+muss all das erraten werden.
+
+Ausgewertet wird dafuer die **IDML**, der Austauschexport aus InDesign. Die
+**INDD** wird abgelegt, aber nicht gelesen. Dieser Text sagt, warum.
+
+## Warum die INDD nicht gelesen wird
+
+Die `.indd` ist ein binaerer Objektspeicher, kein Zip und kein XML. Adobe hat das
+Format nie veroeffentlicht, und es gibt bis heute keine gepflegte freie
+Bibliothek, die es liest — weder in Python noch in Go oder TypeScript. Alle
+verfuegbaren Werkzeuge setzen die IDML voraus.
+
+Am Musterheft (`hefte test/zuerst 3-2026.indd`, 66 MB) wurde das nachgemessen,
+damit die Aussage nicht auf Zuruf beruht:
+
+- Kein eingebettetes IDML, kein Zip-Anteil: `idPkg`, `ParagraphStyleRange`,
+  `<Story` und `PK\x03\x04` kommen kein einziges Mal in der Datei vor.
+- Text liegt als Folge kurzer Saetze vor, jeweils `[Laenge][@][UTF-8]`, mit `\r`
+  als Absatzende. Roh eingesammelt sind das rund 288.000 Zeichen.
+- Die Saetze sind aber Bruchstuecke des Bearbeitungsspeichers, nicht der
+  gesetzte Fliesstext. Aneinandergereiht ergeben sie zerrissene Saetze
+  ("Schon auf der Kndern auch gegen Vorschriften ..."), und die Datei haelt
+  zusaetzlich einen zweiten, aelteren Stand des gesamten Dokuments.
+- Der Satzstrom hat zwar erkennbar feste Kopfsaetze mit laufender Nummer,
+  Klassen- und Objektkennung — sauber durchketten liess er sich in der Sondierung
+  nicht. Wer die Stories in Reihenfolge und mit Formatbezug rekonstruieren will,
+  muss den Objektgraphen der INDD nachbauen. Das ist ein eigenes Vorhaben mit
+  offenem Ausgang, kein Nachmittag.
+
+Ergebnis: aus der INDD ist ohne InDesign nichts zu holen, was besser waere als
+das, was schon aus dem PDF kommt.
+
+## Welche Bibliotheken es gibt, und warum keine eingebaut ist
+
+| Werkzeug | Was es kann | Warum nicht |
+|---|---|---|
+| [SimpleIDML](https://github.com/Starou/SimpleIDML) (Python) | Liest IDML eigenstaendig: `story_ids`, `stories`, `spreads_objects`, `pages`, `style_mapping`. Sein Schwerpunkt ist aber das Zusammensetzen von Dokumenten aus Bausteinen; die mitgelieferten Skripte sprechen den InDesign Server an. | Geprueft an einer erzeugten IDML: liefert Dateinamen und den DOM. Den Absatzdurchlauf mit Format und Text schreibt man danach trotzdem selbst — also genau das, was `idml_extract.py` schon tut. Eine Abhaengigkeit ohne Gewinn. |
+| [idml2docbook](https://pypi.org/project/idml2docbook/) (Python) | Wandelt IDML nach DocBook. | Braucht Java und einen Git-Klon der XSLT-Strecke `idml2xml-frontend`. Das Ergebnis muesste erneut geparst werden. Schwere Fracht fuer den Worker-Container, ohne dass am Ende mehr herauskaeme. |
+| [idml-json-converter](https://github.com/BitAndBlack/idml-json-converter) (PHP) | IDML nach JSON und zurueck. | Andere Sprache als der Dienst, gleiches Bild: die Auswertung bleibt unsere. |
+| IDMarkz / MarkzPortal, Adobe InDesign Server, Typefi | Wandeln INDD nach IDML ohne Handarbeit. | Kosten Geld und laufen ausserhalb. Erst interessant, wenn der Verlag den Export dauerhaft nicht liefern kann. |
+
+Die Auswertung bleibt deshalb in `extract-service/extractor/idml_extract.py`:
+lxml ueber das Zip, ohne weitere Abhaengigkeit.
+
+## Was der Verlag tun muss
+
+Einmal pro Heft, in InDesign: **Datei → Exportieren → InDesign Markup (IDML)**,
+die `.idml` neben die `.indd` legen und mit hochladen.
+
+Fuer mehrere Dateien liegt `tools/indd-nach-idml.jsx` bereit. In InDesign unter
+Fenster → Hilfsprogramme → Skripte oeffnen, doppelklicken, Ordner waehlen: das
+Skript arbeitet den Ordner samt Unterordnern ab, legt jede `.idml` neben ihre
+`.indd`, ueberspringt bereits vorhandene und schliesst ohne zu speichern.
+
+## Stand der Auswertung
+
+`idml_extract.py` liest Stories mit Absatzformat sowie Bildrahmen aus den
+Spreads. Geprueft ist das bisher nur gegen `extract-service/tests/idml_fixture.py`.
+Sobald ein echter Export vorliegt, ist am Heft zu pruefen: Gruppen, gedrehte
+Rahmen, Rahmen auf Musterseiten und ob die Seitenzaehlung des Exports der
+Seitenfolge des Innenteil-PDFs entspricht. Das steht als `drm-viewer-9oy` offen.
