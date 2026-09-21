@@ -104,6 +104,59 @@ def _column_by_start(x0: float, starts: list[float]) -> int:
     return index
 
 
+def _line_fields(words: list[dict]) -> dict:
+    """Die abgeleiteten Angaben einer Zeile aus ihren Woertern bestimmen."""
+    words = sorted(words, key=lambda w: w["x0"])
+    sizes = [float(w.get("size", 0) or 0) for w in words]
+    fonts = [str(w.get("fontname", "")) for w in words]
+    font = Counter(fonts).most_common(1)[0][0] if fonts else ""
+    return {
+        "top": min(w["top"] for w in words),
+        "bottom": max(w["bottom"] for w in words),
+        "x0": min(w["x0"] for w in words),
+        "x1": max(w["x1"] for w in words),
+        "words": words,
+        "text": " ".join(w["text"] for w in words),
+        "size": statistics.median(sizes) if sizes else 0.0,
+        "max_size": max(sizes) if sizes else 0.0,
+        "font": font,
+        "bold": "bold" in font.lower(),
+    }
+
+
+def _split_line_at_gaps(line: dict) -> list[dict]:
+    """Eine Zeile nur an echtem Weissraum in Spaltenstuecke zerlegen.
+
+    Frueher wurden die Woerter erst den Spalten zugeordnet und danach zu Zeilen
+    gebaut. Eine Ueberschrift, die ueber zwei Spalten laeuft, zerfiel dabei
+    zwangslaeufig: aus "Sozialabgaben bald ueber 50 Prozent?" wurden zwei
+    Artikel. Umgekehrt muessen nebeneinanderliegende Spalten getrennt bleiben,
+    sonst verzahnt sich ihr Text.
+
+    Beides unterscheidet der Abstand zwischen zwei Woertern: innerhalb einer
+    Zeile liegt er bei einem Bruchteil der Schriftgroesse, an einer
+    Spaltengrenze bei einem Vielfachen davon. Gemessen am Testheft sind es 4 pt
+    innerhalb einer Ueberschrift gegenueber 22 bis 160 pt an einer Spaltenkante.
+    """
+    words = sorted(line["words"], key=lambda w: w["x0"])
+    if len(words) < 2:
+        return [line]
+    size = line.get("size") or 0.0
+    # Der Schwellwert waechst mit der Schriftgroesse, bleibt aber ueber dem
+    # breitesten gewoehnlichen Wortabstand.
+    threshold = max(10.0, size * 1.2)
+
+    pieces: list[list[dict]] = [[words[0]]]
+    for previous, current in zip(words, words[1:]):
+        if current["x0"] - previous["x1"] >= threshold:
+            pieces.append([current])
+        else:
+            pieces[-1].append(current)
+    if len(pieces) == 1:
+        return [line]
+    return [_line_fields(piece) for piece in pieces]
+
+
 def _words_to_lines(words: list[dict]) -> list[dict]:
     lines: list[dict] = []
     for w in sorted(words, key=lambda w: (round(w["top"], 1), w["x0"])):
@@ -209,10 +262,15 @@ def _looks_shattered(text: str) -> bool:
     an und mischt sich mit der Nachbarzeile. Als Inhalt ist das wertlos.
     """
     tokens = text.split()
-    if len(tokens) < 8:
+    if len(tokens) < 4:
         return False
     singles = sum(1 for t in tokens if len(t) <= 2)
-    return singles / len(tokens) > 0.6
+    if singles / len(tokens) <= 0.6:
+        return False
+    # Ein laengeres Wort rettet den Satz: dann ist es eher eine kurze Zeile
+    # mit Abkuerzungen als zerfallene Zierschrift.
+    lange = sum(1 for t in tokens if len(t) >= 4)
+    return lange <= 1
 
 
 def _looks_doubled(text: str) -> bool:
@@ -304,7 +362,14 @@ def classify(blocks: list[SourceBlock], body: float, body_font: str) -> None:
         elif foreign_font and b.max_size <= body * 1.12 and b.char_count <= 400:
             # Schmuckzitat oder Bildunterschrift im Hausfont, kein Fliesstext.
             b.kind = "quote" if b.char_count < 200 else "caption"
-        elif b.max_size >= body * 1.45 and is_probably_heading(b.text):
+        elif (
+            b.max_size >= body * 1.45
+            # Eine Initiale am Absatzanfang treibt die groesste Schriftgroesse
+            # hoch, ohne dass der Absatz eine Ueberschrift waere. Eine echte
+            # Ueberschrift ist durchgaengig gross oder wenigstens kurz.
+            and (b.size >= body * 1.25 or b.char_count <= 120)
+            and is_probably_heading(b.text)
+        ):
             b.kind = "heading"
         elif b.max_size >= body * 1.12 and b.char_count <= 260 and is_probably_heading(b.text):
             b.kind = "subheading" if b.char_count <= 120 else "lead"
@@ -473,16 +538,22 @@ def extract_pdf_pages(
             page_sizes[canonical_index] = (page.width, page.height)
             starts = _column_starts(words)
             gutters = [] if starts else _detect_gutters(words, page.width)
+            # Erst Zeilen ueber die ganze Seite, dann an echtem Weissraum in
+            # Spaltenstuecke zerlegen. Die umgekehrte Reihenfolge zerschnitt
+            # jede Ueberschrift, die ueber mehrere Spalten laeuft.
+            segments: list[dict] = []
+            for line in _words_to_lines(words):
+                segments.extend(_split_line_at_gaps(line))
             by_column: dict[int, list[dict]] = defaultdict(list)
-            for w in words:
+            for piece in segments:
                 column = (
-                    _column_by_start(w["x0"], starts)
+                    _column_by_start(piece["x0"], starts)
                     if starts
-                    else _column_of((w["x0"] + w["x1"]) / 2, gutters)
+                    else _column_of((piece["x0"] + piece["x1"]) / 2, gutters)
                 )
-                by_column[column].append(w)
+                by_column[column].append(piece)
             for column in sorted(by_column):
-                lines = _words_to_lines(by_column[column])
+                lines = sorted(by_column[column], key=lambda l: (round(l["top"], 1), l["x0"]))
                 column_blocks = _lines_to_blocks(
                     lines, page.width, page.height, canonical_index
                 )

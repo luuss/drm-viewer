@@ -33,6 +33,8 @@ from extractor.image_regions import (  # noqa: E402
 )
 from extractor.model import SourceBlock, SourceImage  # noqa: E402
 from extractor.pdf_extract import (  # noqa: E402
+    _split_line_at_gaps,
+    _words_to_lines,
     attach_captions,
     extract_pdf_pages,
     mark_furniture,
@@ -64,6 +66,61 @@ def test_trennstrich_wird_nur_bei_umbruch_gezogen():
 
 def test_weicher_trennstrich_verschwindet():
     assert clean_text("Ton­ nen") == "Tonnen"
+
+
+def test_bindestrichwort_ueberlebt_den_umbruch():
+    # Nach dem Strich steht ein Grossbuchstabe: das Wort heisst wirklich so.
+    assert (
+        clean_text("Zwangs-\nNacktuntersuchungen")
+        == "Zwangs-Nacktuntersuchungen"
+    )
+    assert clean_text("Gold-\nRückholung") == "Gold-Rückholung"
+
+
+def test_weicher_trennstrich_vor_grossbuchstabe_wird_bindestrich():
+    # InDesign setzt in Bindestrichwoertern einen bedingten Trennstrich, damit
+    # dort umbrochen werden darf. Er gehoert trotzdem ins Wort.
+    assert clean_text("Nordrhein\u00adWestfalen") == "Nordrhein-Westfalen"
+    assert clean_text("Mercosur\u00adAbkommen") == "Mercosur-Abkommen"
+    # Echte Silbentrennung endet klein und verschwindet weiterhin.
+    assert clean_text("demogra\u00adphischen") == "demographischen"
+
+
+def test_zeile_ueber_zwei_spalten_bleibt_ganz():
+    """Eine Ueberschrift ueber mehrere Spalten darf nicht zerschnitten werden."""
+    woerter = [
+        {"text": "Sozialabgaben", "x0": 87.0, "x1": 199.0, "top": 76.0,
+         "bottom": 92.0, "size": 16.0, "fontname": "Arial-BoldMT"},
+        {"text": "bald", "x0": 204.0, "x1": 236.0, "top": 76.0,
+         "bottom": 92.0, "size": 16.0, "fontname": "Arial-BoldMT"},
+        {"text": "über", "x0": 241.0, "x1": 276.0, "top": 76.0,
+         "bottom": 92.0, "size": 16.0, "fontname": "Arial-BoldMT"},
+        {"text": "50", "x0": 280.0, "x1": 298.0, "top": 76.0,
+         "bottom": 92.0, "size": 16.0, "fontname": "Arial-BoldMT"},
+        {"text": "Prozent?", "x0": 302.0, "x1": 371.0, "top": 76.0,
+         "bottom": 92.0, "size": 16.0, "fontname": "Arial-BoldMT"},
+    ]
+    [zeile] = _words_to_lines(woerter)
+    stuecke = _split_line_at_gaps(zeile)
+    assert len(stuecke) == 1
+    assert stuecke[0]["text"] == "Sozialabgaben bald über 50 Prozent?"
+
+
+def test_nebeneinanderliegende_spalten_werden_getrennt():
+    """Zwei Spalten auf gleicher Hoehe duerfen nicht verzahnt werden."""
+    woerter = [
+        {"text": "linke", "x0": 52.0, "x1": 90.0, "top": 100.0, "bottom": 111.0,
+         "size": 10.8, "fontname": "MinionPro"},
+        {"text": "Spalte", "x0": 93.0, "x1": 140.0, "top": 100.0, "bottom": 111.0,
+         "size": 10.8, "fontname": "MinionPro"},
+        {"text": "rechte", "x0": 427.0, "x1": 470.0, "top": 100.0, "bottom": 111.0,
+         "size": 10.8, "fontname": "MinionPro"},
+        {"text": "Spalte", "x0": 473.0, "x1": 520.0, "top": 100.0, "bottom": 111.0,
+         "size": 10.8, "fontname": "MinionPro"},
+    ]
+    [zeile] = _words_to_lines(woerter)
+    stuecke = _split_line_at_gaps(zeile)
+    assert [s["text"] for s in stuecke] == ["linke Spalte", "rechte Spalte"]
 
 
 def test_initiale_wird_ans_wort_gesetzt():

@@ -8,13 +8,20 @@ SOFT_HYPHEN = "­"
 
 def clean_text(raw: str) -> str:
     """Trennstriche, Sonderleerzeichen und Umbrueche aus dem Satz entfernen."""
-    # Bedingter Trennstrich heisst immer: das Wort geht direkt weiter.
-    t = re.sub(SOFT_HYPHEN + r"[ \t]*\n?[ \t]*", "", raw)
+    # Ein bedingter Trennstrich vor einem Grossbuchstaben ist in Wahrheit der
+    # Bindestrich des Wortes: InDesign setzt ihn in "Nordrhein-Westfalen" oder
+    # "Mercosur-Abkommen" so, damit dort umbrochen werden darf. Wird er wie eine
+    # Silbentrennung entfernt, steht im Lesetext "NordrheinWestfalen".
+    t = re.sub(SOFT_HYPHEN + r"[ \t]*\n?[ \t]*(?=[A-ZÄÖÜ])", "-", raw)
+    t = re.sub(SOFT_HYPHEN + r"[ \t]*\n?[ \t]*", "", t)
     t = t.replace(" ", "\n").replace(" ", "\n\n")
     # Geschuetzte und schmale Leerzeichen auf normale abbilden.
     t = re.sub(r"[     ]", " ", t)
     # Am Zeilenende getrennte Woerter zusammenziehen: "Sozialversiche-\nrung".
-    t = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", t)
+    # Folgt dem Strich ein Grossbuchstabe, ist er Teil des Wortes und bleibt:
+    # "Zwangs-\nNacktuntersuchungen" ist ein Bindestrichwort, keine Silbentrennung.
+    t = re.sub(r"(\w)-\s*\n\s*([a-zäöüß])", r"\1\2", t)
+    t = re.sub(r"(\w)-\s*\n\s*([A-ZÄÖÜ])", r"\1-\2", t)
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r" *\n *", "\n", t)
     t = re.sub(r"\n{3,}", "\n\n", t)
@@ -69,6 +76,10 @@ def is_meaningful(text: str) -> bool:
     """
     tokens = text.split()
     if not tokens:
+        return False
+    # Ohne ein einziges richtiges Wort ist es Satzschrott: Preisleisten,
+    # gesperrte Zierschrift, gedrehter Satz vom Umschlagruecken.
+    if not any(re.search(r"[A-Za-zÄÖÜäöüß]{4}", t) for t in tokens):
         return False
     woerter = [t for t in tokens if len(t) >= 3]
     if len(woerter) >= 2:

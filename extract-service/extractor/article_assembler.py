@@ -66,7 +66,10 @@ def assemble(
             # Bildunterschriften gehoeren nicht in den Fliesstext.
             continue
 
-        starts_new = block.kind == "heading"
+        # Eine Ueberschrift ohne ein einziges richtiges Wort taugt nicht als
+        # Artikelanfang: Preisleisten und gesperrte Zierschrift von der
+        # Titelseite haben sonst eigene Artikel eroeffnet.
+        starts_new = block.kind == "heading" and is_meaningful(block.text)
         if starts_new and current is not None:
             body_chars = sum(
                 b.char_count for b in current.blocks if b.kind == "paragraph"
