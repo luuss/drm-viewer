@@ -11,9 +11,9 @@ Ausgewertet wird dafuer die **IDML**, der Austauschexport aus InDesign. Die
 ## Warum die INDD nicht gelesen wird
 
 Die `.indd` ist ein binaerer Objektspeicher, kein Zip und kein XML. Adobe hat das
-Format nie veroeffentlicht, und es gibt bis heute keine gepflegte freie
-Bibliothek, die es liest — weder in Python noch in Go oder TypeScript. Alle
-verfuegbaren Werkzeuge setzen die IDML voraus.
+Format nie veroeffentlicht, und es gibt bis heute keine freie Bibliothek, die es
+liest — weder in Python noch in Go oder TypeScript. Alle setzen die IDML voraus.
+Das einzige Programm, das die INDD selbst liest, ist Photopea (weiter unten).
 
 Am Musterheft (`hefte test/zuerst 3-2026.indd`, 66 MB) wurde das nachgemessen,
 damit die Aussage nicht auf Zuruf beruht:
@@ -32,8 +32,29 @@ damit die Aussage nicht auf Zuruf beruht:
   muss den Objektgraphen der INDD nachbauen. Das ist ein eigenes Vorhaben mit
   offenem Ausgang, kein Nachmittag.
 
-Ergebnis: aus der INDD ist ohne InDesign nichts zu holen, was besser waere als
-das, was schon aus dem PDF kommt.
+Ergebnis: mit eigenen Mitteln ist aus der INDD nichts zu holen, was besser waere
+als das, was schon aus dem PDF kommt.
+
+## Der eine Notnagel: Photopea
+
+Ausser InDesign liest genau ein Programm das Binaerformat: **Photopea**, kostenlos
+und im Browser. Seit Version 5.3 oeffnet es eine `.indd` als Ebenendokument mit
+echtem Text, Vektoren und Bildern; jede Heftseite wird ein Artboard, jeder
+Textrahmen eine Textebene mit Inhalt und Koordinaten. Der Importer ist
+proprietaer und wird von photopea.com geladen — die Datei selbst bleibt im
+Browser, der Code kommt von aussen.
+
+Darauf setzt [dorukgezici/indd-to-idml](https://github.com/dorukgezici/indd-to-idml)
+(MIT, Python): es faehrt Photopea in einem kopflosen Browser, holt das Ergebnis
+als PSD und schreibt daraus selbst eine IDML. Die Forschungsnotiz des Projekts
+ist ehrlich — eine bearbeitbare Rekonstruktion, kein verlustfreier Export,
+geprueft an drei Dokumenten. Das Projekt ist jung und ungenutzt.
+
+Fuer uns waere ohnehin nicht die IDML das Ziel, sondern der `SourceBlock`: Text,
+Position, Seite. Die lassen sich aus den Photopea-Ebenen direkt lesen, ohne den
+Umweg ueber ein Austauschformat. Solange der Verlag den IDML-Export liefert,
+bleibt dieser Weg aber ungebaut — er haengt an einem fremden Dienst, dessen
+Importtreue niemand zusichert.
 
 ## Welche Bibliotheken es gibt, und warum keine eingebaut ist
 
