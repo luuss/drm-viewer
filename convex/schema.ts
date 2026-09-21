@@ -26,6 +26,13 @@ export const pageRole = v.union(
  */
 export const pageHalf = v.union(v.literal("left"), v.literal("right"));
 
+/** Liefergebiet einer Abo-Preisstufe; die Preise unterscheiden sich im Porto. */
+export const deliveryRegion = v.union(
+  v.literal("inland"),
+  v.literal("ausland"),
+  v.literal("luftpost"),
+);
+
 export const blockType = v.union(
   v.literal("heading"),
   v.literal("subheading"),
@@ -267,17 +274,29 @@ export default defineSchema(
     .index("by_stripe_session", ["stripeSessionId"])
     .index("by_external_order", ["externalOrderId"]),
 
+  /**
+   * Preisstufen des Abos eines Titels: Abo-Art (`tier`, etwa Normal- oder
+   * Foerderabonnement) mal Liefergebiet (`region`). Jede Stufe ist ein eigener
+   * Stripe-Preis. Der Kiosk zeigt nur den Inlandspreis der ersten Abo-Art; die
+   * Stufe waehlt der Kunde auf der Abo-Seite.
+   */
   subscriptionPlans: defineTable({
     name: v.string(),
     description: v.optional(v.string()),
     publicationId: v.id("publications"),
     stripePriceId: v.string(),
+    stripeProductId: v.optional(v.string()),
     priceAmountCents: v.number(),
     interval: v.union(v.literal("month"), v.literal("year")),
+    tier: v.optional(v.string()),
+    tierNote: v.optional(v.string()),
+    region: v.optional(deliveryRegion),
     isActive: v.boolean(),
     sortOrder: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_stripe_price", ["stripePriceId"]),
+  })
+    .index("by_stripe_price", ["stripePriceId"])
+    .index("by_publication", ["publicationId"]),
 
   subscriptions: defineTable({
     userId: v.id("users"),

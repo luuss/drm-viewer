@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { requireEditor, requireAdmin, audit } from "./roles";
 
 function slugify(s: string): string {
@@ -51,6 +51,15 @@ export const create = mutation({
     await audit(ctx, "publication.create", id, name);
     return id;
   },
+});
+
+export const getBySlugInternal = internalQuery({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) =>
+    await ctx.db
+      .query("publications")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique(),
 });
 
 export const setActive = mutation({

@@ -3,10 +3,16 @@
 import { v } from "convex/values";
 import Stripe from "stripe";
 import { StripeSubscriptions } from "@convex-dev/stripe";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Id } from "./_generated/dataModel";
+import {
+  REGION_LABEL,
+  SUBSCRIPTION_CATALOG,
+  catalogVariants,
+  missingVariants,
+} from "./subscriptionCatalog";
 
 const stripeClient = new StripeSubscriptions(components.stripe);
 
@@ -100,10 +106,117 @@ export const createPlanWithPrice = action({
       description: args.description,
       publicationId: args.publicationId,
       stripePriceId: price.id,
+      stripeProductId: product.id,
       priceAmountCents: args.priceAmountCents,
       interval: args.interval,
     });
     return { planId, priceId: price.id };
+  },
+});
+
+/** Schluesseltauglicher Teil eines Namens fuer Stripe-Idempotenzschluessel. */
+function keyOf(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[äöüß]/g, (c) => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" })[c] ?? c)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/**
+ * Abo-Angebot eines Titels nach `subscriptionCatalog.ts` anlegen: je Abo-Art
+ * ein Stripe-Produkt, je Liefergebiet ein Jahrespreis, je Preis eine Zeile in
+ * `subscriptionPlans`. Laeuft von der Kommandozeile:
+ *
+ *     npx convex run billing:seedSubscriptionPlans '{"publicationSlug":"zuerst"}'
+ *
+ * Vorhandene Stufen bleiben unangetastet; der Lauf ist wiederholbar und
+ * ergaenzt nur, was fehlt.
+ */
+export const seedSubscriptionPlans = internalAction({
+  args: { publicationSlug: v.string() },
+  handler: async (
+    ctx,
+    { publicationSlug },
+  ): Promise<{ created: string[]; skipped: string[] }> => {
+    const entry = SUBSCRIPTION_CATALOG[publicationSlug];
+    if (!entry) throw new Error(`Kein Abo-Katalog für den Titel ${publicationSlug}`);
+    const publication: any = await ctx.runQuery(
+      internal.publications.getBySlugInternal,
+      { slug: publicationSlug },
+    );
+    if (!publication) {
+      throw new Error(`Titel ${publicationSlug} ist nicht angelegt`);
+    }
+    const existing: any[] = await ctx.runQuery(
+      internal.plans.listByPublicationInternal,
+      { publicationId: publication._id },
+    );
+    const todo = missingVariants(entry, existing);
+    const skipped = catalogVariants(entry)
+      .filter((variant) => !todo.some((t) => t.name === variant.name))
+      .map((variant) => variant.name);
+
+    // Ein Produkt je Abo-Art; die Liefergebiete sind Preise daran. Vorhandene
+    // Stufen derselben Art verraten das Produkt, damit kein zweites entsteht.
+    const stripe = rawStripe();
+    const productByTier = new Map<string, string>();
+    for (const plan of existing) {
+      if (plan.tier && plan.stripeProductId) {
+        productByTier.set(plan.tier, plan.stripeProductId);
+      }
+    }
+    const created: string[] = [];
+    for (const variant of todo) {
+      let productId = productByTier.get(variant.tier);
+      if (!productId) {
+        const product = await stripe.products.create(
+          {
+            name: `${publication.name} ${variant.tier}`,
+            description: variant.tierNote,
+            metadata: {
+              kind: "subscription",
+              publicationId: publication._id as string,
+              tier: variant.tier,
+            },
+          },
+          { idempotencyKey: `abo-product-${publication._id}-${keyOf(variant.tier)}` },
+        );
+        productId = product.id;
+        productByTier.set(variant.tier, productId);
+      }
+      const price = await stripe.prices.create(
+        {
+          product: productId,
+          unit_amount: variant.priceAmountCents,
+          currency: CURRENCY,
+          recurring: { interval: entry.interval },
+          tax_behavior: "inclusive",
+          nickname: REGION_LABEL[variant.region],
+          metadata: { region: variant.region },
+        },
+        {
+          idempotencyKey:
+            `abo-price-${publication._id}-${keyOf(variant.tier)}-` +
+            `${variant.region}-${variant.priceAmountCents}`,
+        },
+      );
+      await ctx.runMutation(internal.plans.createInternal, {
+        name: variant.name,
+        description: variant.tierNote,
+        publicationId: publication._id,
+        stripePriceId: price.id,
+        stripeProductId: productId,
+        priceAmountCents: variant.priceAmountCents,
+        interval: entry.interval,
+        tier: variant.tier,
+        tierNote: variant.tierNote,
+        region: variant.region,
+        sortOrder: variant.sortOrder,
+      });
+      created.push(variant.name);
+    }
+    return { created, skipped };
   },
 });
 

@@ -1,78 +1,26 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Authenticated, useAction, useQuery } from "convex/react";
-import { api, formatEuro, type Id , cleanError } from "../lib/api";
+import { useQuery } from "convex/react";
+import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
 
-const printSubscriptions = [
-  {
-    name: "Normalabonnement",
-    note: null,
-    prices: [
-      ["Inland", "104,40 €"],
-      ["Ausland", "133,20 €"],
-      ["Ausland Luftpost", "153,60 €"],
-    ],
-  },
-  {
-    name: "Schüler- und Studentenabonnement",
-    note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-    prices: [
-      ["Inland", "90,00 €"],
-      ["Ausland", "118,80 €"],
-      ["Ausland Luftpost", "141,60 €"],
-    ],
-  },
-  {
-    name: "Kombi-Abonnement",
-    note: "Zusammen mit einem Abonnement der Deutschen Militärzeitschrift",
-    prices: [
-      ["Inland", "96,00 €"],
-      ["Ausland", "124,80 €"],
-    ],
-  },
-  {
-    name: "Förderabonnement",
-    note: "Der Förderbetrag fließt in die Werbung von ZUERST!",
-    prices: [
-      ["Inland", "126,00 €"],
-      ["Ausland", "153,00 €"],
-      ["Ausland Luftpost", "177,00 €"],
-    ],
-  },
-] as const;
+const REGION_LABEL: Record<string, string> = {
+  inland: "Inland",
+  ausland: "Ausland",
+  luftpost: "Ausland Luftpost",
+};
 
-const PRINT_ORDER_URL = "https://zuerst.de/abo/";
-const SAMPLE_ORDER_URL = "https://zuerst.de/probeexemplar/";
-
-/** Kiosk: veroeffentlichte Ausgaben und die Abos je Titel. */
+/**
+ * Kiosk: die Abos je Titel und die veroeffentlichten Ausgaben. Beides sind
+ * Karten, die auf eine eigene Seite fuehren; gekauft wird erst dort. Das Abo
+ * zeigt hier nur den Inlandspreis des Normalabonnements — die Abo-Art und das
+ * Liefergebiet waehlt der Kunde auf der Abo-Seite.
+ */
 export default function KioskPage() {
   const issues = useQuery(api.issues.listPublished, {});
-  const plans = useQuery(api.plans.list, {});
-  const waiver = useQuery(api.consents.currentWaiver, {});
-  const subscribe = useAction(api.billing.createSubscriptionCheckout);
-  const [accepted, setAccepted] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const offers = useQuery(api.plans.offers, {});
 
-  if (issues === undefined) return <div className="centered">Laden...</div>;
-
-  async function startAbo(planId: Id<"subscriptionPlans">) {
-    setErr(null);
-    setBusy(planId as string);
-    try {
-      const origin = window.location.origin;
-      const { url } = await subscribe({
-        planId,
-        successUrl: `${origin}/library?abo=1`,
-        cancelUrl: `${origin}/kiosk`,
-        withdrawalWaiver: accepted,
-      });
-      window.location.href = url;
-    } catch (e: any) {
-      setErr(cleanError(e) ?? "Abo fehlgeschlagen");
-      setBusy(null);
-    }
+  if (issues === undefined || offers === undefined) {
+    return <div className="centered">Laden...</div>;
   }
 
   return (
@@ -85,108 +33,53 @@ export default function KioskPage() {
         </p>
       </div>
 
-      <section className="subscription-overview" aria-labelledby="print-subscriptions-title">
-        <div className="subscription-heading">
-          <div>
-            <span className="eyebrow">Bezugsmöglichkeiten</span>
-            <h3 id="print-subscriptions-title">Abos</h3>
-          </div>
-          <a
-            className="sample-copy"
-            href={SAMPLE_ORDER_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Icon name="book-open" size={22} />
-            <div>
-              <strong>Kostenloses Leseexemplar</strong>
-              <span>
-                Jetzt kostenloses aktuelles Leseexemplar anfordern
-                <Icon name="arrow-right" size={15} />
-              </span>
-            </div>
-          </a>
-        </div>
-
-        <div className="subscription-grid">
-          {printSubscriptions.map((subscription) => (
-            <article className="subscription-card" key={subscription.name}>
-              <div>
-                <h4>{subscription.name}</h4>
-                {subscription.note && <p>{subscription.note}</p>}
-              </div>
-              <div className="subscription-prices" aria-label={`Preise ${subscription.name}`}>
-                {subscription.prices.map(([region, price]) => (
-                  <a
-                    key={region}
-                    href={PRINT_ORDER_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`${subscription.name}, ${region}, ${price} bestellen`}
-                  >
-                    <span>{region}</span>
-                    <strong>{price}</strong>
-                    <span className="subscription-buy">
-                      Bestellen <Icon name="arrow-right" size={15} />
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-        <p className="subscription-order-note">
-          Die Bestellung öffnet den offiziellen ZUERST!-Bestellprozess mit
-          Rechnungsanschrift und Auswahl zwischen Rechnung, SEPA-Lastschrift und
-          sicherer Online-Zahlung.
-        </p>
-      </section>
-
-      {plans && plans.length > 0 && (
+      {offers.length > 0 && (
         <section>
-          <h3>Digitale Abos</h3>
+          <h3>Abonnements</h3>
           <p className="hint">
             Das Abo schaltet jede Ausgabe frei, die während der Laufzeit
             erscheint — und das bei Abschluss aktuelle Heft. Freigeschaltete
             Ausgaben bleiben auch nach einer Kündigung lesbar.
           </p>
-          <Authenticated>
-            <label className="consent">
-              <input
-                type="checkbox"
-                checked={accepted}
-                onChange={(e) => setAccepted(e.target.checked)}
-              />
-              <span>
-                {waiver?.text ?? "Sofortiger Zugriff gewünscht."} (
-                <Link to="/widerruf">Widerrufsbelehrung</Link>)
-              </span>
-            </label>
-          </Authenticated>
-          <div className="plan-grid">
-            {plans.map((p) => (
-              <div className="plan-card" key={p._id}>
-                <div className="title">{p.name}</div>
-                {p.publication && <div className="meta">{p.publication}</div>}
-                {p.description && <p>{p.description}</p>}
-                <div className="price">
-                  {formatEuro(p.priceAmountCents)}
-                  {p.interval === "year" ? " / Jahr" : " / Monat"}
+          <div className="issue-grid">
+            {offers.map((o) => (
+              <Link
+                key={o.publicationId}
+                to={`/abo/${o.publicationSlug}`}
+                className="issue-card"
+              >
+                <div className="issue-cover-preview">
+                  {o.coverUrl ? (
+                    <img
+                      src={o.coverUrl}
+                      alt={o.latestIssueTitle ?? o.publicationName}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="cover-placeholder">{o.publicationName[0]}</div>
+                  )}
                 </div>
-                <Authenticated>
-                  <button
-                    className="btn"
-                    disabled={!accepted || busy !== null}
-                    aria-busy={busy === p._id}
-                    onClick={() => startAbo(p._id)}
-                  >
-                    {busy === p._id ? "Wird geöffnet..." : <><Icon name="arrow-right" /> Abo starten</>}
-                  </button>
-                </Authenticated>
-              </div>
+                <div className="issue-card-body">
+                  <div className="title">{o.publicationName}</div>
+                  <div className="meta">
+                    {[
+                      o.headline.tier,
+                      o.headline.region ? REGION_LABEL[o.headline.region] : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                  <div className="price">
+                    {formatEuro(o.headline.priceAmountCents)}
+                    {o.headline.interval === "year" ? " / Jahr" : " / Monat"}
+                  </div>
+                  <div className="card-action">
+                    Abo ansehen <Icon name="arrow-right" />
+                  </div>
+                </div>
+              </Link>
             ))}
           </div>
-          {err && <div className="err">{err}</div>}
         </section>
       )}
 

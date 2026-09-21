@@ -39,6 +39,11 @@ Das Abo gilt je Titel und schaltet dauerhaft frei: alles, was während der
 Laufzeit erscheint, plus das bei Abschluss aktuelle Heft. Eine Kündigung nimmt
 nichts weg, eine Pause holt nichts nach.
 
+Im Kiosk steht neben den Einzelausgaben je Titel ein Abo mit dem Inlandspreis
+des Normalabonnements. Abo-Art (Normal, Schüler und Studenten, Kombi, Förder)
+und Liefergebiet (Inland, Ausland, Luftpost) wählt man erst auf der Abo-Seite;
+der Abschluss läuft wie der Einzelkauf über Stripe.
+
 ## Für die Redaktion
 
 Titel und Ausgaben anlegen, Quellen hochladen (Innenteil-PDF, Umschlag-PDF als
@@ -51,6 +56,15 @@ Veröffentlichen geht erst, wenn jeder Artikel entschieden ist.
 Für Titel mit fester Heftstruktur (ZUERST!, Deutsche Militärzeitschrift) kennt
 der Import Publikationsprofile; alternativ legt `scripts/heft-anlegen.py` ein
 Heft samt Importauftrag von der Kommandozeile an.
+
+Das Abo-Angebot eines Titels (Abo-Arten mal Liefergebiete, Preise in
+`convex/subscriptionCatalog.ts`) legt eine Kommandozeile samt Stripe-Produkten
+und -Preisen an; ein zweiter Lauf ergänzt nur, was fehlt:
+
+```bash
+npx convex run billing:seedSubscriptionPlans '{"publicationSlug":"zuerst"}'
+npx convex run billing:seedSubscriptionPlans '{"publicationSlug":"dmz"}'
+```
 
 ## Entwicklung
 

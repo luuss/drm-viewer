@@ -869,36 +869,88 @@ button.small, .btn.small {
 .issue-card .cta .go .icon { transition: transform 0.15s ease; }
 .issue-card-body .cta .where { color: var(--muted); }
 
-/* Abo-Karten */
-.subscription-overview {
-  padding: clamp(var(--s5), 4vw, var(--s7));
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background:
-    radial-gradient(circle at 92% 0%, var(--accent-soft), transparent 34%),
-    var(--surface);
-  box-shadow: var(--shadow-sm);
+/* Abo-Seite: Abo-Art und Liefergebiet waehlen. Die Karten stehen in der
+   Lesebreite der Heftinfo; jede Preiszeile ist ein Auswahlknopf. Der Kiosk
+   selbst zeigt Abos als Heftkarten (.issue-card), nicht hiermit. */
+.subscription-choice {
+  align-self: stretch;
+  min-width: 0;
+  margin: var(--s2) 0 0;
+  padding: 0;
+  border: 0;
 }
-.subscription-heading {
+.subscription-choice legend {
+  padding: 0;
+  margin-bottom: var(--s3);
+  font-family: var(--serif);
+  font-size: var(--fs-h4);
+  font-weight: 600;
+}
+.subscription-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3);
+}
+.subscription-card {
   display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: var(--s5);
-  margin-bottom: var(--s5);
+  flex-direction: column;
+  gap: var(--s4);
+  min-width: 0;
+  padding: var(--s4);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 92%, var(--paper));
+  transition: border-color 0.15s ease;
 }
-.subscription-heading h3 { margin: var(--s1) 0 0; }
-.subscription-heading .eyebrow {
-  color: var(--accent);
+/* Die Karte mit der gewaehlten Stufe traegt den Akzent, damit die Wahl auch
+   ohne Blick auf den Radioknopf sichtbar ist. */
+.subscription-card.selected { border-color: var(--accent); }
+.subscription-card h4 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--fs-h4);
+}
+.subscription-card p {
+  margin: var(--s1) 0 0;
+  color: var(--muted);
   font-size: var(--fs-mini);
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  line-height: 1.45;
 }
+.subscription-prices {
+  display: grid;
+  gap: var(--s1);
+  margin: auto 0 0;
+}
+.subscription-prices > label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 2.8rem;
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--rule-soft);
+  color: var(--muted);
+  font-size: var(--fs-sub);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+}
+.subscription-prices > label:hover { color: var(--ink); }
+.subscription-prices > label.selected { color: var(--ink); font-weight: 600; }
+.subscription-prices > label > input { margin: 0; cursor: pointer; }
+.subscription-prices > label > strong {
+  color: var(--accent);
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* Verweis auf das gedruckte Leseexemplar beim Verlag. */
 .sample-copy {
   display: flex;
   align-items: center;
   gap: var(--s3);
   max-width: 27rem;
+  margin-top: var(--s3);
   padding: var(--s3) var(--s4);
   border: 1px solid var(--accent-soft);
   border-radius: var(--radius);
@@ -925,124 +977,10 @@ button.small, .btn.small {
   margin-left: var(--s1);
   vertical-align: -0.2em;
 }
-.subscription-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s3);
-}
-.subscription-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s4);
-  min-width: 0;
-  padding: var(--s4);
-  border: 1px solid var(--rule-soft);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface) 92%, var(--paper));
-}
-.subscription-card h4 {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: var(--fs-h4);
-}
-.subscription-card p {
-  margin: var(--s1) 0 0;
-  color: var(--muted);
-  font-size: var(--fs-mini);
-  line-height: 1.45;
-}
-.subscription-prices {
-  display: grid;
-  gap: var(--s1);
-  margin: auto 0 0;
-}
-.subscription-prices > a {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: var(--s3);
-  min-height: 2.8rem;
-  padding: var(--s2) 0;
-  border-top: 1px solid var(--rule-soft);
-  color: inherit;
-  text-decoration: none;
-}
-.subscription-prices > a > span:first-child { color: var(--muted); }
-.subscription-prices > a > strong {
-  color: var(--accent);
-  font-weight: 700;
-  white-space: nowrap;
-}
-.subscription-buy {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s1);
-  color: var(--accent);
-  font-size: var(--fs-mini);
-  font-weight: 700;
-  opacity: 0.76;
-}
-.subscription-prices > a:hover .subscription-buy { opacity: 1; }
-.subscription-prices > a:hover .subscription-buy .icon {
-  transform: translateX(0.15rem);
-}
-.subscription-buy .icon { transition: transform 0.15s ease; }
-.subscription-order-note {
-  margin: var(--s4) 0 0;
-  color: var(--muted);
-  font-size: var(--fs-mini);
-}
 @media (max-width: 46rem) {
-  .subscription-heading { align-items: stretch; flex-direction: column; }
-  .sample-copy { max-width: none; }
   .subscription-grid { grid-template-columns: 1fr; }
-  .subscription-prices > a {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .subscription-buy { grid-column: 1 / -1; }
+  .sample-copy { max-width: none; }
 }
-
-.plan-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: var(--s4);
-  grid-auto-rows: 1fr;
-}
-.plan-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s2);
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: var(--s5);
-  box-shadow: var(--shadow-sm);
-  height: 100%;
-}
-.plan-card .title {
-  font-family: var(--serif);
-  font-size: var(--fs-h3);
-  font-weight: 600;
-}
-.plan-card .meta {
-  font-size: var(--fs-mini);
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.plan-card p { font-size: var(--fs-sub); }
-/* Preis und Knopf haengen unten am selben Anschlag, damit die Karten einer
-   Reihe trotz verschieden langer Texte gleich aussehen. */
-.plan-card .price {
-  font-family: var(--serif);
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--accent);
-  margin-top: auto;
-  padding-top: var(--s3);
-}
-.plan-card .btn { margin-top: var(--s2); }
 
 /* Einzelansicht einer Ausgabe */
 .issue-detail {

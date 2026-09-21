@@ -37,6 +37,7 @@ import type * as roles from "../roles.js";
 import type * as serviceAuth from "../serviceAuth.js";
 import type * as shopIntegration from "../shopIntegration.js";
 import type * as stripeEvents from "../stripeEvents.js";
+import type * as subscriptionCatalog from "../subscriptionCatalog.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as toc from "../toc.js";
 import type * as uploadRules from "../uploadRules.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   serviceAuth: typeof serviceAuth;
   shopIntegration: typeof shopIntegration;
   stripeEvents: typeof stripeEvents;
+  subscriptionCatalog: typeof subscriptionCatalog;
   subscriptions: typeof subscriptions;
   toc: typeof toc;
   uploadRules: typeof uploadRules;

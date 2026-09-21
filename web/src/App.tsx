@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import LibraryPage from "./library/LibraryPage";
 import KioskPage from "./library/KioskPage";
 import IssueDetailPage from "./library/IssueDetailPage";
+import SubscriptionDetailPage from "./library/SubscriptionDetailPage";
 import ClaimPage from "./pages/ClaimPage";
 import ReaderShell from "./reader/ReaderShell";
 import AdminPage from "./admin/AdminPage";
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/claim/:token" element={<ClaimPage />} />
           <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
+          <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
@@ -40,6 +42,7 @@ export default function App() {
           <Route path="/library" element={<Shell><LibraryPage /></Shell>} />
           <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
+          <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
           <Route path="/claim/:token" element={<ClaimPage />} />
           <Route path="/suche" element={<Shell><SearchPage /></Shell>} />
           <Route path="/account" element={<Shell><ProfilePage /></Shell>} />

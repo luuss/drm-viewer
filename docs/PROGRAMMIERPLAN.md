@@ -216,7 +216,13 @@ verhindert und den Reader zeitweise unbenutzbar gemacht.
 ## 11. Commerce und Shop-Anbindung
 
 Stripe bleibt, gebuendelt in `convex/billing.ts` und `convex/stripeEvents.ts`.
-Abos gelten je Publikation. Zusaetzlich `convex/shopIntegration.ts`:
+Abos gelten je Publikation und haben Preisstufen: `subscriptionPlans.tier`
+(Abo-Art) mal `region` (Liefergebiet), jede mit eigenem Stripe-Preis.
+`convex/subscriptionCatalog.ts` ist die Vorlage, `billing.seedSubscriptionPlans`
+legt die Stufen von der Kommandozeile an. Der Kiosk (`plans.offers`) zeigt je
+Titel nur den Inlandspreis der ersten Abo-Art; die Stufe waehlt der Kunde auf
+`/abo/:slug` (`plans.offerBySlug`), der Abschluss laeuft wie der Einzelkauf
+ueber `billing.createSubscriptionCheckout`. Zusaetzlich `convex/shopIntegration.ts`:
 HMAC-signierte Server-Schnittstelle unter `/shop/entitlements`, idempotent ueber
 `externalOrderId` und Aktion, mit Protokoll in `shopGrants` und `auditLog`.
 
@@ -271,4 +277,3 @@ Next.js, Redis oder Celery.
 * Weitere Analyzer (Docling, Adobe) hinter derselben `SourceBlock`-Grenze.
 * S3 oder R2 statt MinIO ueber dieselbe Storage-Schnittstelle.
 * OIDC-Anmeldung, sobald der Shop sie anbietet.
-* Mehrere Abo-Plaene je Publication.
