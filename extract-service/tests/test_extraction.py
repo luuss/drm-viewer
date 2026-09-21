@@ -39,6 +39,7 @@ from extractor.page_geometry import (  # noqa: E402
 from extractor.model import LayoutLine, SourceBlock, SourceImage, TocHint  # noqa: E402
 from extractor.pdf_extract import (  # noqa: E402
     _split_line_at_gaps,
+    _split_word_on_size,
     _words_on_visible_page,
     _words_to_lines,
     attach_captions,
@@ -137,6 +138,59 @@ def test_nebeneinanderliegende_spalten_werden_getrennt():
     [zeile] = _words_to_lines(woerter)
     stuecke = _split_line_at_gaps(zeile)
     assert [s["text"] for s in stuecke] == ["linke Spalte", "rechte Spalte"]
+
+
+def _zeichen(text: str, groessen, x0: float = 10.0) -> list[dict]:
+    return [
+        {"text": t, "x0": x0 + i * 5, "x1": x0 + i * 5 + 5, "top": 100.0,
+         "bottom": 111.0, "size": s}
+        for i, (t, s) in enumerate(zip(text, groessen))
+    ]
+
+
+def test_groessenrauschen_trennt_kein_wort():
+    """Kursive DMZ-Bildunterschriften schwanken je Glyphe um Hundertstel."""
+    wort = {"text": "Als", "fontname": "MinionPro-It", "upright": True,
+            "chars": _zeichen("Als", (11.04, 11.11, 11.06))}
+    [ganz] = _split_word_on_size(wort)
+    assert ganz["text"] == "Als"
+    assert abs(ganz["size"] - 11.06) < 0.01
+    assert ganz["fontname"] == "MinionPro-It"
+
+
+def test_initiale_bleibt_eigenes_wort():
+    """Ein echter Groessensprung trennt weiterhin, sonst klebt die Initiale."""
+    wort = {"text": "Der", "fontname": "MinionPro-Regular", "upright": True,
+            "chars": _zeichen("Der", (40.0, 11.0, 11.0))}
+    teile = _split_word_on_size(wort)
+    assert [t["text"] for t in teile] == ["D", "er"]
+    assert teile[0]["size"] == 40.0 and teile[1]["size"] == 11.0
+
+
+@has_dmz
+def test_dmz_bildunterschrift_bleibt_ganz():
+    """Gedruckte Seite 12: die Unterschrift unter dem Portraet kam vorher als
+    "A l s B e f e h l s h a b e r" an und klebte im Fliesstext."""
+    data = open(DMZ_HEFT, "rb").read()
+    blocks, _images = extract_pdf_pages(data, [(9, 11)])
+    texte = [b.text for b in blocks]
+    assert any("Als Befehlshaber bewährt, bekam General von Senger" in t for t in texte)
+    assert not any("A l s B e f" in t for t in texte)
+
+
+def test_schraege_zeile_bleibt_eine_zeile():
+    """Leicht gedrehter Satz driftet ueber die Zeilenbreite um mehr als die
+    Zeilentoleranz; die Woerter gehoeren trotzdem in eine Zeile, in x-Reihenfolge."""
+    texte = "Als Befehlshaber bewährt, bekam General von Senger und Etterlin".split()
+    woerter = [
+        {"text": t, "x0": 60.0 + i * 40, "x1": 95.0 + i * 40,
+         "top": 446.0 - i * 0.45, "bottom": 457.0 - i * 0.45,
+         "size": 11.1, "fontname": "MinionPro-It"}
+        for i, t in enumerate(texte)
+    ]
+    assert woerter[0]["top"] - woerter[-1]["top"] > 2.2
+    [zeile] = _words_to_lines(woerter)
+    assert zeile["text"] == " ".join(texte)
 
 
 def test_initiale_wird_ans_wort_gesetzt():

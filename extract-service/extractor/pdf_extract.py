@@ -110,6 +110,61 @@ def _column_by_start(x0: float, starts: list[float]) -> int:
     return index
 
 
+SIZE_JITTER = 0.5          # Punkte: kleinere Groessenspruenge trennen kein Wort
+
+
+def _word_from_chars(chars: list[dict], template: dict) -> dict:
+    sizes = [float(c.get("size", 0) or 0) for c in chars]
+    return {
+        "text": "".join(c["text"] for c in chars),
+        "x0": min(c["x0"] for c in chars),
+        "x1": max(c["x1"] for c in chars),
+        "top": min(c["top"] for c in chars),
+        "bottom": max(c["bottom"] for c in chars),
+        "size": statistics.median(sizes) if sizes else 0.0,
+        "fontname": template.get("fontname", ""),
+        "upright": template.get("upright", True),
+    }
+
+
+def _split_word_on_size(word: dict) -> list[dict]:
+    """Ein Wort nur an echten Groessenspruengen teilen.
+
+    pdfplumber beginnt ein neues Wort bei jeder Aenderung eines Trennmerkmals.
+    Mit "size" als Merkmal zerfielen die kursiven Bildunterschriften der DMZ in
+    Einzelbuchstaben ("A l s B e f e h l s h a b e r"), weil ihre Glyphen je
+    nach Rundung zwischen 11,04 und 11,15 pt liegen. Hier entscheidet deshalb
+    ein Schwellwert: eine Initiale neben Grundschrift bleibt ein eigenes Wort,
+    Rundungsrauschen nicht.
+    """
+    chars = word.get("chars") or []
+    if not chars:
+        rest = {k: v for k, v in word.items() if k != "chars"}
+        rest.setdefault("size", 0.0)
+        return [rest]
+    pieces: list[list[dict]] = [[chars[0]]]
+    for previous, current in zip(chars, chars[1:]):
+        jump = abs(
+            float(current.get("size", 0) or 0) - float(previous.get("size", 0) or 0)
+        )
+        if jump > SIZE_JITTER:
+            pieces.append([current])
+        else:
+            pieces[-1].append(current)
+    return [_word_from_chars(piece, word) for piece in pieces]
+
+
+def _extract_words(page) -> list[dict]:
+    """Woerter einer Seite mit Schriftgroesse, -art und Lage lesen."""
+    words = page.extract_words(
+        extra_attrs=["fontname", "upright"], keep_blank_chars=False, return_chars=True
+    )
+    out: list[dict] = []
+    for word in words:
+        out.extend(_split_word_on_size(word))
+    return out
+
+
 def _line_fields(words: list[dict]) -> dict:
     """Die abgeleiteten Angaben einer Zeile aus ihren Woertern bestimmen."""
     words = sorted(words, key=lambda w: w["x0"])
@@ -168,8 +223,14 @@ def _words_to_lines(words: list[dict]) -> list[dict]:
     for w in sorted(words, key=lambda w: (round(w["top"], 1), w["x0"])):
         placed = False
         for line in reversed(lines[-4:]):
-            if abs(line["top"] - w["top"]) <= LINE_TOLERANCE:
+            # Gemessen wird am zuletzt angefuegten Wort, nicht am ersten der
+            # Zeile: die kursiven DMZ-Bildunterschriften stehen minimal schraeg
+            # und driften ueber die Zeilenbreite um mehr als die Toleranz. Am
+            # ersten Wort gemessen zerfiel die Zeile in zwei Stuecke, die dann
+            # in falscher Reihenfolge standen ("bekam General ... Als Befehlshaber").
+            if abs(line["words"][-1]["top"] - w["top"]) <= LINE_TOLERANCE:
                 line["words"].append(w)
+                line["top"] = min(line["top"], w["top"])
                 line["x0"] = min(line["x0"], w["x0"])
                 line["x1"] = max(line["x1"], w["x1"])
                 line["bottom"] = max(line["bottom"], w["bottom"])
@@ -635,9 +696,7 @@ def extract_pdf_pages(
             if source_index >= len(pdf.pages):
                 continue
             page = pdf.pages[source_index]
-            words = page.extract_words(
-                extra_attrs=["size", "fontname", "upright"], keep_blank_chars=False
-            )
+            words = _extract_words(page)
             # Gedrehter Satz (Preisleiste am Umschlagruecken, Bildnachweise)
             # gehoert nicht in den Lesefluss und zerreisst sonst die Zeilen.
             words = [w for w in words if w.get("upright", True)]
