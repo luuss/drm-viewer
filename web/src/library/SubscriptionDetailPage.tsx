@@ -73,7 +73,7 @@ export default function SubscriptionDetailPage() {
     <div className="page issue-detail">
       <div className="cover-wrap">
         {offer.coverUrl ? (
-          <img src={offer.coverUrl} alt={offer.latestIssueTitle ?? offer.publicationName} />
+          <img src={offer.coverUrl} alt={offer.coverTitle ?? offer.publicationName} />
         ) : (
           <div className="cover-placeholder">{offer.publicationName[0]}</div>
         )}

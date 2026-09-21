@@ -74,7 +74,9 @@ async function offerFor(
 ) {
   const grouped = groupPlans(plans.filter((p) => p.isActive));
   if (!grouped) return null;
-  // Der Umschlag des juengsten veroeffentlichten Hefts steht fuer den Titel.
+  // Fuer die Reihe steht das aktuelle Titelbild aus dem Verlagsshop
+  // (publicationCovers), ersatzweise der Umschlag des juengsten
+  // veroeffentlichten Hefts.
   const issues = await ctx.db
     .query("issues")
     .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
@@ -85,12 +87,17 @@ async function offerFor(
       (a, b) =>
         (b.publicationDate ?? b.createdAt) - (a.publicationDate ?? a.createdAt),
     )[0];
+  const shopCover = await assetUrl(ctx, publication.coverAssetId);
+  const issueCover = latest ? await assetUrl(ctx, latest.coverAssetId) : null;
   return {
     publicationId: publication._id,
     publicationSlug: publication.slug,
     publicationName: publication.name,
     description: publication.description ?? null,
-    coverUrl: latest ? await assetUrl(ctx, latest.coverAssetId) : null,
+    coverUrl: shopCover ?? issueCover,
+    coverTitle: shopCover
+      ? (publication.coverLabel ?? publication.name)
+      : (latest?.title ?? null),
     latestIssueTitle: latest?.title ?? null,
     ...grouped,
   };

@@ -14,4 +14,15 @@ crons.daily(
   {},
 );
 
+/**
+ * Taeglich das aktuelle Titelbild jeder Reihe aus dem Verlagsshop holen; es
+ * steht auf den Abo-Karten und Abo-Seiten.
+ */
+crons.daily(
+  "titelbilder aus dem verlagsshop",
+  { hourUTC: 4, minuteUTC: 15 },
+  internal.publicationCovers.refreshAll,
+  {},
+);
+
 export default crons;

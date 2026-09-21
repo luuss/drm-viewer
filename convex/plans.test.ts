@@ -137,6 +137,36 @@ describe("Abos im Kiosk", () => {
   });
 });
 
+describe("Titelbild der Reihe", () => {
+  test("das Bild aus dem Verlagsshop geht dem Umschlag des juengsten Hefts vor", async () => {
+    const t = convexTest(schema, modules);
+    const { zuerst } = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("issues", {
+        publicationId: zuerst, title: "ZUERST! 3/2026", slug: "zuerst-3-2026", pageCount: 84,
+        priceAmountCents: 999, isPublished: true, includedInSubscription: true,
+        publicationDate: 300, createdAt: 1, updatedAt: 1,
+      });
+    });
+    const before = await t.query(api.plans.offerBySlug, { slug: "zuerst" });
+    expect(before!.coverUrl).toBeNull();
+    expect(before!.coverTitle).toBe("ZUERST! 3/2026");
+
+    await t.run(async (ctx) => {
+      const storageId = await ctx.storage.store(new Blob(["jpeg"], { type: "image/jpeg" }));
+      const assetId = await ctx.db.insert("assets", {
+        key: "publications/zuerst/cover-9910.jpg", contentType: "image/jpeg", kind: "cover",
+        convexStorageId: storageId, createdAt: 2,
+      });
+      await ctx.db.patch(zuerst, { coverAssetId: assetId, coverLabel: "ZUERST! September 2026", coverSource: "x" });
+    });
+    const after = await t.query(api.plans.offerBySlug, { slug: "zuerst" });
+    expect(after!.coverUrl).toBeTruthy();
+    expect(after!.coverTitle).toBe("ZUERST! September 2026");
+    expect(after!.latestIssueTitle).toBe("ZUERST! 3/2026");
+  });
+});
+
 describe("Abo-Katalog", () => {
   test("die Stufen folgen der Reihenfolge Abo-Art, dann Liefergebiet", () => {
     const dmz = catalogVariants(SUBSCRIPTION_CATALOG.dmz);

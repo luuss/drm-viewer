@@ -43,7 +43,7 @@ export default function KioskPage() {
                   {o.coverUrl ? (
                     <img
                       src={o.coverUrl}
-                      alt={o.latestIssueTitle ?? o.publicationName}
+                      alt={o.coverTitle ?? o.publicationName}
                       loading="lazy"
                     />
                   ) : (

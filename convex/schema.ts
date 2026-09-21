@@ -72,6 +72,13 @@ export default defineSchema(
     slug: v.string(),
     description: v.optional(v.string()),
     isActive: v.boolean(),
+    // Aktuelles Titelbild der Reihe aus dem Verlagsshop, taeglich nachgefuehrt
+    // (publicationCovers.refreshAll). Ohne Bild gilt der Umschlag des
+    // juengsten veroeffentlichten Hefts.
+    coverAssetId: v.optional(v.id("assets")),
+    coverSource: v.optional(v.string()),
+    coverLabel: v.optional(v.string()),
+    coverUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_slug", ["slug"]),
 

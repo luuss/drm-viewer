@@ -40,7 +40,9 @@ Laufzeit erscheint, plus das bei Abschluss aktuelle Heft. Eine Kündigung nimmt
 nichts weg, eine Pause holt nichts nach.
 
 Im Kiosk steht neben den Einzelausgaben je Titel ein Abo mit dem Inlandspreis
-des Normalabonnements. Abo-Art (Normal, Schüler und Studenten, Kombi, Förder)
+des Normalabonnements und dem aktuellen Titelbild der Reihe aus dem
+Verlagsshop (täglich nachgeführt, von Hand mit
+`npx convex run publicationCovers:refreshAll`). Abo-Art (Normal, Schüler und Studenten, Kombi, Förder)
 und Liefergebiet (Inland, Ausland, Luftpost) wählt man erst auf der Abo-Seite;
 der Abschluss läuft wie der Einzelkauf über Stripe.
 
