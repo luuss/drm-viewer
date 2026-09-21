@@ -1,4 +1,12 @@
-name: Validate and deploy Convex
+name: Pruefen und ausliefern
+
+# Ein Push auf main liefert aus, aber nur wenn alle Pruefungen bestehen.
+# Reihenfolge ist wichtig: erst das Backend, dann die Dienste. Andersherum
+# zeigt eine frische Oberflaeche auf Funktionen, die es noch nicht gibt.
+#
+# Dokploy hat deshalb KEINEN eigenen Auto-Deploy mehr. Wuerde es bei jedem Push
+# selbst starten, liefe es an den Tests vorbei und rote Tests wuerden ein
+# kaputtes Deployment nicht aufhalten.
 
 on:
   push:
@@ -13,26 +21,32 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  pruefen:
+    name: Tests und Bau
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
-      - name: Test Convex functions
-        run: |
-          npm ci
-          npm test
+      - name: Abhaengigkeiten
+        run: npm ci
 
-      - name: Build web application
+      - name: Convex-Funktionen testen
+        run: npm test
+
+      - name: Weboberflaeche bauen
         env:
           VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
         run: |
-          test -n "$VITE_CONVEX_URL"
+          if [[ -z "$VITE_CONVEX_URL" ]]; then
+            echo "::error::Repository-Variable VITE_CONVEX_URL fehlt."
+            exit 1
+          fi
           npm ci --prefix web
           npm run build --prefix web
 
@@ -42,39 +56,120 @@ jobs:
           cache: pip
           cache-dependency-path: extract-service/requirements.txt
 
-      - name: Test extraction service
+      - name: Extraktion testen
         run: |
           python -m pip install --disable-pip-version-check -r extract-service/requirements.txt pytest
           python -m pytest -q extract-service/tests
 
-      - name: Validate Dokploy Compose
+      - name: Compose-Datei pruefen
         env:
           PUBLIC_WEB_ORIGIN: https://digital.example.test
           VITE_CONVEX_URL: https://example.convex.cloud
           CONVEX_SITE_URL: https://example.convex.site
-          TILE_SERVICE_SECRET: validation-only
-          EXTRACT_SERVICE_SECRET: validation-only
+          TILE_SERVICE_SECRET: nur-zur-pruefung
+          EXTRACT_SERVICE_SECRET: nur-zur-pruefung
         run: docker compose -f docker-compose.dokploy.yml config --quiet
 
-  deploy-convex:
-    needs: validate
+  ausliefern:
+    name: Backend und Dienste ausliefern
+    needs: pruefen
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
-      - name: Deploy Convex production functions
+      # Fehlt ein Zugang, bricht der Lauf ab. Frueher wurde der Schritt still
+      # uebersprungen und der Lauf trotzdem gruen gemeldet — das Backend blieb
+      # dann alt, ohne dass irgendwo etwas auffiel.
+      - name: Zugaenge pruefen
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          DOKPLOY_DEPLOY_URL: ${{ secrets.DOKPLOY_DEPLOY_URL }}
+        run: |
+          fehlt=0
+          if [[ -z "$CONVEX_DEPLOY_KEY" ]]; then
+            echo "::error::Secret CONVEX_DEPLOY_KEY fehlt. Neu erzeugen mit: npx convex deployment token create github-actions"
+            fehlt=1
+          fi
+          if [[ -z "$DOKPLOY_DEPLOY_URL" ]]; then
+            echo "::error::Secret DOKPLOY_DEPLOY_URL fehlt. Es ist die Deploy-Webhook-Adresse des Compose-Dienstes in Dokploy."
+            fehlt=1
+          fi
+          exit $fehlt
+
+      - name: Convex-Funktionen ausliefern
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
-          if [[ -z "$CONVEX_DEPLOY_KEY" ]]; then
-            echo "::notice::CONVEX_DEPLOY_KEY fehlt; Validierung erfolgreich, Convex-Deploy uebersprungen."
-            exit 0
-          fi
           npm ci
-          npx convex deploy --typecheck enable --message "GitHub ${GITHUB_SHA}"
+          npx convex deploy --typecheck enable --message "GitHub ${GITHUB_SHA::7}"
+
+      # Erst jetzt die Dienste: die Oberflaeche darf nie vor dem Backend neu
+      # sein, sonst ruft sie Funktionen auf, die es noch nicht gibt.
+      - name: Dienste in Dokploy neu ausrollen
+        env:
+          DOKPLOY_DEPLOY_URL: ${{ secrets.DOKPLOY_DEPLOY_URL }}
+        run: |
+          code=$(curl --silent --show-error --fail-with-body \
+                      --max-time 30 --output /tmp/dokploy.out \
+                      --write-out '%{http_code}' \
+                      -X POST "$DOKPLOY_DEPLOY_URL") || {
+            echo "::error::Dokploy hat den Auftrag nicht angenommen (HTTP $code)."
+            cat /tmp/dokploy.out || true
+            exit 1
+          }
+          echo "Dokploy angestossen, HTTP $code."
+
+      # Der Webhook bestaetigt nur die Annahme, nicht den Erfolg. Deshalb wird
+      # danach die laufende Seite selbst befragt.
+      - name: Rauchtest an der ausgelieferten Seite
+        env:
+          PUBLIC_WEB_ORIGIN: ${{ vars.PUBLIC_WEB_ORIGIN }}
+          ERWARTETE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+        run: |
+          basis="${PUBLIC_WEB_ORIGIN:-https://d.chuk.dev}"
+          echo "Warte auf $basis"
+
+          # Dokploy baut drei Images; bis die neuen Container stehen, antwortet
+          # kurzzeitig noch der alte Stand oder gar nichts.
+          for versuch in $(seq 1 60); do
+            gesund=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$basis/api/health" || echo 000)
+            seite=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$basis/" || echo 000)
+            if [[ "$gesund" == "200" && "$seite" == "200" ]]; then
+              echo "Seite und Kacheldienst antworten nach $((versuch * 10)) s."
+              erreichbar=ja
+              break
+            fi
+            sleep 10
+          done
+          if [[ "${erreichbar:-nein}" != "ja" ]]; then
+            echo "::error::$basis antwortet nach 10 Minuten nicht (Seite $seite, Kacheldienst $gesund). Bauprotokoll in Dokploy pruefen."
+            exit 1
+          fi
+
+          # Ein abgebrochener Bau hinterlaesst eine index.html, deren Bundle
+          # fehlt. Das faellt sonst erst dem Leser auf.
+          bundle=$(curl -s --max-time 10 "$basis/" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)
+          if [[ -z "$bundle" ]]; then
+            echo "::error::In der ausgelieferten Seite steht kein JavaScript-Bundle."
+            exit 1
+          fi
+          bundle_code=$(curl -s -o /tmp/bundle.js -w '%{http_code}' --max-time 30 "$basis$bundle")
+          if [[ "$bundle_code" != "200" ]]; then
+            echo "::error::Das Bundle $bundle fehlt (HTTP $bundle_code)."
+            exit 1
+          fi
+
+          # Zeigt die Oberflaeche auf das erwartete Backend?
+          if [[ -n "$ERWARTETE_CONVEX_URL" ]] && ! grep -qF "$ERWARTETE_CONVEX_URL" /tmp/bundle.js; then
+            echo "::error::Die ausgelieferte Oberflaeche zeigt nicht auf $ERWARTETE_CONVEX_URL."
+            exit 1
+          fi
+
+          echo "Rauchtest bestanden: Seite, Kacheldienst, Bundle und Backend-Adresse stimmen."

@@ -5,11 +5,22 @@ Weboberflaeche, Kachel-Gateway und Import-Worker laufen dauerhaft als Docker-
 Compose-Anwendung in Dokploy. Der Entwicklungsrechner braucht danach weder
 Vite noch Worker, Kacheldienst oder Cloudflare Quick Tunnel.
 
-Jeder Push auf `main` loest automatisch zwei Teile aus:
+Jeder Push auf `main` laeuft durch eine einzige Kette in GitHub Actions
+(`.github/workflows/deploy-production.yml`):
 
-1. Dokploy klont `main`, baut die drei Images und ersetzt die Dienste.
-2. GitHub Actions testet Convex, Weboberflaeche und Extraktion und aktualisiert
-   nach erfolgreichen Tests die Convex-Produktionsfunktionen.
+1. **Pruefen** — Convex-Tests, Bau der Weboberflaeche, Tests der Extraktion und
+   eine Syntaxpruefung der Compose-Datei.
+2. **Ausliefern**, nur bei gruenen Pruefungen und in dieser Reihenfolge:
+   erst die Convex-Funktionen, dann die drei Dienste in Dokploy, zuletzt ein
+   Rauchtest gegen die laufende Seite.
+
+Die Reihenfolge ist nicht beliebig: waere die Oberflaeche vor dem Backend neu,
+riefe sie Funktionen auf, die es noch nicht gibt.
+
+**Dokploy hat bewusst keinen eigenen Auto-Deploy.** Wuerde es selbst auf jeden
+Push reagieren, liefe es an den Tests vorbei; ein roter Test wuerde ein kaputtes
+Deployment nicht mehr aufhalten. Stattdessen stoesst der Workflow Dokploy ueber
+dessen Deploy-Webhook an.
 
 ## 1. Dokploy auf einem EU-Server
 
@@ -29,8 +40,12 @@ eine HTTPS-Domain oder ein VPN erreichbar machen.
    `./docker-compose.dokploy.yml` eintragen.
 4. **Docker Compose** verwenden, nicht Docker Stack: Die Images werden direkt
    aus dem Checkout gebaut.
-5. Als Trigger **On Push** waehlen und **Auto Deploy aktivieren**. Dokploy
-   reagiert dann direkt auf neue Commits im ausgewaehlten Branch `main`.
+5. **Auto Deploy ausgeschaltet lassen.** Den Rollout stoesst GitHub Actions an,
+   nachdem die Tests durchgelaufen sind. Die Adresse dafuer steht unter
+   **Compose → Deployments → Webhook URL** und gehoert als Secret
+   `DOKPLOY_DEPLOY_URL` ins Repository. Sie enthaelt ein Merkmal, das nur diesen
+   einen Dienst ausloesen kann — ein Dokploy-API-Schluessel mit Vollzugriff hat
+   in einem oeffentlichen Repository nichts zu suchen.
 
 Dokploy klont den Quellstand bei jedem Deployment neu. Persistente Dateien
 duerfen deshalb spaeter nur in benannten Volumes oder Dokploy File Mounts
@@ -79,20 +94,34 @@ Unter **Repository → Settings → Secrets and variables → Actions** eintrage
 Das optionale Secret kann direkt im geschuetzten Environment `production`
 liegen:
 
-- `CONVEX_DEPLOY_KEY` – Production Deploy Key aus Convex
+- `CONVEX_DEPLOY_KEY` – Deploy-Key des Deployments, an dem die Web-App haengt
+- `DOKPLOY_DEPLOY_URL` – Deploy-Webhook des Compose-Dienstes in Dokploy
 
-Ohne dieses Secret bleibt der Workflow gruen und ueberspringt nur den Convex-
-Deploy. Solange die Bibliotheksdaten noch im Dev-Deployment liegen, muss ein
-Deploy-Key fuer genau dieses Deployment verwendet werden; das leere Production-
-Deployment darf nicht versehentlich als Datenquelle der Web-App gesetzt werden.
+Beide sind Pflicht. Fehlt eines, bricht der Lauf mit einer klaren Meldung ab.
+Frueher wurde der Convex-Schritt bei fehlendem Schluessel still uebersprungen
+und der Lauf trotzdem gruen gemeldet — das Backend blieb alt, ohne dass es
+jemandem auffiel.
+
+Den Convex-Schluessel erzeugt die CLI, ein Besuch im Dashboard ist nicht noetig:
+
+```bash
+npx convex deployment token create github-actions
+```
+
+Der Schluessel bestimmt das Ziel. Solange die Bibliotheksdaten im Dev-Deployment
+liegen und die Web-App darauf zeigt, muss es ein Schluessel fuer genau dieses
+Deployment sein — er beginnt dann mit `dev:`. Ein Schluessel fuer das leere
+Produktionsdeployment wuerde die Funktionen ins Leere ausliefern, waehrend die
+Oberflaeche weiter woanders liest.
 
 Repository-Variablen:
 
-- `VITE_CONVEX_URL` – produktive `.convex.cloud`-Adresse
+- `VITE_CONVEX_URL` – `.convex.cloud`-Adresse, gegen die gebaut wird
+- `PUBLIC_WEB_ORIGIN` – oeffentliche Adresse der Seite, Ziel des Rauchtests
 
-Fuer den automatischen Convex-Rollout darf das GitHub-Environment keine
-manuelle Freigaberegel besitzen. Dokploy selbst benoetigt keine GitHub-Secrets,
-weil die installierte Dokploy-GitHub-App den Push direkt empfaengt.
+Fuer den automatischen Rollout darf das GitHub-Environment `production` keine
+manuelle Freigaberegel besitzen, sonst bleibt jeder Push auf eine Bestaetigung
+warten.
 
 ## 7. Erster Rollout und Abschalten der lokalen Dienste
 
