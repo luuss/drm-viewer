@@ -223,7 +223,28 @@ def apply_profile(
         return _apply_dmz(blocks, images, pages, publication_slug)
     if profile == "dmz-zeitgeschichte":
         return _apply_dmz_zeitgeschichte(blocks, images, pages, publication_slug)
-    return blocks, images, []
+    kept_blocks, kept_images = _without_cover_pages(blocks, images, pages)
+    return kept_blocks, kept_images, []
+
+
+_COVER_ROLES = {"front_cover", "inside_front", "inside_back", "back_cover"}
+
+
+def _without_cover_pages(
+    blocks: list[SourceBlock], images: list[SourceImage], pages: list[dict]
+) -> tuple[list[SourceBlock], list[SourceImage]]:
+    """Umschlagseiten tragen Titel, Anzeigen und Bestellscheine, nie Artikel.
+
+    Auch ohne Heftprofil bleiben sie deshalb draussen. Die Seitenrollen kommen
+    aus der Leserreihenfolge; fehlen sie, bleibt alles wie es ist.
+    """
+    covers = {
+        int(page["index"]) for page in pages if page.get("role") in _COVER_ROLES
+    }
+    return (
+        [block for block in blocks if block.page_index not in covers],
+        [image for image in images if image.page_index not in covers],
+    )
 
 
 # --- ZUERST! ---------------------------------------------------------------

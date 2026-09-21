@@ -1170,6 +1170,36 @@ def test_dmz_artikel_folgen_dem_inhaltsverzeichnis():
 
 
 
+# --- Ohne Profil ---------------------------------------------------------------
+
+def test_ohne_profil_liefern_umschlagseiten_keine_artikel():
+    pages = [
+        {"index": 0, "role": "front_cover", "printedLabel": "U1"},
+        {"index": 1, "role": "inside_front", "printedLabel": "U2"},
+        {"index": 2, "role": "content", "printedLabel": "3"},
+        {"index": 3, "role": "inside_back", "printedLabel": "U3"},
+        {"index": 4, "role": "back_cover", "printedLabel": "U4"},
+    ]
+    blocks = [
+        block("Alle Waffentaten sind umfangreich dargestellt", page=0),
+        block("Die Bibliothek der Tapfersten im Abo", page=1),
+        block("Robert Greim wurde am 22. Juni 1892 geboren. " * 5, page=2, y=0.2),
+        block("Ihre Sammlung", page=3),
+        block("92. Schwerter 216. Eichenlaub", page=4),
+    ]
+    images = [bild(page=0), bild(page=2), bild(page=4)]
+    kept_blocks, kept_images, hints = apply_profile(blocks, images, pages, "schwertertraeger")
+    assert [b.page_index for b in kept_blocks] == [2]
+    assert [i.page_index for i in kept_images] == [2]
+    assert hints == []
+
+
+def test_ohne_profil_und_ohne_rollen_bleibt_alles():
+    blocks = [block("Seite eins", page=0), block("Seite zwei", page=1)]
+    kept_blocks, _images, _hints = apply_profile(blocks, [], [], None)
+    assert len(kept_blocks) == 2
+
+
 # --- DMZ-Zeitgeschichte-Profil -------------------------------------------------
 
 def zg_head(text, page):
