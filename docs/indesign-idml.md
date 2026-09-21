@@ -52,9 +52,27 @@ geprueft an drei Dokumenten. Das Projekt ist jung und ungenutzt.
 
 Fuer uns waere ohnehin nicht die IDML das Ziel, sondern der `SourceBlock`: Text,
 Position, Seite. Die lassen sich aus den Photopea-Ebenen direkt lesen, ohne den
-Umweg ueber ein Austauschformat. Solange der Verlag den IDML-Export liefert,
-bleibt dieser Weg aber ungebaut — er haengt an einem fremden Dienst, dessen
-Importtreue niemand zusichert.
+Umweg ueber ein Austauschformat.
+
+Angesehen habe ich mir den Weg am Umschlag des Musterheftes, mit kopflosem
+Chromium gegen photopea.com. Zwei Dinge sind dabei belegt, ein drittes nicht:
+
+- Der Import beginnt wirklich. Photopea zieht die `.indd` vom lokalen Server und
+  dekodiert die eingebetteten Bilder; das steht so in seiner Protokollausgabe.
+- Chrome sperrt den Zugriff zuerst ab: eine Seite von `https://www.photopea.com`
+  darf nicht ohne Weiteres auf `127.0.0.1` zugreifen. Der lokale Server muss
+  `Access-Control-Allow-Private-Network` mitschicken und die Vorabfrage
+  beantworten.
+- Fernsteuern liess sich Photopea nicht. Seine Live-Messaging-Schnittstelle gab
+  weder auf Skripte noch beim Laden ein Lebenszeichen zurueck — auch nicht im
+  iframe, auch nicht ohne jede Datei. Das ist ein Fehler in meiner Verdrahtung,
+  kein Beweis gegen den Weg; das oben genannte Projekt macht genau das
+  erfolgreich. Wer es aufgreift, faengt dort an.
+
+Solange der Verlag den IDML-Export liefert, bleibt der Weg ungebaut. Er haengt an
+einem fremden Dienst, dessen Importtreue niemand zusichert, und der Umschlag mit
+vier Seiten war nach zwanzig Minuten noch nicht fertig — fuer achtzig Seiten
+Innenteil ist das keine Grundlage.
 
 ## Welche Bibliotheken es gibt, und warum keine eingebaut ist
 
