@@ -133,25 +133,77 @@ def _merge_small(articles: list[AssembledArticle]) -> list[AssembledArticle]:
     return out
 
 
+MAX_IMAGES_PER_ARTICLE = 12
+NEAR_GAP = 0.22  # senkrechter Abstand, ab dem ein Block nichts mehr mit dem Bild zu tun hat
+
+
+def _image_score(article: AssembledArticle, img: SourceImage) -> float:
+    """Wie gut passt das Bild zu diesem Artikel auf dieser Seite?
+
+    Der reine Mittenabstand, wie er vorher benutzt wurde, greift im
+    Magazinsatz daneben: er zieht ein Bild zum Nachbarartikel, sobald dessen
+    Ueberschrift zufaellig naeher steht als der eigene Fliesstext. Im Satz gilt
+    dagegen die Spalte. Ein Bild liegt in der Spaltenbreite seines Artikels und
+    stoesst dort oben oder unten an dessen Text.
+
+    Deshalb zaehlen drei Dinge, in dieser Reihenfolge:
+    waagerechte Ueberdeckung (Spalte), senkrechter Abstand, und als
+    Stichentscheid die Textmenge des Artikels auf der Seite.
+    """
+    breite = max(img.x1 - img.x0, 1e-6)
+    beste_ueberdeckung = 0.0
+    kleinster_abstand = 1e9
+    zeichen = 0
+    for b in article.blocks:
+        if b.page_index != img.page_index or b.kind == "caption":
+            continue
+        zeichen += b.char_count
+        ueberdeckung = (min(b.x1, img.x1) - max(b.x0, img.x0)) / breite
+        beste_ueberdeckung = max(beste_ueberdeckung, min(1.0, ueberdeckung))
+        if b.y0 >= img.y1:
+            abstand = b.y0 - img.y1          # Block steht unter dem Bild
+        elif b.y1 <= img.y0:
+            abstand = img.y0 - b.y1          # Block steht ueber dem Bild
+        else:
+            abstand = 0.0                    # Block laeuft neben dem Bild
+        if ueberdeckung > 0.15:
+            kleinster_abstand = min(kleinster_abstand, abstand)
+    if beste_ueberdeckung <= 0 and kleinster_abstand > NEAR_GAP:
+        return 0.0
+    naehe = max(0.0, 1.0 - min(kleinster_abstand, NEAR_GAP) / NEAR_GAP)
+    return beste_ueberdeckung * 1.0 + naehe * 0.8 + min(1.0, zeichen / 1500) * 0.2
+
+
 def _attach_images(articles: list[AssembledArticle], images: list[SourceImage]) -> None:
+    """Bilder ihren Artikeln zuordnen und in Lesereihenfolge ablegen."""
     for img in images:
-        center_x = (img.x0 + img.x1) / 2
-        center_y = (img.y0 + img.y1) / 2
-        best, best_dist = None, 1e9
-        for a in articles:
-            for b in a.blocks:
-                if b.page_index != img.page_index:
-                    continue
-                dist = abs((b.x0 + b.x1) / 2 - center_x) + abs((b.y0 + b.y1) / 2 - center_y)
-                if dist < best_dist:
-                    best, best_dist = a, dist
+        auf_seite = [
+            a
+            for a in articles
+            if any(b.page_index == img.page_index for b in a.blocks)
+        ]
+        best, best_score = None, 0.0
+        for a in auf_seite:
+            score = _image_score(a, img)
+            if score > best_score:
+                best, best_score = a, score
         if best is None:
-            for a in articles:
-                if img.page_index in a.pages:
-                    best = a
-                    break
-        if best is not None and len(best.images) < 12:
+            # Keine Spaltenverwandtschaft: der Artikel, der die Seite traegt.
+            gewichte = {}
+            for a in auf_seite:
+                gewichte[id(a)] = sum(
+                    b.char_count for b in a.blocks if b.page_index == img.page_index
+                )
+            if auf_seite:
+                best = max(auf_seite, key=lambda a: gewichte[id(a)])
+        if best is None:
+            # Ganzseitiges Bild ohne Text: der Artikel, ueber dessen Seiten es liegt.
+            best = next((a for a in articles if img.page_index in a.pages), None)
+        if best is not None and len(best.images) < MAX_IMAGES_PER_ARTICLE:
             best.images.append(img)
+
+    for a in articles:
+        a.images.sort(key=lambda i: (i.page_index, round(i.y0, 3), i.x0))
 
 
 def _confidence(article: AssembledArticle) -> float:

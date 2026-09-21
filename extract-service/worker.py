@@ -23,7 +23,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import render
 from extractor.article_assembler import assemble
-from extractor.idml_extract import extract_idml_blocks
+from extractor.idml_extract import (
+    extract_idml_blocks,
+    extract_idml_image_frames,
+    frames_to_images,
+)
+from extractor.image_regions import read_trim_boxes
 from extractor.model import SourceBlock
 from extractor.pdf_extract import extract_pdf_pages, prepare_blocks
 from storage import ConvexClient, Storage, issue_key
@@ -198,21 +203,81 @@ class Job:
             b, i = extract_pdf_pages(blob, page_map)
             blocks.extend(b)
             images.extend(i)
+
+        # IDML liefert die verlaesslicheren Bildrahmen und Artikelgrenzen; das
+        # PDF bleibt die Quelle fuer die Seitengeometrie.
+        idml_source = next((s for s in sources if s["kind"] == "idml"), None)
+        idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
+        if idml_bytes:
+            self.beat(80, "Satzdatei wird ausgewertet")
+            images = self._images_from_idml(
+                idml_bytes, idml_source, sources, blobs, by_asset, images
+            )
+
+        # Erst jetzt aufraeumen, damit die Bildunterschriften an den endgueltigen
+        # Bildbereichen haengen.
         ordered = prepare_blocks(blocks, images, len(pages))
 
-        # IDML liefert die verlaesslicheren Artikelgrenzen; das PDF bleibt die
-        # Quelle fuer die Seitengeometrie.
-        idml_source = next((s for s in sources if s["kind"] == "idml"), None)
-        if idml_source and blobs.get(idml_source["assetId"]):
-            self.beat(80, "Satzdatei wird ausgewertet")
+        if idml_bytes:
             try:
-                idml_blocks = extract_idml_blocks(blobs[idml_source["assetId"]])
+                idml_blocks = extract_idml_blocks(idml_bytes)
                 if idml_blocks:
                     ordered = _prefer_idml(ordered, idml_blocks)
                     log("job.idml", jobId=self.job_id, blocks=len(idml_blocks))
             except Exception as exc:
                 log("job.idmlFailed", jobId=self.job_id, error=str(exc)[:200])
         return ordered, images
+
+    def _images_from_idml(
+        self, idml_bytes, idml_source, sources, blobs, by_asset, images
+    ):
+        """Bildrahmen aus dem Satz statt aus dem PDF, soweit sie greifen.
+
+        Im Satz steht der Rahmen, der den sichtbaren Ausschnitt bestimmt. Im PDF
+        steht nur die Platzierung des Bildes, und was davon zu sehen ist, muss
+        ueber Beschnittpfade erschlossen werden. Liegt die Satzdatei vor, ist sie
+        also die bessere Quelle.
+
+        Die IDML gehoert zu genau einer PDF-Quelle — der mit derselben Rolle,
+        also Innenteil zu Innenteil. Nur deren Seiten werden ersetzt; ein
+        Umschlag aus einer zweiten Datei bleibt beim PDF-Weg.
+        """
+        partner = next(
+            (
+                s
+                for s in sources
+                if s["kind"] == "pdf"
+                and s.get("role") == idml_source.get("role")
+                and blobs.get(s["assetId"])
+            ),
+            None,
+        )
+        if partner is None:
+            return images
+        page_map = by_asset.get(partner["assetId"])
+        if not page_map:
+            return images
+        try:
+            frames = extract_idml_image_frames(idml_bytes)
+            if not frames:
+                return images
+            trims = read_trim_boxes(blobs[partner["assetId"]], page_map)
+            ersatz = frames_to_images(frames, page_map, trims)
+        except Exception as exc:
+            log("job.idmlImagesFailed", jobId=self.job_id, error=str(exc)[:200])
+            return images
+        if not ersatz:
+            return images
+        betroffen = {canonical for _source, canonical in page_map}
+        behalten = [img for img in images if img.page_index not in betroffen]
+        log(
+            "job.idmlImages",
+            jobId=self.job_id,
+            frames=len(frames),
+            images=len(ersatz),
+            replaced=len(images) - len(behalten),
+        )
+        return behalten + ersatz
 
     def _build_payload(self, articles, page_images: dict[int, bytes]) -> list[dict]:
         payload = []

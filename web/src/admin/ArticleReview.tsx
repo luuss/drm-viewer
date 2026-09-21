@@ -55,7 +55,9 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
       </div>
       {err && <div className="err">{err}</div>}
 
-      <div className="review-split">
+      {/* Solange kein Artikel offen ist, braucht die rechte Haelfte keinen Platz;
+          die Liste stand sonst in einer halb so breiten Spalte und brach um. */}
+      <div className={open ? "review-split" : "review-split single"}>
         <ul className="article-rows">
           {articles.map((a) => (
             <li key={a._id} className={a.reviewStatus}>

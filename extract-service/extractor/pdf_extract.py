@@ -15,12 +15,12 @@ from collections import Counter, defaultdict
 
 import pdfplumber
 
+from .image_regions import drop_repeating, read_raw_images, select_regions
 from .model import SourceBlock, SourceImage
 from .textutil import clean_text, glue_dropcap, is_probably_heading, normalize_compare
 
 LINE_TOLERANCE = 2.2       # Punkte: Zeilen mit dieser Abweichung gelten als eine
 BLOCK_GAP_FACTOR = 1.45    # Zeilenabstand, ab dem ein neuer Block beginnt
-MIN_IMAGE_SIDE = 0.06      # Anteil der Seite, ab dem ein Bild zaehlt
 
 
 def _detect_gutters(words: list[dict], page_width: float) -> list[float]:
@@ -345,40 +345,97 @@ def reading_order(blocks: list[SourceBlock]) -> list[SourceBlock]:
     return ordered
 
 
-def extract_images(page, page_index: int, page_width: float,
-                   page_height: float) -> list[SourceImage]:
+def _body_word_size(words_by_page: dict[int, list[dict]]) -> float:
+    """Grundschriftgroesse des Dokuments, nach Zeichen gewichtet.
+
+    Ueber alle Seiten gemessen, nicht je Seite: eine Bildstrecke oder eine
+    Anzeigenseite haette sonst ihre eigene "Grundschrift".
+    """
+    counter: Counter[float] = Counter()
+    for words in words_by_page.values():
+        for w in words:
+            counter[round(float(w.get("size", 0) or 0), 1)] += len(w.get("text", ""))
+    return counter.most_common(1)[0][0] if counter else 10.0
+
+
+def extract_images(
+    pdf_bytes: bytes,
+    page_map: list[tuple[int, int]],
+    words_by_page: dict[int, list[tuple[float, float, float, float]]],
+    body_words_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
+) -> list[SourceImage]:
+    """Bildbereiche aller Seiten bestimmen.
+
+    Die Arbeit steckt in `image_regions`: Beschnittpfad verrechnen, Anschnitt
+    abschneiden, Hintergruende und Masken verwerfen, Lagen zusammenfassen. Hier
+    bleibt nur die Klammer ueber alle Seiten, weil Seitenschmuck erst im
+    Vergleich mehrerer Seiten auffaellt.
+    """
+    raw_by_page, trims = read_raw_images(pdf_bytes, page_map)
+    regions: dict[int, list[tuple]] = {}
+    for canonical_index, raw_images in raw_by_page.items():
+        words = words_by_page.get(canonical_index, [])
+        body = (body_words_by_page or {}).get(canonical_index)
+        trim = trims.get(canonical_index, (0.0, 0.0, 1.0, 1.0))
+        regions[canonical_index] = select_regions(raw_images, words, trim, body)
+    regions = drop_repeating(regions, len(raw_by_page))
+
     out: list[SourceImage] = []
-    for img in page.images:
-        x0 = max(0.0, img["x0"] / page_width)
-        x1 = min(1.0, img["x1"] / page_width)
-        y0 = max(0.0, img["top"] / page_height)
-        y1 = min(1.0, img["bottom"] / page_height)
-        if (x1 - x0) < MIN_IMAGE_SIDE or (y1 - y0) < MIN_IMAGE_SIDE:
-            continue
-        out.append(SourceImage(page_index=page_index, x0=x0, y0=y0, x1=x1, y1=y1))
+    for canonical_index in sorted(regions):
+        for x0, y0, x1, y1 in regions[canonical_index]:
+            out.append(
+                SourceImage(
+                    page_index=canonical_index,
+                    x0=max(0.0, x0),
+                    y0=max(0.0, y0),
+                    x1=min(1.0, x1),
+                    y1=min(1.0, y1),
+                )
+            )
     return out
 
 
+CAPTION_GAP = 0.055        # Abstand Bildunterkante zur Unterschrift
+
+
 def attach_captions(images: list[SourceImage], blocks: list[SourceBlock]) -> None:
-    """Die Unterschrift steht unter dem Bild und ueberlappt es waagerecht."""
-    captions = [b for b in blocks if b.kind == "caption"]
+    """Bildunterschrift nur uebernehmen, wenn sie raeumlich zum Bild gehoert.
+
+    Zwei Bedingungen, beide notwendig: die Unterschrift steht dicht unter dem
+    Bild, und sie liegt in dessen Spaltenbreite. Ohne die zweite Bedingung
+    faengt ein Bild die Unterschrift des Nachbarbildes ein; ohne die erste
+    wandert irgendein Kleintext von weiter unten herauf.
+
+    Ausserdem darf eine Unterschrift nur einmal vergeben werden — das naeher
+    stehende Bild bekommt sie.
+    """
+    captions = [b for b in blocks if b.kind == "caption" and not b.drop]
+    vergeben: dict[int, tuple[float, SourceImage]] = {}
     for img in images:
-        best, best_gap = None, 1e9
-        for c in captions:
+        for index, c in enumerate(captions):
             if c.page_index != img.page_index:
                 continue
             gap = c.y0 - img.y1
-            if gap < -0.01 or gap > 0.09:
+            if gap < -0.012 or gap > CAPTION_GAP:
                 continue
+            breite = max(img.x1 - img.x0, 1e-6)
             overlap = min(c.x1, img.x1) - max(c.x0, img.x0)
-            if overlap < (img.x1 - img.x0) * 0.35:
+            if overlap < breite * 0.5:
                 continue
-            if gap < best_gap:
-                best, best_gap = c, gap
-        if best is not None:
-            text = best.text.strip()
-            if not text.lower().startswith(("foto:", "fotos:", "bild:", "grafik:")):
-                img.caption = text[:400]
+            # Die Unterschrift darf nicht breiter sein als das Bild plus eine
+            # Spaltenbreite — sonst ist es ein Fliesstextrest.
+            if (c.x1 - c.x0) > breite * 1.6:
+                continue
+            bisher = vergeben.get(index)
+            if bisher is None or gap < bisher[0]:
+                vergeben[index] = (gap, img)
+
+    for index, (_gap, img) in vergeben.items():
+        text = captions[index].text.strip()
+        if text.lower().startswith(("foto:", "fotos:", "bild:", "grafik:")):
+            continue
+        if img.caption is None:
+            img.caption = text[:400]
 
 
 def extract_pdf_pages(
@@ -392,7 +449,10 @@ def extract_pdf_pages(
     import io
 
     blocks: list[SourceBlock] = []
-    images: list[SourceImage] = []
+    # Woerter je Seite. Die Bilderkennung braucht sie, um Masken und
+    # Hintergruende von echten Bildern zu unterscheiden.
+    raw_words_by_page: dict[int, list[dict]] = {}
+    page_sizes: dict[int, tuple[float, float]] = {}
     wanted = dict(page_map)
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
@@ -409,6 +469,8 @@ def extract_pdf_pages(
             # Winzige Zeichen sind gedrehte Bildnachweise am Rand. Sie zerreissen
             # sonst die Zeilen des Fliesstextes daneben.
             words = [w for w in words if float(w.get("size", 0) or 0) >= 4.5]
+            raw_words_by_page[canonical_index] = words
+            page_sizes[canonical_index] = (page.width, page.height)
             starts = _column_starts(words)
             gutters = [] if starts else _detect_gutters(words, page.width)
             by_column: dict[int, list[dict]] = defaultdict(list)
@@ -427,9 +489,32 @@ def extract_pdf_pages(
                 for b in column_blocks:
                     b.column = column
                 blocks.extend(column_blocks)
-            images.extend(
-                extract_images(page, canonical_index, page.width, page.height)
+
+    # Die Bildgeometrie kommt aus PDFium, weil dort der Beschnittpfad steht.
+    body_size = _body_word_size(raw_words_by_page)
+    words_by_page: dict[int, list[tuple[float, float, float, float]]] = {}
+    body_words_by_page: dict[int, list[tuple[float, float, float, float]]] = {}
+    for canonical_index, words in raw_words_by_page.items():
+        width, height = page_sizes[canonical_index]
+        alle = []
+        satz = []
+        for w in words:
+            rect = (
+                w["x0"] / width,
+                w["top"] / height,
+                w["x1"] / width,
+                w["bottom"] / height,
             )
+            alle.append(rect)
+            # Nur Satz in Grundschriftgroesse zaehlt als Fliesstext (gedrehter
+            # Satz ist oben schon draussen). Kartenbeschriftung, Anzeigensatz
+            # und Bildunterschriften sind kleiner gesetzt und duerfen im Bild
+            # stehen, ohne es zu verwerfen.
+            if abs(float(w.get("size", 0) or 0) - body_size) < body_size * 0.15:
+                satz.append(rect)
+        words_by_page[canonical_index] = alle
+        body_words_by_page[canonical_index] = satz
+    images = extract_images(pdf_bytes, page_map, words_by_page, body_words_by_page)
     return blocks, images
 
 

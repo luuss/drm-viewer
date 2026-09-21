@@ -1,11 +1,12 @@
 FROM python:3.12-slim
 
+# Der Dienst ist ein Worker, kein Webdienst: er holt Auftraege aus der
+# Warteschlange im Backend. Deshalb kein uvicorn und kein offener Port.
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+COPY worker.py render.py storage.py ./
 COPY extractor ./extractor
 
-EXPOSE 8100
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8100"]
+CMD ["python", "worker.py"]

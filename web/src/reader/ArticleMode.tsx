@@ -4,12 +4,20 @@ import { api, type Id } from "../lib/api";
 type Props = {
   articleId: Id<"articles"> | null;
   watermark: string;
+  /** Gedruckte Seitenzahl zu einer Leseseite (U1 statt 1 auf dem Umschlag). */
+  pageLabel: (index: number) => string;
   onPrev: () => void;
   onNext: () => void;
 };
 
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
-export default function ArticleMode({ articleId, watermark, onPrev, onNext }: Props) {
+export default function ArticleMode({
+  articleId,
+  watermark,
+  pageLabel,
+  onPrev,
+  onNext,
+}: Props) {
   const article = useQuery(
     api.articles.getForReader,
     articleId ? { articleId } : "skip",
@@ -42,8 +50,10 @@ export default function ArticleMode({ articleId, watermark, onPrev, onNext }: Pr
         {article.subtitle && <p className="subtitle">{article.subtitle}</p>}
         {article.author && <p className="byline">{article.author}</p>}
         <p className="meta">
-          Seite {article.pageStart + 1}
-          {article.pageEnd !== article.pageStart ? `–${article.pageEnd + 1}` : ""}
+          Seite {pageLabel(article.pageStart)}
+          {article.pageEnd !== article.pageStart
+            ? `–${pageLabel(article.pageEnd)}`
+            : ""}
         </p>
         {article.images.map((img, i) => (
           <figure key={i}>

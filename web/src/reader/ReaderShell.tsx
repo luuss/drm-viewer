@@ -42,8 +42,11 @@ export default function ReaderShell() {
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (access === false) navigate(`/issue/${issueId}`);
-  }, [access, issueId, navigate]);
+    if (access !== false || issue === undefined) return;
+    // Die Verkaufsseite laeuft unter `/issue/:slug`, nicht unter der Kennung.
+    // Mit der Kennung landete der Leser auf "Ausgabe nicht gefunden".
+    navigate(issue?.slug ? `/issue/${issue.slug}` : "/library", { replace: true });
+  }, [access, issue, navigate]);
 
   useEffect(() => {
     if (!access) return;
@@ -84,6 +87,18 @@ export default function ReaderShell() {
   }, [restored, progress, articles, searchParams]);
 
   const articleList = articles ?? [];
+
+  /**
+   * Die gedruckte Seitenzahl zu einer Leseseite. Sie ist nicht die laufende
+   * Nummer: der Umschlag heisst U1 bis U4, und der Innenteil beginnt bei 3.
+   * Ohne sie stand am Artikel "Seite 1", wo im Heft "U1" steht.
+   */
+  const pageLabel = useCallback(
+    (index: number) =>
+      pages?.find((p) => p.index === index)?.printedLabel || String(index + 1),
+    [pages],
+  );
+
   const articleIndex = useMemo(
     () => articleList.findIndex((a) => a._id === articleId),
     [articleList, articleId],
@@ -120,12 +135,19 @@ export default function ReaderShell() {
       setArticleId(id);
       setMode("article");
       const hit = articleList.find((a) => a._id === id);
-      if (hit) setPageIndex(hit.primaryPageIndex);
+      // Laeuft der Artikel ueber die Seite, auf der der Leser gerade steht,
+      // bleibt diese Seite stehen. Sonst sprang der Rueckwechsel in den
+      // Seitenmodus auf den Anfang des Artikels zurueck, obwohl der Leser
+      // schon weiter war.
+      const covers =
+        hit != null && pageIndex >= hit.pageStart && pageIndex <= hit.pageEnd;
+      const target = covers ? pageIndex : (hit?.primaryPageIndex ?? pageIndex);
+      setPageIndex(target);
       const next = new URLSearchParams(searchParams);
       if (id) next.set("article", id as string);
       else next.delete("article");
       setSearchParams(next, { replace: true });
-      persist({ mode: "article", pageIndex: hit?.primaryPageIndex ?? pageIndex, articleId: id });
+      persist({ mode: "article", pageIndex: target, articleId: id });
     },
     [articleList, pageIndex, persist, searchParams, setSearchParams],
   );
@@ -159,7 +181,14 @@ export default function ReaderShell() {
   const switchToPages = useCallback(() => {
     const current = articleList.find((a) => a._id === articleId);
     setMode("page");
-    const target = current?.primaryPageIndex ?? pageIndex;
+    // Steht der Leser schon auf einer Seite des Artikels, bleibt er dort.
+    // Nur wenn die gemerkte Seite nicht zum Artikel gehoert, wird auf seinen
+    // Anfang gesprungen.
+    const covers =
+      current != null &&
+      pageIndex >= current.pageStart &&
+      pageIndex <= current.pageEnd;
+    const target = covers ? pageIndex : (current?.primaryPageIndex ?? pageIndex);
     setPageIndex(target);
     persist({ mode: "page", pageIndex: target, articleId });
   }, [articleList, articleId, pageIndex, persist]);
@@ -176,9 +205,25 @@ export default function ReaderShell() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setTocOpen(false);
+        return;
+      }
+      // Liegt der Fokus auf einem Bedienelement — vor allem auf dem Regler der
+      // unteren Leiste —, gehoert die Pfeiltaste diesem Element. Sonst blaettert
+      // ein einziger Tastendruck zwei Seiten weiter.
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "SELECT" ||
+        tag === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
       if (e.key === "ArrowLeft") prev();
       if (e.key === "ArrowRight") next();
-      if (e.key === "Escape") setTocOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -260,6 +305,7 @@ export default function ReaderShell() {
           <ArticleMode
             articleId={articleId ?? articleList[0]?._id ?? null}
             watermark={watermark}
+            pageLabel={pageLabel}
             onPrev={prev}
             onNext={next}
           />
@@ -278,6 +324,7 @@ export default function ReaderShell() {
         issueId={issueId}
         open={tocOpen}
         mode={mode}
+        pageLabel={pageLabel}
         onClose={() => setTocOpen(false)}
         onPage={(p) => {
           setMode("page");

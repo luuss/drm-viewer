@@ -1,5 +1,13 @@
+# Laufzeit des Extraktionsdienstes und des Import-Workers.
+# PyMuPDF steht bewusst NICHT hier: es ist AGPL und damit fuer den
+# proprietaeren Betrieb heikel. Gelesen wird mit pdfplumber (MIT), gerendert
+# mit pypdfium2 (BSD/Apache).
 fastapi
 uvicorn[standard]
 httpx
-PyMuPDF
 lxml
+pdfplumber
+pypdfium2
+Pillow
+boto3
+python-dotenv

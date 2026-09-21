@@ -131,6 +131,11 @@ export const listForReader = query({
   },
 });
 
+/** Kleinste Klickflaeche, die noch Sinn ergibt (Anteil der Seitenkante). */
+const MIN_REGION_SIZE = 0.004;
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
 /** Klickflaechen im Seitenmodus, nur von freigegebenen Artikeln. */
 export const regionsForReader = query({
   args: { issueId: v.id("issues") },
@@ -151,13 +156,22 @@ export const regionsForReader = query({
         published.set(key, a?.reviewStatus === "approved");
       }
       if (!published.get(key)) continue;
+      // Die Aufbereitung liefert vereinzelt verdrehte oder ueberstehende
+      // Rechtecke (x0 groesser als x1, Werte ueber 1). Sortiert und auf die
+      // Seite beschnitten kommen sie hier heraus; entartete Flaechen fallen
+      // weg, statt im Reader als unsichtbare Fehlklickflaeche zu liegen.
+      const x0 = clamp01(Math.min(r.x0, r.x1));
+      const x1 = clamp01(Math.max(r.x0, r.x1));
+      const y0 = clamp01(Math.min(r.y0, r.y1));
+      const y1 = clamp01(Math.max(r.y0, r.y1));
+      if (x1 - x0 < MIN_REGION_SIZE || y1 - y0 < MIN_REGION_SIZE) continue;
       out.push({
         articleId: r.articleId,
         pageIndex: r.pageIndex,
-        x0: r.x0,
-        y0: r.y0,
-        x1: r.x1,
-        y1: r.y1,
+        x0,
+        y0,
+        x1,
+        y1,
         kind: r.kind,
       });
     }

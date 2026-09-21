@@ -29,7 +29,7 @@ export default function SearchPage() {
       <ul className="search-results">
         {results?.map((r) => (
           <li key={r._id}>
-            <Link to={`/read/${r.issueId}?article=${r._id}`}>
+            <Link to={`/reader/${r.issueId}?article=${r._id}`}>
               <strong>{r.title}</strong>
             </Link>
             <div className="meta">

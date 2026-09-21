@@ -17,6 +17,23 @@ export default function ReaderRail({ mode, position, total, label, onSeek }: Pro
   const [dragging, setDragging] = useState<number | null>(null);
   useEffect(() => setDragging(null), [position]);
 
+  // Das Loslassen wird am Fenster abgehoert, nicht am Regler. Wer beim Ziehen
+  // den Regler verlaesst und die Taste woanders loslaesst, bekam sonst keinen
+  // Sprung: die Anzeige stand auf der neuen Seite, der Reader auf der alten.
+  useEffect(() => {
+    if (dragging === null) return;
+    const commit = () => {
+      setDragging(null);
+      onSeek(dragging);
+    };
+    window.addEventListener("pointerup", commit);
+    window.addEventListener("pointercancel", commit);
+    return () => {
+      window.removeEventListener("pointerup", commit);
+      window.removeEventListener("pointercancel", commit);
+    };
+  }, [dragging, onSeek]);
+
   const shown = dragging ?? position;
   return (
     <div className="reader-rail">
@@ -30,10 +47,12 @@ export default function ReaderRail({ mode, position, total, label, onSeek }: Pro
         max={Math.max(0, total - 1)}
         value={shown}
         onChange={(e) => setDragging(Number(e.target.value))}
-        onMouseUp={() => dragging !== null && onSeek(dragging)}
-        onTouchEnd={() => dragging !== null && onSeek(dragging)}
         onKeyUp={(e) => {
-          if (["ArrowLeft", "ArrowRight"].includes(e.key) && dragging !== null) {
+          // Mit der Tastatur gibt es kein Loslassen des Zeigers; hier wird der
+          // Sprung deshalb direkt nach dem Tastendruck ausgeloest.
+          const keys = ["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"];
+          if (keys.includes(e.key) && dragging !== null) {
+            setDragging(null);
             onSeek(dragging);
           }
         }}

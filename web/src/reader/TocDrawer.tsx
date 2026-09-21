@@ -8,6 +8,8 @@ type Props = {
   onPage: (pageIndex: number) => void;
   onArticle: (articleId: Id<"articles">) => void;
   mode: "page" | "article";
+  /** Gedruckte Seitenzahl zu einer Leseseite (U1 statt 1 auf dem Umschlag). */
+  pageLabel: (index: number) => string;
 };
 
 /**
@@ -22,6 +24,7 @@ export default function TocDrawer({
   onPage,
   onArticle,
   mode,
+  pageLabel,
 }: Props) {
   const entries = useQuery(api.toc.listForReader, open ? { issueId } : "skip");
   if (!open) return null;
@@ -53,7 +56,7 @@ export default function TocDrawer({
               >
                 <span className="label">{e.label}</span>
                 {e.pageIndex !== null && (
-                  <span className="page">{e.pageIndex + 1}</span>
+                  <span className="page">{pageLabel(e.pageIndex)}</span>
                 )}
               </button>
             </li>

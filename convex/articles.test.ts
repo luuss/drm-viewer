@@ -286,6 +286,66 @@ describe("Artikeloperationen", () => {
     expect(merged.searchText).toContain("Text B");
   });
 
+  test("Klickflaechen kommen sortiert und beschnitten beim Leser an", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId } = await base(t);
+    const leserId = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const userId = await ctx.db.insert("users", { email: "leser@example.de" });
+      await ctx.db.insert("entitlements", {
+        userId,
+        issueId,
+        source: "purchase",
+        createdAt: now,
+      });
+      const articleId = await ctx.db.insert("articles", {
+        issueId,
+        order: 1,
+        title: "Artikel",
+        source: "pdf",
+        reviewStatus: "approved",
+        primaryPageIndex: 0,
+        pageStart: 0,
+        pageEnd: 0,
+        searchText: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      // verdreht und ueberstehend, wie es die Aufbereitung vereinzelt liefert
+      await ctx.db.insert("articleRegions", {
+        articleId,
+        issueId,
+        pageIndex: 0,
+        x0: 1.2,
+        y0: 0.1,
+        x1: 0.6,
+        y1: 0.4,
+        kind: "title",
+      });
+      // entartet: ohne Breite, taugt nur als unsichtbare Fehlklickflaeche
+      await ctx.db.insert("articleRegions", {
+        articleId,
+        issueId,
+        pageIndex: 0,
+        x0: 0.5,
+        y0: 0.5,
+        x1: 0.5,
+        y1: 0.9,
+        kind: "body",
+      });
+      return userId;
+    });
+
+    const { api } = await import("./_generated/api");
+    const regions = await t
+      .withIdentity({ subject: leserId, email: "leser@example.de" })
+      .query(api.articles.regionsForReader, { issueId });
+
+    expect(regions).toHaveLength(1);
+    expect(regions[0].x0).toBeCloseTo(0.6);
+    expect(regions[0].x1).toBeCloseTo(1);
+  });
+
   test("Veroeffentlichen erst, wenn alle Artikel entschieden sind", async () => {
     const t = convexTest(schema, modules);
     const { issueId, editorId } = await base(t);

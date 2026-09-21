@@ -53,7 +53,61 @@ def make_thumbnail(jpeg_bytes: bytes, width_px: int = COVER_WIDTH_PX) -> bytes:
     return buf.getvalue()
 
 
-def crop_region(jpeg_bytes: bytes, x0: float, y0: float, x1: float, y1: float) -> bytes:
+BLANK_LEVEL = 238        # ab diesem Grauwert gilt eine Randzeile als Papier
+BLANK_SPREAD = 14        # zulaessige Schwankung innerhalb der Randzeile
+BLANK_MAX_SHARE = 0.30   # hoechstens so viel darf je Seite wegfallen
+
+
+def _blank_border(image: Image.Image) -> tuple[int, int, int, int]:
+    """Gleichmaessig helle Raender messen.
+
+    Der Beschnittpfad aus dem Satz ist oft keine Rechteckform (freigestellte
+    Person, Schraege). Sein umschliessendes Rechteck enthaelt dann Papier. Das
+    laesst sich am fertigen Seitenbild nachmessen: eine Randzeile, die fast
+    weiss und dabei gleichmaessig ist, gehoert nicht zum Bild.
+
+    Abgeschnitten wird hoechstens ein knappes Drittel je Seite, damit ein Foto
+    mit hellem Himmel oder weissem Studiogrund nicht zerlegt wird.
+    """
+    grau = image.convert("L")
+    breite, hoehe = grau.size
+    pixel = grau.load()
+
+    def zeile_leer(y: int) -> bool:
+        werte = [pixel[x, y] for x in range(0, breite, max(1, breite // 64))]
+        return min(werte) >= BLANK_LEVEL - BLANK_SPREAD and sum(werte) / len(werte) >= BLANK_LEVEL
+
+    def spalte_leer(x: int) -> bool:
+        werte = [pixel[x, y] for y in range(0, hoehe, max(1, hoehe // 64))]
+        return min(werte) >= BLANK_LEVEL - BLANK_SPREAD and sum(werte) / len(werte) >= BLANK_LEVEL
+
+    oben, unten = 0, hoehe - 1
+    grenze_y = int(hoehe * BLANK_MAX_SHARE)
+    while oben < grenze_y and zeile_leer(oben):
+        oben += 1
+    while unten > hoehe - 1 - grenze_y and zeile_leer(unten):
+        unten -= 1
+
+    links, rechts = 0, breite - 1
+    grenze_x = int(breite * BLANK_MAX_SHARE)
+    while links < grenze_x and spalte_leer(links):
+        links += 1
+    while rechts > breite - 1 - grenze_x and spalte_leer(rechts):
+        rechts -= 1
+
+    if rechts - links < breite * 0.2 or unten - oben < hoehe * 0.2:
+        return (0, 0, breite, hoehe)
+    return (links, oben, rechts + 1, unten + 1)
+
+
+def crop_region(
+    jpeg_bytes: bytes,
+    x0: float,
+    y0: float,
+    x1: float,
+    y1: float,
+    trim_blank: bool = True,
+) -> bytes:
     """Bildausschnitt in normierten Koordinaten — fuer Artikelbilder."""
     image = Image.open(io.BytesIO(jpeg_bytes)).convert("RGB")
     box = (
@@ -65,6 +119,8 @@ def crop_region(jpeg_bytes: bytes, x0: float, y0: float, x1: float, y1: float) -
     if box[2] - box[0] < 8 or box[3] - box[1] < 8:
         raise ValueError("Ausschnitt zu klein")
     cropped = image.crop(box)
+    if trim_blank:
+        cropped = cropped.crop(_blank_border(cropped))
     if cropped.width > 1600:
         height = round(cropped.height * 1600 / cropped.width)
         cropped = cropped.resize((1600, height), Image.LANCZOS)

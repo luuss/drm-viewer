@@ -124,6 +124,30 @@ main {
   max-width: 960px;
 }
 
+/* Waagerechte Reihe mit Abstand. Ohne diese Regel klebten die Knoepfe in der
+   Redaktionsansicht ohne Luecke aneinander ("bearbeitenzurueckziehen..."). */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.row.actions { gap: 1rem; margin-top: 0.35rem; }
+/* Nimmt den freien Platz einer Reihe ein, ohne lange Titel zu sprengen. */
+.grow { flex: 1; min-width: 0; text-align: left; }
+
+.app-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding: 1.25rem 2rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.app-footer a { color: var(--muted); }
+.app-footer a:hover { color: var(--ink); }
+
 /* Forms / inputs */
 label {
   display: flex;
@@ -499,8 +523,25 @@ button.secondary:hover:not(:disabled) {
 }
 .page-edge.left { left: 0; }
 .page-edge.right { right: 0; }
+/* Im Artikelmodus liegen die Blaetterzonen auf schmalen Schirmen ueber dem
+   Text: ein Tippen an den Rand eines Absatzes sprang dann in einen anderen
+   Artikel. Dort wird mit Wischen, Regler und Tastatur geblaettert. */
+@media (max-width: 58rem) {
+  .article-mode .page-edge { display: none; }
+}
 
-.hotspots { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+/* Die Ebene wird von PageMode auf das Rechteck der gerenderten Seite gelegt
+   und beim Zoomen nachgefuehrt; hier steht nur der Ausgangszustand. */
+.hotspots {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 4;
+}
 .hotspots .hotspot {
   position: absolute;
   pointer-events: auto;
@@ -619,6 +660,8 @@ button.secondary:hover:not(:disabled) {
 .page-order li { padding: 0.15rem 0; }
 .review-split { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
 @media (min-width: 60rem) { .review-split { grid-template-columns: 1fr 1fr; } }
+.review-split.single { grid-template-columns: 1fr; }
+@media (min-width: 60rem) { .review-split.single { grid-template-columns: 1fr; } }
 .article-rows { list-style: none; padding: 0; max-height: 32rem; overflow: auto; }
 .article-rows li {
   display: flex;
