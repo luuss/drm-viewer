@@ -1,5 +1,5 @@
 # Dokploy baut diese drei Dienste direkt aus dem Git-Checkout. TLS und Routing
-# werden in Dokploy unter "Domains" konfiguriert; deshalb gibt es hier weder
+# wird in Dokploy unter "Domains" konfiguriert; deshalb gibt es hier weder
 # Host-Ports noch einen zweiten Reverse Proxy.
 
 x-logging: &default-logging
@@ -66,7 +66,6 @@ services:
       dockerfile: web/Dockerfile
       args:
         VITE_CONVEX_URL: ${VITE_CONVEX_URL:?VITE_CONVEX_URL fehlt}
-        VITE_TILE_SERVICE_URL: ${VITE_TILE_SERVICE_URL:?VITE_TILE_SERVICE_URL fehlt}
     depends_on:
       tile-service:
         condition: service_healthy

@@ -31,10 +31,8 @@ jobs:
       - name: Build web application
         env:
           VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
-          VITE_TILE_SERVICE_URL: ${{ vars.VITE_TILE_SERVICE_URL }}
         run: |
           test -n "$VITE_CONVEX_URL"
-          test -n "$VITE_TILE_SERVICE_URL"
           npm ci --prefix web
           npm run build --prefix web
 
@@ -53,7 +51,6 @@ jobs:
         env:
           PUBLIC_WEB_ORIGIN: https://digital.example.test
           VITE_CONVEX_URL: https://example.convex.cloud
-          VITE_TILE_SERVICE_URL: https://tiles.example.test
           CONVEX_SITE_URL: https://example.convex.site
           TILE_SERVICE_SECRET: validation-only
           EXTRACT_SERVICE_SECRET: validation-only
@@ -75,6 +72,9 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
-          test -n "$CONVEX_DEPLOY_KEY"
+          if [[ -z "$CONVEX_DEPLOY_KEY" ]]; then
+            echo "::notice::CONVEX_DEPLOY_KEY fehlt; Validierung erfolgreich, Convex-Deploy uebersprungen."
+            exit 0
+          fi
           npm ci
           npx convex deploy --typecheck enable --message "GitHub ${GITHUB_SHA}"

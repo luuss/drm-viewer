@@ -3,9 +3,13 @@ import { api as generated } from "../../../convex/_generated/api";
 export const api = generated;
 export type { Id } from "../../../convex/_generated/dataModel";
 
-/** Adresse des Kachel-Gateways; im Betrieb hinter derselben Domain. */
+/** Im Betrieb laeuft das Kachel-Gateway unter /api auf derselben Domain. */
+const configuredTileService = (
+  (import.meta.env.VITE_TILE_SERVICE_URL as string | undefined) ?? ""
+).trim();
 export const TILE_SERVICE_URL = (
-  (import.meta.env.VITE_TILE_SERVICE_URL as string) || "http://localhost:8000"
+  configuredTileService ||
+  (import.meta.env.DEV ? "http://localhost:8000" : window.location.origin)
 ).replace(/\/$/, "");
 
 /** Basis-Pfad, falls die App unter einem Unterpfad laeuft. */

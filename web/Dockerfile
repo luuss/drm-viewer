@@ -8,9 +8,7 @@ RUN npm ci --no-audit --no-fund
 COPY web /app/web
 COPY convex /app/convex
 ARG VITE_CONVEX_URL
-ARG VITE_TILE_SERVICE_URL
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
-ENV VITE_TILE_SERVICE_URL=$VITE_TILE_SERVICE_URL
 RUN npm run build
 
 FROM nginx:alpine

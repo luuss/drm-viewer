@@ -43,7 +43,6 @@ und alle Platzhalter ersetzen. Besonders wichtig:
 
 - `VITE_CONVEX_URL` ist die oeffentliche `.convex.cloud`-Adresse.
 - `CONVEX_SITE_URL` ist die passende `.convex.site`-Adresse.
-- `VITE_TILE_SERVICE_URL` ist die spaetere HTTPS-Domain des Kacheldienstes.
 - `PUBLIC_WEB_ORIGIN` ist exakt die spaetere HTTPS-Domain der Weboberflaeche.
 - `TILE_SERVICE_SECRET` und `EXTRACT_SERVICE_SECRET` sind zwei getrennte,
   zufaellige Werte, zum Beispiel aus `openssl rand -hex 32`.
@@ -51,18 +50,17 @@ und alle Platzhalter ersetzen. Besonders wichtig:
 
 ## 4. Domains in Dokploy
 
-Zwei DNS-A/AAAA-Eintraege auf den Dokploy-Server zeigen lassen. Danach unter
-**Compose → Domains** zwei HTTPS-Domains anlegen:
+Einen DNS-A/AAAA-Eintrag fuer `d.chuk.dev` auf den Dokploy-Server zeigen
+lassen. Danach unter **Compose → Domains** genau eine HTTPS-Domain anlegen:
 
 | Domain | Service | Container-Port |
 |---|---|---:|
-| `digital.example.de` | `web` | `80` |
-| `tiles.example.de` | `tile-service` | `8000` |
+| `d.chuk.dev` | `web` | `80` |
 
-Dokploy erzeugt die Traefik-Routen und TLS-Zertifikate. Es wird kein zusaetzlicher
-Caddy-Container und kein veroeffentlichter Host-Port benoetigt. Vor dem ersten
-Rollout mit **Preview Compose** pruefen, dass beide Domains am richtigen Service
-und Port haengen.
+Dokploy erzeugt die Traefik-Route und das TLS-Zertifikat. Nginx liefert die App
+aus und leitet `/api/...` im internen Docker-Netz an `tile-service:8000` weiter.
+Der Tile-Port wird nicht oeffentlich freigegeben. Vor dem ersten Rollout mit
+**Preview Compose** pruefen, dass `d.chuk.dev` an `web:80` haengt.
 
 ## 5. Convex vorbereiten
 
@@ -70,22 +68,27 @@ Im Convex-Produktionsdeployment einen Production Deploy Key erzeugen. Die
 beiden Dienstgeheimnisse und die echte Webadresse einmalig in Convex setzen:
 
 ```bash
-npx convex env set APP_PUBLIC_URL https://digital.example.de
-npx convex env set TILE_SERVICE_SECRET <derselbe Wert wie in Dokploy>
-npx convex env set EXTRACT_SERVICE_SECRET <derselbe Wert wie in Dokploy>
+npx convex env set --prod APP_PUBLIC_URL https://d.chuk.dev
+npx convex env set --prod TILE_SERVICE_SECRET <derselbe Wert wie in Dokploy>
+npx convex env set --prod EXTRACT_SERVICE_SECRET <derselbe Wert wie in Dokploy>
 ```
 
 ## 6. GitHub Actions konfigurieren
 
 Unter **Repository → Settings → Secrets and variables → Actions** eintragen.
-Das Secret kann direkt im geschuetzten Environment `production` liegen:
+Das optionale Secret kann direkt im geschuetzten Environment `production`
+liegen:
 
 - `CONVEX_DEPLOY_KEY` – Production Deploy Key aus Convex
+
+Ohne dieses Secret bleibt der Workflow gruen und ueberspringt nur den Convex-
+Deploy. Solange die Bibliotheksdaten noch im Dev-Deployment liegen, muss ein
+Deploy-Key fuer genau dieses Deployment verwendet werden; das leere Production-
+Deployment darf nicht versehentlich als Datenquelle der Web-App gesetzt werden.
 
 Repository-Variablen:
 
 - `VITE_CONVEX_URL` – produktive `.convex.cloud`-Adresse
-- `VITE_TILE_SERVICE_URL` – produktive Kacheldomain mit `https://`
 
 Fuer den automatischen Convex-Rollout darf das GitHub-Environment keine
 manuelle Freigaberegel besitzen. Dokploy selbst benoetigt keine GitHub-Secrets,
@@ -98,7 +101,7 @@ kontrollieren. Danach einen kleinen Commit nach `main` pushen und pruefen, dass
 der Workflow **Validate and deploy Convex** erfolgreich ist und genau ein neues
 Dokploy-Deployment erzeugt.
 
-Erst wenn Anmeldung, eine Heftseite und ein Testimport ueber die echten Domains
+Erst wenn Anmeldung, eine Heftseite und ein Testimport ueber die echte Domain
 funktionieren, die lokalen systemd-Dienste und den Quick Tunnel deaktivieren.
 So bleibt bis zur erfolgreichen Abnahme ein Rueckweg bestehen.
 
