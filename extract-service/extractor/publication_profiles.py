@@ -36,8 +36,18 @@ def is_zuerst(publication_slug: str | None) -> bool:
     return slug == "zuerst" or slug.startswith("zuerst-")
 
 
+def is_dmz_zeitgeschichte(publication_slug: str | None) -> bool:
+    """DMZ Zeitgeschichte teilt Verlag und Satz, aber nicht die Seitenlogik:
+    Editorial und Inhalt stehen zusammen auf Seite 3, der Inhalt beginnt auf
+    Seite 4. Das DMZ-Profil wuerde dort eine Inhaltsseite streichen."""
+    slug = (publication_slug or "").strip().lower()
+    return slug == "dmz-zeitgeschichte" or slug.startswith("dmz-zeitgeschichte-")
+
+
 def is_dmz(publication_slug: str | None) -> bool:
     slug = (publication_slug or "").strip().lower()
+    if is_dmz_zeitgeschichte(slug):
+        return False
     return (
         slug == "dmz"
         or slug.startswith("dmz-")

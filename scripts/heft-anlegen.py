@@ -19,6 +19,10 @@ Beispiel DMZ 170:
       --umschlag "hefte test/umschlag dmz 170.pdf" --umschlag-layout spreads \\
       --archiv "hefte test/dmz 170.indd" --archiv "hefte test/umschlag dmz 170.indd"
 
+Mit --freigeben werden nach dem Import alle Artikel freigegeben und die
+Ausgabe veroeffentlicht, ohne redaktionelle Pruefung. Umschlaege mit Klappe
+zerlegt vorher scripts/umschlag-zerlegen.py in vier Einzelseiten.
+
 Beispiel ZUERST! (Umschlag als vier Einzelseiten in Bogenreihenfolge):
 
     scripts/heft-anlegen.py --publikation "ZUERST!" --kennung zuerst \\
@@ -30,6 +34,7 @@ Beispiel ZUERST! (Umschlag als vier Einzelseiten in Bogenreihenfolge):
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import shutil
@@ -116,6 +121,8 @@ def main() -> int:
     parser.add_argument("--kennung", help="Kennung des Titels (waehlt das Heftprofil), z.B. dmz")
     parser.add_argument("--titel", required=True, help='Titel der Ausgabe, z.B. "DMZ 170"')
     parser.add_argument("--nummer", help="Heftnummer")
+    parser.add_argument("--beschreibung", help="Untertitel oder Thema der Ausgabe")
+    parser.add_argument("--datum", help="Erscheinungsdatum JJJJ-MM-TT")
     parser.add_argument("--preis", required=True, help="Einzelpreis in Euro, z.B. 9,80")
     parser.add_argument("--innen", required=True, help="Innenteil-PDF")
     parser.add_argument("--umschlag", help="Umschlag-PDF")
@@ -127,7 +134,14 @@ def main() -> int:
     parser.add_argument("--archiv", action="append", default=[], help=".indd-Datei, mehrfach moeglich")
     parser.add_argument("--erste-seite", type=int, default=3, help="gedruckte Seitenzahl der ersten Innenseite")
     parser.add_argument("--nicht-warten", action="store_true", help="nicht auf den Worker warten")
+    parser.add_argument(
+        "--freigeben",
+        action="store_true",
+        help="nach dem Import alle Artikel freigeben und die Ausgabe veroeffentlichen",
+    )
     args = parser.parse_args()
+    if args.freigeben and args.nicht_warten:
+        raise SystemExit("--freigeben braucht das Warten auf den Worker")
 
     for path in [args.innen, args.umschlag, *args.archiv]:
         if path and not os.path.exists(path):
@@ -148,6 +162,15 @@ def main() -> int:
         seed["publicationSlug"] = args.kennung
     if args.nummer:
         seed["issueNumber"] = args.nummer
+    if args.beschreibung:
+        seed["description"] = args.beschreibung
+    if args.datum:
+        seed["publicationDate"] = int(
+            datetime.datetime.strptime(args.datum, "%Y-%m-%d")
+            .replace(tzinfo=datetime.timezone.utc)
+            .timestamp()
+            * 1000
+        )
     if args.umschlag:
         seed["coverStorageId"] = upload(args.umschlag, "application/pdf")
         seed["coverFilename"] = os.path.basename(args.umschlag)
@@ -187,6 +210,14 @@ def main() -> int:
                 f"{status.get('pageCount')} Seiten. Ausgabe /issue/{status.get('issueSlug')} "
                 "steht in der Redaktion zur Pruefung."
             )
+            if args.freigeben:
+                released = convex_run("devtools:releaseIssueInternal", {"issueId": result["issueId"]})
+                if not isinstance(released, dict):
+                    raise SystemExit(f"Freigabe fehlgeschlagen: {released!r}")
+                print(
+                    f"Veroeffentlicht: {released['approved']} von {released['articles']} "
+                    f"Artikeln freigegeben, Ausgabe /issue/{released.get('slug')} ist im Kiosk."
+                )
             return 0
         if status["status"] == "error":
             raise SystemExit(f"Import fehlgeschlagen: {status.get('message')}")

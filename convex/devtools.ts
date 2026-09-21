@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { slugify } from "./publications";
+import { publishIssue } from "./issues";
+import { audit } from "./roles";
 
 /**
  * Hilfen fuer Entwicklung und Integrationspruefung.
@@ -20,6 +22,8 @@ export const seedIssueFromAssets = internalMutation({
     publicationSlug: v.optional(v.string()),
     title: v.string(),
     issueNumber: v.optional(v.string()),
+    description: v.optional(v.string()),
+    publicationDate: v.optional(v.number()),
     priceAmountCents: v.number(),
     innerStorageId: v.id("_storage"),
     innerFilename: v.string(),
@@ -62,6 +66,8 @@ export const seedIssueFromAssets = internalMutation({
       title: args.title,
       slug: `${slug}-${now.toString(36)}`,
       issueNumber: args.issueNumber,
+      description: args.description,
+      publicationDate: args.publicationDate,
       pageCount: 0,
       priceAmountCents: args.priceAmountCents,
       isPublished: false,
@@ -192,6 +198,50 @@ export const seedIssueFromAssets = internalMutation({
       createdAt: now,
     });
     return { issueId, jobId, pages: pages.length, publicationSlug };
+  },
+});
+
+/**
+ * Alle offenen Artikel freigeben und die Ausgabe veroeffentlichen. Fuer das
+ * Anlegen von der Kommandozeile (`heft-anlegen.py --freigeben`); die
+ * redaktionelle Pruefung entfaellt damit bewusst.
+ */
+export const releaseIssueInternal = internalMutation({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    const rows = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    let approved = 0;
+    for (const row of rows) {
+      if (row.reviewStatus !== "pending") continue;
+      await ctx.db.patch(row._id, { reviewStatus: "approved", updatedAt: Date.now() });
+      approved++;
+    }
+    await audit(ctx, "article.approveAll", issueId, `${approved} Artikel (Kommandozeile)`);
+    await publishIssue(ctx, issueId);
+    const issue = await ctx.db.get(issueId);
+    return { approved, articles: rows.length, slug: issue?.slug ?? null };
+  },
+});
+
+/** Die juengsten Importauftraege, um den Worker von aussen zu beobachten. */
+export const recentJobsInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const jobs = await ctx.db.query("importJobs").order("desc").take(8);
+    return jobs.map((job) => ({
+      _id: job._id,
+      issueId: job.issueId,
+      status: job.status,
+      progress: job.progress ?? null,
+      message: job.message ?? null,
+      workerId: job.workerId ?? null,
+      attempts: job.attempts,
+      createdAt: job.createdAt,
+      finishedAt: job.finishedAt ?? null,
+    }));
   },
 });
 

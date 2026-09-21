@@ -907,6 +907,15 @@ def test_woerter_der_anderen_haelfte_fallen_weg():
 
 # --- DMZ-Profil --------------------------------------------------------------
 
+def test_dmz_zeitgeschichte_faellt_nicht_unter_das_dmz_profil():
+    from extractor.publication_profiles import profile_for
+
+    assert profile_for("dmz") == "dmz"
+    assert profile_for("dmz-170") == "dmz"
+    assert profile_for("dmz-zeitgeschichte") is None
+    assert profile_for("schwertertraeger") is None
+
+
 DMZ_PAGES = [
     {"index": 0, "role": "front_cover", "printedLabel": "U1"},
     {"index": 1, "role": "inside_front", "printedLabel": "U2"},

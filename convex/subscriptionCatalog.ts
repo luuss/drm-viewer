@@ -7,8 +7,8 @@
  * liest nie aus dieser Datei.
  *
  * Alle Preise sind Jahrespreise in Cent, inklusive Mehrwertsteuer.
- * Quellen, Stand September 2026: zuerst.de/abo und das DMZ-Bestellformular
- * auf lesenundschenken.de.
+ * Quellen, Stand September 2026: zuerst.de/abo und die Bestellformulare fuer
+ * DMZ, DMZ Zeitgeschichte und Schwertertraeger auf lesenundschenken.de.
  */
 
 export type DeliveryRegion = "inland" | "ausland" | "luftpost";
@@ -78,6 +78,44 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
         name: "Förderabonnement",
         note: "Der Förderbetrag fließt in die Werbung der DMZ",
         prices: { inland: 6900, ausland: 8520 },
+      },
+    ],
+  },
+  "dmz-zeitgeschichte": {
+    interval: "year",
+    tiers: [
+      {
+        name: "Normalabonnement",
+        prices: { inland: 6480, ausland: 8160 },
+      },
+      {
+        name: "Schüler- und Studentenabonnement",
+        note: "Kopie des Schüler- oder Studentenausweises erforderlich",
+        prices: { inland: 5880, ausland: 7560 },
+      },
+      {
+        name: "Förderabonnement",
+        note: "Der Förderbetrag fließt in die Werbung der DMZ Zeitgeschichte",
+        prices: { inland: 7500, ausland: 9180 },
+      },
+    ],
+  },
+  schwertertraeger: {
+    interval: "year",
+    tiers: [
+      {
+        name: "Normalabonnement",
+        prices: { inland: 5520, ausland: 6560 },
+      },
+      {
+        name: "Schüler- und Studentenabonnement",
+        note: "Kopie des Schüler- oder Studentenausweises erforderlich",
+        prices: { inland: 4920, ausland: 5920 },
+      },
+      {
+        name: "Förderabonnement",
+        note: "Der Förderbetrag fließt in die Werbung des Schwerterträgers",
+        prices: { inland: 6380, ausland: 7540 },
       },
     ],
   },

@@ -14,6 +14,10 @@ const REGION_LABEL: Record<string, string> = {
 const SAMPLE_COPY_URL: Record<string, string> = {
   zuerst: "https://zuerst.de/probeexemplar/",
   dmz: "https://lesenundschenken.de/module/luszeitformulare/formular?f=probeexemplar&zeitschrift=DMZ",
+  "dmz-zeitgeschichte":
+    "https://lesenundschenken.de/module/luszeitformulare/formular?f=probeexemplar&zeitschrift=DMZ-Zeitgeschichte",
+  schwertertraeger:
+    "https://lesenundschenken.de/module/luszeitformulare/formular?f=probeexemplar&zeitschrift=Schwertertr%C3%A4ger",
 };
 
 /**

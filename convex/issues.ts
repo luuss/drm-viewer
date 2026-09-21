@@ -4,6 +4,7 @@ import {
   internalQuery,
   mutation,
   query,
+  MutationCtx,
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, requirePublisher, audit } from "./roles";
@@ -278,49 +279,61 @@ export const update = mutation({
   },
 });
 
+/**
+ * Ausgabe veroeffentlichen: Seiten muessen aufbereitet und alle Artikel
+ * entschieden sein, danach bekommen laufende Abos der Publikation das Heft.
+ * Gemeinsamer Weg fuer die Redaktion und das Anlegen von der Kommandozeile.
+ */
+export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
+  const issue = await ctx.db.get(issueId);
+  if (!issue) throw new Error("Ausgabe nicht gefunden");
+  const pages = await ctx.db
+    .query("issuePages")
+    .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+    .collect();
+  if (pages.length === 0) {
+    throw new Error("Ohne aufbereitete Seiten kann nicht veröffentlicht werden");
+  }
+  // Gate: jeder Artikel muss entschieden sein, sonst steht im Heft
+  // ungeprueftes Material.
+  const articles = await ctx.db
+    .query("articles")
+    .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+    .collect();
+  const pending = articles.filter((a) => a.reviewStatus === "pending").length;
+  if (pending > 0) {
+    throw new Error(
+      `Noch ${pending} Artikel ohne Entscheidung. Erst freigeben oder ausschließen.`,
+    );
+  }
+  await ctx.db.patch(issueId, {
+    isPublished: true,
+    publishedAt: issue.publishedAt ?? Date.now(),
+    updatedAt: Date.now(),
+  });
+  await audit(ctx, "issue.publish", issueId);
+
+  // Neue Ausgabe: laufende Abos der Publikation bekommen sie dauerhaft.
+  const subs = await ctx.db.query("subscriptions").collect();
+  for (const sub of subs) {
+    if (sub.publicationId !== issue.publicationId) continue;
+    if (!subscriptionIsActive(sub)) continue;
+    await syncSubscription(ctx, sub._id);
+  }
+}
+
 export const setPublished = mutation({
   args: { issueId: v.id("issues"), isPublished: v.boolean() },
   handler: async (ctx, { issueId, isPublished }) => {
     await requirePublisher(ctx);
+    if (isPublished) {
+      await publishIssue(ctx, issueId);
+      return;
+    }
     const issue = await ctx.db.get(issueId);
     if (!issue) throw new Error("Ausgabe nicht gefunden");
-    if (isPublished) {
-      const pages = await ctx.db
-        .query("issuePages")
-        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
-        .collect();
-      if (pages.length === 0) {
-        throw new Error("Ohne aufbereitete Seiten kann nicht veröffentlicht werden");
-      }
-      // Gate: jeder Artikel muss entschieden sein, sonst steht im Heft
-      // ungeprueftes Material.
-      const articles = await ctx.db
-        .query("articles")
-        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
-        .collect();
-      const pending = articles.filter((a) => a.reviewStatus === "pending").length;
-      if (pending > 0) {
-        throw new Error(
-          `Noch ${pending} Artikel ohne Entscheidung. Erst freigeben oder ausschließen.`,
-        );
-      }
-    }
-    await ctx.db.patch(issueId, {
-      isPublished,
-      publishedAt: isPublished ? (issue.publishedAt ?? Date.now()) : issue.publishedAt,
-      updatedAt: Date.now(),
-    });
-    await audit(ctx, isPublished ? "issue.publish" : "issue.unpublish", issueId);
-
-    if (isPublished) {
-      // Neue Ausgabe: laufende Abos der Publikation bekommen sie dauerhaft.
-      const subs = await ctx.db.query("subscriptions").collect();
-      for (const sub of subs) {
-        if (sub.publicationId !== issue.publicationId) continue;
-        if (!subscriptionIsActive(sub)) continue;
-        await syncSubscription(ctx, sub._id);
-      }
-    }
+    await ctx.db.patch(issueId, { isPublished: false, updatedAt: Date.now() });
+    await audit(ctx, "issue.unpublish", issueId);
   },
 });
 
