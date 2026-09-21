@@ -129,15 +129,23 @@ jobs:
         env:
           DOKPLOY_DEPLOY_URL: ${{ secrets.DOKPLOY_DEPLOY_URL }}
         run: |
-          code=$(curl --silent --show-error --fail-with-body \
-                      --max-time 30 --output /tmp/dokploy.out \
-                      --write-out '%{http_code}' \
-                      -X POST "$DOKPLOY_DEPLOY_URL") || {
-            echo "::error::Dokploy hat den Auftrag nicht angenommen (HTTP $code)."
-            cat /tmp/dokploy.out || true
+          # Dokploy erwartet an diesem Eingang einen Aufruf in der Form, die
+          # GitHub selbst schickt: das Ereignis im Kopf und den Zweig im Rumpf.
+          # Fehlt eines davon, antwortet es "Branch Not Match" — und zwar mit
+          # Code 301, den curl nicht als Fehler wertet. Deshalb wird hier der
+          # Rumpf ausgewertet und nicht nur der Code.
+          code=$(curl --silent --show-error --max-time 60 \
+                      --output /tmp/dokploy.out --write-out '%{http_code}' \
+                      -X POST "$DOKPLOY_DEPLOY_URL" \
+                      -H 'Content-Type: application/json' \
+                      -H 'x-github-event: push' \
+                      -d "{\"ref\":\"${GITHUB_REF:-refs/heads/main}\"}")
+          antwort=$(cat /tmp/dokploy.out 2>/dev/null || true)
+          echo "Antwort ($code): $antwort"
+          if [[ "$code" != "200" ]] || ! grep -qi "successfully" /tmp/dokploy.out; then
+            echo "::error::Dokploy hat den Auftrag nicht angenommen: $antwort"
             exit 1
-          }
-          echo "Dokploy angestossen, HTTP $code."
+          fi
 
       # Der Webhook bestaetigt nur die Annahme, nicht den Erfolg. Deshalb wird
       # danach die laufende Seite selbst befragt.

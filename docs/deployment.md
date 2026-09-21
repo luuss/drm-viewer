@@ -51,14 +51,17 @@ eine HTTPS-Domain oder ein VPN erreichbar machen.
    `./docker-compose.dokploy.yml` eintragen.
 4. **Docker Compose** verwenden, nicht Docker Stack: Die Images werden direkt
    aus dem Checkout gebaut.
-5. **Auto Deploy eingeschaltet lassen, aber als Trigger `tag` waehlen.** Das
-   sieht widerspruechlich aus und ist es nicht: in Dokploy haengt der
-   Deploy-Webhook am selben Schalter wie der Push-Trigger. Ist Auto Deploy aus,
-   antwortet der Webhook mit
-   `{"message":"Automatic deployments are disabled for this compose"}`. Mit dem
-   Trigger `tag` bleibt der Webhook nutzbar, waehrend ein gewoehnlicher Push auf
-   `main` Dokploy nicht mehr selbst starten laesst — genau das soll er nicht,
-   denn er wuerde an den Tests vorbeilaufen.
+5. **Auto Deploy eingeschaltet lassen, Trigger `push`.** Der Deploy-Webhook
+   haengt am selben Schalter wie der Push-Trigger: ist Auto Deploy aus,
+   antwortet er mit
+   `{"message":"Automatic deployments are disabled for this compose"}`.
+   Mit Trigger `tag` antwortet er `{"message":"Branch Not Match"}`.
+
+   Der Webhook will in der Form aufgerufen werden, in der GitHub selbst ihn
+   ruft: Kopfzeile `x-github-event: push` und im Rumpf `{"ref":"refs/heads/main"}`.
+   Fehlt eines davon, kommt wieder `Branch Not Match` — und zwar mit Code 301,
+   den `curl` nicht als Fehler wertet. Der Workflow prueft deshalb den Rumpf auf
+   `successfully` und nicht nur den Code.
 6. Die Webhook-Adresse steht unter **Compose → Deployments → Webhook URL** und
    gehoert als Secret `DOKPLOY_DEPLOY_URL` ins Repository. Sie traegt ein
    Merkmal, das nur diesen einen Dienst ausloesen kann — ein Dokploy-API-
