@@ -1,9 +1,10 @@
 # Automatisches Produktionsdeployment mit Dokploy
 
-Die Produktionsstufe verwendet das bestehende Convex-EU-Cloud-Deployment.
-Weboberflaeche, Kachel-Gateway und Import-Worker laufen dauerhaft als Docker-
-Compose-Anwendung in Dokploy. Der Entwicklungsrechner braucht danach weder
-Vite noch Worker, Kacheldienst oder Cloudflare Quick Tunnel.
+Alles laeuft in einer einzigen Docker-Compose-Anwendung in Dokploy: Convex-
+Backend, Postgres, MinIO, Kachel-Gateway, Import-Worker und Weboberflaeche.
+Eine Convex-Cloud gibt es nicht mehr. Der Entwicklungsrechner braucht weder
+Vite noch Worker, Kacheldienst oder Tunnel — gearbeitet wird gegen die echte
+Anlage, ausgeliefert wird durch `git push`.
 
 Jeder Push auf `main` laeuft durch eine einzige Kette in GitHub Actions
 (`.github/workflows/deploy-production.yml`):
@@ -11,11 +12,13 @@ Jeder Push auf `main` laeuft durch eine einzige Kette in GitHub Actions
 1. **Pruefen** — Convex-Tests, Bau der Weboberflaeche, Tests der Extraktion und
    eine Syntaxpruefung der Compose-Datei.
 2. **Ausliefern**, nur bei gruenen Pruefungen und in dieser Reihenfolge:
-   erst die Convex-Funktionen, dann die drei Dienste in Dokploy, zuletzt ein
-   Rauchtest gegen die laufende Seite.
+   Dokploy anstossen, warten bis das Backend antwortet, Convex-Funktionen
+   ausliefern, Umgebungswerte des Backends sichern, zuletzt ein Rauchtest
+   gegen die laufende Seite.
 
-Die Reihenfolge ist nicht beliebig: waere die Oberflaeche vor dem Backend neu,
-riefe sie Funktionen auf, die es noch nicht gibt.
+Die Reihenfolge hat sich mit dem Umzug umgedreht: frueher lag das Backend in
+der Cloud und war immer da, heute startet es im selben Stapel. Funktionen
+koennen also erst hinein, wenn Dokploy den Stapel hochgezogen hat.
 
 Der Webhook bestaetigt nur, dass Dokploy den Auftrag angenommen hat. Ob der Bau
 gelingt, sagt er nicht. Deshalb wartet der Lauf danach, bis die Seite genau das
@@ -34,8 +37,24 @@ Dokploy-GitHub-App angebunden, sondern klont das oeffentliche Repository direkt
 Push von selbst — gemessen am 21.09.2026 liefen dadurch zwei Rollouts
 nebeneinander, einer um 16:53:44 direkt beim Push und einer um 16:54:46 nach den
 Tests. Der erste lief an den Tests vorbei; ein roter Test haette ein kaputtes
-Deployment nicht mehr aufgehalten. Jetzt loest ausschliesslich der Workflow aus,
-ueber den Deploy-Webhook des Dienstes.
+Deployment nicht mehr aufhalten koennen. Jetzt loest ausschliesslich der
+Workflow aus, ueber den Deploy-Webhook des Dienstes.
+
+## Wo die Daten liegen
+
+Dokploy klont den Quellstand bei jedem Deployment neu — der Checkout ist also
+fluechtig. Alles, was bleiben muss, liegt deshalb im Ordner der Anwendung auf
+dem Server:
+
+| Pfad auf dem Server | Inhalt |
+|---|---|
+| `/etc/dokploy/compose/<dienst>/files/postgres` | Die ganze Datenbank: Nutzer, Hefte, Artikel, Kaeufe |
+| `/etc/dokploy/compose/<dienst>/files/minio` | Alle Dateien: Seiten, Bilder, Satz- und Druckdateien |
+
+In der Compose-Datei stehen sie als `../files/postgres` und `../files/minio`.
+Ein Deployment, ein Neustart oder ein Neubau der Abbilder fasst sie nicht an.
+Geloescht werden sie nur mit dem Dienst selbst. **Die Sicherung dieser beiden
+Ordner ist die Sicherung der Anwendung.**
 
 ## 1. Dokploy auf einem EU-Server
 
@@ -74,97 +93,140 @@ eine HTTPS-Domain oder ein VPN erreichbar machen.
    Schluessel mit Vollzugriff haette in einem oeffentlichen Repository nichts zu
    suchen.
 
-Dokploy klont den Quellstand bei jedem Deployment neu. Persistente Dateien
-duerfen deshalb spaeter nur in benannten Volumes oder Dokploy File Mounts
-liegen. Der aktuelle Cloud-Bridge-Stack speichert lokal keine Nutzdaten.
+Wo die Nutzdaten liegen, steht oben unter "Wo die Daten liegen". Der Checkout
+ist fluechtig, `../files/` nicht.
 
 ## 3. Umgebungswerte in Dokploy
 
 Den Inhalt von `.env.dokploy.example` unter **Compose → Environment** einfuegen
-und alle Platzhalter ersetzen. Besonders wichtig:
+und alle Platzhalter ersetzen. Die Zufallswerte erzeugt:
 
-- `VITE_CONVEX_URL` ist die oeffentliche `.convex.cloud`-Adresse.
-- `CONVEX_SITE_URL` ist die passende `.convex.site`-Adresse.
-- `PUBLIC_WEB_ORIGIN` ist exakt die spaetere HTTPS-Domain der Weboberflaeche.
-- `TILE_SERVICE_SECRET` und `EXTRACT_SERVICE_SECRET` sind zwei getrennte,
-  zufaellige Werte, zum Beispiel aus `openssl rand -hex 32`.
-- Der OpenRouter-Schluessel gehoert nur in Dokploy, niemals ins Repository.
+```bash
+openssl rand -hex 32     # CONVEX_INSTANCE_SECRET, TILE_SERVICE_SECRET, EXTRACT_SERVICE_SECRET
+openssl rand -hex 24     # POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD
+echo "eigen:$(openssl rand -base64 32)"   # MINIO_KMS_SECRET_KEY
+```
+
+Drei Werte muessen **in Dokploy und in GitHub gleich** sein, weil beide Seiten
+sie brauchen: `TILE_SERVICE_SECRET`, `EXTRACT_SERVICE_SECRET` und die
+MinIO-Zugangsdaten. Der Workflow traegt sie im Convex-Backend ein; der Stapel
+gibt sie den Diensten. Stimmen sie nicht ueberein, weist das Backend
+Kacheldienst und Import-Worker ab.
+
+`CONVEX_INSTANCE_SECRET` ist der wichtigste Wert: aus ihm leitet sich der
+Admin-Schluessel ab. Wird er geaendert, gilt jeder bisherige Schluessel nicht
+mehr und der Workflow kommt nicht mehr ins Backend.
 
 ## 4. Domains in Dokploy
 
-Einen DNS-A/AAAA-Eintrag fuer `d.chuk.dev` auf den Dokploy-Server zeigen
-lassen. Danach unter **Compose → Domains** genau eine HTTPS-Domain anlegen:
+Vier DNS-A/AAAA-Eintraege auf den Dokploy-Server zeigen lassen, danach unter
+**Compose → Domains** vier HTTPS-Domains anlegen:
 
-| Domain | Service | Container-Port |
-|---|---|---:|
-| `d.chuk.dev` | `web` | `80` |
+| Domain | Service | Container-Port | wofuer |
+|---|---|---:|---|
+| `d.chuk.dev` | `web` | `80` | Die Seite selbst |
+| `api.d.chuk.dev` | `convex-backend` | `3210` | Datenverbindung des Browsers |
+| `hooks.d.chuk.dev` | `convex-backend` | `3211` | HTTP-Endpunkte (Shop, Stripe) |
+| `medien.d.chuk.dev` | `minio` | `9000` | Browser laedt Heftdateien direkt hoch |
 
-Dokploy erzeugt die Traefik-Route und das TLS-Zertifikat. Nginx liefert die App
-aus und leitet `/api/...` im internen Docker-Netz an `tile-service:8000` weiter.
-Der Tile-Port wird nicht oeffentlich freigegeben. Vor dem ersten Rollout mit
-**Preview Compose** pruefen, dass `d.chuk.dev` an `web:80` haengt.
+Optional fuer die Convex-Konsole: `konsole.d.chuk.dev` auf
+`convex-dashboard:6791`. Sie zeigt Tabellen, Protokolle und laufende
+Funktionen; fuer den Betrieb ist sie nicht noetig.
 
-## 5. Convex vorbereiten
+Der Kacheldienst bekommt **keine** eigene Domain: die Weboberflaeche reicht
+`/api/...` im internen Netz an `tile-service:8000` weiter.
 
-Im Convex-Produktionsdeployment einen Production Deploy Key erzeugen. Die
-beiden Dienstgeheimnisse und die echte Webadresse einmalig in Convex setzen:
+## 5. Erster Start: Admin-Schluessel und Anmeldung
+
+Nach dem ersten Deploy einmalig auf dem Server den Admin-Schluessel erzeugen —
+er bleibt gueltig, solange `CONVEX_INSTANCE_SECRET` steht:
 
 ```bash
-npx convex env set --prod APP_PUBLIC_URL https://d.chuk.dev
-npx convex env set --prod TILE_SERVICE_SECRET <derselbe Wert wie in Dokploy>
-npx convex env set --prod EXTRACT_SERVICE_SECRET <derselbe Wert wie in Dokploy>
+cd /etc/dokploy/compose/<dienst>/code
+docker compose -f docker-compose.dokploy.yml exec convex-backend ./generate_admin_key.sh
 ```
+
+Die Ausgabe (`emagazin|017...`) gehoert als GitHub-Secret
+`CONVEX_SELF_HOSTED_ADMIN_KEY` ins Repository. Ohne ihn kann der Workflow keine
+Funktionen ausliefern.
+
+Den ersten Zugang legt die Anwendung selbst an: die Adresse aus der
+Repository-Variablen `ADMIN_EMAILS` bekommt beim Registrieren auf
+`https://d.chuk.dev` sofort Adminrechte. Danach kann die Variable stehen
+bleiben; Rollen haengen ab dann am Nutzer.
 
 ## 6. GitHub Actions konfigurieren
 
 Unter **Repository → Settings → Secrets and variables → Actions** eintragen.
-Das optionale Secret kann direkt im geschuetzten Environment `production`
-liegen:
 
-- `CONVEX_DEPLOY_KEY` – Deploy-Key des Deployments, an dem die Web-App haengt
-- `DOKPLOY_DEPLOY_URL` – Deploy-Webhook des Compose-Dienstes in Dokploy
+Secrets:
 
-Beide sind Pflicht. Fehlt eines, bricht der Lauf mit einer klaren Meldung ab.
-Frueher wurde der Convex-Schritt bei fehlendem Schluessel still uebersprungen
-und der Lauf trotzdem gruen gemeldet — das Backend blieb alt, ohne dass es
-jemandem auffiel.
+| Name | Inhalt |
+|---|---|
+| `CONVEX_SELF_HOSTED_ADMIN_KEY` | Ausgabe von `generate_admin_key.sh` |
+| `DOKPLOY_DEPLOY_URL` | Deploy-Webhook des Compose-Dienstes |
+| `MINIO_ROOT_USER` | wie in Dokploy |
+| `MINIO_ROOT_PASSWORD` | wie in Dokploy |
+| `TILE_SERVICE_SECRET` | wie in Dokploy |
+| `EXTRACT_SERVICE_SECRET` | wie in Dokploy |
+| `RESEND_API_KEY` | optional, fuer Mailversand |
+| `STRIPE_SECRET_KEY` | optional, fuer den Verkauf |
+| `SHOP_WEBHOOK_SECRET` | optional, fuer die Shop-Schnittstelle |
 
-Den Convex-Schluessel erzeugt die CLI, ein Besuch im Dashboard ist nicht noetig:
+Variablen:
 
-```bash
-npx convex deployment token create github-actions
-```
+| Name | Inhalt |
+|---|---|
+| `VITE_CONVEX_URL` | `https://api.d.chuk.dev` — wird ins Bundle gebaut |
+| `CONVEX_SELF_HOSTED_URL` | dieselbe Adresse; Ziel von `convex deploy` |
+| `PUBLIC_WEB_ORIGIN` | `https://d.chuk.dev` |
+| `PUBLIC_MEDIA_ORIGIN` | `https://medien.d.chuk.dev` |
+| `ADMIN_EMAILS` | Adresse des ersten Zugangs |
+| `MEDIA_BUCKET` | optional, Vorgabe `emag-media` |
+| `RESEND_FROM_EMAIL` | optional, Absender |
 
-Der Schluessel bestimmt das Ziel. Solange die Bibliotheksdaten im Dev-Deployment
-liegen und die Web-App darauf zeigt, muss es ein Schluessel fuer genau dieses
-Deployment sein — er beginnt dann mit `dev:`. Ein Schluessel fuer das leere
-Produktionsdeployment wuerde die Funktionen ins Leere ausliefern, waehrend die
-Oberflaeche weiter woanders liest.
-
-Repository-Variablen:
-
-- `VITE_CONVEX_URL` – `.convex.cloud`-Adresse, gegen die gebaut wird
-- `PUBLIC_WEB_ORIGIN` – oeffentliche Adresse der Seite, Ziel des Rauchtests
+Die Umgebungswerte des Backends setzt der Workflow bei jedem Lauf selbst
+(`scripts/convex-env-sichern.mjs`). Er schreibt nur, was fehlt oder abweicht,
+und erzeugt die Schluessel der Anmeldung (`JWT_PRIVATE_KEY`, `JWKS`) genau
+einmal — wuerde er sie jedes Mal neu erzeugen, waere nach jedem Deployment
+jeder angemeldete Leser ausgesperrt.
 
 Fuer den automatischen Rollout darf das GitHub-Environment `production` keine
 manuelle Freigaberegel besitzen, sonst bleibt jeder Push auf eine Bestaetigung
 warten.
 
-## 7. Erster Rollout und Abschalten der lokalen Dienste
+## 7. Erster Rollout
 
-Zuerst in Dokploy einmal **Deploy** ausfuehren und Web-, Tile- und Worker-Logs
-kontrollieren. Danach einen kleinen Commit nach `main` pushen und pruefen, dass
-der Workflow **Validate and deploy Convex** erfolgreich ist und genau ein neues
-Dokploy-Deployment erzeugt.
+1. In Dokploy **Deploy** ausfuehren und die Protokolle von `postgres`, `minio`,
+   `convex-backend`, `web`, `tile-service` und `import-worker` durchsehen.
+2. Admin-Schluessel erzeugen (Abschnitt 5) und als Secret hinterlegen.
+3. Einen kleinen Commit nach `main` pushen. Der Workflow liefert die Funktionen
+   aus, setzt die Umgebungswerte und prueft die Seite.
+4. Auf `https://d.chuk.dev` mit der Adresse aus `ADMIN_EMAILS` registrieren.
+5. Ein Heft per Drag-and-Drop importieren und im Reader pruefen.
 
-Erst wenn Anmeldung, eine Heftseite und ein Testimport ueber die echte Domain
-funktionieren, die lokalen systemd-Dienste und den Quick Tunnel deaktivieren.
-So bleibt bis zur erfolgreichen Abnahme ein Rueckweg bestehen.
+Ab dann genuegt `git push`.
 
-## 8. Spaetere vollstaendige Selbstverwaltung
+## 8. Sicherung
 
-`docker-compose.selfhost.yml` bleibt fuer den geplanten Umzug von Convex,
-Postgres und Medien nach MinIO erhalten. Diesen Stack nicht parallel als neue
-Produktion starten: Vor dem DNS-Wechsel muessen Cloud-Daten und Dateien
-exportiert, importiert und geprueft werden. Andernfalls startet die Bibliothek
-leer.
+Gesichert werden zwei Ordner auf dem Server:
+
+```bash
+tar czf sicherung-$(date +%F).tgz \
+    /etc/dokploy/compose/<dienst>/files/postgres \
+    /etc/dokploy/compose/<dienst>/files/minio
+```
+
+Sauberer ist eine Sicherung der Datenbank im laufenden Betrieb:
+
+```bash
+docker compose exec postgres pg_dump -U convex emagazin | gzip > datenbank-$(date +%F).sql.gz
+```
+
+Die Dateien in MinIO lassen sich mit `mc mirror` auf ein zweites Ziel spiegeln.
+
+## 9. Der lokale Aufbau
+
+`docker-compose.selfhost.yml` bleibt fuer den Aufbau auf dem eigenen Rechner:
+dieselben Dienste, aber mit Host-Ports und Caddy statt Dokploy-Domains. Er ist
+zum Ausprobieren da, nicht fuer den Betrieb.

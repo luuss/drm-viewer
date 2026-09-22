@@ -1,6 +1,15 @@
-# Dokploy baut diese drei Dienste direkt aus dem Git-Checkout. TLS und Routing
-# wird in Dokploy unter "Domains" konfiguriert; deshalb gibt es hier weder
+# Dokploy baut diesen Stapel direkt aus dem Git-Checkout. TLS und Routing
+# werden in Dokploy unter "Domains" eingestellt; deshalb gibt es hier weder
 # Host-Ports noch einen zweiten Reverse Proxy.
+#
+# Enthalten ist auch das Convex-Backend samt Datenbank und Medienspeicher. Die
+# Convex-Cloud wird nicht mehr gebraucht.
+#
+# WICHTIG: Dokploy klont den Quellstand bei jedem Deployment neu. Alles, was
+# bleiben soll, liegt deshalb unter `../files/` — das ist der Ordner der
+# Anwendung auf dem Server (`/etc/dokploy/compose/<dienst>/files/`), und der
+# ueberlebt jedes Deployment. Geloescht wird er nur, wenn der Dienst selbst
+# geloescht wird.
 
 x-logging: &default-logging
   driver: json-file
@@ -8,15 +17,156 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+x-minio-zugang: &minio-zugang
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD fehlt}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  S3_ENDPOINT_URL: http://minio:9000
+  # MinIO kennt keine Bucket-Unterdomaenen. Ohne diesen Schalter sucht der
+  # S3-Client nach "convex-files.minio" und scheitert an der Namensaufloesung.
+  AWS_S3_FORCE_PATH_STYLE: "true"
+  S3_FORCE_PATH_STYLE: "true"
+
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: convex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+      # Das Convex-Backend erwartet eine Datenbank, die wie die Instanz heisst.
+      POSTGRES_DB: ${CONVEX_INSTANCE_NAME:-emagazin}
+    volumes:
+      - ../files/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convex -d ${CONVEX_INSTANCE_NAME:-emagazin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-convexminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD fehlt}
+      # Das Convex-Backend legt seine Dateien serverseitig verschluesselt ab.
+      # Ohne Schluessel lehnt MinIO jeden Upload mit "KMS not configured" ab.
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:?MINIO_KMS_SECRET_KEY fehlt}
+      # Der Browser laedt die Heftdateien unmittelbar hierher; die Adresse in
+      # der vorsignierten Anfrage ist die oeffentliche.
+      MINIO_BROWSER_REDIRECT_URL: ${PUBLIC_MEDIA_ORIGIN:?PUBLIC_MEDIA_ORIGIN fehlt}
+    volumes:
+      - ../files/minio:/data
+    expose:
+      - "9000"
+      - "9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Einmalig je Deployment: die Eimer anlegen, die Convex und der Kacheldienst
+  # erwarten. `mb --ignore-existing` laeuft beliebig oft folgenlos durch.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-convexminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN fehlt}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set eigen http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        for eimer in convex-exports convex-imports convex-modules convex-files \
+                     convex-search "$$MEDIA_BUCKET"; do
+          mc mb --ignore-existing "eigen/$$eimer"
+        done
+        # Der Browser laedt Heftdateien per vorsignierter Anfrage hoch. Dafuer
+        # muss der Medieneimer den Ursprung der Oberflaeche zulassen.
+        mc admin config set eigen api cors_allow_origin="$$PUBLIC_WEB_ORIGIN" || true
+        mc admin service restart eigen || true
+        echo "Eimer bereit."
+    restart: "no"
+    logging: *default-logging
+
+  convex-backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *minio-zugang
+      INSTANCE_NAME: ${CONVEX_INSTANCE_NAME:-emagazin}
+      INSTANCE_SECRET: ${CONVEX_INSTANCE_SECRET:?CONVEX_INSTANCE_SECRET fehlt}
+      CONVEX_CLOUD_ORIGIN: ${CONVEX_CLOUD_ORIGIN:?CONVEX_CLOUD_ORIGIN fehlt}
+      CONVEX_SITE_ORIGIN: ${CONVEX_SITE_ORIGIN:?CONVEX_SITE_ORIGIN fehlt}
+      # Postgres statt SQLite: noetig fuer Sicherungen im laufenden Betrieb.
+      DATABASE_URL: postgresql://convex:${POSTGRES_PASSWORD}@postgres:5432
+      POSTGRES_URL: postgresql://convex:${POSTGRES_PASSWORD}@postgres:5432
+      DO_NOT_REQUIRE_SSL: "true"
+      S3_STORAGE_EXPORTS_BUCKET: convex-exports
+      S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET: convex-imports
+      S3_STORAGE_MODULES_BUCKET: convex-modules
+      S3_STORAGE_FILES_BUCKET: convex-files
+      S3_STORAGE_SEARCH_BUCKET: convex-search
+      # Kein Telemetriefunk aus einem selbst betriebenen Aufbau.
+      DISABLE_BEACON: "true"
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      # Mit Postgres und MinIO liegen hier keine Nutzdaten; der Ordner haelt
+      # nur Zwischenstaende. Deshalb ein benanntes Volume statt `../files`:
+      # das Abbild bringt die Rechte selbst mit.
+      - convex-data:/convex/data
+    expose:
+      - "3210"
+      - "3211"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3210/version >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging
+
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    depends_on:
+      convex-backend:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${CONVEX_CLOUD_ORIGIN}
+    expose:
+      - "6791"
+    restart: unless-stopped
+    logging: *default-logging
+
   tile-service:
     build:
       context: ./tile-service
       dockerfile: Dockerfile
+    depends_on:
+      convex-backend:
+        condition: service_healthy
     environment:
-      CONVEX_SITE_URL: ${CONVEX_SITE_URL:?CONVEX_SITE_URL fehlt}
+      <<: *minio-zugang
+      # Im eigenen Netz, ohne Umweg ueber TLS und oeffentliche Adresse.
+      CONVEX_SITE_URL: http://convex-backend:3211
       TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET:?TILE_SERVICE_SECRET fehlt}
       CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN fehlt}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
       MAX_PAGES_PER_MIN: ${MAX_PAGES_PER_MIN:-80}
       MAX_TILES_PER_MIN: ${MAX_TILES_PER_MIN:-1200}
     expose:
@@ -40,9 +190,14 @@ services:
     build:
       context: ./extract-service
       dockerfile: Dockerfile
+    depends_on:
+      convex-backend:
+        condition: service_healthy
     environment:
-      CONVEX_SITE_URL: ${CONVEX_SITE_URL:?CONVEX_SITE_URL fehlt}
+      <<: *minio-zugang
+      CONVEX_SITE_URL: http://convex-backend:3211
       EXTRACT_SERVICE_SECRET: ${EXTRACT_SERVICE_SECRET:?EXTRACT_SERVICE_SECRET fehlt}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
       PAGE_RENDER_WIDTH: ${PAGE_RENDER_WIDTH:-2400}
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
       WORKER_IDLE_POLL_MAX_SECONDS: ${WORKER_IDLE_POLL_MAX_SECONDS:-60}
@@ -56,7 +211,8 @@ services:
       context: .
       dockerfile: web/Dockerfile
       args:
-        VITE_CONVEX_URL: ${VITE_CONVEX_URL:?VITE_CONVEX_URL fehlt}
+        # Die Adresse steht im Bundle; sie muss die oeffentliche sein.
+        VITE_CONVEX_URL: ${CONVEX_CLOUD_ORIGIN:?CONVEX_CLOUD_ORIGIN fehlt}
     depends_on:
       tile-service:
         condition: service_healthy
@@ -72,3 +228,6 @@ services:
     security_opt:
       - no-new-privileges:true
     logging: *default-logging
+
+volumes:
+  convex-data:

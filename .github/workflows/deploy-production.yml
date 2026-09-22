@@ -1,8 +1,11 @@
 name: Pruefen und ausliefern
 
 # Ein Push auf main liefert aus, aber nur wenn alle Pruefungen bestehen.
-# Reihenfolge ist wichtig: erst das Backend, dann die Dienste. Andersherum
-# zeigt eine frische Oberflaeche auf Funktionen, die es noch nicht gibt.
+#
+# Das Convex-Backend laeuft seit dem Umzug im selben Compose-Stapel. Deshalb
+# startet jetzt zuerst Dokploy — erst dadurch existiert das Backend — und die
+# Funktionen gehen hinterher, sobald es antwortet. Die Oberflaeche wird im
+# selben Lauf gebaut und ist meist spaeter fertig als die Funktionen.
 #
 # Dokploy hat deshalb KEINEN eigenen Auto-Deploy mehr. Wuerde es bei jedem Push
 # selbst starten, liefe es an den Tests vorbei und rote Tests wuerden ein
@@ -80,8 +83,13 @@ jobs:
       - name: Compose-Datei pruefen
         env:
           PUBLIC_WEB_ORIGIN: https://digital.example.test
-          VITE_CONVEX_URL: https://example.convex.cloud
-          CONVEX_SITE_URL: https://example.convex.site
+          PUBLIC_MEDIA_ORIGIN: https://medien.example.test
+          CONVEX_CLOUD_ORIGIN: https://api.example.test
+          CONVEX_SITE_ORIGIN: https://hooks.example.test
+          CONVEX_INSTANCE_SECRET: nur-zur-pruefung
+          POSTGRES_PASSWORD: nur-zur-pruefung
+          MINIO_ROOT_PASSWORD: nur-zur-pruefung
+          MINIO_KMS_SECRET_KEY: nur-zur-pruefung
           TILE_SERVICE_SECRET: nur-zur-pruefung
           EXTRACT_SERVICE_SECRET: nur-zur-pruefung
         run: docker compose -f docker-compose.dokploy.yml config --quiet
@@ -105,12 +113,17 @@ jobs:
       # dann alt, ohne dass irgendwo etwas auffiel.
       - name: Zugaenge pruefen
         env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          CONVEX_SELF_HOSTED_URL: ${{ vars.CONVEX_SELF_HOSTED_URL }}
+          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
           DOKPLOY_DEPLOY_URL: ${{ secrets.DOKPLOY_DEPLOY_URL }}
         run: |
           fehlt=0
-          if [[ -z "$CONVEX_DEPLOY_KEY" ]]; then
-            echo "::error::Secret CONVEX_DEPLOY_KEY fehlt. Neu erzeugen mit: npx convex deployment token create github-actions"
+          if [[ -z "$CONVEX_SELF_HOSTED_URL" ]]; then
+            echo "::error::Repository-Variable CONVEX_SELF_HOSTED_URL fehlt. Das ist die oeffentliche Adresse des eigenen Convex-Backends, z.B. https://api.d.chuk.dev"
+            fehlt=1
+          fi
+          if [[ -z "$CONVEX_SELF_HOSTED_ADMIN_KEY" ]]; then
+            echo "::error::Secret CONVEX_SELF_HOSTED_ADMIN_KEY fehlt. Auf dem Server einmalig erzeugen: docker compose exec convex-backend ./generate_admin_key.sh"
             fehlt=1
           fi
           if [[ -z "$DOKPLOY_DEPLOY_URL" ]]; then
@@ -119,15 +132,8 @@ jobs:
           fi
           exit $fehlt
 
-      - name: Convex-Funktionen ausliefern
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: |
-          npm ci
-          npx convex deploy --typecheck enable --message "GitHub ${GITHUB_SHA::7}"
-
-      # Erst jetzt die Dienste: die Oberflaeche darf nie vor dem Backend neu
-      # sein, sonst ruft sie Funktionen auf, die es noch nicht gibt.
+      # Zuerst der Stapel: das Backend laeuft darin mit, es muss also stehen,
+      # bevor Funktionen hineingehen koennen.
       - name: Dienste in Dokploy neu ausrollen
         env:
           DOKPLOY_DEPLOY_URL: ${{ secrets.DOKPLOY_DEPLOY_URL }}
@@ -149,6 +155,55 @@ jobs:
             echo "::error::Dokploy hat den Auftrag nicht angenommen: $antwort"
             exit 1
           fi
+
+      - name: Warten bis das Backend antwortet
+        env:
+          CONVEX_SELF_HOSTED_URL: ${{ vars.CONVEX_SELF_HOSTED_URL }}
+        run: |
+          for versuch in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+                   "$CONVEX_SELF_HOSTED_URL/version" || echo 000)
+            if [[ "$code" == "200" ]]; then
+              echo "Backend steht nach $((versuch * 10)) s."
+              bereit=ja
+              break
+            fi
+            sleep 10
+          done
+          if [[ "${bereit:-nein}" != "ja" ]]; then
+            echo "::error::$CONVEX_SELF_HOSTED_URL/version antwortet nach 10 Minuten nicht. Deployment-Protokoll in Dokploy pruefen."
+            exit 1
+          fi
+
+      - name: Convex-Funktionen ausliefern
+        env:
+          CONVEX_SELF_HOSTED_URL: ${{ vars.CONVEX_SELF_HOSTED_URL }}
+          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
+        run: |
+          npm ci
+          npx convex deploy --typecheck enable --message "GitHub ${GITHUB_SHA::7}"
+
+      # Die Werte des Backends stehen in GitHub, nicht im Container: so gehen
+      # sie beim Neuaufbau nicht verloren und sind nachvollziehbar.
+      - name: Umgebungswerte des Backends sichern
+        env:
+          CONVEX_SELF_HOSTED_URL: ${{ vars.CONVEX_SELF_HOSTED_URL }}
+          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
+          APP_PUBLIC_URL: ${{ vars.PUBLIC_WEB_ORIGIN }}
+          PUBLIC_TILE_ORIGIN: ${{ vars.PUBLIC_WEB_ORIGIN }}
+          S3_ENDPOINT_URL: ${{ vars.PUBLIC_MEDIA_ORIGIN }}
+          MEDIA_BUCKET: ${{ vars.MEDIA_BUCKET || 'emag-media' }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ROOT_USER }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          TILE_SERVICE_SECRET: ${{ secrets.TILE_SERVICE_SECRET }}
+          EXTRACT_SERVICE_SECRET: ${{ secrets.EXTRACT_SERVICE_SECRET }}
+          ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          SHOP_WEBHOOK_SECRET: ${{ secrets.SHOP_WEBHOOK_SECRET }}
+        run: node scripts/convex-env-sichern.mjs
 
       # Der Webhook bestaetigt nur die Annahme, nicht den Erfolg. Deshalb wird
       # danach die laufende Seite selbst befragt.
