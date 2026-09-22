@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFrage } from "../components/Frage";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id , cleanError } from "../lib/api";
 
@@ -10,6 +11,7 @@ import { api, type Id , cleanError } from "../lib/api";
  * Aenderungen daran wirken sofort.
  */
 export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
+  const frage = useFrage();
   const articles = useQuery(api.articles.listForEditors, { issueId });
   const summary = useQuery(api.articles.reviewSummary, { issueId });
   const update = useMutation(api.articles.updateArticle);
@@ -57,14 +59,13 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
           <button
             className="btn"
             disabled={approvingAll}
-            onClick={() => {
-              if (
-                !confirm(
-                  `${pendingCount} offene Artikel freigeben? Bei einer veröffentlichten Ausgabe sind sie sofort sichtbar.`,
-                )
-              ) {
-                return;
-              }
+            onClick={async () => {
+              const weiter = await frage({
+                titel: `${pendingCount} offene Artikel freigeben?`,
+                text: "Bei einer veröffentlichten Ausgabe sind sie sofort sichtbar.",
+                ja: "Freigeben",
+              });
+              if (!weiter) return;
               setApproveNote(null);
               setApprovingAll(true);
               guard(async () => {
@@ -153,10 +154,14 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
                 )}
                 <button
                   className="btn quiet small danger"
-                  onClick={() => {
-                    if (confirm(`"${a.title}" löschen?`)) {
-                      guard(() => removeArticle({ articleId: a._id }));
-                    }
+                  onClick={async () => {
+                    const weiter = await frage({
+                      titel: "Artikel löschen?",
+                      text: `„${a.title}“ wird entfernt. Rückgängig geht das nur über einen neuen Import.`,
+                      ja: "Löschen",
+                      gefahr: true,
+                    });
+                    if (weiter) guard(() => removeArticle({ articleId: a._id }));
                   }}
                 >
                   Löschen

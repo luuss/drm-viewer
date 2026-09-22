@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFrage } from "../components/Frage";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api, formatEuro, type Id , cleanError } from "../lib/api";
 import ImportWizard from "./ImportWizard";
@@ -10,6 +11,7 @@ import ExtractionDebug from "./ExtractionDebug";
 type Tab = "import" | "debug" | "articles" | "toc";
 
 export default function AdminPage() {
+  const frage = useFrage();
   const me = useQuery(api.users.me, {});
   const publications = useQuery(api.publications.listAll, {});
   const issues = useQuery(api.issues.listForEditors, {});
@@ -262,10 +264,14 @@ export default function AdminPage() {
                 {me.isPublisher && (
                   <button
                     className="btn secondary small danger"
-                    onClick={() => {
-                      if (confirm(`"${i.title}" endgültig löschen?`)) {
-                        guard(() => removeIssue({ issueId: i._id }), "Gelöscht");
-                      }
+                    onClick={async () => {
+                      const weiter = await frage({
+                        titel: "Ausgabe endgültig löschen?",
+                        text: `„${i.title}“ verschwindet mit allen Seiten, Artikeln und Dateien. Käufe bleiben bestehen, zeigen aber ins Leere.`,
+                        ja: "Löschen",
+                        gefahr: true,
+                      });
+                      if (weiter) guard(() => removeIssue({ issueId: i._id }), "Gelöscht");
                     }}
                   >
                     Löschen

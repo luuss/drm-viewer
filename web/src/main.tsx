@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { FrageHost } from "./components/Frage";
 import { ConvexReactClient } from "convex/react";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import App from "./App";
@@ -16,7 +17,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ConvexAuthProvider client={convex}>
       <BrowserRouter>
-        <App />
+        <FrageHost>
+          <App />
+        </FrageHost>
       </BrowserRouter>
     </ConvexAuthProvider>
   </React.StrictMode>,

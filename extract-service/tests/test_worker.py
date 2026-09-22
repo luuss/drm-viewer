@@ -280,3 +280,65 @@ def test_zwei_rahmen_ergeben_zwei_flaechen():
     )
 
     assert len(regionen) == 2
+
+
+def test_preis_von_der_titelseite_gilt_wenn_das_impressum_keinen_nennt(monkeypatch):
+    """ZUERST! druckt im Impressum nur Abopreise; der Einzelpreis steht vorn."""
+    gesendet: list[dict] = []
+
+    class _Convex:
+        def post(self, pfad, nachricht):
+            gesendet.append({"pfad": pfad, **nachricht})
+            return {}
+
+    class _Job:
+        issue_id = "i1"
+        job_id = "j1"
+        convex = _Convex()
+        _store_meta = worker.Job._store_meta
+
+    monkeypatch.setattr(
+        worker, "read_cover_meta", lambda b: {"coverPriceAmountCents": 870}
+    )
+    monkeypatch.setattr(worker, "read_issue_meta", lambda b: {})
+    monkeypatch.setattr(worker, "publication_date", lambda m: None)
+
+    job = _Job()
+    quellen = [
+        {"kind": "pdf", "role": "inner", "assetId": "a1"},
+        {"kind": "image", "role": "cover", "assetId": "a2"},
+    ]
+    job._store_meta(quellen, {"a1": b"x", "a2": b"y"})
+
+    assert gesendet and gesendet[0]["priceAmountCents"] == 870
+
+
+def test_impressum_schlaegt_die_titelseite(monkeypatch):
+    gesendet: list[dict] = []
+
+    class _Convex:
+        def post(self, pfad, nachricht):
+            gesendet.append(nachricht)
+            return {}
+
+    class _Job:
+        issue_id = "i1"
+        job_id = "j1"
+        convex = _Convex()
+        _store_meta = worker.Job._store_meta
+
+    monkeypatch.setattr(
+        worker, "read_cover_meta", lambda b: {"coverPriceAmountCents": 1360}
+    )
+    monkeypatch.setattr(worker, "read_issue_meta", lambda b: {"priceAmountCents": 1280})
+    monkeypatch.setattr(worker, "publication_date", lambda m: None)
+
+    _Job()._store_meta(
+        [
+            {"kind": "pdf", "role": "inner", "assetId": "a1"},
+            {"kind": "image", "role": "cover", "assetId": "a2"},
+        ],
+        {"a1": b"x", "a2": b"y"},
+    )
+
+    assert gesendet[0]["priceAmountCents"] == 1280

@@ -2425,3 +2425,52 @@ button.small, .btn.small {
   border: 1px solid rgba(76, 107, 64, 0.25);
   max-width: var(--prose);
 }
+
+
+/* ---------------------------------------------------------------------------
+   Nachfrage im Fenster statt window.confirm. Der Schleier legt sich ueber die
+   Seite, der Kasten steht darueber; auf dem Telefon sitzt er unten, wo der
+   Daumen ist.
+   ------------------------------------------------------------------------ */
+.frage-schleier {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(28, 28, 28, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.frage {
+  width: min(28rem, 100%);
+  background: var(--surface);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+.frage h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.frage p {
+  margin: 0 0 1rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.frage-knoepfe {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .frage-schleier { align-items: flex-end; }
+  .frage-knoepfe .btn { flex: 1 1 8rem; }
+}

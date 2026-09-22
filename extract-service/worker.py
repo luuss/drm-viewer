@@ -231,14 +231,18 @@ class Job:
             # Das Impressum ist Text und damit genauer als die Texterkennung
             # auf der Titelseite; es gilt zuletzt.
             meta.update(read_issue_meta(blobs[innen["assetId"]]))
-        # Der Preis von der Titelseite bleibt liegen: die Texterkennung
-        # verwechselt dort Ziffern (13,60 statt 12,80). Den verlaesslichen
-        # Preis liest der Importdialog aus dem Impressum, bevor die Druckdatei
-        # ueberhaupt gerendert wird.
-
+        # Der Preis aus dem Impressum ist der verlaessliche: er ist Text. Die
+        # Texterkennung auf der Titelseite verwechselt Ziffern (13,60 statt
+        # 12,80) und zaehlt deshalb nur, wenn das Impressum keinen nennt —
+        # ZUERST! etwa druckt dort nur Bezugspreise fuers Abo. Lieber ein
+        # Vorschlag zum Pruefen als eine Ausgabe fuer null Euro.
         nachricht = {"issueId": self.issue_id}
-        if meta.get("priceAmountCents"):
-            nachricht["priceAmountCents"] = meta["priceAmountCents"]
+        preis = meta.get("priceAmountCents") or meta.get("coverPriceAmountCents")
+        if preis:
+            nachricht["priceAmountCents"] = preis
+            meta["priceQuelle"] = (
+                "impressum" if meta.get("priceAmountCents") else "titelseite"
+            )
         datum = publication_date(meta)
         if datum:
             nachricht["publicationDate"] = datum

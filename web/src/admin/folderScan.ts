@@ -96,23 +96,10 @@ export function classifyFolder(folderName: string, files: ScannedFile[]): Folder
       entries.push({ role: "ignored", file: f, reason: "Schrift" });
       continue;
     }
-    if (teile.some((t) => t === "links")) {
-      if (endetAuf(name, BILD_ENDUNGEN)) {
-        artwork.push(f);
-        entries.push({ role: "artwork", file: f });
-      } else {
-        entries.push({
-          role: "ignored",
-          file: f,
-          reason: "Kein lesbares Bildformat",
-        });
-      }
-      continue;
-    }
-    if (teile.length > 0) {
-      entries.push({ role: "ignored", file: f, reason: "Unbekannter Unterordner" });
-      continue;
-    }
+    // Die Druckvorstufe legt den Ordner nicht immer gleich an: mal heisst der
+    // Bilderordner "Links", mal "Bilder", mal liegt das PDF eine Ebene tiefer.
+    // Entschieden wird deshalb nach Dateiart, nicht nach Ort. Nur Schriften
+    // und Systemdateien sind oben schon aussortiert.
     if (name.endsWith(".pdf")) {
       pdfs.push(f);
       continue;
@@ -137,7 +124,17 @@ export function classifyFolder(folderName: string, files: ScannedFile[]): Folder
       continue;
     }
     if (endetAuf(name, BILD_ENDUNGEN)) {
-      bilderOben.push(f);
+      // Ein Bild neben den Druckdateien ist die Titelseite; eines in einem
+      // Unterordner ist ein platziertes Bild aus dem Satz.
+      if (teile.length === 0) bilderOben.push(f);
+      else {
+        artwork.push(f);
+        entries.push({ role: "artwork", file: f });
+      }
+      continue;
+    }
+    if (teile.length > 0) {
+      entries.push({ role: "ignored", file: f, reason: "Kein lesbares Bildformat" });
       continue;
     }
     entries.push({ role: "ignored", file: f, reason: "Nicht gebraucht" });
@@ -145,19 +142,24 @@ export function classifyFolder(folderName: string, files: ScannedFile[]): Folder
 
   let inner: ScannedFile | undefined;
   let cover: ScannedFile | undefined;
-  for (const f of pdfs) {
+  // Der Name entscheidet, solange er etwas sagt. Sagt er nichts, entscheidet
+  // die Groesse: der Innenteil ist ein Vielfaches des Umschlags.
+  const nachGroesse = [...pdfs].sort((a, b) => b.size - a.size);
+  for (const f of nachGroesse) {
     const n = f.name.toLowerCase();
-    if (/umschlag|cover|\bu1\b/.test(n) || (/titel/.test(n) && !/innen/.test(n))) {
+    if (/innen|inhalt|kern/.test(n)) inner = inner ?? f;
+    else if (/umschlag|cover|\bu1\b/.test(n) || (/titel/.test(n) && !/innen/.test(n))) {
       cover = cover ?? f;
-    } else {
-      inner = inner ?? f;
     }
   }
-  if (!inner && cover && pdfs.length === 1) {
+  if (!inner) inner = nachGroesse.find((f) => f !== cover);
+  if (!inner && cover) {
     inner = cover;
     cover = undefined;
   }
-  if (!inner && pdfs.length > 0) inner = pdfs[0];
+  if (!cover && nachGroesse.length > 1) {
+    cover = nachGroesse.find((f) => f !== inner);
+  }
   for (const f of pdfs) {
     if (f === inner) entries.push({ role: "inner", file: f });
     else if (f === cover) entries.push({ role: "cover", file: f });

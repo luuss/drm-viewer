@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFrage } from "../components/Frage";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api, formatEuro } from "../lib/api";
 
@@ -12,6 +13,7 @@ const KAUFSTATUS: Record<string, string> = {
 };
 
 export default function ProfilePage() {
+  const frage = useFrage();
   const me = useQuery(api.users.me, {});
   const subStatus = useQuery(api.subscriptions.myStatus, {});
   const purchases = useQuery(api.purchases.mine, {});
@@ -236,8 +238,14 @@ export default function ProfilePage() {
         <button
           className="btn secondary danger"
           disabled={busy}
-          onClick={() => {
-            if (!confirm("Konto endgültig löschen?")) return;
+          onClick={async () => {
+            const weiter = await frage({
+              titel: "Konto endgültig löschen?",
+              text: "Zugang, Freischaltungen und Lesefortschritt verschwinden. Das lässt sich nicht rückgängig machen.",
+              ja: "Konto löschen",
+              gefahr: true,
+            });
+            if (!weiter) return;
             guard(async () => {
               await deleteAccount({ confirm: "LOESCHEN" });
               window.location.href = "/";

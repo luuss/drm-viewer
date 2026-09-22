@@ -76,7 +76,6 @@ export default function FolderImport({
   const [ordner, setOrdner] = useState<Eingelesen | null>(null);
   const [ueber, setUeber] = useState(false);
   const [mitBildern, setMitBildern] = useState(true);
-  const [startNummer, setStartNummer] = useState("3");
   const [sofortImport, setSofortImport] = useState(true);
   const [lauf, setLauf] = useState<Fortschritt | null>(null);
   const [aktiv, setAktiv] = useState(false);
@@ -201,7 +200,10 @@ export default function FolderImport({
       if (preis) {
         notiere(`Einzelpreis aus dem Impressum: ${(preis / 100).toFixed(2)} €`);
       } else if (heft.created) {
-        offen.push("Preis eintragen — im Impressum stand keiner");
+        offen.push(
+          "Im Impressum stand kein Einzelpreis — die Aufbereitung liest ihn " +
+            "von der Titelseite; bitte nachsehen, ob er stimmt",
+        );
       }
       onIssue?.(issueId);
       abhaken("heft");
@@ -215,6 +217,9 @@ export default function FolderImport({
       //    wird auf das Netzformat aus der Satzdatei, damit Anschnitt und
       //    Schnittmarken gar nicht erst im Reader landen.
       const satzMass = plan.idml ? await readIdmlMeta(plan.idml.file).catch(() => null) : null;
+      // Die gedruckte Zahl der ersten Innenseite steht im Satz. Fehlt sie,
+      // gilt 3: Umschlag und Umschlaginnenseite sind die ersten beiden.
+      const gedruckteStartseite = satzMass?.firstPrintedPage ?? 3;
       if (plan.idml && !satzMass) {
         offen.push("Netzformat aus der Satzdatei nicht lesbar — Seiten behalten den Anschnitt");
       }
@@ -536,7 +541,7 @@ export default function FolderImport({
             },
             cover: coverPdf,
             coverImage: coverImageAsset,
-            printedStart: Number(startNummer) || 3,
+            printedStart: gedruckteStartseite,
           });
           const n = await setOrder({ issueId, pages: seiten });
           notiere(`${n} Seiten in Leserreihenfolge`);
@@ -642,17 +647,9 @@ export default function FolderImport({
       </div>
 
       {/* Die Einstellungen gelten fuer den naechsten Ordner: gelesen werden sie
-          in dem Augenblick, in dem der Lauf anfaengt. */}
+          in dem Augenblick, in dem der Lauf anfaengt. Die gedruckte Seitenzahl
+          steht nicht dabei — sie kommt aus dem Satz. */}
       <div className="import-optionen">
-        <label className="narrow-field">
-          Erste Innenseite trägt Seitenzahl
-          <input
-            value={startNummer}
-            inputMode="numeric"
-            disabled={laeuft}
-            onChange={(e) => setStartNummer(e.target.value)}
-          />
-        </label>
         <label className="muted">
           <input
             type="checkbox"

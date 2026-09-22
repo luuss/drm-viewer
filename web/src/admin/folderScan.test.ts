@@ -80,6 +80,34 @@ describe("classifyFolder", () => {
     expect(plan.cover).toBeUndefined();
   });
 
+  it("findet die Dateien auch, wenn sie anders liegen", () => {
+    // Ein Ordner aus einer anderen Druckerei: Bilder in "Bilder" statt
+    // "Links", die Druckdateien eine Ebene tiefer, ohne sprechende Namen.
+    const plan = classifyFolder("DMZ 171", [
+      f("Druck/heft.pdf", 90_000_000),
+      f("Druck/aussen.pdf", 4_000_000),
+      f("Satz/heft.idml", 2_000_000),
+      f("Bilder/foto1.tif", 30_000_000),
+      f("Bilder/unter/foto2.jpg", 2_000_000),
+      f("titelseite.tif", 5_000_000),
+    ]);
+    expect(plan.inner?.name).toBe("heft.pdf");
+    expect(plan.cover?.name).toBe("aussen.pdf");
+    expect(plan.idml?.name).toBe("heft.idml");
+    expect(plan.artwork.map((f) => f.name).sort()).toEqual(["foto1.tif", "foto2.jpg"]);
+    expect(plan.coverImage?.name).toBe("titelseite.tif");
+    expect(plan.problems).toEqual([]);
+  });
+
+  it("nimmt das groesste PDF als Innenteil, wenn kein Name es verraet", () => {
+    const plan = classifyFolder("Heft 5", [
+      f("a.pdf", 3_000_000),
+      f("b.pdf", 80_000_000),
+    ]);
+    expect(plan.inner?.name).toBe("b.pdf");
+    expect(plan.cover?.name).toBe("a.pdf");
+  });
+
   it("meldet einen Ordner ohne Innenteil als Problem", () => {
     const plan = classifyFolder("x", [f("Links/bild.tif", 10)]);
     expect(plan.problems[0]).toMatch(/Kein Innenteil/);
