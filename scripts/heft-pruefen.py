@@ -25,6 +25,7 @@ HIER = Path(__file__).resolve().parent
 sys.path.insert(0, str(HIER.parent / "extract-service"))
 
 from extractor.article_assembler import assemble, flow_text_blocks  # noqa: E402
+from extractor.idml_articles import artikel_aus_satz  # noqa: E402
 from extractor.idml_extract import (  # noqa: E402
     extract_idml_blocks,
     extract_idml_frames,
@@ -117,12 +118,13 @@ def auswerten(pfad: Path, slug: str | None, gedruckt_ab: int = 3) -> dict:
         toc = satz_toc
     if aus_satz:
         mark_furniture(blocks, len(pages))
-        geordnet = idml_reading_order([b for b in blocks if not b.drop])
-        attach_captions(images, geordnet)
+        geordnet = [b for b in blocks if not b.drop]
+        attach_captions(images, idml_reading_order(geordnet))
+        # Wie im Worker: die Stories des Satzes sind die Artikel.
+        artikel = artikel_aus_satz(geordnet, images)
     else:
         geordnet = prepare_blocks(blocks, images, len(pages))
-
-    artikel = assemble(geordnet, images, toc_hints=toc)
+        artikel = assemble(geordnet, images, toc_hints=toc)
     meta = read_issue_meta(pdf_bytes)
 
     return {

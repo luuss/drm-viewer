@@ -232,6 +232,10 @@ def extract_idml_blocks(
                 style = re.sub(
                     r"^ParagraphStyle/", "", psr.get("AppliedParagraphStyle", "") or ""
                 )
+                # Ein Formatbereich umfasst oft mehrere Absaetze; getrennt
+                # werden sie durch `<Br/>`. Frueher landete der ganze Bereich
+                # als ein Block — 150.000 Zeichen Mengentext in fuenf Kloetzen,
+                # im Reader eine Wand ohne Absaetze.
                 parts: list[str] = []
                 for node in psr.iter():
                     # Ein Kommentar oder eine Verarbeitungsanweisung traegt
@@ -243,11 +247,12 @@ def extract_idml_blocks(
                     if tag == "Content" and node.text:
                         parts.append(node.text)
                     elif tag == "Br":
-                        parts.append("\n")
-                text = clean_text("".join(parts))
-                if not text:
-                    continue
-                absaetze.append((text, style))
+                        parts.append("\x00")
+                for roh in "".join(parts).split("\x00"):
+                    text = clean_text(roh)
+                    if not text:
+                        continue
+                    absaetze.append((text, style))
 
             if not absaetze:
                 continue

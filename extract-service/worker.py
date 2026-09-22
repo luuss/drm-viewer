@@ -41,6 +41,7 @@ from extractor.pdf_extract import (
     mark_furniture,
     prepare_blocks,
 )
+from extractor.idml_articles import artikel_aus_satz
 from extractor.publication_profiles import apply_profile
 from storage import ConvexClient, Storage, issue_key
 
@@ -137,8 +138,22 @@ class Job:
         page_images = self._render_pages(pages, blobs)
         self._store_meta(sources, blobs)
         blocks, images, toc_hints = self._extract(pages, blobs, sources)
-        articles = assemble(blocks, images, toc_hints=toc_hints)
-        log("job.assembled", jobId=self.job_id, articles=len(articles))
+        satz = [b for b in blocks if b.origin == "idml"]
+        if satz:
+            # Der Satz kennt seine Artikel selbst: eine Mengentext-Story ist
+            # ein Artikel, die Reihenfolge der Absaetze steht in der Datei.
+            # Damit braucht es weder Inhaltsverzeichnis noch Seitenbereiche.
+            articles = artikel_aus_satz(satz, images)
+            quelle = "satz"
+        else:
+            articles = assemble(blocks, images, toc_hints=toc_hints)
+            quelle = "pdf"
+        log(
+            "job.assembled",
+            jobId=self.job_id,
+            articles=len(articles),
+            source=quelle,
+        )
 
         payload_articles = self._build_payload(articles, page_images)
         log(
@@ -516,6 +531,18 @@ class Job:
         payload = []
         for order, article in enumerate(articles, start=1):
             reader_blocks = flow_text_blocks(article.blocks)
+            # Unterzeile und Vorspann stehen schon im Kopf des Artikels. Als
+            # Block noch einmal gedruckt, liest sich das wie ein Versehen.
+            kopfzeilen = {
+                t.strip()
+                for t in (article.subtitle, article.teaser, article.title)
+                if t
+            }
+            reader_blocks = [
+                b
+                for b in reader_blocks
+                if not (b.kind in ("lead", "heading") and b.text.strip() in kopfzeilen)
+            ]
             blocks = [
                 {
                     "order": i + 1,

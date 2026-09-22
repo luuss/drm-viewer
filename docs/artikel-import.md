@@ -122,6 +122,46 @@ steht. Das PDF muss dasselbe an Schriftgroessen und Abstaenden erraten. Liegt
 eine IDML vor, wird der Text also aus ihr gelesen und das PDF nur noch fuer das
 Bild der Seite gebraucht.
 
+### Eine Story ist ein Artikel
+
+InDesign speichert Text nicht seitenweise, sondern als Fluss: eine **Story**
+laeuft durch beliebig viele verkettete Rahmen ueber beliebig viele Seiten, und
+die Reihenfolge ihrer Absaetze steht in der Datei. Damit ist die Artikelgrenze
+keine Schaetzung mehr:
+
+* Eine Story im Mengentextformat **ist** ein Artikel — kein Inhaltsverzeichnis,
+  keine Seitenbereiche, keine Ueberschriftensuche noetig.
+* Ueberschrift, Unterzeile, Vorspann und Autor stehen in eigenen kleinen
+  Stories. Sie gehoeren zu dem Mengentext, den sie ankuendigen: auf derselben
+  Seite, bei einem Aufmacher auch eine Seite davor.
+* Kaesten und Zitate liegen ebenfalls einzeln; sie werden hinter dem letzten
+  Absatz ihrer Seite eingefuegt, damit sie im Lesefluss an der richtigen
+  Stelle stehen.
+* Kurze Meldungen (Kalenderblatt, Nachrichtenspalte) tragen ihre Zeile als
+  ersten Absatz der eigenen Story. Dann gilt das Format des ersten Absatzes.
+
+Zwei Eigenheiten des Satzes kosten sonst Text:
+
+* Ein Formatbereich (`ParagraphStyleRange`) umfasst **mehrere** Absaetze,
+  getrennt durch `<Br/>`. Wer daraus einen Block macht, bekommt 150.000
+  Zeichen in fuenf Kloetzen statt in hundert Absaetzen.
+* Der **Anfangsbuchstabe** steht oft in einem eigenen Rahmen, damit er frei
+  ueber mehrere Zeilen stehen kann. Dem Absatz fehlt er dann vorn
+  ("ridolin Rudolf ..."). Er wird ueber die Lage auf der Seite
+  zurueckgegeben.
+
+Nachrechnen laesst sich das ohne Server und ohne Datenbank:
+
+```bash
+scripts/satz-lesen.py "<Heftordner>"              # Artikel mit Seiten und Laenge
+scripts/satz-lesen.py "<Heftordner>" --artikel 1  # Volltext eines Artikels
+scripts/satz-lesen.py "<Heftordner>" --stories    # Stories mit Rolle und Format
+```
+
+Gemessen an den vier Musterheften landen so 86 bis 92 Prozent aller Zeichen des
+Satzes in Artikeln; der Rest sind Bildunterschriften, Bildquellen,
+Kolumnentitel und das Inhaltsverzeichnis, die bewusst woanders hingehoeren.
+
 Der letzte Schritt ist bewusst eine einzige Mutation: bei einem erneuten Import
 sehen Leser entweder den alten oder den neuen Stand, nie eine Mischung.
 

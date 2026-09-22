@@ -28,6 +28,10 @@ def clean_text(raw: str) -> str:
     # Zeilenumbrueche aus dem Satz sind keine Absaetze: im Fliesstext stoeren sie.
     t = re.sub(r"(?<!\n)\n(?!\n)", " ", t)
     t = re.sub(r"[ \t]{2,}", " ", t)
+    # InDesign setzt unsichtbare Marken in den Text: Byte-Reihenfolge-Marke
+    # am Anfang eines Rahmens, Breitenull-Zeichen an Trennstellen. Im
+    # Lesetext stehen sie als leere Kaestchen.
+    t = t.replace("\ufeff", "").replace("\u200b", "").replace("\u200d", "")
     return t.strip()
 
 
