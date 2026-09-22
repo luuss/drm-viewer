@@ -634,6 +634,15 @@ class Job:
             bild = render.image_size(data)
             if bild[0] < 8 or bild[1] < 8:
                 return None
+            ausschnitt = getattr(img, "crop", None)
+            if ausschnitt is not None:
+                # Der Satz sagt genau, welcher Teil der Datei im Rahmen steht.
+                # Dann muss nichts geschaetzt werden.
+                u0, v0, u1, v1 = ausschnitt
+                # Ohne Weissrandschnitt: der Satz hat den Rand so gewollt.
+                return render.fit_image(
+                    render.crop_region(data, u0, v0, u1, v1, trim_blank=False)
+                )
             rahmen_verhaeltnis = rahmen_breite / rahmen_hoehe
             bild_verhaeltnis = bild[0] / bild[1]
             abweichung = abs(rahmen_verhaeltnis - bild_verhaeltnis) / max(

@@ -88,6 +88,9 @@ class SourceImage:
     # nennt. Liegt dieselbe Datei umgewandelt im Medienspeicher, ist sie die
     # bessere Vorlage als der Ausschnitt aus der gerenderten Seite.
     link: str | None = None
+    # Welcher Teil der verknuepften Datei im Rahmen steht (u0, v0, u1, v1 als
+    # Anteile des Originals). None heisst: ganzes Bild oder unbekannt.
+    crop: tuple[float, float, float, float] | None = None
     # 1-basierte Position des Reader-Blocks, nach dem das Bild stehen soll.
     # None laesst die bisherige geometrische Rueckfalllogik aktiv.
     after_block_order: int | None = None

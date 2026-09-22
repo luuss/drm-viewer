@@ -326,6 +326,10 @@ class IdmlImageFrame:
     x1: float
     y1: float
     link: str | None = None
+    # Welcher Teil der verknuepften Datei im Rahmen steht, als Anteile
+    # (u0, v0, u1, v1) des Originalbildes. None heisst: ganzes Bild, oder der
+    # Satz hat es gedreht bzw. gespiegelt, dann traegt der Seitenausschnitt.
+    crop: tuple[float, float, float, float] | None = None
 
 
 def _matrix(value: str | None) -> tuple[float, float, float, float, float, float]:
@@ -387,6 +391,50 @@ def _path_bounds(element, matrix) -> tuple[float, float, float, float] | None:
     if not xs:
         return None
     return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _graphic_crop(
+    grafik, matrix, rahmen: tuple[float, float, float, float]
+) -> tuple[float, float, float, float] | None:
+    """Sichtbarer Anteil des platzierten Bildes, in Anteilen des Originals.
+
+    InDesign legt das Bild in voller Groesse hinter den Rahmen und laesst den
+    Rahmen davon zeigen, was er ueberdeckt. `GraphicBounds` nennt die Groesse
+    des Bildes, `ItemTransform` seine Lage. Beides zusammen sagt genau, welches
+    Stueck der Datei gedruckt wird — ohne Raten am Seitenverhaeltnis.
+
+    Gedrehte oder gespiegelte Bilder geben None zurueck: dort stimmt der
+    Ausschnitt aus der gerenderten Seite eher als eine Rechnung, die die
+    Drehung ignoriert.
+    """
+    a, b, c, d, tx, ty = _multiply(matrix, _matrix(grafik.get("ItemTransform")))
+    if abs(b) > 1e-6 or abs(c) > 1e-6 or a <= 0 or d <= 0:
+        return None
+    bounds = next(grafik.iter("{*}GraphicBounds"), None)
+    if bounds is None:
+        return None
+    try:
+        links = float(bounds.get("Left"))
+        oben = float(bounds.get("Top"))
+        rechts = float(bounds.get("Right"))
+        unten = float(bounds.get("Bottom"))
+    except (TypeError, ValueError):
+        return None
+    bx0, bx1 = sorted((a * links + tx, a * rechts + tx))
+    by0, by1 = sorted((d * oben + ty, d * unten + ty))
+    breite, hoehe = bx1 - bx0, by1 - by0
+    if breite <= 0 or hoehe <= 0:
+        return None
+    u0 = max(0.0, min(1.0, (rahmen[0] - bx0) / breite))
+    u1 = max(0.0, min(1.0, (rahmen[2] - bx0) / breite))
+    v0 = max(0.0, min(1.0, (rahmen[1] - by0) / hoehe))
+    v1 = max(0.0, min(1.0, (rahmen[3] - by0) / hoehe))
+    if u1 - u0 < 0.05 or v1 - v0 < 0.05:
+        return None
+    if u0 < 0.005 and v0 < 0.005 and u1 > 0.995 and v1 > 0.995:
+        # Der Rahmen zeigt das ganze Bild; kein Schneiden noetig.
+        return None
+    return (u0, v0, u1, v1)
 
 
 def _spread_order(zf: zipfile.ZipFile) -> list[str]:
@@ -456,7 +504,16 @@ def extract_idml_frames(
                 seiten.append(((min(xs) + max(xs)) / 2, (min(xs), min(ys), max(xs), max(ys))))
             seiten.sort(key=lambda s: s[0])
 
-            bildrahmen: list[tuple[float, float, float, float, str | None]] = []
+            bildrahmen: list[
+                tuple[
+                    float,
+                    float,
+                    float,
+                    float,
+                    str | None,
+                    tuple[float, float, float, float] | None,
+                ]
+            ] = []
             textrahmen: list[tuple[float, float, float, float, str, str, str | None, str | None]] = []
 
             def walk(element, matrix) -> None:
@@ -511,7 +568,7 @@ def extract_idml_frames(
                         ),
                         None,
                     )
-                    bildrahmen.append((*box, link))
+                    bildrahmen.append((*box, link, _graphic_crop(grafik, eigene, box)))
 
             walk(root.find("{*}Spread") if root.find("{*}Spread") is not None else root,
                  (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
@@ -539,7 +596,7 @@ def extract_idml_frames(
                         min(1.0, (y1 - seite[1]) / hoehe),
                     )
 
-                for x0, y0, x1, y1, link in bildrahmen:
+                for x0, y0, x1, y1, link, crop in bildrahmen:
                     box = auf_seite(x0, y0, x1, y1)
                     if box is None:
                         continue
@@ -551,6 +608,7 @@ def extract_idml_frames(
                             x1=box[2],
                             y1=box[3],
                             link=link,
+                            crop=crop,
                         )
                     )
                 for x0, y0, x1, y1, story, self_id, vorher, nachher in textrahmen:
@@ -616,6 +674,7 @@ def frames_to_images(
                 x1=min(1.0, x1),
                 y1=min(1.0, y1),
                 link=frame.link,
+                crop=frame.crop,
             )
         )
     out.sort(key=lambda i: (i.page_index, round(i.y0, 3), i.x0))

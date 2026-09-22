@@ -19,6 +19,7 @@ import render  # noqa: E402
 from extractor.article_assembler import assemble, flow_text_blocks  # noqa: E402
 from extractor.idml_extract import (  # noqa: E402
     extract_idml_blocks,
+    extract_idml_frames,
     extract_idml_image_frames,
     frames_to_images,
 )
@@ -1583,3 +1584,83 @@ def test_titelseite_liefert_zeitraum_und_preis():
 
     einzeln = parse_cover_text("17. Jahrgang | März 2026 | € 8,70")
     assert einzeln["monthFrom"] == einzeln["monthTo"] == 3
+
+
+def _idml_mit_ausschnitt(graphic_transform: str, bounds: str) -> bytes:
+    """Ein Bogen mit einem Rahmen, hinter dem ein groesseres Bild liegt.
+
+    Der Rahmen ist 100 x 100 Punkt und sitzt bei (0,0). Das Bild ist ueber
+    `GraphicBounds` und seine eigene `ItemTransform` beschrieben — genau so
+    legt InDesign ein beschnittenes Bild ab.
+    """
+    import io, zipfile
+
+    punkte = "".join(
+        f'<PathPointType Anchor="{x} {y}" LeftDirection="{x} {y}" RightDirection="{x} {y}"/>'
+        for x, y in ((-50, -50), (-50, 50), (50, 50), (50, -50))
+    )
+    spread = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">'
+        '<Spread Self="sp1" ItemTransform="1 0 0 1 0 0">'
+        '<Page Self="p1" Name="1" GeometricBounds="0 0 400 400" '
+        'ItemTransform="1 0 0 1 200 -200"/>'
+        '<Rectangle Self="r0" ItemTransform="1 0 0 1 250 -150">'
+        '<Properties><PathGeometry><GeometryPathType PathOpen="false">'
+        f'<PathPointArray>{punkte}</PathPointArray>'
+        '</GeometryPathType></PathGeometry></Properties>'
+        f'<Image Self="i0" ItemTransform="{graphic_transform}">'
+        f'<Properties><GraphicBounds {bounds}/></Properties>'
+        '<Link Self="l0" LinkResourceURI="file:/Bilder/gross.jpg"/>'
+        '</Image></Rectangle>'
+        '</Spread></idPkg:Spread>'
+    )
+    designmap = (
+        '<?xml version="1.0"?>'
+        '<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">'
+        '<idPkg:Spread src="Spreads/Spread_sp1.xml"/></Document>'
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("designmap.xml", designmap)
+        zf.writestr("Spreads/Spread_sp1.xml", spread)
+    return buf.getvalue()
+
+
+def test_bildrahmen_kennt_seinen_ausschnitt():
+    # Bild 200 x 100 Punkt, mittig hinter dem 100 x 100 grossen Rahmen: der
+    # Rahmen zeigt die mittlere Haelfte der Breite und die Hoehe ganz.
+    idml = _idml_mit_ausschnitt(
+        graphic_transform="1 0 0 1 0 0",
+        bounds='Left="-100" Top="-50" Right="100" Bottom="50"',
+    )
+    bilder, _ = extract_idml_frames(idml)
+    assert len(bilder) == 1
+    crop = bilder[0].crop
+    assert crop is not None
+    u0, v0, u1, v1 = crop
+    assert u0 == pytest.approx(0.25, abs=0.01)
+    assert u1 == pytest.approx(0.75, abs=0.01)
+    assert v0 == pytest.approx(0.0, abs=0.01)
+    assert v1 == pytest.approx(1.0, abs=0.01)
+
+
+def test_voll_gefuellter_rahmen_braucht_keinen_ausschnitt():
+    # Bild genau so gross wie der Rahmen: nichts zu schneiden.
+    idml = _idml_mit_ausschnitt(
+        graphic_transform="1 0 0 1 0 0",
+        bounds='Left="-50" Top="-50" Right="50" Bottom="50"',
+    )
+    bilder, _ = extract_idml_frames(idml)
+    assert bilder[0].crop is None
+
+
+def test_gedrehtes_bild_gibt_keinen_ausschnitt():
+    # Eine Drehung wuerde die Rechnung verfaelschen; dann traegt der
+    # Seitenausschnitt.
+    idml = _idml_mit_ausschnitt(
+        graphic_transform="0 1 -1 0 0 0",
+        bounds='Left="-100" Top="-50" Right="100" Bottom="50"',
+    )
+    bilder, _ = extract_idml_frames(idml)
+    assert bilder[0].crop is None

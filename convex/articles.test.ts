@@ -408,6 +408,80 @@ describe("Artikeloperationen", () => {
     expect(jump.x0).toBeCloseTo(0.1);
   });
 
+  test("Zwei Artikel auf einer Seite bekommen getrennte Klickflaechen", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId } = await base(t);
+    const leserId = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const userId = await ctx.db.insert("users", { email: "leser2@example.de" });
+      await ctx.db.insert("entitlements", {
+        userId,
+        issueId,
+        source: "purchase",
+        createdAt: now,
+      });
+      const artikel = async (order: number, title: string) =>
+        await ctx.db.insert("articles", {
+          issueId,
+          order,
+          title,
+          source: "idml",
+          reviewStatus: "approved",
+          primaryPageIndex: 0,
+          pageStart: 0,
+          pageEnd: 0,
+          searchText: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+      const oben = await artikel(1, "Oben");
+      const unten = await artikel(2, "Unten");
+      // Oberer Artikel: Ueberschrift und Text dicht untereinander, wachsen
+      // zu einer Flaeche zusammen.
+      for (const [y0, y1, kind] of [
+        [0.05, 0.12, "title"],
+        [0.13, 0.4, "body"],
+      ] as const) {
+        await ctx.db.insert("articleRegions", {
+          articleId: oben,
+          issueId,
+          pageIndex: 0,
+          x0: 0.1,
+          y0,
+          x1: 0.9,
+          y1,
+          kind,
+        });
+      }
+      // Unterer Artikel auf derselben Seite, deutlich abgesetzt.
+      await ctx.db.insert("articleRegions", {
+        articleId: unten,
+        issueId,
+        pageIndex: 0,
+        x0: 0.1,
+        y0: 0.6,
+        x1: 0.9,
+        y1: 0.95,
+        kind: "body",
+      });
+      return userId;
+    });
+
+    const { api } = await import("./_generated/api");
+    const regions = await t
+      .withIdentity({ subject: leserId, email: "leser2@example.de" })
+      .query(api.articles.regionsForReader, { issueId });
+
+    expect(regions).toHaveLength(2);
+    const sortiert = [...regions].sort((a, b) => a.y0 - b.y0);
+    expect(sortiert[0].y0).toBeCloseTo(0.05);
+    expect(sortiert[0].y1).toBeCloseTo(0.4);
+    expect(sortiert[1].y0).toBeCloseTo(0.6);
+    // Keine Ueberdeckung: die obere Flaeche endet vor der unteren.
+    expect(sortiert[0].y1).toBeLessThan(sortiert[1].y0);
+    expect(sortiert[0].articleId).not.toEqual(sortiert[1].articleId);
+  });
+
   test("Sammelfreigabe gibt offene Artikel frei und laesst Ausgeschlossene in Ruhe", async () => {
     const t = convexTest(schema, modules);
     const { issueId, editorId } = await base(t);

@@ -138,8 +138,48 @@ export const listForReader = query({
 
 /** Kleinste Klickflaeche, die noch Sinn ergibt (Anteil der Seitenkante). */
 const MIN_REGION_SIZE = 0.004;
+// Wie nah zwei Rahmen liegen duerfen, damit sie zu einer Klickflaeche
+// zusammenwachsen. Knapp gehalten: Spaltenabstaende und der Abstand zum
+// Nachbarartikel sind groesser, die Luecke zwischen Uberschrift und Text ist
+// kleiner.
+const REGION_GAP = 0.012;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
+// Rechtecke desselben Artikels auf einer Seite zu wenigen Flaechen
+// zusammenfassen: was sich beruehrt oder dicht beieinander liegt, wird ein
+// Kasten. Die Liste ist kurz (Rahmen einer Seite), das quadratische Vorgehen
+// also unkritisch.
+function verschmelzen<T extends { x0: number; y0: number; x1: number; y1: number }>(
+  rechtecke: T[],
+): T[] {
+  const offen = [...rechtecke];
+  const fertig: T[] = [];
+  while (offen.length > 0) {
+    const gruppe = offen.shift()!;
+    let gewachsen = true;
+    while (gewachsen) {
+      gewachsen = false;
+      for (let i = offen.length - 1; i >= 0; i--) {
+        const k = offen[i];
+        const beruehrt =
+          k.x0 <= gruppe.x1 + REGION_GAP &&
+          k.x1 >= gruppe.x0 - REGION_GAP &&
+          k.y0 <= gruppe.y1 + REGION_GAP &&
+          k.y1 >= gruppe.y0 - REGION_GAP;
+        if (!beruehrt) continue;
+        gruppe.x0 = Math.min(gruppe.x0, k.x0);
+        gruppe.y0 = Math.min(gruppe.y0, k.y0);
+        gruppe.x1 = Math.max(gruppe.x1, k.x1);
+        gruppe.y1 = Math.max(gruppe.y1, k.y1);
+        offen.splice(i, 1);
+        gewachsen = true;
+      }
+    }
+    fertig.push(gruppe);
+  }
+  return fertig;
+}
 
 /** Klickflaechen im Seitenmodus, nur von freigegebenen Artikeln. */
 export const regionsForReader = query({
@@ -164,7 +204,7 @@ export const regionsForReader = query({
       targetPageIndex: number | null;
     };
     const navigation: ReaderRegion[] = [];
-    const articleAreas = new Map<string, ReaderRegion>();
+    const articleAreas = new Map<string, ReaderRegion[]>();
     for (const r of regions) {
       const key = r.articleId as string;
       if (!published.has(key)) {
@@ -198,22 +238,21 @@ export const regionsForReader = query({
         continue;
       }
 
-      // Die Debugansicht behaelt alle feinen Rohregionen. Im Reader bilden sie
-      // dagegen genau eine ruhige Klickflaeche je Artikel und Seite. Besonders
-      // mehrspaltige Kaesten erzeugten sonst Dutzende schmale Zeilenstreifen.
+      // Die Debugansicht behaelt alle feinen Rohregionen. Im Reader werden
+      // daraus wenige ruhige Flaechen: benachbarte Rahmen desselben Artikels
+      // wachsen zusammen, entfernte bleiben getrennt. Ein einziger Kasten je
+      // Artikel und Seite wuerde sonst bei zwei Artikeln auf einer Seite die
+      // ganze Seite belegen und den Nachbarn verdecken.
       const areaKey = `${r.articleId}:${r.pageIndex}`;
-      const area = articleAreas.get(areaKey);
-      if (area) {
-        area.x0 = Math.min(area.x0, x0);
-        area.y0 = Math.min(area.y0, y0);
-        area.x1 = Math.max(area.x1, x1);
-        area.y1 = Math.max(area.y1, y1);
-        area.kind = "body";
-      } else {
-        articleAreas.set(areaKey, { ...normalized, kind: "body" });
-      }
+      const bisher = articleAreas.get(areaKey);
+      if (bisher) bisher.push({ ...normalized, kind: "body" });
+      else articleAreas.set(areaKey, [{ ...normalized, kind: "body" }]);
     }
-    return [...navigation, ...articleAreas.values()];
+    const flaechen: ReaderRegion[] = [];
+    for (const rohe of articleAreas.values()) {
+      for (const teil of verschmelzen(rohe)) flaechen.push(teil);
+    }
+    return [...navigation, ...flaechen];
   },
 });
 

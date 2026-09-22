@@ -108,6 +108,36 @@ def test_beschnittenes_bild_bleibt_beim_seitenausschnitt():
     assert job._artwork_image(bild, seite) is None
 
 
+def test_ausschnitt_aus_dem_satz_schneidet_das_original():
+    """Nennt der Satz den Ausschnitt, wird das Original danach geschnitten.
+
+    Der Seitenausschnitt schleppte hier Nachbartext mit; aus der Datei kommt
+    genau das, was gedruckt ist.
+    """
+    from extractor.model import SourceImage
+
+    seite = _jpeg(1000, 1400)
+    # Rahmen 400x140 (breit), Bild 800x1120 (hoch) — ohne Ausschnitt bliebe es
+    # beim Seitenausschnitt. Der Satz zeigt den mittleren Streifen.
+    bild = SourceImage(
+        page_index=0,
+        x0=0.1,
+        y0=0.1,
+        x1=0.5,
+        y1=0.2,
+        link="foto.tif",
+        crop=(0.0, 0.4, 1.0, 0.525),
+    )
+    job = _Job({"foto.tif": {"assetId": "a1"}}, {"a1": _jpeg(800, 1120)})
+
+    ergebnis = job._artwork_image(bild, seite)
+
+    assert ergebnis is not None
+    breite, hoehe = worker.render.image_size(ergebnis)
+    assert breite == 800
+    assert 130 <= hoehe <= 150
+
+
 def test_ohne_passende_datei_bleibt_es_beim_seitenausschnitt():
     from extractor.model import SourceImage
 
