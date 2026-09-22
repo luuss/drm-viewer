@@ -22,7 +22,10 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    # MinIO liegt nicht mehr auf Docker Hub: `minio/mc` antwortet dort mit
+    # "pull access denied". Die offizielle Quelle ist quay.io. Feste Fassung,
+    # damit ein Neubau nicht ploetzlich eine andere Version zieht.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-convexminio}
