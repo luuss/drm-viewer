@@ -1481,6 +1481,8 @@ def test_absaetze_verteilen_sich_nach_rahmenflaeche():
 
     assert lagen[0][0] == 3
     assert lagen[1][0] == 4
+    # Jeder Absatz kennt den ganzen Rahmen, in dem er steht.
+    assert lagen[0][6] == (0.1, 0.1, 0.5, 0.9)
 
 
 def test_ohne_rahmen_bleibt_die_lage_offen():
@@ -1488,7 +1490,7 @@ def test_ohne_rahmen_bleibt_die_lage_offen():
 
     lagen = _verteile_auf_rahmen([("Text", "Mengentext")], [])
 
-    assert lagen == [(0, 0.0, 0.0, 1.0, 0.0, "")]
+    assert lagen == [(0, 0.0, 0.0, 1.0, 0.0, "", None)]
 
 
 def test_inhaltsverzeichnis_aus_dem_satz():

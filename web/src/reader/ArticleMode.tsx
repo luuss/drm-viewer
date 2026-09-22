@@ -11,6 +11,8 @@ type Props = {
   onNext: () => void;
   canPrev: boolean;
   canNext: boolean;
+  /** Lesesitzung fuer Bilder aus dem Medienspeicher. */
+  sessionToken?: string | null;
 };
 
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
@@ -22,7 +24,17 @@ export default function ArticleMode({
   onNext,
   canPrev,
   canNext,
+  sessionToken,
 }: Props) {
+  /**
+   * Bilder aus dem Medienspeicher kommen ueber das Kachel-Gateway, und das
+   * prueft die Lesesitzung. Ein `img`-Element kann keinen eigenen Kopf
+   * mitschicken, deshalb steht das Sitzungsmerkmal in der Adresse.
+   */
+  const mitSitzung = (url: string) =>
+    sessionToken && url.includes("/api/asset/")
+      ? `${url}${url.includes("?") ? "&" : "?"}s=${encodeURIComponent(sessionToken)}`
+      : url;
   const article = useQuery(
     api.articles.getForReader,
     articleId ? { articleId } : "skip",
@@ -135,7 +147,7 @@ export default function ArticleMode({
             const img = item.image;
             return (
               <figure key={`image-${item.index}`} data-source-page={item.page}>
-                <img src={img.url ?? ""} alt={img.caption ?? ""} loading="lazy" />
+                <img src={mitSitzung(img.url ?? "")} alt={img.caption ?? ""} loading="lazy" />
                 {img.caption && <figcaption>{img.caption}</figcaption>}
               </figure>
             );

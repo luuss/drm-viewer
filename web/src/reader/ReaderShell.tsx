@@ -421,6 +421,7 @@ export default function ReaderShell() {
             onNext={next}
             canPrev={canPrev}
             canNext={canNext}
+            sessionToken={sessionToken}
           />
         )}
       </main>

@@ -57,6 +57,11 @@ class SourceBlock:
     story_id: str | None = None
     frame_id: str | None = None
     style_name: str | None = None
+    # Nur bei Bloecken aus dem Satz: der Textrahmen, in dem der Absatz steht,
+    # als Rechteck auf der Seite. Wo genau ein Absatz innerhalb des Rahmens
+    # sitzt, weiss die IDML nicht — der Rahmen selbst dagegen steht fest, und
+    # er ist die richtige Trefferflaeche fuer den Sprung in den Artikel.
+    frame_box: tuple[float, float, float, float] | None = None
     column: int = 0
     drop: bool = False        # Beiwerk: Seitenzahl, Kolumnentitel, Slug
     confidence: float = 1.0

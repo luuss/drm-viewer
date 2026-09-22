@@ -4,6 +4,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor } from "./roles";
 import { hasIssueAccess } from "./access";
 import { pageHalf, pageRole } from "./schema";
+import { assetUrl } from "./assets";
 import { Id } from "./_generated/dataModel";
 
 /** Kanonische Seitenliste fuer den Reader. Ohne Zugriff kommt nichts zurueck. */
@@ -61,9 +62,7 @@ export const debugForEditors = query({
             .withIndex("by_key", (q) => q.eq("key", page.previewKey!))
             .first()
         : null;
-      const previewUrl = preview?.convexStorageId
-        ? await ctx.storage.getUrl(preview.convexStorageId)
-        : null;
+      const previewUrl = preview ? await assetUrl(ctx, preview._id) : null;
       out.push({
         _id: page._id,
         index: page.index,

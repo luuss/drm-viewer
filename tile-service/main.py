@@ -205,6 +205,7 @@ async def session_info(
 @app.get("/api/asset/{asset_id}.jpg")
 async def asset(
     asset_id: str,
+    s: str | None = None,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> Response:
     """Ein Bild aus dem Medienspeicher ausliefern.
@@ -221,7 +222,10 @@ async def asset(
     if not info:
         raise HTTPException(404, "Unbekanntes Bild")
     if not info.get("public"):
-        session = await require_session(x_tile_session, info.get("issueId"))
+        # Ein Bild steht in einem `img`-Element, und das kann keinen eigenen
+        # Kopf mitschicken. Deshalb darf die Lesesitzung hier auch in der
+        # Adresse stehen.
+        session = await require_session(x_tile_session or s, info.get("issueId"))
         check_rate(
             f'assets:{session.get("userId")}:{info.get("issueId")}',
             MAX_TILES_PER_MIN,

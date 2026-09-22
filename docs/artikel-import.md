@@ -188,6 +188,18 @@ Gesetzt wird nur, was am Heft noch nicht steht. Eine Eingabe der Redaktion
 bleibt unangetastet. Die Heftnummer wird nicht aus dem Text gelesen — sie steht
 im Ordnernamen, und dort steht sie eindeutig.
 
+### Klickflaechen im Seitenmodus
+
+Wer im Seitenmodus auf einen Artikel tippt, springt in den Artikelmodus. Die
+Flaechen dafuer kommen aus dem Satz: **ein Textrahmen ist eine Flaeche**. Wo
+genau ein einzelner Absatz im Rahmen sitzt, weiss die IDML nicht — der Rahmen
+selbst steht dagegen fest, und er ist ohnehin die richtige Groesse zum Antippen.
+Bilder zaehlen mit, damit man nicht nur den Text daneben treffen kann.
+
+Sichtbar sind die Flaechen erst, wenn der Artikel freigegeben und die Ausgabe
+veroeffentlicht ist. Zum Durchsehen eines frisch importierten Hefts gibt es in
+der Pruefansicht den Knopf **Alle offenen freigeben**.
+
 ## 4. Redaktionelle Pruefung
 
 Importierte Artikel haben den Reviewstatus `pending`. Die Redaktion kann:

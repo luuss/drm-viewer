@@ -530,17 +530,7 @@ class Job:
                 }
                 for i, b in enumerate(reader_blocks)
             ]
-            regions = [
-                {
-                    "pageIndex": b.page_index,
-                    "x0": round(max(0.0, b.x0), 5),
-                    "y0": round(max(0.0, b.y0), 5),
-                    "x1": round(min(1.0, b.x1), 5),
-                    "y1": round(min(1.0, b.y1), 5),
-                    "kind": "title" if b.kind == "heading" else "body",
-                }
-                for b in article.blocks
-            ]
+            regions = _text_regions(article.blocks)
             # Auch das Bild selbst gehoert zur Artikel-Trefferflaeche. Damit
             # bleibt die Zuordnung im Debugger sichtbar und Leser koennen nicht
             # nur auf den danebenliegenden Text klicken.
@@ -780,6 +770,43 @@ def main() -> int:
             continue
         time.sleep(idle_poll_delay(empty_polls))
         empty_polls += 1
+
+
+def _text_regions(blocks) -> list[dict]:
+    """Trefferflaechen des Artikels im Seitenmodus.
+
+    Liegt der Satz vor, ist der Textrahmen die richtige Flaeche: er steht fest,
+    waehrend die Stelle eines einzelnen Absatzes darin nur geschaetzt ist. Ein
+    Rahmen wird einmal genommen, auch wenn zwanzig Absaetze darin stehen —
+    sonst liegen zwanzig Rechtecke uebereinander.
+
+    Ohne Satz bleibt es beim Block: aus dem PDF ist das alles, was es gibt.
+    """
+    out: list[dict] = []
+    gesehen: set[tuple] = set()
+    for b in blocks:
+        kasten = getattr(b, "frame_box", None)
+        if kasten is not None:
+            kennung = (b.page_index, b.frame_id or kasten)
+            if kennung in gesehen:
+                continue
+            gesehen.add(kennung)
+            x0, y0, x1, y1 = kasten
+            art = "body"
+        else:
+            x0, y0, x1, y1 = b.x0, b.y0, b.x1, b.y1
+            art = "title" if b.kind == "heading" else "body"
+        out.append(
+            {
+                "pageIndex": b.page_index,
+                "x0": round(max(0.0, min(x0, x1)), 5),
+                "y0": round(max(0.0, min(y0, y1)), 5),
+                "x1": round(min(1.0, max(x0, x1)), 5),
+                "y1": round(min(1.0, max(y0, y1)), 5),
+                "kind": art,
+            }
+        )
+    return out
 
 
 def _printed_offset(pages: list[dict]) -> int:

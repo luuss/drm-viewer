@@ -184,3 +184,69 @@ def test_gedruckte_seitenzahl_ergibt_den_versatz():
     assert worker._printed_offset(pages) == 2
     assert worker._printed_offset([{"index": 0, "printedLabel": "U1"}]) == 0
     assert worker._printed_offset([]) == 0
+
+
+def test_trefferflaeche_ist_der_rahmen_nicht_der_absatz():
+    """Zwanzig Absaetze in einem Rahmen ergeben eine Flaeche, nicht zwanzig."""
+    from extractor.model import SourceBlock
+
+    def b(text: str, y: float) -> SourceBlock:
+        return SourceBlock(
+            page_index=4,
+            text=text,
+            x0=0.1,
+            y0=y,
+            x1=0.5,
+            y1=y + 0.02,
+            origin="idml",
+            story_id="s",
+            frame_id="f1",
+            frame_box=(0.08, 0.12, 0.52, 0.88),
+        )
+
+    regionen = worker._text_regions([b("Erster", 0.2), b("Zweiter", 0.4)])
+
+    assert regionen == [
+        {"pageIndex": 4, "x0": 0.08, "y0": 0.12, "x1": 0.52, "y1": 0.88, "kind": "body"}
+    ]
+
+
+def test_ohne_satz_bleibt_der_block_die_trefferflaeche():
+    from extractor.model import SourceBlock
+
+    block = SourceBlock(
+        page_index=2, text="Ueberschrift", x0=0.1, y0=0.1, x1=0.9, y1=0.2, kind="heading"
+    )
+
+    regionen = worker._text_regions([block])
+
+    assert regionen[0]["kind"] == "title"
+    assert regionen[0]["y1"] == 0.2
+
+
+def test_zwei_rahmen_ergeben_zwei_flaechen():
+    from extractor.model import SourceBlock
+
+    def b(frame: str, kasten, seite: int) -> SourceBlock:
+        return SourceBlock(
+            page_index=seite,
+            text="Text",
+            x0=kasten[0],
+            y0=kasten[1],
+            x1=kasten[2],
+            y1=kasten[3],
+            origin="idml",
+            story_id="s",
+            frame_id=frame,
+            frame_box=kasten,
+        )
+
+    regionen = worker._text_regions(
+        [
+            b("f1", (0.1, 0.1, 0.5, 0.9), 3),
+            b("f2", (0.5, 0.1, 0.9, 0.9), 3),
+            b("f1", (0.1, 0.1, 0.5, 0.9), 3),
+        ]
+    )
+
+    assert len(regionen) == 2

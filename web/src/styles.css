@@ -2413,3 +2413,15 @@ button.small, .btn.small {
 @media (max-width: 46rem) {
   .import-optionen { gap: var(--s3); }
 }
+
+/* Rueckmeldung der Sammelfreigabe in der Pruefansicht. Sie steht wie eine
+   Fehlermeldung an derselben Stelle, meldet aber einen Erfolg. */
+.approve-note {
+  font-size: var(--fs-sub);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--radius-sm);
+  color: var(--success);
+  background: var(--success-soft);
+  border: 1px solid rgba(76, 107, 64, 0.25);
+  max-width: var(--prose);
+}

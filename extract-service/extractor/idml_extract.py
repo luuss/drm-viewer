@@ -142,7 +142,7 @@ def _kette_ordnen(rahmen: list["IdmlTextFrame"]) -> list["IdmlTextFrame"]:
 def _verteile_auf_rahmen(
     absaetze: list[tuple[str, str]],
     rahmen: list["IdmlTextFrame"],
-) -> list[tuple[int, float, float, float, float, str]]:
+) -> list[tuple[int, float, float, float, float, str, tuple[float, float, float, float] | None]]:
     """Absaetze einer Story auf ihre Rahmen verteilen.
 
     Wo genau der Text im Satz umbricht, steht in der IDML nicht — das
@@ -151,10 +151,10 @@ def _verteile_auf_rahmen(
     Absatz landet damit sicher im ersten Rahmen, und das ist die Angabe, auf
     die es ankommt: wo ein Artikel beginnt.
 
-    Liefert je Absatz Seite, Rechteck und Rahmenkennung.
+    Liefert je Absatz Seite, Rechteck, Rahmenkennung und den ganzen Rahmen.
     """
     if not rahmen:
-        return [(0, 0.0, 0.0, 1.0, 0.0, "") for _ in absaetze]
+        return [(0, 0.0, 0.0, 1.0, 0.0, "", None) for _ in absaetze]
 
     laengen = [max(1, len(text)) for text, _stil in absaetze]
     gesamt = sum(laengen)
@@ -194,6 +194,7 @@ def _verteile_auf_rahmen(
                 f.x1,
                 min(1.0, max(f.y0, y) + hoehe * (laenge / gesamt)),
                 f.self_id,
+                (f.x0, f.y0, f.x1, f.y1),
             )
         )
     return out
@@ -258,7 +259,9 @@ def extract_idml_blocks(
                 # gehoeren nicht in die Ausgabe.
                 continue
             lagen = _verteile_auf_rahmen(absaetze, rahmen)
-            for (text, style), (seite, x0, y0, x1, y1, frame_id) in zip(absaetze, lagen):
+            for (text, style), (seite, x0, y0, x1, y1, frame_id, kasten) in zip(
+                absaetze, lagen
+            ):
                 if _ist_beiwerk(style):
                     continue
                 blocks.append(
@@ -274,6 +277,7 @@ def extract_idml_blocks(
                         story_id=story_id,
                         frame_id=frame_id or None,
                         style_name=style or None,
+                        frame_box=kasten,
                     )
                 )
     return blocks
@@ -657,6 +661,14 @@ def frames_to_blocks(
         th = trim[3] - trim[1]
         if tw <= 0 or th <= 0:
             continue
+        kasten = block.frame_box
+        if kasten is not None:
+            kasten = (
+                max(0.0, trim[0] + kasten[0] * tw),
+                max(0.0, trim[1] + kasten[1] * th),
+                min(1.0, trim[0] + kasten[2] * tw),
+                min(1.0, trim[1] + kasten[3] * th),
+            )
         out.append(
             replace(
                 block,
@@ -665,6 +677,7 @@ def frames_to_blocks(
                 y0=max(0.0, trim[1] + block.y0 * th),
                 x1=min(1.0, trim[0] + block.x1 * tw),
                 y1=min(1.0, trim[1] + block.y1 * th),
+                frame_box=kasten,
             )
         )
     return out

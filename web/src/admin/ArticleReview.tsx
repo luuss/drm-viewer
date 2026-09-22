@@ -25,12 +25,16 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
   const [openId, setOpenId] = useState<Id<"articles"> | null>(null);
   const [mergeSource, setMergeSource] = useState<Id<"articles"> | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [approvingAll, setApprovingAll] = useState(false);
+  const [approveNote, setApproveNote] = useState<string | null>(null);
 
   if (articles === undefined) return <p className="hint">Laden...</p>;
   if (articles.length === 0)
     return <p className="hint">Noch keine Artikel. Erst den Import starten.</p>;
 
   const open = articles.find((a) => a._id === openId) ?? null;
+  const pendingCount =
+    summary?.pending ?? articles.filter((a) => a.reviewStatus === "pending").length;
 
   async function guard(fn: () => Promise<unknown>) {
     setErr(null);
@@ -49,10 +53,36 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
           {summary?.approved ?? 0} freigegeben · {summary?.pending ?? 0} offen ·{" "}
           {summary?.excluded ?? 0} ausgeschlossen
         </span>
-        <button className="btn" onClick={() => guard(() => approveAll({ issueId }))}>
-          Alle offenen freigeben
-        </button>
+        {pendingCount > 0 && (
+          <button
+            className="btn"
+            disabled={approvingAll}
+            onClick={() => {
+              if (
+                !confirm(
+                  `${pendingCount} offene Artikel freigeben? Bei einer veröffentlichten Ausgabe sind sie sofort sichtbar.`,
+                )
+              ) {
+                return;
+              }
+              setApproveNote(null);
+              setApprovingAll(true);
+              guard(async () => {
+                const result = await approveAll({ issueId });
+                setApproveNote(
+                  `${result.approved} Artikel freigegeben` +
+                    (result.remaining
+                      ? " — es sind noch weitere offen, bitte noch einmal klicken."
+                      : ""),
+                );
+              }).finally(() => setApprovingAll(false));
+            }}
+          >
+            {approvingAll ? "Gebe frei..." : "Alle offenen freigeben"}
+          </button>
+        )}
       </div>
+      {approveNote && <div className="approve-note">{approveNote}</div>}
       {err && <div className="err">{err}</div>}
 
       {/* Solange kein Artikel offen ist, braucht die rechte Haelfte keinen Platz;

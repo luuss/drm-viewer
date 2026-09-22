@@ -9,6 +9,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, requirePublisher, audit } from "./roles";
 import { hasIssueAccess, accessibleIssueIds } from "./access";
 import { blockType } from "./schema";
+import { assetUrl } from "./assets";
 import { Id } from "./_generated/dataModel";
 
 const regionInput = v.object({
@@ -241,10 +242,9 @@ export const getForReader = query({
       .collect();
     const withUrls = [];
     for (const img of images.sort((a, b) => a.order - b.order)) {
-      const asset = await ctx.db.get(img.assetId);
-      const url = asset?.convexStorageId
-        ? await ctx.storage.getUrl(asset.convexStorageId)
-        : null;
+      // Ueber `assetUrl`, damit auch Bilder aus dem Medienspeicher eine
+      // Adresse bekommen — dort fuehrt der Weg ueber das Kachel-Gateway.
+      const url = await assetUrl(ctx, img.assetId);
       if (url) {
         withUrls.push({
           url,
@@ -657,27 +657,44 @@ export const setReviewStatus = mutation({
   },
 });
 
+/**
+ * Obergrenze je Aufruf. Nach dem Import stehen alle Artikel eines Hefts offen;
+ * einzeln freigeben ist bei siebzig Artikeln unzumutbar. Eine Mutation darf
+ * aber nicht unbegrenzt schreiben, deshalb der Deckel — was darueber liegt,
+ * holt der naechste Aufruf.
+ */
+const APPROVE_ALL_LIMIT = 500;
+
 /** Alle offenen Artikel einer Ausgabe auf einmal freigeben. */
 export const approveAllPending = mutation({
   args: { issueId: v.id("issues") },
   handler: async (ctx, { issueId }) => {
     await requireEditor(ctx);
-    const rows = await ctx.db
-      .query("articles")
-      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
-      .collect();
-    let n = 0;
+    const pendingQuery = () =>
+      ctx.db
+        .query("articles")
+        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+        .filter((q) => q.eq(q.field("reviewStatus"), "pending"));
+
+    const rows = await pendingQuery().take(APPROVE_ALL_LIMIT);
+    const now = Date.now();
     for (const r of rows) {
-      if (r.reviewStatus === "pending") {
-        await ctx.db.patch(r._id, {
-          reviewStatus: "approved",
-          updatedAt: Date.now(),
-        });
-        n++;
-      }
+      // Genau wie setReviewStatus: nur der Artikel wird angefasst. Die Zaehler
+      // am Heft (articleCount) haengen an der Anzahl, nicht am Status, und
+      // duerfen hier nicht angefasst werden.
+      await ctx.db.patch(r._id, { reviewStatus: "approved", updatedAt: now });
     }
-    await audit(ctx, "article.approveAll", issueId, `${n} Artikel`);
-    return n;
+
+    // Nach dem Deckel kann noch etwas offen sein. Das meldet die Pruefansicht,
+    // statt stillschweigend eine halb freigegebene Ausgabe zu hinterlassen.
+    const remaining = (await pendingQuery().first()) !== null;
+    await audit(
+      ctx,
+      "article.review.approveAll",
+      issueId,
+      `${rows.length} Artikel${remaining ? ", weitere offen" : ""}`,
+    );
+    return { approved: rows.length, remaining };
   },
 });
 

@@ -408,6 +408,105 @@ describe("Artikeloperationen", () => {
     expect(jump.x0).toBeCloseTo(0.1);
   });
 
+  test("Sammelfreigabe gibt offene Artikel frei und laesst Ausgeschlossene in Ruhe", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, editorId } = await base(t);
+    await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const make = async (order: number, title: string, reviewStatus: string) =>
+        await ctx.db.insert("articles", {
+          issueId,
+          order,
+          title,
+          source: "pdf",
+          reviewStatus,
+          primaryPageIndex: 0,
+          pageStart: 0,
+          pageEnd: 0,
+          searchText: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+      await make(1, "Offen A", "pending");
+      await make(2, "Offen B", "pending");
+      await make(3, "Raus", "excluded");
+      await make(4, "Schon frei", "approved");
+    });
+
+    const { api } = await import("./_generated/api");
+    const asEditor = t.withIdentity({ subject: editorId, email: "redaktion@example.de" });
+    const result = await asEditor.mutation(api.articles.approveAllPending, { issueId });
+    expect(result).toEqual({ approved: 2, remaining: false });
+
+    const state = await t.run(async (ctx: any) => {
+      const rows = await ctx.db
+        .query("articles")
+        .withIndex("by_issue_order", (q: any) => q.eq("issueId", issueId))
+        .collect();
+      const issue = await ctx.db.get(issueId);
+      const log = await ctx.db.query("auditLog").collect();
+      return {
+        status: rows.map((r: any) => [r.title, r.reviewStatus]),
+        articleCount: issue.articleCount,
+        actions: log.map((entry: any) => entry.action),
+      };
+    });
+    expect(state.status).toEqual([
+      ["Offen A", "approved"],
+      ["Offen B", "approved"],
+      // Ausgeschlossene Artikel bleiben ausgeschlossen, sonst waere die
+      // redaktionelle Entscheidung mit einem Klick weg.
+      ["Raus", "excluded"],
+      ["Schon frei", "approved"],
+    ]);
+    // Der Zaehler am Heft haengt an der Anzahl, nicht am Status.
+    expect(state.articleCount).toBeUndefined();
+    expect(state.actions).toContain("article.review.approveAll");
+
+    // Zweiter Aufruf findet nichts mehr und meldet das auch so.
+    const zweiter = await asEditor.mutation(api.articles.approveAllPending, { issueId });
+    expect(zweiter).toEqual({ approved: 0, remaining: false });
+  });
+
+  test("Sammelfreigabe verlangt Redaktionsrechte", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId } = await base(t);
+    const leserId = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const userId = await ctx.db.insert("users", { email: "leser@example.de" });
+      await ctx.db.insert("articles", {
+        issueId,
+        order: 1,
+        title: "Offen",
+        source: "pdf",
+        reviewStatus: "pending",
+        primaryPageIndex: 0,
+        pageStart: 0,
+        pageEnd: 0,
+        searchText: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return userId;
+    });
+
+    const { api } = await import("./_generated/api");
+    await expect(
+      t
+        .withIdentity({ subject: leserId, email: "leser@example.de" })
+        .mutation(api.articles.approveAllPending, { issueId }),
+    ).rejects.toThrow(/Berechtigung/i);
+
+    const status = await t.run(async (ctx: any) => {
+      const rows = await ctx.db
+        .query("articles")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect();
+      return rows.map((r: any) => r.reviewStatus);
+    });
+    expect(status).toEqual(["pending"]);
+  });
+
   test("Veroeffentlichen erst, wenn alle Artikel entschieden sind", async () => {
     const t = convexTest(schema, modules);
     const { issueId, editorId } = await base(t);
