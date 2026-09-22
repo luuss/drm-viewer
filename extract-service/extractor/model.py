@@ -21,8 +21,7 @@ class LayoutLine:
     """Eine sichtbare Satzzeile, bevor sie zu einem PDF-Block verschmilzt.
 
     Diese Daten verlassen den Import-Worker nicht. Sie erhalten die
-    Absatzgrenzen und die genaue Geometrie fuer eine optionale, texttreue
-    LLM-Nachbearbeitung.
+    Absatzgrenzen und die genaue Geometrie der Textebene.
     """
 
     page_index: int
@@ -66,7 +65,6 @@ class SourceBlock:
     # bekannt bleiben, dass das Folgewort ohne Leerzeichen anschliesst.
     continues_word: bool = False
     layout_lines: tuple[LayoutLine, ...] = field(default_factory=tuple)
-    llm_refined: bool = False
 
     @property
     def char_count(self) -> int:
@@ -121,9 +119,18 @@ class AssembledArticle:
     author: str | None = None
     teaser: str | None = None
     confidence: float = 1.0
-    llm_refined: bool = False
 
     @property
     def pages(self) -> list[int]:
         pages = sorted({b.page_index for b in self.blocks})
         return pages or [0]
+
+    @property
+    def source(self) -> str:
+        """Woher der Text stammt: aus dem Satz, aus der PDF-Textebene oder beides."""
+        if not self.blocks:
+            return "pdf"
+        aus_satz = sum(1 for b in self.blocks if b.origin == "idml")
+        if aus_satz == len(self.blocks):
+            return "idml"
+        return "hybrid" if aus_satz else "pdf"

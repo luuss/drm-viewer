@@ -258,6 +258,8 @@ workerRoute("/service/issue/counts", (ctx, body) =>
     pageCount: body.pageCount,
     articleCount: body.articleCount,
     coverAssetId: body.coverAssetId,
+    priceAmountCents: body.priceAmountCents,
+    publicationDate: body.publicationDate,
   }),
 );
 

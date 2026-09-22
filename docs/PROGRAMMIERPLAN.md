@@ -166,8 +166,8 @@ nur der Ablageort.
 5. Textextraktion mit pdfplumber: Bloecke mit Position, Schrift, Groesse.
 6. Optional IDML: Stories, Frames, Absatzformate.
 7. Normalisierung beider Quellen auf `SourceBlock`.
-8. Artikelaufbau aus Spaltenfolge, Schriftgroessen, Fortsetzungssignalen,
-   optional LLM-Gruppierung.
+8. Artikelaufbau aus Spaltenfolge, Schriftgroessen und Fortsetzungssignalen;
+   liegt eine IDML vor, kommt die Artikelstruktur aus der Satzdatei.
 9. Artikel, Bloecke, Regionen, Bilder und Inhaltsverzeichnis werden in einer
    einzigen Mutation aktiviert (`imports.activateResultInternal`), Artikel mit
    Reviewstatus `pending`; der Auftrag geht auf `review`.
@@ -253,8 +253,7 @@ getan hat.
   Re-Import, Trennen an der Blockgrenze, Zusammenfuehren, Veroeffentlichungs-Gate;
   Shop-Schnittstelle idempotent und ohne Kontoanlage.
 * Python (`pytest`): Trennstriche, Initialen, Beiwerk, Spalten, mehrseitige
-  Artikel, IDML-Fixture inklusive Pfadausbruch, kanonische Seitenreihenfolge,
-  KI-Stufe standardmaessig aus.
+  Artikel, IDML-Fixture inklusive Pfadausbruch, kanonische Seitenreihenfolge.
 * Ende zu Ende an den echten Heften ZUERST! 3/2026 (Umschlag als
   Einzelseiten) und DMZ 170 (Umschlag als Doppelseiten, eigenes Profil).
 * Typecheck und Build fuer Web und Convex, `docker compose config`.

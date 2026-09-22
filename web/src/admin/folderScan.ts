@@ -302,3 +302,51 @@ export function formatBytes(n: number): string {
   if (n >= 1e3) return `${Math.round(n / 1e3)} kB`;
   return `${n} B`;
 }
+
+/* --- Fortschritt eines Laufs ---------------------------------------------- */
+
+/**
+ * Die Abschnitte eines Imports und ihr Anteil am Ganzen.
+ *
+ * Die Gewichte sind nach dem geschaetzt, was Zeit kostet: die Bilder aus
+ * `Links/` muss der Browser einzeln umwandeln und hochladen, sie machen die
+ * Haelfte aus; das Innenteil-PDF geht als ein grosses Stueck hoch und macht
+ * ein Viertel aus. Der Rest ist Beiwerk.
+ */
+export const IMPORT_PHASEN = [
+  { id: "heft", gewicht: 2 },
+  { id: "innenteil", gewicht: 25 },
+  { id: "umschlag", gewicht: 5 },
+  { id: "satzdatei", gewicht: 5 },
+  { id: "titelseite", gewicht: 5 },
+  { id: "bilder", gewicht: 50 },
+  { id: "reihenfolge", gewicht: 3 },
+  { id: "aufbereitung", gewicht: 5 },
+] as const;
+
+export type ImportPhase = (typeof IMPORT_PHASEN)[number]["id"];
+
+const PHASEN_GEWICHT = new Map<ImportPhase, number>(
+  IMPORT_PHASEN.map((p) => [p.id, p.gewicht]),
+);
+
+/**
+ * Prozentwert ueber den ganzen Lauf.
+ *
+ * Abschnitte, die dieser Ordner nicht braucht — kein Umschlag, keine
+ * Satzdatei —, gelten sofort als erledigt. Sonst bliebe der Balken am Ende
+ * unter hundert stehen, obwohl nichts mehr aussteht.
+ */
+export function fortschrittProzent(
+  erledigt: readonly ImportPhase[],
+  laufend?: ImportPhase,
+  anteil = 0,
+): number {
+  let summe = 0;
+  for (const phase of new Set(erledigt)) summe += PHASEN_GEWICHT.get(phase) ?? 0;
+  if (laufend && !erledigt.includes(laufend)) {
+    const teil = Math.min(1, Math.max(0, anteil));
+    summe += (PHASEN_GEWICHT.get(laufend) ?? 0) * teil;
+  }
+  return Math.max(0, Math.min(100, Math.round(summe)));
+}

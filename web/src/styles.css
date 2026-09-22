@@ -2335,3 +2335,81 @@ button.small, .btn.small {
   .plan-table th { width: 6rem; }
   .plan-table td:last-child { width: auto; }
 }
+
+/* --- Heftordner: Lauf und Ergebnis ---------------------------------------- */
+
+/* Waehrend eines Laufs nimmt das Feld keinen zweiten Ordner an. */
+.dropzone.busy { cursor: default; border-style: solid; opacity: 0.75; }
+.dropzone.busy:hover { border-color: var(--rule); }
+
+.import-optionen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4);
+}
+
+.lauf {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.lauf-kopf {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  font-size: var(--fs-sub);
+}
+.lauf-kopf > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lauf-wert { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* Der Balken wird in jedem Browser anders gebaut, deshalb dreimal dasselbe. */
+.lauf-balken {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 0.5rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--paper-sunk);
+  color: var(--accent);
+  overflow: hidden;
+}
+.lauf-balken::-webkit-progress-bar {
+  background: var(--paper-sunk);
+  border-radius: 999px;
+}
+.lauf-balken::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.lauf-balken::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 999px;
+}
+.lauf > .btn { justify-self: start; }
+
+.lauf-ergebnis { display: grid; gap: var(--s2); }
+.lauf-ergebnis h5 {
+  margin: var(--s2) 0 0;
+  font-size: var(--fs-h4);
+}
+.nachtrag {
+  margin: 0;
+  padding-left: var(--s5);
+  font-size: var(--fs-sub);
+  color: var(--ink-soft);
+}
+.nachtrag li { margin: var(--s1) 0; }
+
+@media (max-width: 46rem) {
+  .import-optionen { gap: var(--s3); }
+}

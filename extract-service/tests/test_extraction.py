@@ -475,13 +475,6 @@ def test_kanonische_reihenfolge_aus_zwei_quellen():
     assert order[-1] == ("cover", 0)
 
 
-def test_llm_gruppierung_ist_standardmaessig_aus():
-    from extractor import llm
-
-    os.environ.pop("EXTRACT_USE_LLM", None)
-    assert llm.enabled() is False
-
-
 # --- Bildbereiche ----------------------------------------------------------
 
 
@@ -1381,3 +1374,210 @@ def test_bildrahmen_tragen_den_dateinamen_der_verknuepfung():
     frames = extract_idml_image_frames(idml_fixture.bauen())
 
     assert {f.link for f in frames} == {"titel.jpg", "links.jpg", "rechts.jpg", "winzig.jpg"}
+
+
+# --- Der Satz als Hauptquelle ----------------------------------------------
+
+
+def test_absatzformate_werden_ihrer_rolle_zugeordnet():
+    """Die Formate der Hefte sind sprechend — und die Reihenfolge zaehlt.
+
+    "Zwischenueberschrift" und "Unterueberschrift" enthalten beide das Wort
+    "ueberschrift", meinen aber weder einen Artikelanfang noch dasselbe.
+    """
+    from extractor.idml_extract import _style_kind
+
+    assert _style_kind("Überschrift 2023") == "heading"
+    assert _style_kind("hauptüberschrift schwerter") == "heading"
+    assert _style_kind("Unterüberschrift 2023") == "lead"
+    assert _style_kind("Zwischenüberschrift DMZ 2023") == "subheading"
+    assert _style_kind("Bildunterschrift DMZ 2023") == "caption"
+    assert _style_kind("Bildquelle DMZ 2023") == "other"
+    assert _style_kind("Verzeichnis Titel 2023") == "other"
+    assert _style_kind("Inhaltsverzeichnis Überschrift") == "other"
+    assert _style_kind("Kasten Überschrift 2023") == "box"
+    assert _style_kind("Mengentext 2023") == "paragraph"
+
+
+def test_kolumnentitel_kommt_nicht_in_die_ausgabe():
+    """Ein Kolumnentitel steht auf jeder Seite und gehoert zu keinem Artikel."""
+    from extractor.idml_extract import _ist_beiwerk
+
+    assert _ist_beiwerk("Kolumnentitel 2018")
+    assert _ist_beiwerk("neu_Kolumnentitel")
+    assert not _ist_beiwerk("Überschrift 2023")
+
+
+def test_stories_ohne_rahmen_sind_musterseiten():
+    """Was im Heft nirgends steht, gehoert nicht hinein.
+
+    InDesign hebt auf den Musterseiten Platzhalter und Textbausteine auf. Ohne
+    diese Regel landeten sie alle auf Seite eins.
+    """
+    from extractor.idml_extract import IdmlTextFrame, extract_idml_blocks
+
+    idml = io.BytesIO()
+    story = """<?xml version="1.0" encoding="UTF-8"?>
+    <idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+      <Story Self="platziert">
+        <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Mengentext">
+          <CharacterStyleRange><Content>Steht im Heft</Content></CharacterStyleRange>
+        </ParagraphStyleRange>
+      </Story>
+    </idPkg:Story>"""
+    vorlage = story.replace("platziert", "vorlage").replace(
+        "Steht im Heft", "xxx Platzhalter"
+    )
+    with zipfile.ZipFile(idml, "w") as zf:
+        zf.writestr("Stories/Story_a.xml", story)
+        zf.writestr("Stories/Story_b.xml", vorlage)
+
+    rahmen = [
+        IdmlTextFrame(
+            page_number=4,
+            x0=0.1,
+            y0=0.2,
+            x1=0.9,
+            y1=0.6,
+            story_id="platziert",
+            self_id="f1",
+        )
+    ]
+    blocks = extract_idml_blocks(idml.getvalue(), rahmen)
+
+    assert [b.text for b in blocks] == ["Steht im Heft"]
+    assert blocks[0].page_index == 4
+    assert (blocks[0].x0, blocks[0].x1) == (0.1, 0.9)
+
+    # Ohne Rahmenangabe bleibt es beim alten Verhalten: alles kommt mit.
+    assert len(extract_idml_blocks(idml.getvalue())) == 2
+
+
+def test_rahmenkette_bestimmt_die_lesereihenfolge():
+    """Ein Fortsetzungsrahmen kann weiter vorn im Heft stehen."""
+    from extractor.idml_extract import IdmlTextFrame, _kette_ordnen
+
+    zweiter = IdmlTextFrame(
+        page_number=2, x0=0, y0=0, x1=1, y1=1, story_id="s", self_id="b", previous="a"
+    )
+    erster = IdmlTextFrame(
+        page_number=9, x0=0, y0=0, x1=1, y1=1, story_id="s", self_id="a", next="b"
+    )
+
+    assert [f.self_id for f in _kette_ordnen([zweiter, erster])] == ["a", "b"]
+
+
+def test_absaetze_verteilen_sich_nach_rahmenflaeche():
+    """Der erste Absatz gehoert sicher in den ersten Rahmen."""
+    from extractor.idml_extract import IdmlTextFrame, _verteile_auf_rahmen
+
+    rahmen = [
+        IdmlTextFrame(page_number=3, x0=0.1, y0=0.1, x1=0.5, y1=0.9, story_id="s", self_id="a"),
+        IdmlTextFrame(page_number=4, x0=0.1, y0=0.1, x1=0.5, y1=0.9, story_id="s", self_id="b"),
+    ]
+    absaetze = [("A" * 100, "Mengentext"), ("B" * 100, "Mengentext")]
+
+    lagen = _verteile_auf_rahmen(absaetze, rahmen)
+
+    assert lagen[0][0] == 3
+    assert lagen[1][0] == 4
+
+
+def test_ohne_rahmen_bleibt_die_lage_offen():
+    from extractor.idml_extract import _verteile_auf_rahmen
+
+    lagen = _verteile_auf_rahmen([("Text", "Mengentext")], [])
+
+    assert lagen == [(0, 0.0, 0.0, 1.0, 0.0, "")]
+
+
+def test_inhaltsverzeichnis_aus_dem_satz():
+    """Die Seitenzahl steht je nach Reihe vor oder hinter dem Titel."""
+    from extractor.idml_extract import toc_from_idml
+    from extractor.model import SourceBlock
+
+    def eintrag(text: str, stil: str, y: float) -> SourceBlock:
+        return SourceBlock(
+            page_index=1,
+            text=text,
+            x0=0.1,
+            y0=y,
+            x1=0.9,
+            y1=y + 0.02,
+            origin="idml",
+            style_name=stil,
+        )
+
+    blocks = [
+        eintrag("5 Schicksalsschlacht", "Verzeichnis Titel 2023", 0.1),
+        eintrag("Napoleon unterliegt", "Verzeichnis Untertitel 2023", 0.13),
+        eintrag("Vergiftete Nachbarschaft 8", "Inhaltsverzeichnis Überschrift", 0.2),
+        eintrag("Mengentext", "Mengentext 2023", 0.3),
+    ]
+
+    # Erste Innenseite traegt die 3 und liegt an Position 1: Versatz 2.
+    hints = toc_from_idml(blocks, 2)
+
+    assert [(h.label, h.page_index) for h in hints] == [
+        ("Schicksalsschlacht", 3),
+        ("Vergiftete Nachbarschaft", 6),
+    ]
+    # Die Unterzeile vergroessert die Klickflaeche des Eintrags.
+    assert hints[0].y1 >= 0.15
+    assert hints[0].toc_page_index == 1
+
+
+def test_satz_lesereihenfolge_haelt_stories_zusammen():
+    """Eine Story bleibt am Stueck, auch wenn sie ueber Seiten laeuft."""
+    from extractor.idml_extract import idml_reading_order
+    from extractor.model import SourceBlock
+
+    def b(story: str, seite: int, y: float, text: str) -> SourceBlock:
+        return SourceBlock(
+            page_index=seite,
+            text=text,
+            x0=0.1,
+            y0=y,
+            x1=0.9,
+            y1=y + 0.05,
+            origin="idml",
+            story_id=story,
+        )
+
+    blocks = [
+        b("lang", 3, 0.2, "Anfang"),
+        b("lang", 4, 0.1, "Fortsetzung"),
+        b("kurz", 3, 0.6, "Kasten"),
+    ]
+
+    assert [x.text for x in idml_reading_order(blocks)] == [
+        "Anfang",
+        "Fortsetzung",
+        "Kasten",
+    ]
+
+
+def test_impressum_liefert_den_einzelpreis():
+    from extractor.issue_meta import parse_issue_meta
+
+    # Das Eurozeichen kommt aus der Textebene je nach Datei als "t" heraus.
+    assert parse_issue_meta(["Bezugspreise: Einzelheft: 12,80 t, Preise ..."]) == {
+        "priceAmountCents": 1280
+    }
+    assert parse_issue_meta(["Einzelheft: t 9,80, Jahresabonnement"]) == {
+        "priceAmountCents": 980
+    }
+    assert parse_issue_meta(["ohne Angabe"]) == {}
+
+
+def test_titelseite_liefert_zeitraum_und_preis():
+    from extractor.issue_meta import parse_cover_text, publication_date
+
+    meta = parse_cover_text("Nr. 170 - März-April 2026 - € 9,80")
+
+    assert meta["monthFrom"] == 3 and meta["monthTo"] == 4 and meta["year"] == 2026
+    assert meta["coverPriceAmountCents"] == 980
+    assert publication_date(meta) is not None
+
+    einzeln = parse_cover_text("17. Jahrgang | März 2026 | € 8,70")
+    assert einzeln["monthFrom"] == einzeln["monthTo"] == 3

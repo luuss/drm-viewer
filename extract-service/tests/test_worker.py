@@ -141,53 +141,31 @@ def test_satzdatei_als_beiwerk_gehoert_zum_innenteil():
     """Die Oberflaeche legt die IDML als Beiwerk ab, gemeint ist der Innenteil.
 
     Vorher suchte der Worker eine PDF-Quelle mit derselben Rolle. Die gab es
-    nie, also blieb es still beim Weg ueber das PDF — und die Bildrahmen aus
-    dem Satz lagen ungenutzt herum.
+    nie, also blieb es still beim Weg ueber das PDF — und der ganze Satz lag
+    ungenutzt herum.
     """
-    from extractor.model import SourceImage
-
-    aufrufe = {}
-
-    class _Job:
-        job_id = "j1"
-        _images_from_idml = worker.Job._images_from_idml
-        _halves_by_asset: dict = {}
-
-    job = _Job()
     sources = [
-        {"kind": "pdf", "role": "inner", "assetId": "innen"},
         {"kind": "pdf", "role": "cover", "assetId": "umschlag"},
+        {"kind": "pdf", "role": "inner", "assetId": "innen"},
     ]
-    idml_source = {"kind": "idml", "role": "supplemental", "assetId": "satz"}
-    blobs = {"innen": b"%PDF", "umschlag": b"%PDF", "satz": b"idml"}
-    alt = [SourceImage(page_index=0, x0=0, y0=0, x1=1, y1=1)]
+    blobs = {"innen": b"%PDF", "umschlag": b"%PDF"}
 
-    def falsche_frames(_bytes):
-        aufrufe["frames"] = True
-        return [object()]
+    partner = worker.Job._idml_partner(
+        {"kind": "idml", "role": "supplemental"}, sources, blobs
+    )
+    assert partner is not None and partner["assetId"] == "innen"
 
-    def trims(_blob, _map, _halves):
-        return {0: (0.0, 0.0, 1.0, 1.0)}
+    # Traegt die Satzdatei eine eigene Rolle, gilt die gleichnamige PDF.
+    umschlag = worker.Job._idml_partner(
+        {"kind": "idml", "role": "cover"}, sources, blobs
+    )
+    assert umschlag is not None and umschlag["assetId"] == "umschlag"
 
-    def zu_bildern(_frames, _map, _trims):
-        return [SourceImage(page_index=0, x0=0.1, y0=0.1, x1=0.4, y1=0.4, link="a.tif")]
 
-    import extractor.idml_extract as idml_extract
-
-    alt_frames = worker.extract_idml_image_frames
-    alt_trims = worker.read_trim_boxes
-    alt_bilder = worker.frames_to_images
-    try:
-        worker.extract_idml_image_frames = falsche_frames
-        worker.read_trim_boxes = trims
-        worker.frames_to_images = zu_bildern
-        ergebnis = job._images_from_idml(
-            b"idml", idml_source, sources, blobs, {"innen": [(0, 0)]}, alt
-        )
-    finally:
-        worker.extract_idml_image_frames = alt_frames
-        worker.read_trim_boxes = alt_trims
-        worker.frames_to_images = alt_bilder
-
-    assert aufrufe.get("frames") is True
-    assert [i.link for i in ergebnis] == ["a.tif"]
+def test_ohne_geladene_pdf_gibt_es_keinen_partner():
+    partner = worker.Job._idml_partner(
+        {"kind": "idml", "role": "supplemental"},
+        [{"kind": "pdf", "role": "inner", "assetId": "innen"}],
+        {},
+    )
+    assert partner is None

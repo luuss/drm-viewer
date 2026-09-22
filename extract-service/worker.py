@@ -25,14 +25,22 @@ import render
 from extractor.article_assembler import assemble, flow_text_blocks
 from extractor.idml_extract import (
     extract_idml_blocks,
-    extract_idml_image_frames,
+    extract_idml_frames,
+    frames_to_blocks,
     frames_to_images,
+    idml_reading_order,
     link_name,
+    toc_from_idml,
 )
 from extractor.image_regions import read_trim_boxes
-from extractor.llm import postprocess_issue
+from extractor.issue_meta import publication_date, read_cover_meta, read_issue_meta
 from extractor.model import SourceBlock
-from extractor.pdf_extract import extract_pdf_pages, prepare_blocks
+from extractor.pdf_extract import (
+    attach_captions,
+    extract_pdf_pages,
+    mark_furniture,
+    prepare_blocks,
+)
 from extractor.publication_profiles import apply_profile
 from storage import ConvexClient, Storage, issue_key
 
@@ -127,28 +135,10 @@ class Job:
         )
 
         page_images = self._render_pages(pages, blobs)
+        self._store_meta(sources, blobs)
         blocks, images, toc_hints = self._extract(pages, blobs, sources)
         articles = assemble(blocks, images, toc_hints=toc_hints)
         log("job.assembled", jobId=self.job_id, articles=len(articles))
-
-        llm_report = postprocess_issue(
-            articles,
-            blocks,
-            images,
-            page_images,
-            heartbeat=lambda message: self.beat(86, message),
-            event_log=lambda event, **detail: log(
-                event, jobId=self.job_id, **detail
-            ),
-        )
-        if llm_report.attempted_chunks:
-            log(
-                "job.llm",
-                jobId=self.job_id,
-                attempted=llm_report.attempted_chunks,
-                applied=llm_report.applied_chunks,
-                fallback=llm_report.failed_chunks,
-            )
 
         payload_articles = self._build_payload(articles, page_images)
         log(
@@ -194,6 +184,46 @@ class Job:
             except Exception as exc:
                 log("job.fetchFailed", jobId=self.job_id, key=key, error=str(exc)[:200])
         return None
+
+    def _store_meta(self, sources: list[dict], blobs: dict[str, bytes]) -> None:
+        """Preis und Erscheinungsdatum aus dem Heft nachtragen.
+
+        Der Einzelpreis steht im Impressum des Innenteils, der
+        Erscheinungszeitraum in der Kopfzeile der Titelseite. Beides wird nur
+        gesetzt, wenn am Heft noch nichts steht; eine Eingabe der Redaktion
+        bleibt unangetastet.
+        """
+        innen = next(
+            (
+                s
+                for s in sources
+                if s["kind"] == "pdf" and s.get("role") == "inner" and blobs.get(s["assetId"])
+            ),
+            None,
+        )
+        titel = next(
+            (s for s in sources if s["kind"] == "image" and blobs.get(s["assetId"])),
+            None,
+        )
+        meta: dict = {}
+        if titel is not None:
+            meta.update(read_cover_meta(blobs[titel["assetId"]]))
+        if innen is not None:
+            # Das Impressum ist Text und damit genauer als die Texterkennung
+            # auf der Titelseite; es gilt zuletzt.
+            meta.update(read_issue_meta(blobs[innen["assetId"]]))
+        if "priceAmountCents" not in meta and "coverPriceAmountCents" in meta:
+            meta["priceAmountCents"] = meta["coverPriceAmountCents"]
+
+        nachricht = {"issueId": self.issue_id}
+        if meta.get("priceAmountCents"):
+            nachricht["priceAmountCents"] = meta["priceAmountCents"]
+        datum = publication_date(meta)
+        if datum:
+            nachricht["publicationDate"] = datum
+        if len(nachricht) > 1:
+            self.convex.post("/service/issue/counts", nachricht)
+        log("job.meta", jobId=self.job_id, **{k: v for k, v in meta.items()})
 
     def _render_pages(self, pages: list[dict], blobs: dict[str, bytes]) -> dict[int, bytes]:
         rendered: dict[int, bytes] = {}
@@ -272,7 +302,6 @@ class Job:
         return rendered
 
     def _extract(self, pages: list[dict], blobs: dict[str, bytes], sources: list[dict]):
-        self.beat(70, "Text wird gelesen")
         by_asset: dict[str, list[tuple[int, int]]] = {}
         # Umschlag-Doppelseiten: je kanonischer Seite die Haelfte der Quellseite.
         halves_by_asset: dict[str, dict[int, str]] = {}
@@ -286,8 +315,44 @@ class Job:
                 )
         self._halves_by_asset = halves_by_asset
 
+        idml_source = next((s for s in sources if s["kind"] == "idml"), None)
+        idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
+        partner = (
+            self._idml_partner(idml_source, sources, blobs) if idml_bytes else None
+        )
+
         blocks: list[SourceBlock] = []
         images = []
+        # Seiten, die der Satz selbst beschreibt. Fuer sie wird die PDF-Textebene
+        # nicht mehr gebraucht.
+        aus_satz: set[int] = set()
+
+        if idml_bytes and partner is not None:
+            self.beat(72, "Satzdatei wird ausgewertet")
+            page_map = by_asset.get(partner["assetId"]) or []
+            try:
+                satz_blocks, satz_images = self._from_idml(
+                    idml_bytes, blobs[partner["assetId"]], page_map,
+                    halves_by_asset.get(partner["assetId"]),
+                )
+            except Exception as exc:
+                log("job.idmlFailed", jobId=self.job_id, error=str(exc)[:200])
+                satz_blocks, satz_images = [], []
+            if satz_blocks:
+                blocks.extend(satz_blocks)
+                aus_satz = {kanonisch for _quelle, kanonisch in page_map}
+            images.extend(satz_images)
+            log(
+                "job.idml",
+                jobId=self.job_id,
+                blocks=len(satz_blocks),
+                images=len(satz_images),
+                pages=len(aus_satz),
+            )
+
+        # Was der Satz nicht abdeckt — ein Umschlag aus einer zweiten Datei,
+        # oder ein Heft ganz ohne Satzdatei — kommt weiter aus dem PDF.
+        self.beat(76, "Text wird gelesen")
         for asset_id, page_map in by_asset.items():
             blob = blobs.get(asset_id)
             if blob is None:
@@ -295,19 +360,23 @@ class Job:
             if getattr(self, "_kind_by_asset", {}).get(asset_id) == "image":
                 # Eine Titelseite als Bild hat weder Textebene noch Rahmen.
                 continue
-            b, i = extract_pdf_pages(blob, page_map, halves_by_asset.get(asset_id))
+            rest = [(q, k) for q, k in page_map if k not in aus_satz]
+            if not rest:
+                continue
+            b, i = extract_pdf_pages(blob, rest, halves_by_asset.get(asset_id))
             blocks.extend(b)
             images.extend(i)
 
-        # IDML liefert die verlaesslicheren Bildrahmen und Artikelgrenzen; das
-        # PDF bleibt die Quelle fuer die Seitengeometrie.
-        idml_source = next((s for s in sources if s["kind"] == "idml"), None)
-        idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
-        if idml_bytes:
-            self.beat(80, "Satzdatei wird ausgewertet")
-            images = self._images_from_idml(
-                idml_bytes, idml_source, sources, blobs, by_asset, images
+        # Steht das Inhaltsverzeichnis im Satz, ist es dort eindeutig
+        # ausgezeichnet. Das schlaegt jede Erkennung ueber Schriftgroessen —
+        # gelesen wird es, bevor das Profil die Inhaltsseite aussortiert.
+        satz_toc = (
+            toc_from_idml(
+                [b for b in blocks if b.origin == "idml"], _printed_offset(pages)
             )
+            if aus_satz
+            else []
+        )
 
         # Publikationskonventionen greifen vor der Klassifikation: Umschlag und
         # gedrucktes Inhaltsverzeichnis sollen weder Artikel noch Bilder liefern.
@@ -317,41 +386,62 @@ class Job:
             pages,
             self.data.get("publicationSlug"),
         )
+        if satz_toc:
+            log("job.toc", jobId=self.job_id, entries=len(satz_toc), source="idml")
+            toc_hints = satz_toc
 
-        # Erst jetzt aufraeumen, damit die Bildunterschriften an den endgueltigen
-        # Bildbereichen haengen.
-        ordered = prepare_blocks(blocks, images, len(pages))
-
-        if idml_bytes:
-            try:
-                idml_blocks = extract_idml_blocks(idml_bytes)
-                if idml_blocks:
-                    ordered = _prefer_idml(ordered, idml_blocks)
-                    log("job.idml", jobId=self.job_id, blocks=len(idml_blocks))
-            except Exception as exc:
-                log("job.idmlFailed", jobId=self.job_id, error=str(exc)[:200])
+        # Beide Herkuenfte werden getrennt aufbereitet: die PDF-Bloecke brauchen
+        # Schriftgroessen und Spaltenerkennung, die Satz-Bloecke bringen ihre
+        # Rollen schon mit und wuerden davon nur verfaelscht.
+        aus_pdf = [b for b in blocks if b.origin != "idml"]
+        satz = [b for b in blocks if b.origin == "idml"]
+        geordnet: list[SourceBlock] = []
+        if aus_pdf:
+            geordnet.extend(prepare_blocks(aus_pdf, images, len(pages)))
+        if satz:
+            geordnet.extend(self._prepare_satz(satz, images, len(pages)))
+        # Stabil nach Seite: innerhalb einer Seite bleibt die eben hergestellte
+        # Reihenfolge erhalten.
+        ordered = sorted(geordnet, key=lambda b: b.page_index)
         return ordered, images, toc_hints
 
-    def _images_from_idml(
-        self, idml_bytes, idml_source, sources, blobs, by_asset, images
-    ):
-        """Bildrahmen aus dem Satz statt aus dem PDF, soweit sie greifen.
+    @staticmethod
+    def _prepare_satz(
+        blocks: list[SourceBlock], images, page_count: int
+    ) -> list[SourceBlock]:
+        """Satz-Bloecke aufraeumen und ordnen.
 
-        Im Satz steht der Rahmen, der den sichtbaren Ausschnitt bestimmt. Im PDF
-        steht nur die Platzierung des Bildes, und was davon zu sehen ist, muss
-        ueber Beschnittpfade erschlossen werden. Liegt die Satzdatei vor, ist sie
-        also die bessere Quelle.
+        Kolumnentitel und Seitenzahlen sind auch im Satz eigene Rahmen; sie
+        werden wie beim PDF an ihrer Wiederholung erkannt. Eine Klassifikation
+        nach Schriftgroesse entfaellt — das Absatzformat hat sie schon gesagt.
+        """
+        mark_furniture(blocks, page_count)
+        ordered = idml_reading_order([b for b in blocks if not b.drop])
+        attach_captions(images, ordered)
+        return ordered
 
-        Die IDML gehoert zu genau einer PDF-Quelle. Traegt sie eine eigene
-        Rolle, gilt die gleichnamige PDF; die Oberflaeche legt sie aber als
-        Beiwerk ab, und dann ist der Innenteil gemeint. Nur dessen Seiten
-        werden ersetzt; ein Umschlag aus einer zweiten Datei bleibt beim
-        PDF-Weg.
+    def _from_idml(self, idml_bytes, pdf_bytes, page_map, halves):
+        """Bloecke und Bildbereiche aus der Satzdatei."""
+        bildrahmen, textrahmen = extract_idml_frames(idml_bytes)
+        trims = read_trim_boxes(pdf_bytes, page_map, halves)
+        satz_blocks = frames_to_blocks(
+            extract_idml_blocks(idml_bytes, textrahmen), page_map, trims
+        )
+        satz_images = frames_to_images(bildrahmen, page_map, trims)
+        return satz_blocks, satz_images
+
+    @staticmethod
+    def _idml_partner(idml_source, sources, blobs):
+        """Die PDF-Quelle, zu der die Satzdatei gehoert.
+
+        Traegt die IDML eine eigene Rolle, gilt die gleichnamige PDF; die
+        Oberflaeche legt sie aber als Beiwerk ab, und dann ist der Innenteil
+        gemeint.
         """
         gesuchte_rolle = idml_source.get("role")
         if gesuchte_rolle in (None, "supplemental", "artwork", "archive"):
             gesuchte_rolle = "inner"
-        partner = next(
+        return next(
             (
                 s
                 for s in sources
@@ -361,42 +451,10 @@ class Job:
             ),
             None,
         )
-        if partner is None:
-            return images
-        page_map = by_asset.get(partner["assetId"])
-        if not page_map:
-            return images
-        try:
-            frames = extract_idml_image_frames(idml_bytes)
-            if not frames:
-                return images
-            trims = read_trim_boxes(
-                blobs[partner["assetId"]],
-                page_map,
-                getattr(self, "_halves_by_asset", {}).get(partner["assetId"]),
-            )
-            ersatz = frames_to_images(frames, page_map, trims)
-        except Exception as exc:
-            log("job.idmlImagesFailed", jobId=self.job_id, error=str(exc)[:200])
-            return images
-        if not ersatz:
-            return images
-        betroffen = {canonical for _source, canonical in page_map}
-        behalten = [img for img in images if img.page_index not in betroffen]
-        log(
-            "job.idmlImages",
-            jobId=self.job_id,
-            frames=len(frames),
-            images=len(ersatz),
-            replaced=len(images) - len(behalten),
-        )
-        return behalten + ersatz
 
     def _build_payload(self, articles, page_images: dict[int, bytes]) -> list[dict]:
         payload = []
         for order, article in enumerate(articles, start=1):
-            # `flow_text_blocks` laesst KI-gepruefte Seiten unveraendert und
-            # greift nur auf Seiten zurueck, deren LLM-Chunk fehlgeschlagen ist.
             reader_blocks = flow_text_blocks(article.blocks)
             blocks = [
                 {
@@ -446,7 +504,7 @@ class Job:
                     **({"subtitle": article.subtitle} if article.subtitle else {}),
                     **({"author": article.author} if article.author else {}),
                     **({"teaser": article.teaser} if article.teaser else {}),
-                    "source": "hybrid" if article.llm_refined else "pdf",
+                    "source": article.source,
                     "confidence": article.confidence,
                     "primaryPageIndex": pages[0],
                     "pageStart": pages[0],
@@ -611,43 +669,6 @@ class Job:
         return out
 
 
-def _prefer_idml(pdf_blocks: list[SourceBlock], idml_blocks: list[SourceBlock]):
-    """IDML-Signale in die PDF-Bloecke uebernehmen.
-
-    Der Text bleibt aus dem PDF, weil dort die Seitengeometrie stimmt. Aus dem
-    IDML kommen Story-Zuordnung und Absatzformat: damit weiss der Artikelaufbau,
-    welche Bloecke zusammengehoeren, auch ueber Seitengrenzen hinweg.
-
-    Zugeordnet wird ueber den Textanfang; nur eindeutige Treffer zaehlen.
-    """
-    import re as _re
-
-    def key(text: str) -> str:
-        return _re.sub(r"[^a-z0-9]", "", text.lower())[:60]
-
-    index: dict[str, list[SourceBlock]] = {}
-    for b in idml_blocks:
-        k = key(b.text)
-        if len(k) < 20:
-            continue
-        index.setdefault(k, []).append(b)
-
-    matched = 0
-    for b in pdf_blocks:
-        candidates = index.get(key(b.text))
-        if not candidates or len(candidates) != 1:
-            continue
-        source = candidates[0]
-        b.story_id = source.story_id
-        b.style_name = source.style_name
-        # Das Absatzformat weiss besser als die Schriftgroesse, was es ist.
-        if source.kind in ("heading", "subheading", "lead", "caption"):
-            b.kind = source.kind
-        matched += 1
-    log("idml.matched", blocks=matched)
-    return pdf_blocks
-
-
 def run_once(convex: ConvexClient, storage: Storage) -> bool:
     claimed = convex.post("/service/jobs/claim", {"workerId": WORKER_ID})
     if not claimed:
@@ -703,3 +724,17 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _printed_offset(pages: list[dict]) -> int:
+    """Differenz zwischen gedruckter Seitenzahl und kanonischem Index.
+
+    Steht auf der ersten Innenseite eine 3 und liegt sie an Position 1, ist der
+    Versatz 2. Ohne brauchbare Angabe gilt 0 — dann sind gedruckte Zahl und
+    Position dasselbe.
+    """
+    for page in pages:
+        label = (page.get("printedLabel") or "").strip()
+        if label.isdigit():
+            return int(label) - page["index"]
+    return 0

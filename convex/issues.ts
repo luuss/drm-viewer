@@ -544,11 +544,23 @@ export const setCountsInternal = internalMutation({
     pageCount: v.optional(v.number()),
     articleCount: v.optional(v.number()),
     coverAssetId: v.optional(v.id("assets")),
+    // Aus dem Heft gelesen: Einzelpreis aus dem Impressum, Erscheinungsdatum
+    // von der Titelseite. Beide ueberschreiben nichts, was die Redaktion schon
+    // eingetragen hat — sie fuellen nur, was leer ist.
+    priceAmountCents: v.optional(v.number()),
+    publicationDate: v.optional(v.number()),
   },
-  handler: async (ctx, { issueId, ...patch }) => {
+  handler: async (ctx, { issueId, priceAmountCents, publicationDate, ...patch }) => {
+    const issue = await ctx.db.get(issueId);
     const clean: Record<string, unknown> = { updatedAt: Date.now() };
     for (const [k, val] of Object.entries(patch)) {
       if (val !== undefined) clean[k] = val;
+    }
+    if (priceAmountCents !== undefined && !issue?.priceAmountCents) {
+      clean.priceAmountCents = priceAmountCents;
+    }
+    if (publicationDate !== undefined && !issue?.publicationDate) {
+      clean.publicationDate = publicationDate;
     }
     await ctx.db.patch(issueId, clean);
   },

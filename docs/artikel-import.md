@@ -107,12 +107,20 @@ Je Auftrag:
 
 1. Seiten mit PDFium rendern und im Medienspeicher ablegen.
 2. Titelbild aus Seite 1.
-3. Text mit pdfplumber lesen: Position, Schriftgroesse, Schriftart.
-4. Beiwerk aussortieren: Seitenzahlen, Kolumnentitel, Setzer-Slug, Ueberdruck.
-5. Spalten bestimmen und Lesereihenfolge herstellen.
-6. IDML auswerten, falls vorhanden.
-7. Artikel bauen, Bilder zuschneiden.
+3. Satzdatei auswerten: Absaetze mit Absatzformat, Textrahmen mit Lage und
+   Verkettung, Bildrahmen mit Dateinamen.
+4. Beiwerk aussortieren: Seitenzahlen, Kolumnentitel, Wiederholer.
+5. Gedrucktes Inhaltsverzeichnis aus dem Satz lesen.
+6. Fuer Seiten ohne Satzdatei — meist der Umschlag — den Text mit pdfplumber
+   aus dem PDF lesen und Spalten bestimmen.
+7. Artikel bauen, Bilder zuschneiden oder das Originalbild nehmen.
 8. Ergebnis in einer Transaktion aktivieren.
+
+**Die Satzdatei ist die Hauptquelle.** Sie weiss, was eine Ueberschrift ist und
+was eine Zwischenzeile, welche Absaetze zu einem Text gehoeren und wo ein Bild
+steht. Das PDF muss dasselbe an Schriftgroessen und Abstaenden erraten. Liegt
+eine IDML vor, wird der Text also aus ihr gelesen und das PDF nur noch fuer das
+Bild der Seite gebraucht.
 
 Der letzte Schritt ist bewusst eine einzige Mutation: bei einem erneuten Import
 sehen Leser entweder den alten oder den neuen Stand, nie eine Mischung.
@@ -141,53 +149,44 @@ im Verzeichnis nicht steht, bekommt einen eigenen Eintrag ohne Klickflaeche.
 
 ### Was der Parser kann und was nicht
 
-Am Musterheft ZUERST! 3/2026 (84 Seiten) entstehen rund 60 bis 75 Artikel mit
-sauberen Ueberschriften und zusammenhaengendem Fliesstext ueber Seitengrenzen.
-Am Musterheft DMZ 170 (84 Seiten, A4) sind es rund 43 Artikel: 25 Eintraege
-des Inhaltsverzeichnisses plus Editorial, dazu die Einzelmeldungen der
-Rubrikseiten. Nicht jede Grenze sitzt: bei Bildstrecken und Kaesten trennt die
-Automatik gelegentlich zu fein. Dafuer gibt es die Pruefansicht.
+An den vier Musterheften, jeweils ueber die Satzdatei:
+
+| Heft | Seiten | Artikel | Inhaltseintraege | Bildbereiche |
+|---|---|---|---|---|
+| ZUERST! 3/2026 | 81 | 70 | 46 | 158 |
+| DMZ 170 | 81 | 53 | 25 | 223 |
+| DMZ Zeitgeschichte 80 | 65 | 30 | 11 | 188 |
+| Schwertertraeger 36 | 49 | 7 | 0 | 91 |
+
+Nachmessen laesst sich das ohne Server:
+
+```bash
+extract-service/.venv/bin/python scripts/heft-pruefen.py "<Heftordner>"
+scripts/heft-pruefen.py "<Heftordner>" --artikel 5     # Volltext eines Artikels
+```
+
+Nicht jede Grenze sitzt. Wo ein Artikel ueber mehrere Rahmen laeuft, schaetzt
+der Import die Seitenaufteilung ueber die Rahmenflaeche — wo genau der Text
+umbricht, entscheidet erst InDesign beim Setzen und steht in der IDML nicht.
+Anfang und Ende eines Artikels stimmen dadurch, die Seiten dazwischen koennen
+sich bei Nachbarartikeln ueberlappen. Dafuer gibt es die Pruefansicht.
 
 Jeder Artikel bekommt ein `confidence`-Mass. Alles unter 0,8 ist ein Hinweis,
 zuerst dort hinzuschauen.
 
-### KI-Stufe
+### Was aus dem Heft selbst kommt
 
-Optional kann ein Sprachmodell die Gruppierung nachbessern. Es ist
-**standardmaessig aus**. Der Import-Worker sendet jeweils hoechstens zwei
-gerenderte Druckseiten sowie vollstaendige Zeilen-, Geometrie- und Bild-IDs an
-ein Vision-Modell. Die Antwort darf nur vorhandene IDs ordnen: Absaetze,
-Lesereihenfolge, Rollen, Bildunterschriften und Bild-zu-Artikel-Zuordnung. Der
-Text wird lokal aus den PDF-Zeilen rekonstruiert; unbekannte, doppelte oder
-ausgelassene IDs verwerfen den ganzen Seiten-Chunk und nutzen automatisch das
-deterministische Ergebnis.
+Zwei Angaben liest der Import aus dem Heft, damit sie niemand abtippen muss:
 
-Aktivierung im **Secret-Store des Import-Workers** (nicht in Convex-Daten und
-nicht im Frontend):
+* **Einzelpreis** aus dem Impressum des Innenteils ("Einzelheft: 9,80"). Das
+  ist Text und damit verlaesslich.
+* **Erscheinungszeitraum** aus der Kopfzeile der Titelseite ("Nr. 170 ·
+  Maerz-April 2026"). Die Titelseite ist ein Bild, dafuer laeuft eine
+  Texterkennung (Tesseract). Fehlt sie im System, bleibt die Angabe leer.
 
-```dotenv
-EXTRACT_USE_LLM=true
-EXTRACT_LLM_PROVIDER=anthropic   # oder openai/openrouter
-EXTRACT_LLM_MODEL=<Vision-Modell>
-EXTRACT_LLM_API_KEY=<geheim>
-```
-
-Bei OpenRouter lassen sich Provider und Datenschutz pro Request hart begrenzen:
-
-```dotenv
-EXTRACT_LLM_ROUTING_ONLY=together
-EXTRACT_LLM_ZDR=true
-EXTRACT_LLM_DATA_COLLECTION=deny
-EXTRACT_LLM_ALLOW_FALLBACKS=false
-```
-
-Damit wird nicht auf einen anderen Endpoint ausgewichen, falls Together die
-angeforderten Datenschutzbedingungen oder das Modell gerade nicht anbieten
-kann. Der betroffene Chunk nutzt dann das deterministische Ergebnis.
-
-Ein mit `npx convex env set` gesetzter Provider-Key ist fuer den separaten
-Worker nicht sichtbar. Er gehoert deshalb in dessen Deployment-Secrets bzw. in
-die nicht eingecheckte `.env.selfhost`.
+Gesetzt wird nur, was am Heft noch nicht steht. Eine Eingabe der Redaktion
+bleibt unangetastet. Die Heftnummer wird nicht aus dem Text gelesen — sie steht
+im Ordnernamen, und dort steht sie eindeutig.
 
 ## 4. Redaktionelle Pruefung
 

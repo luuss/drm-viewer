@@ -153,10 +153,9 @@ def flow_text_blocks(blocks: list[SourceBlock]) -> list[SourceBlock]:
     pages = sorted({block.page_index for block in blocks})
     for page in pages:
         page_blocks = [block for block in blocks if block.page_index == page]
-        # Diese Seite enthaelt bereits validierte Absatzgruppen. Andere Seiten
-        # desselben Artikels duerfen bei einem Chunk-Fallback weiterhin die
-        # deterministische Zeilen-Heuristik nutzen.
-        if any(block.llm_refined for block in page_blocks):
+        # Bloecke aus dem Satz sind schon ganze Absaetze; die Zeilenheuristik
+        # wuerde sie nur wieder zerlegen.
+        if any(block.origin == "idml" for block in page_blocks):
             out.extend(page_blocks)
             continue
         paragraphs = [block for block in page_blocks if block.kind == "paragraph"]
@@ -251,7 +250,19 @@ def _assemble_by_toc(
         ]
         if not article_blocks:
             continue
-        if hint.split_headings:
+        # Das gedruckte Verzeichnis nennt nur die Hauptbeitraege. Stehen im
+        # Bereich weitere Ueberschriften aus dem Satz, sind das eigene Artikel:
+        # der Satz unterscheidet Ueberschrift und Zwischenueberschrift
+        # zuverlaessig, anders als eine Messung an Schriftgroessen im PDF.
+        weitere_ueberschriften = (
+            sum(
+                1
+                for b in article_blocks
+                if b.origin == "idml" and b.kind == "heading" and is_meaningful(b.text)
+            )
+            > 1
+        )
+        if hint.split_headings or weitere_ueberschriften:
             parts = _assemble_by_headings(article_blocks)
             # Beginnt die Rubrikseite ohne eigene Ueberschrift (Kalenderblatt,
             # Buchbesprechungen), heisst der erste Teil wie der Eintrag im

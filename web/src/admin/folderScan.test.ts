@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyFolder,
+  fortschrittProzent,
+  IMPORT_PHASEN,
   parseFolderName,
   slugify,
+  type ImportPhase,
   type ScannedFile,
 } from "./folderScan";
 
@@ -119,5 +122,51 @@ describe("parseFolderName", () => {
 describe("slugify", () => {
   it("wandelt Umlaute in Buchstabenpaare", () => {
     expect(slugify("Schwerterträger Groß")).toBe("schwertertraeger-gross");
+  });
+});
+
+describe("fortschrittProzent", () => {
+  it("teilt hundert Prozent auf die Abschnitte auf", () => {
+    const summe = IMPORT_PHASEN.reduce((n, p) => n + p.gewicht, 0);
+    expect(summe).toBe(100);
+  });
+
+  it("faengt bei null an und endet bei hundert", () => {
+    expect(fortschrittProzent([])).toBe(0);
+    expect(fortschrittProzent(IMPORT_PHASEN.map((p) => p.id))).toBe(100);
+  });
+
+  it("rechnet den laufenden Abschnitt anteilig dazu", () => {
+    // Heft (2) erledigt, Innenteil (25) zur Haelfte.
+    expect(fortschrittProzent(["heft"], "innenteil", 0.5)).toBe(15);
+    // Bild 25 von 50 in der Bilderphase (50), davor 2+25+5+5+5 = 42.
+    expect(
+      fortschrittProzent(
+        ["heft", "innenteil", "umschlag", "satzdatei", "titelseite"],
+        "bilder",
+        25 / 50,
+      ),
+    ).toBe(67);
+  });
+
+  it("zaehlt uebersprungene Abschnitte als erledigt", () => {
+    // Ein Ordner ohne Umschlag, Satzdatei und Bilder kommt trotzdem an.
+    const ohne: ImportPhase[] = [
+      "heft",
+      "innenteil",
+      "umschlag",
+      "satzdatei",
+      "titelseite",
+      "bilder",
+      "reihenfolge",
+      "aufbereitung",
+    ];
+    expect(fortschrittProzent(ohne)).toBe(100);
+  });
+
+  it("bleibt bei doppelten Eintraegen und krummen Anteilen im Rahmen", () => {
+    expect(fortschrittProzent(["heft", "heft"], "heft", 1)).toBe(2);
+    expect(fortschrittProzent([], "bilder", 5)).toBe(50);
+    expect(fortschrittProzent([], "bilder", -1)).toBe(0);
   });
 });

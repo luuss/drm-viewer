@@ -439,9 +439,8 @@ def split_drop_caps(blocks: list[SourceBlock], body: float) -> list[SourceBlock]
             c.text = t + c.text
             c.x0 = min(c.x0, b.x0)
             c.y0 = min(c.y0, b.y0)
-            # Die optionale LLM-Stufe rekonstruiert ausschliesslich aus diesen
-            # Zeilen. Die grosse Initiale darf deshalb beim deterministischen
-            # Zusammenkleben nicht aus dem Zeileninventar verschwinden.
+            # Das Zeileninventar bleibt vollstaendig: die grosse Initiale
+            # darf beim Zusammenkleben nicht daraus verschwinden.
             c.layout_lines = b.layout_lines + c.layout_lines
             used.add(i)
     return [b for k, b in enumerate(blocks) if k not in used]
