@@ -96,8 +96,9 @@ services:
         done
         # Der Browser laedt Heftdateien per vorsignierter Anfrage hoch. Dafuer
         # muss der Medieneimer den Ursprung der Oberflaeche zulassen.
-        mc admin config set eigen api cors_allow_origin="$$PUBLIC_WEB_ORIGIN" || true
-        mc admin service restart eigen || true
+        # Die api-Einstellungen greifen sofort; ein Neustart ist nicht noetig
+        # und scheitert ohne Terminal ohnehin.
+        mc admin config set eigen api cors_allow_origin="$$PUBLIC_WEB_ORIGIN"
         echo "Eimer bereit."
     restart: "no"
     logging: *default-logging
