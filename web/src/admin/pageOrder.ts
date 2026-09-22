@@ -21,6 +21,22 @@ export type PageDraft<Asset = string> = {
   sourceHalf?: "left" | "right";
   role: PageRole;
   printedLabel?: string;
+  /** Gesetzt, wenn die Seite schon als Bild vorliegt. */
+  previewKey?: string;
+  width?: number;
+  height?: number;
+};
+
+/**
+ * Eine schon gerenderte Seite. Hat der Browser die Druckdatei selbst
+ * gerendert, traegt jede Seite ihr eigenes Asset — dann geht die Druckdatei
+ * nie auf den Server.
+ */
+export type RenderedSource<Asset = string> = {
+  assetId: Asset;
+  previewKey: string;
+  width: number;
+  height: number;
 };
 
 /**
@@ -32,11 +48,13 @@ export type PageDraft<Asset = string> = {
 export type CoverLayout = "auto" | "sheets" | "spreads" | "reading";
 
 export type OrderInput<Asset = string> = {
-  inner: { assetId: Asset; pageCount: number };
+  inner: { assetId: Asset; pageCount: number; rendered?: RenderedSource<Asset>[] };
   /** Umschlag als PDF, falls vorhanden. */
-  cover?: { assetId: Asset; pageCount: number };
+  cover?: { assetId: Asset; pageCount: number; rendered?: RenderedSource<Asset>[] };
   /** Titelseite als Bild — dann gibt es nur U1, kein Umschlagbogen. */
   coverImageAssetId?: Asset;
+  /** Dieselbe Titelseite, wenn sie schon als fertige Seite vorliegt. */
+  coverImage?: RenderedSource<Asset>;
   layout?: CoverLayout;
   printedStart?: number;
 };
@@ -55,10 +73,35 @@ export function buildPageOrder<Asset = string>({
   inner,
   cover,
   coverImageAssetId,
+  coverImage,
   layout,
   printedStart = 3,
 }: OrderInput<Asset>): PageDraft<Asset>[] {
-  const draft: PageDraft<Asset>[] = [];
+  const roh: PageDraft<Asset>[] = [];
+  const draft = {
+    push(seite: PageDraft<Asset>) {
+      // Liegt die Seite schon als Bild vor, zeigt sie auf ihr eigenes Asset
+      // und nicht mehr auf die Druckdatei.
+      const quelle =
+        seite.sourceAssetId === inner.assetId
+          ? inner.rendered
+          : cover && seite.sourceAssetId === cover.assetId
+            ? cover.rendered
+            : undefined;
+      const fertig = quelle?.[seite.sourcePageIndex];
+      roh.push(
+        fertig
+          ? {
+              ...seite,
+              sourceAssetId: fertig.assetId,
+              previewKey: fertig.previewKey,
+              width: fertig.width,
+              height: fertig.height,
+            }
+          : seite,
+      );
+    },
+  };
   const form = resolveLayout(layout, cover?.pageCount);
   const spreads = !!cover && form === "spreads" && cover.pageCount >= 2;
   const sheets = !!cover && form === "sheets" && cover.pageCount === 4;
@@ -75,9 +118,19 @@ export function buildPageOrder<Asset = string>({
     if (cover.pageCount >= 1) {
       draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, role: "front_cover", printedLabel: "U1" });
     }
-  } else if (coverImageAssetId !== undefined) {
+  } else if (coverImage) {
     // Eine Titelseite als Bild ist genau eine Seite: U1.
-    draft.push({ sourceAssetId: coverImageAssetId, sourcePageIndex: 0, role: "front_cover", printedLabel: "U1" });
+    roh.push({
+      sourceAssetId: coverImage.assetId,
+      sourcePageIndex: 0,
+      role: "front_cover",
+      printedLabel: "U1",
+      previewKey: coverImage.previewKey,
+      width: coverImage.width,
+      height: coverImage.height,
+    });
+  } else if (coverImageAssetId !== undefined) {
+    roh.push({ sourceAssetId: coverImageAssetId, sourcePageIndex: 0, role: "front_cover", printedLabel: "U1" });
   }
 
   for (let i = 0; i < inner.pageCount; i++) {
@@ -104,5 +157,5 @@ export function buildPageOrder<Asset = string>({
     });
   }
 
-  return draft;
+  return roh;
 }

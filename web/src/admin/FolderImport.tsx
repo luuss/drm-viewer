@@ -16,13 +16,25 @@ import { readDirectoryInput, readDroppedFolder } from "./folderDrop";
 import { ImageConverter } from "./convertClient";
 import { jpegName } from "./imageConvert";
 import { buildPageOrder } from "./pageOrder";
-import { countPdfPages, uploadAsset } from "./uploadAsset";
+import { uploadAsset } from "./uploadAsset";
+import { readIdmlMeta } from "./idmlMeta";
+import {
+  readPriceFromImprint,
+  renderPdfPages,
+  type RenderedPage,
+} from "./pageRender";
 
 /** Laengste Kante der umgewandelten Bilder. */
 const ARTWORK_KANTE = 1600;
 const ARTWORK_GUETE = 0.82;
 /** Titelseiten werden im Reader ganzseitig gezeigt und bleiben groesser. */
 const TITEL_KANTE = 2400;
+/**
+ * Breite der gerenderten Druckseiten. Daraus schneidet das Kachel-Gateway
+ * seine Kacheln; das reicht fuer scharfen Zoom auf Magazinseiten.
+ */
+const SEITEN_BREITE = 2400;
+const SEITEN_GUETE = 0.86;
 
 type Fortschritt = { text: string; prozent: number };
 
@@ -163,13 +175,17 @@ export default function FolderImport({
 
     const wandler = new ImageConverter();
     try {
-      // 1. Heft anlegen oder wiederfinden.
+      // 1. Heft anlegen oder wiederfinden. Der Einzelpreis steht im Impressum
+      //    des Innenteils; er wird hier gelesen, weil die Druckdatei den
+      //    Rechner nicht verlaesst.
       melde("heft", "Heft anlegen");
+      const preis = await readPriceFromImprint(innenteil.file).catch(() => undefined);
       const heft = await ensureIssue({
         publicationSlug: name.publicationSlug,
         publicationName: name.publicationName,
         title: name.issueTitle,
         issueNumber: name.issueNumber,
+        priceAmountCents: preis,
       });
       const issueId = heft.issueId;
       notiere(
@@ -178,75 +194,150 @@ export default function FolderImport({
           : `Heft „${name.issueTitle}" war schon da — die Quellen werden ersetzt`,
       );
       if (heft.publicationCreated) notiere(`Reihe „${name.publicationName}" angelegt`);
-      if (heft.created) offen.push("Preis eintragen — ein neues Heft steht auf 0,00 €");
+      if (preis) {
+        notiere(`Einzelpreis aus dem Impressum: ${(preis / 100).toFixed(2)} €`);
+      } else if (heft.created) {
+        offen.push("Preis eintragen — im Impressum stand keiner");
+      }
       onIssue?.(issueId);
       abhaken("heft");
       pruefen();
 
       const deps = { presignUpload, registerUpload, generateUploadUrl };
 
-      // 2. Innenteil und Umschlag als PDF — unveraendert, sie sind die Vorlage
-      //    fuer die gerenderten Seiten. Der Innenteil ist die eine Datei, ohne
-      //    die der Lauf keinen Sinn hat: scheitert er, bricht alles ab.
-      melde(
-        "innenteil",
-        `Innenteil ${innenteil.name} (${formatBytes(innenteil.size)}) geht hoch`,
-      );
-      let innerAsset: Id<"assets">;
+      // 2. Innenteil: der Browser rendert die Seiten selbst und laedt nur sie
+      //    hoch. Die Druckdatei bleibt hier — sie ist der groesste Posten im
+      //    Ordner und wird auf dem Server nur als Bild gebraucht. Geschnitten
+      //    wird auf das Netzformat aus der Satzdatei, damit Anschnitt und
+      //    Schnittmarken gar nicht erst im Reader landen.
+      const satzMass = plan.idml ? await readIdmlMeta(plan.idml.file).catch(() => null) : null;
+      if (plan.idml && !satzMass) {
+        offen.push("Netzformat aus der Satzdatei nicht lesbar — Seiten behalten den Anschnitt");
+      }
+      melde("innenteil", `Innenteil ${innenteil.name} wird gerendert`);
+      const innenSeiten: {
+        assetId: Id<"assets">;
+        previewKey: string;
+        width: number;
+        height: number;
+      }[] = [];
       let innerSeiten: number | undefined;
       try {
-        innerAsset = await uploadAsset(deps, issueId, innenteil.file, innenteil.name);
-        innerSeiten = await countPdfPages(innenteil.file);
-        await addSource({
-          issueId,
-          assetId: innerAsset,
-          kind: "pdf",
-          role: "inner",
-          filename: innenteil.name,
-          pageCount: innerSeiten,
-        });
+        await renderPdfPages(
+          innenteil.file,
+          {
+            targetWidth: SEITEN_BREITE,
+            quality: SEITEN_GUETE,
+            trimWidthPt: satzMass?.pageWidthPt,
+            trimHeightPt: satzMass?.pageHeightPt,
+          },
+          async (seite: RenderedPage, i: number, total: number) => {
+            pruefen();
+            melde(
+              "innenteil",
+              `Seite ${i + 1} von ${total}: ${innenteil.name}`,
+              (i + 1) / total,
+            );
+            const dateiname = `seite-${String(i + 1).padStart(3, "0")}.jpg`;
+            const { assetId, key } = await uploadAsset(
+              deps,
+              issueId,
+              seite.blob,
+              dateiname,
+              "page",
+            );
+            innenSeiten.push({
+              assetId,
+              previewKey: key,
+              width: seite.width,
+              height: seite.height,
+            });
+            hochgeladen += seite.blob.size;
+          },
+          () => abbrechen.current,
+        );
+        innerSeiten = innenSeiten.length;
       } catch (e: any) {
         if (e instanceof Abgebrochen) throw e;
         throw new Error(
-          `Innenteil ${innenteil.name} liess sich nicht hochladen: ` +
+          `Innenteil ${innenteil.name} liess sich nicht rendern: ` +
             `${cleanError(e) ?? "Fehler"}. Der Lauf ist abgebrochen.`,
         );
       }
-      hochgeladen += innenteil.size;
+      // Die Seiten zeigen auf sich selbst; ein Innenteil-Asset gibt es nicht
+      // mehr. Fuer die Reihenfolge zaehlt nur noch die Liste.
+      const innerAsset = innenSeiten[0]?.assetId as Id<"assets">;
       notiere(
-        `Innenteil ${innenteil.name} (${formatBytes(innenteil.size)}` +
-          `${innerSeiten ? `, ${innerSeiten} Seiten` : ""})`,
+        `Innenteil ${innenteil.name}: ${innerSeiten} Seiten gerendert, ` +
+          `${formatBytes(innenteil.size)} Druckdatei bleibt hier`,
       );
       if (!innerSeiten) {
-        offen.push(
-          "Seitenzahl des Innenteils war nicht lesbar — Reihenfolge im Importdialog erzeugen",
-        );
+        offen.push("Der Innenteil ergab keine Seiten — bitte die Datei prüfen");
       }
       abhaken("innenteil");
       pruefen();
 
-      let coverPdf: { assetId: Id<"assets">; pageCount: number } | undefined;
+      // Der Umschlag geht denselben Weg: gerendert wird hier, hoch gehen die
+      // Seiten. Er traegt keinen Satz, deshalb bleibt sein Anschnitt stehen —
+      // ein Umschlagbogen wird ohnehin in Haelften gelesen.
+      let coverPdf:
+        | {
+            assetId: Id<"assets">;
+            pageCount: number;
+            rendered: {
+              assetId: Id<"assets">;
+              previewKey: string;
+              width: number;
+              height: number;
+            }[];
+          }
+        | undefined;
       if (plan.cover) {
         const umschlag = plan.cover;
-        melde("umschlag", `Umschlag ${umschlag.name} geht hoch`);
+        melde("umschlag", `Umschlag ${umschlag.name} wird gerendert`);
         try {
-          const assetId = await uploadAsset(deps, issueId, umschlag.file, umschlag.name);
-          const seiten = await countPdfPages(umschlag.file);
-          await addSource({
-            issueId,
-            assetId,
-            kind: "pdf",
-            role: "cover",
-            filename: umschlag.name,
-            pageCount: seiten,
-          });
-          coverPdf = { assetId, pageCount: seiten ?? 1 };
-          hochgeladen += umschlag.size;
-          notiere(`Umschlag ${umschlag.name} (${formatBytes(umschlag.size)})`);
+          const seiten: {
+            assetId: Id<"assets">;
+            previewKey: string;
+            width: number;
+            height: number;
+          }[] = [];
+          await renderPdfPages(
+            umschlag.file,
+            { targetWidth: SEITEN_BREITE, quality: SEITEN_GUETE },
+            async (seite, i, total) => {
+              pruefen();
+              melde("umschlag", `Umschlagseite ${i + 1} von ${total}`, (i + 1) / total);
+              const dateiname = `umschlag-${String(i + 1).padStart(2, "0")}.jpg`;
+              const { assetId, key } = await uploadAsset(
+                deps,
+                issueId,
+                seite.blob,
+                dateiname,
+                "page",
+              );
+              seiten.push({
+                assetId,
+                previewKey: key,
+                width: seite.width,
+                height: seite.height,
+              });
+              hochgeladen += seite.blob.size;
+            },
+            () => abbrechen.current,
+          );
+          if (seiten.length) {
+            coverPdf = {
+              assetId: seiten[0].assetId,
+              pageCount: seiten.length,
+              rendered: seiten,
+            };
+            notiere(`Umschlag ${umschlag.name}: ${seiten.length} Seiten gerendert`);
+          }
         } catch (e: any) {
           if (e instanceof Abgebrochen) throw e;
           offen.push(
-            `Umschlag ${umschlag.name} nachtragen — ${cleanError(e) ?? "nicht hochgeladen"}`,
+            `Umschlag ${umschlag.name} nachtragen — ${cleanError(e) ?? "nicht gerendert"}`,
           );
         }
       }
@@ -258,7 +349,7 @@ export default function FolderImport({
         const satz = plan.idml;
         melde("satzdatei", `Satzdatei ${satz.name} geht hoch`);
         try {
-          const assetId = await uploadAsset(deps, issueId, satz.file, satz.name);
+          const { assetId } = await uploadAsset(deps, issueId, satz.file, satz.name);
           await addSource({
             issueId,
             assetId,
@@ -283,7 +374,9 @@ export default function FolderImport({
       pruefen();
 
       // 4. Titelseite: im Browser aus der TIF in ein JPEG umwandeln.
-      let coverImageAsset: Id<"assets"> | undefined;
+      let coverImageAsset:
+        | { assetId: Id<"assets">; previewKey: string; width: number; height: number }
+        | undefined;
       if (!plan.cover && plan.coverImage) {
         const titel = plan.coverImage;
         melde("titelseite", `Titelseite ${titel.name} wird umgewandelt`);
@@ -295,16 +388,22 @@ export default function FolderImport({
             0.88,
           );
           const dateiname = jpegName(titel.name);
-          coverImageAsset = await uploadAsset(
+          const titelbild = await uploadAsset(
             deps,
             issueId,
             bild.blob,
             dateiname,
             "source",
           );
+          coverImageAsset = {
+            assetId: titelbild.assetId,
+            previewKey: titelbild.key,
+            width: bild.width,
+            height: bild.height,
+          };
           await addSource({
             issueId,
-            assetId: coverImageAsset,
+            assetId: titelbild.assetId,
             kind: "image",
             role: "cover",
             filename: dateiname,
@@ -359,7 +458,7 @@ export default function FolderImport({
               ARTWORK_KANTE,
               ARTWORK_GUETE,
             );
-            const assetId = await uploadAsset(
+            const { assetId } = await uploadAsset(
               deps,
               issueId,
               bild.blob,
@@ -410,9 +509,13 @@ export default function FolderImport({
         melde("reihenfolge", "Seitenreihenfolge speichern");
         try {
           const seiten = buildPageOrder<Id<"assets">>({
-            inner: { assetId: innerAsset, pageCount: innerSeiten },
+            inner: {
+              assetId: innerAsset,
+              pageCount: innerSeiten,
+              rendered: innenSeiten,
+            },
             cover: coverPdf,
-            coverImageAssetId: coverImageAsset,
+            coverImage: coverImageAsset,
             printedStart: Number(startNummer) || 3,
           });
           const n = await setOrder({ issueId, pages: seiten });

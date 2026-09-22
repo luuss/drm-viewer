@@ -99,6 +99,10 @@ export const setOrder = mutation({
         printedLabel: v.optional(v.string()),
         width: v.optional(v.number()),
         height: v.optional(v.number()),
+        // Gesetzt, wenn die Seite schon als Bild vorliegt — etwa weil der
+        // Browser sie beim Import gerendert hat. Dann muss der Worker sie
+        // nicht mehr aus der Druckdatei herstellen.
+        previewKey: v.optional(v.string()),
       }),
     ),
   },
@@ -122,6 +126,7 @@ export const setOrder = mutation({
         sourceHalf: p.sourceHalf,
         width: p.width ?? 0,
         height: p.height ?? 0,
+        previewKey: p.previewKey,
       });
     }
     await ctx.db.patch(issueId, { pageCount: pages.length, updatedAt: Date.now() });

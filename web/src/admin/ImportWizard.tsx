@@ -45,7 +45,7 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
     setErr(null);
     setBusy(`Lade ${file.name}`);
     try {
-      const assetId = await uploadAsset(
+      const { assetId } = await uploadAsset(
         { presignUpload, registerUpload, generateUploadUrl },
         issueId,
         file,

@@ -335,6 +335,13 @@ export const ensureFromFolder = mutation({
         .collect();
       const treffer = vorhanden.find((i) => i.issueNumber === args.issueNumber);
       if (treffer) {
+        // Ein Preis aus dem Impressum wird nachgetragen, solange keiner steht.
+        if (args.priceAmountCents && !treffer.priceAmountCents) {
+          await ctx.db.patch(treffer._id, {
+            priceAmountCents: args.priceAmountCents,
+            updatedAt: Date.now(),
+          });
+        }
         return {
           issueId: treffer._id,
           publicationId: publication._id,

@@ -169,3 +169,18 @@ def test_ohne_geladene_pdf_gibt_es_keinen_partner():
         {},
     )
     assert partner is None
+
+
+def test_gedruckte_seitenzahl_ergibt_den_versatz():
+    """Steht auf der ersten Innenseite eine 3 und liegt sie an Position 1,
+    ist der Versatz 2. Die Funktion muss vor dem Einstiegspunkt stehen —
+    sonst faellt der Worker erst im Betrieb darueber."""
+    pages = [
+        {"index": 0, "role": "front_cover", "printedLabel": "U1"},
+        {"index": 1, "role": "content", "printedLabel": "3"},
+        {"index": 2, "role": "content", "printedLabel": "4"},
+    ]
+
+    assert worker._printed_offset(pages) == 2
+    assert worker._printed_offset([{"index": 0, "printedLabel": "U1"}]) == 0
+    assert worker._printed_offset([]) == 0

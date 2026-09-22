@@ -36,6 +36,12 @@ export const presignUpload = action({
       endpoint,
       region: process.env.AWS_REGION ?? "us-east-1",
       forcePathStyle: true,
+      // Das SDK rechnet seit Version 3.729 zu jedem PutObject eine Pruefsumme
+      // aus und nimmt sie in die Signatur auf. Der Browser sendet den Kopf
+      // beim direkten Upload aber nicht mit, also passt die Signatur nicht
+      // mehr und der Medienspeicher antwortet mit 403.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",

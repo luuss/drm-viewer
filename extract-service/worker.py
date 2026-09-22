@@ -212,8 +212,10 @@ class Job:
             # Das Impressum ist Text und damit genauer als die Texterkennung
             # auf der Titelseite; es gilt zuletzt.
             meta.update(read_issue_meta(blobs[innen["assetId"]]))
-        if "priceAmountCents" not in meta and "coverPriceAmountCents" in meta:
-            meta["priceAmountCents"] = meta["coverPriceAmountCents"]
+        # Der Preis von der Titelseite bleibt liegen: die Texterkennung
+        # verwechselt dort Ziffern (13,60 statt 12,80). Den verlaesslichen
+        # Preis liest der Importdialog aus dem Impressum, bevor die Druckdatei
+        # ueberhaupt gerendert wird.
 
         nachricht = {"issueId": self.issue_id}
         if meta.get("priceAmountCents"):
@@ -225,11 +227,73 @@ class Job:
             self.convex.post("/service/issue/counts", nachricht)
         log("job.meta", jobId=self.job_id, **{k: v for k, v in meta.items()})
 
+    def _page_image(self, page: dict) -> bytes | None:
+        """Eine bereits gerenderte Seite holen.
+
+        Ueber den Medienspeicher geht es ueber den Schluessel, ueber die
+        Convex-Ablage ueber die mitgelieferte Adresse.
+        """
+        schluessel = page.get("previewKey")
+        if not schluessel:
+            return None
+        cache = getattr(self, "_page_cache", None)
+        if cache is None:
+            cache = self._page_cache = {}
+        if schluessel in cache:
+            return cache[schluessel]
+        daten = None
+        if self.storage.uses_s3:
+            try:
+                daten = self.storage.get(schluessel)
+            except Exception as exc:
+                log(
+                    "job.pageMissing",
+                    jobId=self.job_id,
+                    key=schluessel,
+                    error=str(exc)[:160],
+                )
+        if daten is None and page.get("previewUrl"):
+            daten = self.convex.download(page["previewUrl"], MAX_SOURCE_BYTES)
+        cache[schluessel] = daten
+        return daten
+
+    def _store_cover(self, seite_jpeg: bytes) -> str | None:
+        """Titelbild des Hefts aus der ersten Seite."""
+        cover_key = issue_key(self.publication_id, self.issue_id, "covers", "cover.jpg")
+        cover = self.storage.put(
+            cover_key, render.make_thumbnail(seite_jpeg), "image/jpeg"
+        )
+        return self.convex.post(
+            "/service/assets/register",
+            {
+                "key": cover_key,
+                "contentType": "image/jpeg",
+                "kind": "cover",
+                "issueId": self.issue_id,
+                "storageId": cover.convex_storage_id,
+                "bucket": cover.bucket,
+                "bytes": cover.bytes,
+            },
+        )
+
     def _render_pages(self, pages: list[dict], blobs: dict[str, bytes]) -> dict[int, bytes]:
         rendered: dict[int, bytes] = {}
         cover_asset_id = None
         total = len(pages)
         for i, page in enumerate(pages):
+            if page.get("previewKey"):
+                # Die Seite liegt schon als Bild vor: der Browser hat sie beim
+                # Import gerendert. Dann gibt es hier nichts herzustellen, nur
+                # zu holen — fuer die Ausschnitte der Artikelbilder.
+                fertig = self._page_image(page)
+                if fertig is not None:
+                    rendered[page["index"]] = fertig
+                    if page["index"] == 0:
+                        cover_asset_id = self._store_cover(fertig)
+                if i % 10 == 0:
+                    self.beat(5 + int(60 * i / max(1, total)), f"Seite {i + 1}/{total}")
+                continue
+
             blob = blobs.get(page["sourceAssetId"])
             if blob is None:
                 continue
@@ -270,24 +334,7 @@ class Job:
             )
             rendered[page["index"]] = jpeg
             if page["index"] == 0:
-                cover_key = issue_key(
-                    self.publication_id, self.issue_id, "covers", "cover.jpg"
-                )
-                cover = self.storage.put(
-                    cover_key, render.make_thumbnail(jpeg), "image/jpeg"
-                )
-                cover_asset_id = self.convex.post(
-                    "/service/assets/register",
-                    {
-                        "key": cover_key,
-                        "contentType": "image/jpeg",
-                        "kind": "cover",
-                        "issueId": self.issue_id,
-                        "storageId": cover.convex_storage_id,
-                        "bucket": cover.bucket,
-                        "bytes": cover.bytes,
-                    },
-                )
+                cover_asset_id = self._store_cover(jpeg)
             if i % 5 == 0:
                 self.beat(5 + int(60 * i / max(1, total)), f"Seite {i + 1}/{total}")
         self.convex.post(
@@ -317,9 +364,6 @@ class Job:
 
         idml_source = next((s for s in sources if s["kind"] == "idml"), None)
         idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
-        partner = (
-            self._idml_partner(idml_source, sources, blobs) if idml_bytes else None
-        )
 
         blocks: list[SourceBlock] = []
         images = []
@@ -327,13 +371,22 @@ class Job:
         # nicht mehr gebraucht.
         aus_satz: set[int] = set()
 
-        if idml_bytes and partner is not None:
+        if idml_bytes:
             self.beat(72, "Satzdatei wird ausgewertet")
-            page_map = by_asset.get(partner["assetId"]) or []
+            # Der Satz beschreibt den Innenteil. Das sind die Inhaltsseiten, in
+            # der Reihenfolge, in der sie aus ihrer Quelle kommen.
+            page_map = sorted(
+                (p["sourcePageIndex"], p["index"])
+                for p in pages
+                if p.get("role") == "content"
+            )
+            partner = self._idml_partner(idml_source, sources, blobs)
             try:
                 satz_blocks, satz_images = self._from_idml(
-                    idml_bytes, blobs[partner["assetId"]], page_map,
-                    halves_by_asset.get(partner["assetId"]),
+                    idml_bytes,
+                    blobs.get(partner["assetId"]) if partner else None,
+                    page_map,
+                    halves_by_asset.get(partner["assetId"]) if partner else None,
                 )
             except Exception as exc:
                 log("job.idmlFailed", jobId=self.job_id, error=str(exc)[:200])
@@ -348,6 +401,7 @@ class Job:
                 blocks=len(satz_blocks),
                 images=len(satz_images),
                 pages=len(aus_satz),
+                trimFrom="pdf" if partner else "netzformat",
             )
 
         # Was der Satz nicht abdeckt — ein Umschlag aus einer zweiten Datei,
@@ -421,9 +475,15 @@ class Job:
         return ordered
 
     def _from_idml(self, idml_bytes, pdf_bytes, page_map, halves):
-        """Bloecke und Bildbereiche aus der Satzdatei."""
+        """Bloecke und Bildbereiche aus der Satzdatei.
+
+        Der Satz kennt nur das Netzformat. Liegt das Druck-PDF vor, wird daraus
+        die Trimbox gelesen und der Anschnitt mitgerechnet. Hat dagegen schon
+        der Browser die Seiten auf das Netzformat geschnitten, decken sich beide
+        Systeme und es gibt nichts umzurechnen.
+        """
         bildrahmen, textrahmen = extract_idml_frames(idml_bytes)
-        trims = read_trim_boxes(pdf_bytes, page_map, halves)
+        trims = read_trim_boxes(pdf_bytes, page_map, halves) if pdf_bytes else {}
         satz_blocks = frames_to_blocks(
             extract_idml_blocks(idml_bytes, textrahmen), page_map, trims
         )
@@ -722,10 +782,6 @@ def main() -> int:
         empty_polls += 1
 
 
-if __name__ == "__main__":
-    sys.exit(main())
-
-
 def _printed_offset(pages: list[dict]) -> int:
     """Differenz zwischen gedruckter Seitenzahl und kanonischem Index.
 
@@ -738,3 +794,7 @@ def _printed_offset(pages: list[dict]) -> int:
         if label.isdigit():
             return int(label) - page["index"]
     return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

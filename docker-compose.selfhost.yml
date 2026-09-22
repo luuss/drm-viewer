@@ -10,11 +10,12 @@ services:
     environment:
       POSTGRES_USER: convex
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
-      POSTGRES_DB: convex_self_hosted
+      # Das Convex-Backend erwartet eine Datenbank, die wie die Instanz heisst.
+      POSTGRES_DB: ${CONVEX_INSTANCE_NAME:-emagazin}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U convex"]
+      test: ["CMD-SHELL", "pg_isready -U convex -d ${CONVEX_INSTANCE_NAME:-emagazin}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -26,8 +27,19 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-convexminio}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD fehlt}
+      # Das Convex-Backend legt seine Dateien serverseitig verschluesselt ab.
+      # Dafuer braucht MinIO einen Schluessel; ohne ihn lehnt es jeden Upload
+      # mit "KMS not configured" ab.
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:?MINIO_KMS_SECRET_KEY fehlt}
     volumes:
       - minio-data:/data
+    ports:
+      # Der Browser laedt die Heftdateien direkt in den Medienspeicher, also
+      # muss er von aussen erreichbar sein. Im Betrieb steht Caddy davor; hier
+      # genuegt ein eigener Port, damit er nicht mit anderen Installationen
+      # auf 9000 kollidiert.
+      - "${MINIO_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 15s
@@ -56,6 +68,12 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_REGION: us-east-1
       S3_ENDPOINT_URL: http://minio:9000
+      # MinIO kennt keine Bucket-Unterdomaenen. Ohne diesen Schalter sucht der
+      # S3-Client nach "convex-modules.minio" und scheitert an der Namensaufloesung.
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      S3_FORCE_PATH_STYLE: "true"
+      # Kein Telemetriefunk aus einem selbst betriebenen Aufbau.
+      DISABLE_BEACON: "true"
       S3_STORAGE_EXPORTS_BUCKET: convex-exports
       S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET: convex-imports
       S3_STORAGE_MODULES_BUCKET: convex-modules
@@ -88,6 +106,12 @@ services:
       CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN}
       MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
       S3_ENDPOINT_URL: http://minio:9000
+      # MinIO kennt keine Bucket-Unterdomaenen. Ohne diesen Schalter sucht der
+      # S3-Client nach "convex-modules.minio" und scheitert an der Namensaufloesung.
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      S3_FORCE_PATH_STYLE: "true"
+      # Kein Telemetriefunk aus einem selbst betriebenen Aufbau.
+      DISABLE_BEACON: "true"
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       MAX_PAGES_PER_MIN: ${MAX_PAGES_PER_MIN:-80}
@@ -108,6 +132,12 @@ services:
       EXTRACT_SERVICE_SECRET: ${EXTRACT_SERVICE_SECRET:?fehlt}
       MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
       S3_ENDPOINT_URL: http://minio:9000
+      # MinIO kennt keine Bucket-Unterdomaenen. Ohne diesen Schalter sucht der
+      # S3-Client nach "convex-modules.minio" und scheitert an der Namensaufloesung.
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      S3_FORCE_PATH_STYLE: "true"
+      # Kein Telemetriefunk aus einem selbst betriebenen Aufbau.
+      DISABLE_BEACON: "true"
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_REGION: us-east-1

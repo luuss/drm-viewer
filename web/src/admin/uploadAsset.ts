@@ -29,15 +29,22 @@ export type UploadDeps = {
   generateUploadUrl: () => Promise<string>;
 };
 
-export type UploadKind = "source" | "image" | "cover";
+export type UploadKind = "source" | "image" | "cover" | "page";
 
+export type Uploaded = { assetId: Id<"assets">; key: string };
+
+/**
+ * Gibt neben der Kennung auch die Adresse zurueck: wer eine gerenderte Seite
+ * hochlaedt, muss sie spaeter am Heft eintragen koennen, und dafuer zaehlt der
+ * Schluessel im Speicher, nicht der Dateiname.
+ */
 export async function uploadAsset(
   deps: UploadDeps,
   issueId: Id<"issues">,
   data: Blob,
   filename: string,
   kind: UploadKind = "source",
-): Promise<Id<"assets">> {
+): Promise<Uploaded> {
   const contentType = data.type || "application/octet-stream";
   const direct = await deps.presignUpload({
     issueId,
@@ -52,7 +59,7 @@ export async function uploadAsset(
       body: data,
     });
     if (!put.ok) throw new Error(`Direkter Upload abgelehnt (${put.status})`);
-    return await deps.registerUpload({
+    const assetId = await deps.registerUpload({
       bucket: "emag-media",
       key: direct.key,
       contentType,
@@ -61,6 +68,7 @@ export async function uploadAsset(
       bytes: data.size,
       filename,
     });
+    return { assetId, key: direct.key };
   }
   const url = await deps.generateUploadUrl();
   const res = await fetch(url, {
@@ -70,15 +78,17 @@ export async function uploadAsset(
   });
   if (!res.ok) throw new Error(`Upload abgelehnt (${res.status})`);
   const { storageId } = await res.json();
-  return await deps.registerUpload({
+  const key = `uploads/${issueId}/${filename}`;
+  const assetId = await deps.registerUpload({
     storageId,
-    key: `uploads/${issueId}/${filename}`,
+    key,
     contentType,
     kind,
     issueId,
     bytes: data.size,
     filename,
   });
+  return { assetId, key };
 }
 
 /**

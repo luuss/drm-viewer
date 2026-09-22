@@ -168,6 +168,33 @@ export const claimNextInternal = internalMutation({
       });
     }
 
+    // Seiten, die der Browser schon gerendert hat, reicht der Worker nur durch.
+    // Er braucht sie fuer die Ausschnitte der Artikelbilder und bekommt dafuer
+    // gleich die Adresse mit.
+    const pageInfos = [];
+    for (const p of pages) {
+      let previewUrl: string | null = null;
+      if (p.previewKey) {
+        const asset = await ctx.db
+          .query("assets")
+          .withIndex("by_key", (q) => q.eq("key", p.previewKey!))
+          .first();
+        previewUrl = asset?.convexStorageId
+          ? await ctx.storage.getUrl(asset.convexStorageId)
+          : null;
+      }
+      pageInfos.push({
+        index: p.index,
+        sourceAssetId: p.sourceAssetId,
+        sourcePageIndex: p.sourcePageIndex,
+        sourceHalf: p.sourceHalf ?? null,
+        role: p.role,
+        printedLabel: p.printedLabel ?? null,
+        previewKey: p.previewKey ?? null,
+        previewUrl,
+      });
+    }
+
     return {
       jobId: queued._id,
       issueId: queued.issueId,
@@ -178,14 +205,7 @@ export const claimNextInternal = internalMutation({
       payload: queued.payload ?? null,
       attempts: queued.attempts + 1,
       sources: sourceInfos,
-      pages: pages.map((p) => ({
-        index: p.index,
-        sourceAssetId: p.sourceAssetId,
-        sourcePageIndex: p.sourcePageIndex,
-        sourceHalf: p.sourceHalf ?? null,
-        role: p.role,
-        printedLabel: p.printedLabel ?? null,
-      })),
+      pages: pageInfos,
     };
   },
 });
