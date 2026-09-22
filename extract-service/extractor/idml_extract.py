@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import io
 import re
+import unicodedata
+import urllib.parse
 import zipfile
 from dataclasses import dataclass
 
@@ -46,6 +48,17 @@ def _safe_members(zf: zipfile.ZipFile, prefix: str) -> list[str]:
             continue
         out.append(name)
     return sorted(out)
+
+
+def link_name(uri: str) -> str:
+    """Dateiname einer Verknuepfung, vergleichbar gemacht.
+
+    Die IDML nennt den Ort als URI: Leerzeichen stehen als `%20`, und auf einem
+    Mac liegen Umlaute zerlegt vor (`a` plus Trema). Beides muss weg, sonst
+    findet sich die Datei aus `Links/` nie wieder.
+    """
+    name = urllib.parse.unquote(uri.rsplit("/", 1)[-1])
+    return unicodedata.normalize("NFC", name)
 
 
 def _style_kind(style: str) -> str:
@@ -81,6 +94,11 @@ def extract_idml_blocks(idml_bytes: bytes) -> list[SourceBlock]:
                 )
                 parts: list[str] = []
                 for node in psr.iter():
+                    # Ein Kommentar oder eine Verarbeitungsanweisung traegt
+                    # kein auswertbares Tag; InDesign schreibt beides in die
+                    # Stories, und `QName` wirft darueber.
+                    if not isinstance(node.tag, str):
+                        continue
                     tag = etree.QName(node).localname
                     if tag == "Content" and node.text:
                         parts.append(node.text)
@@ -277,7 +295,7 @@ def extract_idml_image_frames(idml_bytes: bytes) -> list[IdmlImageFrame]:
                         continue
                     link = next(
                         (
-                            (l.get("LinkResourceURI") or "").rsplit("/", 1)[-1]
+                            link_name(l.get("LinkResourceURI") or "")
                             for l in grafik.iter("{*}Link")
                             if l.get("LinkResourceURI")
                         ),
@@ -351,6 +369,7 @@ def frames_to_images(
                 y0=max(0.0, y0),
                 x1=min(1.0, x1),
                 y1=min(1.0, y1),
+                link=frame.link,
             )
         )
     out.sort(key=lambda i: (i.page_index, round(i.y0, 3), i.x0))

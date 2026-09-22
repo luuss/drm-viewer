@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api, formatEuro, type Id , cleanError } from "../lib/api";
 import ImportWizard from "./ImportWizard";
+import FolderImport from "./FolderImport";
 import ArticleReview from "./ArticleReview";
 import TocEditor from "./TocEditor";
 import ExtractionDebug from "./ExtractionDebug";
@@ -87,6 +88,22 @@ export default function AdminPage() {
             <button className="btn">Anlegen</button>
           </form>
         )}
+      </section>
+
+      <section>
+        <h3>Heftordner einlesen</h3>
+        <p className="hint">
+          Der Ordner aus der Druckvorstufe, wie er kommt. Reihe und Heftnummer
+          stehen im Namen, die Rollen der Dateien im Aufbau. Die Bilder werden
+          im Browser umgerechnet; hochgeladen wird nur, was zum Lesen gebraucht
+          wird.
+        </p>
+        <FolderImport
+          onIssue={(id) => {
+            setOpenIssue(id);
+            setTab("import");
+          }}
+        />
       </section>
 
       <section>

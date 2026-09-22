@@ -149,3 +149,44 @@ def crop_region(
     buf = io.BytesIO()
     cropped.save(buf, format="JPEG", quality=82, optimize=True)
     return buf.getvalue()
+
+
+def render_image_page(image_bytes: bytes, width_px: int = PAGE_WIDTH_PX):
+    """Eine Bilddatei als Druckseite ablegen — (jpeg_bytes, breite, hoehe).
+
+    Manche Hefte kommen ohne Umschlag-PDF: die Titelseite liegt dann als Bild
+    daneben. Sie wird wie eine gerenderte Seite behandelt, damit Reader,
+    Kachel-Gateway und Titelbild nichts von dem Unterschied wissen muessen.
+    Vergroessert wird nicht; ein kleines Original bleibt klein.
+    """
+    image = Image.open(io.BytesIO(image_bytes))
+    if image.mode not in ("RGB", "L"):
+        image = image.convert("RGB")
+    else:
+        image = image.convert("RGB")
+    if image.width > width_px:
+        height = max(1, round(image.height * width_px / image.width))
+        image = image.resize((width_px, height), Image.LANCZOS)
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=PAGE_JPEG_QUALITY, optimize=True)
+    return buf.getvalue(), image.width, image.height
+
+
+def fit_image(image_bytes: bytes, max_edge: int = 1600, quality: int = 82) -> bytes:
+    """Ein platziertes Bild auf Artikelgroesse bringen, ohne es zu beschneiden."""
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    laengste = max(image.width, image.height)
+    if laengste > max_edge:
+        faktor = max_edge / laengste
+        image = image.resize(
+            (max(1, round(image.width * faktor)), max(1, round(image.height * faktor))),
+            Image.LANCZOS,
+        )
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
+
+
+def image_size(image_bytes: bytes) -> tuple[int, int]:
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        return image.width, image.height

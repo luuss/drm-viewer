@@ -81,6 +81,10 @@ class SourceImage:
     x1: float
     y1: float
     caption: str | None = None
+    # Dateiname des im Satz platzierten Bildes (`Links/...`), wenn die IDML ihn
+    # nennt. Liegt dieselbe Datei umgewandelt im Medienspeicher, ist sie die
+    # bessere Vorlage als der Ausschnitt aus der gerenderten Seite.
+    link: str | None = None
     # 1-basierte Position des Reader-Blocks, nach dem das Bild stehen soll.
     # None laesst die bisherige geometrische Rueckfalllogik aktiv.
     after_block_order: int | None = None

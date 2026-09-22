@@ -7,7 +7,7 @@ import {
   MutationCtx,
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { requireEditor, requirePublisher, audit } from "./roles";
+import { requireEditor, requireAdmin, requirePublisher, audit } from "./roles";
 import { accessibleIssueIds, hasIssueAccess } from "./access";
 import { assetUrl } from "./assets";
 import { slugify } from "./publications";
@@ -285,6 +285,98 @@ export const create = mutation({
     });
     await audit(ctx, "issue.create", id, args.title);
     return id;
+  },
+});
+
+/**
+ * Heft aus einem Ordnernamen anlegen, falls es das noch nicht gibt.
+ *
+ * Der Importordner der Druckvorstufe traegt Reihe und Heftnummer schon im
+ * Namen. Was daraus gelesen wird, reicht fuer das Heft — von Hand einzutragen
+ * bleibt nur, was der Ordner nicht weiss, etwa der Preis.
+ *
+ * Zweimal derselbe Ordner ergibt dasselbe Heft: gesucht wird ueber Reihe und
+ * Heftnummer, ein Treffer wird zurueckgegeben statt ein zweites anzulegen.
+ * Eine noch unbekannte Reihe anzulegen bleibt der Verwaltung vorbehalten.
+ */
+export const ensureFromFolder = mutation({
+  args: {
+    publicationSlug: v.string(),
+    publicationName: v.string(),
+    title: v.string(),
+    issueNumber: v.optional(v.string()),
+    priceAmountCents: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireEditor(ctx);
+    let publication = await ctx.db
+      .query("publications")
+      .withIndex("by_slug", (q) => q.eq("slug", args.publicationSlug))
+      .first();
+    let publicationCreated = false;
+    if (!publication) {
+      await requireAdmin(ctx);
+      const pid = await ctx.db.insert("publications", {
+        name: args.publicationName,
+        slug: args.publicationSlug,
+        isActive: true,
+        createdAt: Date.now(),
+      });
+      await audit(ctx, "publication.create", pid, args.publicationName);
+      publication = await ctx.db.get(pid);
+      publicationCreated = true;
+    }
+    if (!publication) throw new Error("Reihe liess sich nicht anlegen");
+
+    if (args.issueNumber) {
+      const vorhanden = await ctx.db
+        .query("issues")
+        .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
+        .collect();
+      const treffer = vorhanden.find((i) => i.issueNumber === args.issueNumber);
+      if (treffer) {
+        return {
+          issueId: treffer._id,
+          publicationId: publication._id,
+          created: false,
+          publicationCreated,
+        };
+      }
+    }
+
+    const base = slugify(
+      `${args.title}${args.issueNumber ? "-" + args.issueNumber : ""}`,
+    );
+    let slug = base;
+    let n = 2;
+    while (
+      await ctx.db
+        .query("issues")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .first()
+    ) {
+      slug = `${base}-${n++}`;
+    }
+    const now = Date.now();
+    const issueId = await ctx.db.insert("issues", {
+      publicationId: publication._id,
+      title: args.title,
+      slug,
+      issueNumber: args.issueNumber,
+      pageCount: 0,
+      priceAmountCents: args.priceAmountCents ?? 0,
+      isPublished: false,
+      includedInSubscription: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await audit(ctx, "issue.create", issueId, args.title);
+    return {
+      issueId,
+      publicationId: publication._id,
+      created: true,
+      publicationCreated,
+    };
   },
 });
 

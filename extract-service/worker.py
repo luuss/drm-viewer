@@ -27,6 +27,7 @@ from extractor.idml_extract import (
     extract_idml_blocks,
     extract_idml_image_frames,
     frames_to_images,
+    link_name,
 )
 from extractor.image_regions import read_trim_boxes
 from extractor.llm import postprocess_issue
@@ -99,16 +100,31 @@ class Job:
         if not sources:
             raise RuntimeError("Keine Quelldateien hinterlegt")
 
-        # Quellen einmal laden und im Speicher halten.
+        # Quellen einmal laden und im Speicher halten. Platzierte Bilder
+        # bleiben liegen: es sind siebzig und mehr je Heft, und gebraucht wird
+        # nur, was am Ende an einem Artikel haengt.
         blobs: dict[str, bytes] = {}
         for src in sources:
-            if not src.get("url"):
+            if src["kind"] in ("indd", "artwork"):
                 continue
-            if src["kind"] == "indd":
-                continue  # Archivdatei, wird nicht ausgewertet
             self.beat(2, f"Lade {src['filename']}")
-            blobs[src["assetId"]] = self.convex.download(src["url"], MAX_SOURCE_BYTES)
-        log("job.sources", jobId=self.job_id, count=len(blobs))
+            data = self._fetch(src)
+            if data is None:
+                log("job.sourceMissing", jobId=self.job_id, filename=src["filename"])
+                continue
+            blobs[src["assetId"]] = data
+        self._artwork = {
+            link_name(src["filename"]): src
+            for src in sources
+            if src["kind"] == "artwork"
+        }
+        self._kind_by_asset = {src["assetId"]: src["kind"] for src in sources}
+        log(
+            "job.sources",
+            jobId=self.job_id,
+            count=len(blobs),
+            artwork=len(self._artwork),
+        )
 
         page_images = self._render_pages(pages, blobs)
         blocks, images, toc_hints = self._extract(pages, blobs, sources)
@@ -135,6 +151,12 @@ class Job:
             )
 
         payload_articles = self._build_payload(articles, page_images)
+        log(
+            "job.images",
+            jobId=self.job_id,
+            fromArtwork=getattr(self, "_artwork_used", 0),
+            artworkAvailable=len(getattr(self, "_artwork", {})),
+        )
         toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
         self.beat(92, "Ergebnis wird uebernommen")
         result = self.convex.post(
@@ -155,6 +177,24 @@ class Job:
             seconds=round(time.time() - self.started, 1),
         )
 
+    def _fetch(self, src: dict) -> bytes | None:
+        """Eine Quelldatei holen.
+
+        Ueber die Convex-Ablage hat das Asset eine kurzlebige Adresse. Laedt der
+        Browser dagegen direkt in den Medienspeicher, gibt es keine — dann wird
+        die Datei ueber ihren Schluessel aus dem Eimer gelesen.
+        """
+        url = src.get("url")
+        if url:
+            return self.convex.download(url, MAX_SOURCE_BYTES)
+        key = src.get("assetKey")
+        if key and self.storage.uses_s3:
+            try:
+                return self.storage.get(key)
+            except Exception as exc:
+                log("job.fetchFailed", jobId=self.job_id, key=key, error=str(exc)[:200])
+        return None
+
     def _render_pages(self, pages: list[dict], blobs: dict[str, bytes]) -> dict[int, bytes]:
         rendered: dict[int, bytes] = {}
         cover_asset_id = None
@@ -163,9 +203,13 @@ class Job:
             blob = blobs.get(page["sourceAssetId"])
             if blob is None:
                 continue
-            jpeg, width, height = render.render_page(
-                blob, page["sourcePageIndex"], half=page.get("sourceHalf") or None
-            )
+            if getattr(self, "_kind_by_asset", {}).get(page["sourceAssetId"]) == "image":
+                # Titelseite als Bild statt als PDF.
+                jpeg, width, height = render.render_image_page(blob)
+            else:
+                jpeg, width, height = render.render_page(
+                    blob, page["sourcePageIndex"], half=page.get("sourceHalf") or None
+                )
             key = issue_key(
                 self.publication_id, self.issue_id, "pages", page["index"], "full.jpg"
             )
@@ -248,6 +292,9 @@ class Job:
             blob = blobs.get(asset_id)
             if blob is None:
                 continue
+            if getattr(self, "_kind_by_asset", {}).get(asset_id) == "image":
+                # Eine Titelseite als Bild hat weder Textebene noch Rahmen.
+                continue
             b, i = extract_pdf_pages(blob, page_map, halves_by_asset.get(asset_id))
             blocks.extend(b)
             images.extend(i)
@@ -295,16 +342,21 @@ class Job:
         ueber Beschnittpfade erschlossen werden. Liegt die Satzdatei vor, ist sie
         also die bessere Quelle.
 
-        Die IDML gehoert zu genau einer PDF-Quelle — der mit derselben Rolle,
-        also Innenteil zu Innenteil. Nur deren Seiten werden ersetzt; ein
-        Umschlag aus einer zweiten Datei bleibt beim PDF-Weg.
+        Die IDML gehoert zu genau einer PDF-Quelle. Traegt sie eine eigene
+        Rolle, gilt die gleichnamige PDF; die Oberflaeche legt sie aber als
+        Beiwerk ab, und dann ist der Innenteil gemeint. Nur dessen Seiten
+        werden ersetzt; ein Umschlag aus einer zweiten Datei bleibt beim
+        PDF-Weg.
         """
+        gesuchte_rolle = idml_source.get("role")
+        if gesuchte_rolle in (None, "supplemental", "artwork", "archive"):
+            gesuchte_rolle = "inner"
         partner = next(
             (
                 s
                 for s in sources
                 if s["kind"] == "pdf"
-                and s.get("role") == idml_source.get("role")
+                and s.get("role") == gesuchte_rolle
                 and blobs.get(s["assetId"])
             ),
             None,
@@ -445,6 +497,57 @@ class Job:
             out.append(entry)
         return out
 
+    # Bildrahmen und platziertes Bild duerfen sich im Seitenverhaeltnis um
+    # diesen Anteil unterscheiden und gelten noch als deckungsgleich.
+    ARTWORK_TOLERANZ = 0.08
+
+    def _artwork_image(self, img, page_jpeg: bytes) -> bytes | None:
+        """Das platzierte Originalbild statt des Seitenausschnitts, wenn es passt.
+
+        Die Satzdatei nennt zu jedem Bildrahmen die Datei aus `Links/`. Der
+        Browser hat sie beim Import auf Netzgroesse gebracht und hochgeladen.
+        Genommen wird sie aber nur, wenn der Rahmen das ganze Bild zeigt: hat
+        der Satz beschnitten, stuende im Artikel sonst mehr, als gedruckt ist.
+        Das Seitenverhaeltnis verraet den Unterschied.
+        """
+        name = getattr(img, "link", None)
+        src = getattr(self, "_artwork", {}).get(link_name(name)) if name else None
+        if src is None:
+            return None
+        try:
+            seite = render.image_size(page_jpeg)
+            rahmen_breite = (img.x1 - img.x0) * seite[0]
+            rahmen_hoehe = (img.y1 - img.y0) * seite[1]
+            if rahmen_breite < 8 or rahmen_hoehe < 8:
+                return None
+            data = self._artwork_blob(src)
+            if data is None:
+                return None
+            bild = render.image_size(data)
+            if bild[0] < 8 or bild[1] < 8:
+                return None
+            rahmen_verhaeltnis = rahmen_breite / rahmen_hoehe
+            bild_verhaeltnis = bild[0] / bild[1]
+            abweichung = abs(rahmen_verhaeltnis - bild_verhaeltnis) / max(
+                rahmen_verhaeltnis, bild_verhaeltnis
+            )
+            if abweichung > self.ARTWORK_TOLERANZ:
+                return None
+            return render.fit_image(data)
+        except Exception as exc:
+            log("job.artworkFailed", jobId=self.job_id, name=name, error=str(exc)[:200])
+            return None
+
+    def _artwork_blob(self, src: dict) -> bytes | None:
+        """Ein platziertes Bild holen und im Speicher behalten."""
+        cache = getattr(self, "_artwork_cache", None)
+        if cache is None:
+            cache = self._artwork_cache = {}
+        key = src["assetId"]
+        if key not in cache:
+            cache[key] = self._fetch(src)
+        return cache[key]
+
     def _store_images(
         self, article, page_images: dict[int, bytes], reader_blocks
     ) -> list[dict]:
@@ -453,10 +556,16 @@ class Job:
             page_jpeg = page_images.get(img.page_index)
             if not page_jpeg:
                 continue
-            try:
-                cropped = render.crop_region(page_jpeg, img.x0, img.y0, img.x1, img.y1)
-            except Exception:
-                continue
+            cropped = self._artwork_image(img, page_jpeg)
+            if cropped is not None:
+                self._artwork_used = getattr(self, "_artwork_used", 0) + 1
+            if cropped is None:
+                try:
+                    cropped = render.crop_region(
+                        page_jpeg, img.x0, img.y0, img.x1, img.y1
+                    )
+                except Exception:
+                    continue
             key = issue_key(
                 self.publication_id,
                 self.issue_id,

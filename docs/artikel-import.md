@@ -4,14 +4,63 @@ Eine Ausgabe entsteht in vier Schritten: Quellen hochladen, Leserreihenfolge
 festlegen, Aufbereitung starten, redaktionell pruefen. Erst danach laesst sich
 die Ausgabe veroeffentlichen.
 
+Der uebliche Weg nimmt alle vier Schritte auf einmal: den Heftordner der
+Druckvorstufe in die Redaktionsoberflaeche ziehen. Die Abschnitte darunter
+beschreiben, was dabei geschieht, und gelten ebenso fuer den Weg von Hand.
+
+## 0. Heftordner einlesen
+
+Die Druckvorstufe liefert je Heft einen Ordner, immer im selben Zuschnitt:
+
+```
+dmz 170, innenteil + titelseite/
+  DMZ 170 innen.pdf        Innenteil, die Vorlage fuer alle Seiten
+  dmz 170 titel.tif        Titelseite, CMYK in Druckaufloesung
+  dmz 170 titel.jpg        dieselbe Titelseite, klein
+  DMZ 170.idml             Satzdatei, Artikelstruktur und Bildrahmen
+  DMZ 170.indd             Archiv
+  Links/                   die platzierten Bilder, meist ueber ein Gigabyte
+  Document fonts/          Schriften
+```
+
+Ein solcher Ordner ist ein bis zwei Gigabyte gross. Davon gehoeren nur
+Innenteil und Satzdatei unveraendert auf den Server — zusammen selten mehr als
+siebzig Megabyte. Alles Uebrige entscheidet der Browser:
+
+| Teil | Was geschieht |
+|---|---|
+| Innenteil-PDF | geht unveraendert hoch, Seitenzahl wird gezaehlt |
+| Umschlag-PDF | geht unveraendert hoch, falls es eins gibt |
+| IDML | geht unveraendert hoch |
+| Titelseite (TIF/JPG) | wird im Browser in ein JPEG umgewandelt und als erste Seite gefuehrt |
+| `Links/` | wird im Browser verkleinert, hoechstens 1600 Bildpunkte je Kante |
+| `.indd`, `Document fonts/` | bleiben liegen |
+
+Reihe und Heftnummer liest der Dialog aus dem Ordnernamen: `dmz 170` wird die
+Reihe `dmz`, Heft `170`; `schwertertraeger 36 greim` wird Heft `36` mit dem
+Titel `Greim`; `zuerst 3-2026` wird Heft `3/2026`. Eine schon gepflegte Reihe
+steht mit ihrem Namen da, nicht mit der Abkuerzung aus dem Ordner. Gibt es das
+Heft mit dieser Nummer schon, werden dessen Quellen ersetzt statt ein zweites
+angelegt; ein zweiter Wurf desselben Ordners macht also nichts doppelt.
+
+Warum die Bilder im Browser umgewandelt werden und nicht auf dem Server: ein
+Heft bringt gut ein Gigabyte CMYK-TIFF mit, von dem im Netz niemand etwas hat.
+Die Umwandlung laeuft in einem Hintergrundfaden (`web/src/admin/convertWorker.ts`),
+damit die Oberflaeche waehrenddessen bedienbar bleibt. TIFF liest UTIF, der
+Browser selbst kann es nicht. Was sich nicht lesen laesst — `.ai`, `.eps`, eine
+beschaedigte Datei — wird uebergangen und im Protokoll genannt; der Import
+laeuft weiter.
+
 ## 1. Quellen
 
 | Datei | Rolle | Pflicht |
 |---|---|---|
 | Innenteil-PDF | originalgetreue Seiten und Textebene | ja |
 | Umschlag-PDF | Titel, U2, U3, Rueckseite | nein |
+| Titelseite als Bild | erste Seite, wenn kein Umschlag-PDF kommt | nein |
 | IDML | Artikelstruktur aus dem Satz | nein, aber empfohlen |
 | INDD | Archiv, mehrere moeglich | nein |
+| Platzierte Bilder | Artikelbilder in Netzgroesse | nein |
 
 Eine `.indd`-Datei wird nur abgelegt, nicht ausgewertet. Innenteil und
 Umschlag haben in der Regel je eine eigene; beide werden behalten, nur eine

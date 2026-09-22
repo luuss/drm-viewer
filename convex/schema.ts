@@ -152,19 +152,37 @@ export default defineSchema(
 
   issueSources: defineTable({
     issueId: v.id("issues"),
-    kind: v.union(v.literal("pdf"), v.literal("idml"), v.literal("indd")),
+    // `image` ist eine Titelseite als Bild statt als PDF, `artwork` ein im
+    // Satz platziertes Bild aus `Links/`, im Browser auf Netzgroesse gebracht.
+    kind: v.union(
+      v.literal("pdf"),
+      v.literal("idml"),
+      v.literal("indd"),
+      v.literal("image"),
+      v.literal("artwork"),
+    ),
     role: v.union(
       v.literal("inner"),
       v.literal("cover"),
       v.literal("supplemental"),
       v.literal("archive"),
+      v.literal("artwork"),
     ),
     assetId: v.id("assets"),
     filename: v.string(),
     pageCount: v.optional(v.number()),
+    // Nur bei `artwork`: Kantenlaengen des umgewandelten Bildes und des
+    // Originals. Damit laesst sich spaeter beurteilen, ob das Bild fuer eine
+    // Stelle im Heft ueberhaupt reicht.
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    sourceWidth: v.optional(v.number()),
+    sourceHeight: v.optional(v.number()),
     sortOrder: v.number(),
     createdAt: v.number(),
-  }).index("by_issue", ["issueId"]),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_issue_kind", ["issueId", "kind"]),
 
   issuePages: defineTable({
     issueId: v.id("issues"),

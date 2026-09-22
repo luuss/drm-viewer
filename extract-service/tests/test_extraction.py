@@ -1338,3 +1338,46 @@ def test_dmz_zeitgeschichte_behaelt_editorial_und_seite_4_und_streicht_verzeichn
     # Seite 4 ist eine Inhaltsseite, nur Kolumnentitel und Fusszeile fallen weg.
     assert [b.text[:12] for b in kept_blocks if b.page_index == 3] == ["Das Foto zei"]
     assert len(hints) == 6
+
+
+def test_idml_ueberspringt_kommentare_in_den_stories():
+    """InDesign schreibt Kommentare in die Stories; sie haben kein Tag.
+
+    Vorher warf `etree.QName` darueber, der ganze IDML-Weg fiel aus und das
+    Heft verlor seine Absatzformate — still, weil der Aufrufer den Fehler
+    abfaengt.
+    """
+    idml = io.BytesIO()
+    story = """<?xml version="1.0" encoding="UTF-8"?>
+    <idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+      <Story Self="u1">
+        <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Ueberschrift">
+          <!-- ein Kommentar aus dem Satz -->
+          <CharacterStyleRange><Content>Die Ueberschrift</Content></CharacterStyleRange>
+        </ParagraphStyleRange>
+      </Story>
+    </idPkg:Story>"""
+    with zipfile.ZipFile(idml, "w") as zf:
+        zf.writestr("Stories/Story_u1.xml", story)
+
+    blocks = extract_idml_blocks(idml.getvalue())
+
+    assert [b.text for b in blocks] == ["Die Ueberschrift"]
+    assert blocks[0].kind == "heading"
+
+
+def test_verknuepfungsname_wird_entschluesselt_und_vereinheitlicht():
+    """Die IDML nennt den Ort als URI, der Mac zerlegt dabei die Umlaute."""
+    from extractor.idml_extract import link_name
+
+    assert link_name("file:/Vol/Links/Logo%20dmz.tif") == "Logo dmz.tif"
+    assert link_name("file:/Vol/Links/DMZ%20fu%CC%88r%20Fu%C3%9Fzeile.tif") == (
+        "DMZ für Fußzeile.tif"
+    )
+    assert link_name("bild.tif") == "bild.tif"
+
+
+def test_bildrahmen_tragen_den_dateinamen_der_verknuepfung():
+    frames = extract_idml_image_frames(idml_fixture.bauen())
+
+    assert {f.link for f in frames} == {"titel.jpg", "links.jpg", "rechts.jpg", "winzig.jpg"}

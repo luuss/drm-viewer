@@ -2288,3 +2288,50 @@ button.small, .btn.small {
   .footer-main { grid-template-columns: 1fr; gap: var(--s5); }
   .footer-logo { height: 3rem; }
 }
+
+/* --- Heftordner einlesen -------------------------------------------------- */
+
+.folder-import { display: grid; gap: var(--s4); }
+
+.dropzone {
+  display: grid;
+  gap: var(--s2);
+  justify-items: center;
+  text-align: center;
+  padding: var(--s6) var(--s4);
+  border: 2px dashed var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-sunk);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.dropzone:hover,
+.dropzone:focus-visible { border-color: var(--accent); }
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone .hint { max-width: 42rem; }
+
+.plan { display: grid; gap: var(--s3); }
+.plan h4 { margin: 0; }
+
+.plan-table { width: 100%; border-collapse: collapse; }
+.plan-table th,
+.plan-table td {
+  text-align: left;
+  padding: var(--s2) var(--s2);
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+.plan-table th { width: 8rem; font-weight: 600; color: var(--ink-soft); }
+.plan-table td:last-child { width: 11rem; color: var(--muted); }
+
+.folder-import .warn {
+  padding: var(--s2) var(--s3);
+  border-radius: var(--radius);
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+@media (max-width: 46rem) {
+  .plan-table th { width: 6rem; }
+  .plan-table td:last-child { width: auto; }
+}

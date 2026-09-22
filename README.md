@@ -48,7 +48,16 @@ der Abschluss läuft wie der Einzelkauf über Stripe.
 
 ## Für die Redaktion
 
-Titel und Ausgaben anlegen, Quellen hochladen (Innenteil-PDF, Umschlag-PDF als
+Der kurze Weg: den Heftordner der Druckvorstufe in die Redaktionsoberfläche
+ziehen. Reihe und Heftnummer stehen im Ordnernamen, die Rollen der Dateien im
+Aufbau. Hoch gehen nur Innenteil-PDF und Satzdatei; die Titelseite und die
+platzierten Bilder aus `Links/` rechnet der Browser vorher auf Netzgröße
+herunter, Archiv und Schriften bleiben liegen. Aus anderthalb Gigabyte werden
+so rund siebzig Megabyte. Einzelheiten:
+[docs/artikel-import.md](docs/artikel-import.md).
+
+Von Hand geht es weiter wie bisher: Titel und Ausgaben anlegen, Quellen
+hochladen (Innenteil-PDF, Umschlag-PDF als
 Einzelseiten oder Doppelseiten, optional IDML, INDD als Archiv),
 Leserreihenfolge bestätigen, Aufbereitung starten, Artikel prüfen
 (zusammenführen, an Blockgrenzen trennen, Blöcke verschieben, freigeben oder

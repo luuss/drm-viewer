@@ -1,53 +1,10 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api, type Id , cleanError } from "../lib/api";
+import { buildPageOrder, type CoverLayout, type PageDraft as Draft } from "./pageOrder";
+import { countPdfPages, uploadAsset } from "./uploadAsset";
 
-type PageDraft = {
-  sourceAssetId: Id<"assets">;
-  sourcePageIndex: number;
-  // Nur bei Umschlag-Doppelseiten: welche Haelfte die Leserseite ist.
-  sourceHalf?: "left" | "right";
-  role: "front_cover" | "inside_front" | "content" | "inside_back" | "back_cover" | "other";
-  printedLabel?: string;
-};
-
-/**
- * Wie die Umschlagdatei aufgebaut ist.
- * sheets:  vier Einzelseiten in Bogenreihenfolge (U4, U1, U2, U3)
- * spreads: zwei Doppelseiten (U4|U1, U2|U3), gelesen als Haelften
- * reading: Einzelseiten bereits in Leserreihenfolge (U1 ... U4)
- * auto:    nach Seitenzahl der Datei entscheiden (2 -> spreads, 4 -> sheets)
- */
-type CoverLayout = "auto" | "sheets" | "spreads" | "reading";
-
-/**
- * Seitenzahl eines PDF ohne Bibliothek bestimmen: zaehlt die Seitenobjekte in
- * der Datei, stueckweise, damit ein 150-MB-Heft nicht am Stueck im Speicher
- * liegt. Bei komprimierten Objektstroemen findet sich nichts; dann bleibt das
- * Feld leer und die Redaktion traegt die Zahl selbst ein.
- */
-async function countPdfPages(file: File): Promise<number | undefined> {
-  const pattern = /\/Type\s*\/Page(?![s\w])/g;
-  const chunkBytes = 8 * 1024 * 1024;
-  const decoder = new TextDecoder("latin1");
-  let count = 0;
-  let tail = "";
-  try {
-    for (let offset = 0; offset < file.size; offset += chunkBytes) {
-      const bytes = await file.slice(offset, offset + chunkBytes).arrayBuffer();
-      const text = tail + decoder.decode(bytes);
-      count += text.match(pattern)?.length ?? 0;
-      // Ein Treffer am Stueckrand darf weder verloren gehen noch doppelt zaehlen.
-      const carry = text.slice(-24);
-      count -= carry.match(pattern)?.length ?? 0;
-      tail = carry;
-    }
-    count += tail.match(pattern)?.length ?? 0;
-  } catch {
-    return undefined;
-  }
-  return count > 0 ? count : undefined;
-}
+type PageDraft = Draft<Id<"assets">>;
 
 type SourceDraft = {
   assetId: Id<"assets">;
@@ -88,52 +45,12 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
     setErr(null);
     setBusy(`Lade ${file.name}`);
     try {
-      const contentType = file.type || "application/octet-stream";
-      // Ist ein Medienspeicher eingerichtet, geht die Datei direkt dorthin —
-      // grosse Hefte laufen dann nicht durch den Server.
-      const direct = await presignUpload({
+      const assetId = await uploadAsset(
+        { presignUpload, registerUpload, generateUploadUrl },
         issueId,
-        filename: file.name,
-        contentType,
-        bytes: file.size,
-      });
-
-      let assetId;
-      if (direct) {
-        const put = await fetch(direct.url, {
-          method: "PUT",
-          headers: { "Content-Type": contentType },
-          body: file,
-        });
-        if (!put.ok) throw new Error("Direkter Upload abgelehnt");
-        assetId = await registerUpload({
-          bucket: "emag-media",
-          key: direct.key,
-          contentType,
-          kind: "source",
-          issueId,
-          bytes: file.size,
-          filename: file.name,
-        });
-      } else {
-        const url = await generateUploadUrl();
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": contentType },
-          body: file,
-        });
-        if (!res.ok) throw new Error("Upload abgelehnt");
-        const { storageId } = await res.json();
-        assetId = await registerUpload({
-          storageId,
-          key: `uploads/${issueId}/${file.name}`,
-          contentType,
-          kind: "source",
-          issueId,
-          bytes: file.size,
-          filename: file.name,
-        });
-      }
+        file,
+        file.name,
+      );
       const pageCount = kind === "pdf" ? await countPdfPages(file) : undefined;
       await addSource({ issueId, assetId, kind, role, filename: file.name, pageCount });
       setMsg(
@@ -149,63 +66,29 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
   }
 
   function buildProposal() {
-    const list = (sources ?? []).filter((s: any) => s.kind === "pdf").map((s: any) => ({...s, pageCount: s.pageCount ?? 0}));
+    const list = (sources ?? [])
+      .filter((s: any) => s.kind === "pdf")
+      .map((s: any) => ({ ...s, pageCount: s.pageCount ?? 0 }));
     const cover = list.find((s: any) => s.role === "cover");
     const inner = list.find((s: any) => s.role === "inner") ?? list[0];
+    const coverImage = (sources ?? []).find(
+      (s: any) => s.kind === "image" && s.role === "cover",
+    );
     if (!inner) {
       setErr("Mindestens ein Innenteil-PDF wird gebraucht");
       return;
     }
-    const draft: PageDraft[] = [];
-    const start = Number(printedStart) || 1;
-    const layout: CoverLayout =
-      coverLayout !== "auto"
-        ? coverLayout
-        : cover?.pageCount === 2
-          ? "spreads"
-          : cover?.pageCount === 4
-            ? "sheets"
-            : "reading";
-    const spreads = !!cover && layout === "spreads" && cover.pageCount >= 2;
-    const sheets = !!cover && layout === "sheets" && cover.pageCount === 4;
-
-    if (cover && spreads) {
-      // Erster Bogen: links U4, rechts U1. Zweiter Bogen: links U2, rechts U3.
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, sourceHalf: "right", role: "front_cover", printedLabel: "U1" });
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 1, sourceHalf: "left", role: "inside_front", printedLabel: "U2" });
-    } else if (cover && sheets) {
-      // Bogenreihenfolge U4, U1, U2, U3 -> Lesereihenfolge.
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 1, role: "front_cover", printedLabel: "U1" });
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 2, role: "inside_front", printedLabel: "U2" });
-    } else if (cover) {
-      cover.pageCount >= 1 &&
-        draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, role: "front_cover", printedLabel: "U1" });
-    }
-
-    for (let i = 0; i < inner.pageCount; i++) {
-      draft.push({
-        sourceAssetId: inner.assetId,
-        sourcePageIndex: i,
-        role: "content",
-        printedLabel: String(start + i),
-      });
-    }
-
-    if (cover && spreads) {
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 1, sourceHalf: "right", role: "inside_back", printedLabel: "U3" });
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, sourceHalf: "left", role: "back_cover", printedLabel: "U4" });
-    } else if (cover && sheets) {
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 3, role: "inside_back", printedLabel: "U3" });
-      draft.push({ sourceAssetId: cover.assetId, sourcePageIndex: 0, role: "back_cover", printedLabel: "U4" });
-    } else if (cover && cover.pageCount > 1) {
-      draft.push({
-        sourceAssetId: cover.assetId,
-        sourcePageIndex: cover.pageCount - 1,
-        role: "back_cover",
-        printedLabel: "U4",
-      });
-    }
-    setPages(draft);
+    setPages(
+      buildPageOrder<Id<"assets">>({
+        inner: { assetId: inner.assetId, pageCount: inner.pageCount },
+        cover: cover
+          ? { assetId: cover.assetId, pageCount: cover.pageCount }
+          : undefined,
+        coverImageAssetId: coverImage?.assetId,
+        layout: coverLayout,
+        printedStart: Number(printedStart) || 1,
+      }),
+    );
   }
 
   function move(index: number, delta: number) {
