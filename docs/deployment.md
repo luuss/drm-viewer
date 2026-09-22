@@ -13,8 +13,7 @@ Jeder Push auf `main` laeuft durch eine einzige Kette in GitHub Actions
    eine Syntaxpruefung der Compose-Datei.
 2. **Ausliefern**, nur bei gruenen Pruefungen und in dieser Reihenfolge:
    Dokploy anstossen, warten bis das Backend antwortet, Convex-Funktionen
-   ausliefern, Umgebungswerte des Backends sichern, zuletzt ein Rauchtest
-   gegen die laufende Seite.
+   ausliefern, zuletzt ein Rauchtest gegen die laufende Seite.
 
 Die Reihenfolge hat sich mit dem Umzug umgedreht: frueher lag das Backend in
 der Cloud und war immer da, heute startet es im selben Stapel. Funktionen
@@ -107,11 +106,15 @@ openssl rand -hex 24     # POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD
 echo "eigen:$(openssl rand -base64 32)"   # MINIO_KMS_SECRET_KEY
 ```
 
-Drei Werte muessen **in Dokploy und in GitHub gleich** sein, weil beide Seiten
-sie brauchen: `TILE_SERVICE_SECRET`, `EXTRACT_SERVICE_SECRET` und die
-MinIO-Zugangsdaten. Der Workflow traegt sie im Convex-Backend ein; der Stapel
-gibt sie den Diensten. Stimmen sie nicht ueberein, weist das Backend
-Kacheldienst und Import-Worker ab.
+**Alle Geheimnisse stehen nur hier.** Das Convex-Backend haelt seine
+Umgebungswerte in der eigenen Datenbank, erreichbar nur ueber den
+Admin-Schluessel — weder Compose noch Dokploy koennen dort hineinschreiben.
+Deshalb gibt es den Dienst `convex-setup`: ein kurzlebiger Behaelter, der nach
+jedem Deployment genau das tut, sobald das Backend antwortet. Er schreibt nur,
+was fehlt oder abweicht.
+
+In GitHub liegen damit nur zwei Dinge: der Admin-Schluessel und die Adresse des
+Backends. Beides braucht der Workflow, um die Funktionen auszuliefern.
 
 `CONVEX_INSTANCE_SECRET` ist der wichtigste Wert: aus ihm leitet sich der
 Admin-Schluessel ab. Wird er geaendert, gilt jeder bisherige Schluessel nicht
@@ -146,9 +149,16 @@ cd /etc/dokploy/compose/<dienst>/code
 docker compose -f docker-compose.dokploy.yml exec convex-backend ./generate_admin_key.sh
 ```
 
-Die Ausgabe (`emagazin|017...`) gehoert als GitHub-Secret
-`CONVEX_SELF_HOSTED_ADMIN_KEY` ins Repository. Ohne ihn kann der Workflow keine
-Funktionen ausliefern.
+Die Ausgabe (`emagazin|017...`) gehoert an **zwei** Stellen:
+
+* in Dokploy als `CONVEX_SELF_HOSTED_ADMIN_KEY` — damit `convex-setup` die
+  Umgebungswerte eintragen kann;
+* in GitHub als Secret `CONVEX_SELF_HOSTED_ADMIN_KEY` — damit der Workflow die
+  Funktionen ausliefern kann.
+
+Danach einmal neu deployen, damit `convex-setup` mit dem Schluessel laeuft.
+Beim allerersten Rollout ist das Feld noch leer; der Dienst sagt dann nur, dass
+nichts einzutragen ist, und laesst alles unberuehrt.
 
 Den ersten Zugang legt die Anwendung selbst an: die Adresse aus der
 Repository-Variablen `ADMIN_EMAILS` bekommt beim Registrieren auf
@@ -165,13 +175,6 @@ Secrets:
 |---|---|
 | `CONVEX_SELF_HOSTED_ADMIN_KEY` | Ausgabe von `generate_admin_key.sh` |
 | `DOKPLOY_DEPLOY_URL` | Deploy-Webhook des Compose-Dienstes |
-| `MINIO_ROOT_USER` | wie in Dokploy |
-| `MINIO_ROOT_PASSWORD` | wie in Dokploy |
-| `TILE_SERVICE_SECRET` | wie in Dokploy |
-| `EXTRACT_SERVICE_SECRET` | wie in Dokploy |
-| `RESEND_API_KEY` | optional, fuer Mailversand |
-| `STRIPE_SECRET_KEY` | optional, fuer den Verkauf |
-| `SHOP_WEBHOOK_SECRET` | optional, fuer die Shop-Schnittstelle |
 
 Variablen:
 
@@ -179,17 +182,15 @@ Variablen:
 |---|---|
 | `VITE_CONVEX_URL` | `https://api.d.chuk.dev` — wird ins Bundle gebaut |
 | `CONVEX_SELF_HOSTED_URL` | dieselbe Adresse; Ziel von `convex deploy` |
-| `PUBLIC_WEB_ORIGIN` | `https://d.chuk.dev` |
-| `PUBLIC_MEDIA_ORIGIN` | `https://medien.d.chuk.dev` |
-| `ADMIN_EMAILS` | Adresse des ersten Zugangs |
-| `MEDIA_BUCKET` | optional, Vorgabe `emag-media` |
-| `RESEND_FROM_EMAIL` | optional, Absender |
+| `PUBLIC_WEB_ORIGIN` | `https://d.chuk.dev`, Ziel des Rauchtests |
 
-Die Umgebungswerte des Backends setzt der Workflow bei jedem Lauf selbst
-(`scripts/convex-env-sichern.mjs`). Er schreibt nur, was fehlt oder abweicht,
-und erzeugt die Schluessel der Anmeldung (`JWT_PRIVATE_KEY`, `JWKS`) genau
-einmal — wuerde er sie jedes Mal neu erzeugen, waere nach jedem Deployment
-jeder angemeldete Leser ausgesperrt.
+Mehr nicht. Alles andere — Dienstgeheimnisse, MinIO-Zugang, Adminadresse,
+Resend, Stripe — steht in der Umgebung des Stapels in Dokploy und wird von
+`convex-setup` ins Backend getragen.
+
+Dabei entstehen die Schluessel der Anmeldung (`JWT_PRIVATE_KEY`, `JWKS`) genau
+einmal. Wuerden sie bei jedem Deployment neu erzeugt, waere danach jeder
+angemeldete Leser ausgesperrt.
 
 Fuer den automatischen Rollout darf das GitHub-Environment `production` keine
 manuelle Freigaberegel besitzen, sonst bleibt jeder Push auf eine Bestaetigung

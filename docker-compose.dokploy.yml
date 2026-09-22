@@ -145,6 +145,47 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  # Traegt die Umgebungswerte in das Backend ein: Adressen, Dienstgeheimnisse,
+  # Zugang zum Medienspeicher. Laeuft bei jedem Deployment, schreibt aber nur,
+  # was fehlt oder abweicht. Die Schluessel der Anmeldung entstehen genau
+  # einmal — wuerden sie jedes Mal neu erzeugt, waere nach jedem Deployment
+  # jeder angemeldete Leser ausgesperrt.
+  convex-setup:
+    build:
+      context: .
+      dockerfile: deploy/convex-setup.Dockerfile
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+    environment:
+      # Im eigenen Netz; die oeffentliche Adresse braucht es dafuer nicht.
+      CONVEX_SELF_HOSTED_URL: http://convex-backend:3210
+      # Beim allerersten Rollout gibt es ihn noch nicht: das Backend muss
+      # erst laufen, damit generate_admin_key.sh ihn ausgeben kann. Fehlt er,
+      # sagt der Einrichter das und laesst alles unberuehrt.
+      CONVEX_SELF_HOSTED_ADMIN_KEY: "${CONVEX_SELF_HOSTED_ADMIN_KEY:-}"
+      APP_PUBLIC_URL: ${PUBLIC_WEB_ORIGIN}
+      # Die Oberflaeche reicht /api/... an den Kacheldienst weiter, deshalb
+      # dieselbe Adresse.
+      PUBLIC_TILE_ORIGIN: ${PUBLIC_WEB_ORIGIN}
+      # Vorsignierte Anfragen gehen an den Browser; die Adresse muss die
+      # oeffentliche sein, nicht die im Docker-Netz.
+      S3_ENDPOINT_URL: ${PUBLIC_MEDIA_ORIGIN}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET}
+      EXTRACT_SERVICE_SECRET: ${EXTRACT_SERVICE_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      SHOP_WEBHOOK_SECRET: ${SHOP_WEBHOOK_SECRET:-}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-}
+    restart: "no"
+    logging: *default-logging
+
   convex-dashboard:
     image: ghcr.io/get-convex/convex-dashboard:latest
     depends_on:

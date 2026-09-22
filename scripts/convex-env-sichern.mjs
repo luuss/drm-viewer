@@ -76,11 +76,19 @@ async function anmeldeschluessel(vorhanden) {
 }
 
 async function main() {
-  if (!process.env.CONVEX_SELF_HOSTED_URL || !process.env.CONVEX_SELF_HOSTED_ADMIN_KEY) {
-    console.error(
-      "CONVEX_SELF_HOSTED_URL und CONVEX_SELF_HOSTED_ADMIN_KEY muessen gesetzt sein.",
-    );
+  if (!process.env.CONVEX_SELF_HOSTED_URL) {
+    console.error("CONVEX_SELF_HOSTED_URL muss gesetzt sein.");
     process.exit(2);
+  }
+  if (!process.env.CONVEX_SELF_HOSTED_ADMIN_KEY) {
+    // Beim allerersten Rollout gibt es den Schluessel noch nicht — das Backend
+    // muss erst laufen. Das ist kein Fehler, nur noch nichts zu tun.
+    console.log(
+      "Kein Admin-Schluessel gesetzt, es wird nichts eingetragen.\n" +
+        "Einmalig erzeugen und in die Umgebung des Stapels legen:\n" +
+        "  docker compose exec convex-backend ./generate_admin_key.sh",
+    );
+    return;
   }
 
   const fehlend = pflicht.filter((name) => !process.env[name]);

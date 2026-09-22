@@ -7,6 +7,8 @@
 !web/**
 !convex/
 !convex/**
+# Der Einrichter traegt die Umgebungswerte ins Backend ein.
+!scripts/convex-env-sichern.mjs
 
 web/node_modules/
 web/dist/
