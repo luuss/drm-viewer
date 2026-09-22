@@ -150,6 +150,24 @@ Zwei Eigenheiten des Satzes kosten sonst Text:
   ("ridolin Rudolf ..."). Er wird ueber die Lage auf der Seite
   zurueckgegeben.
 
+### Schmuckflaechen sind keine Bilder
+
+Der gelbe Klebezettel hinter einem Kasten, das Kalenderblatt hinter einem
+Datum, das Fusszeilenlogo: im Satz sind das platzierte Bilder wie jedes Foto.
+Im Artikel stand dann eine leere gelbe Flaeche.
+
+Erkannt werden sie an der Anordnung, nicht am Aussehen: **im Bildrahmen steckt
+ein Textrahmen.** Deckt dieser mindestens 30 Prozent des Bildes ab und traegt
+er Beiwerk — Kasten, Kolumnentitel, Bildquelle, Rubrikname —, ist das Bild
+seine Unterlage und faellt weg. Steht dagegen Mengentext oder eine Ueberschrift
+darin, ist es ein Aufmacherfoto mit Text darauf und bleibt.
+
+Ueber Helligkeit oder Farbe laesst sich das **nicht** entscheiden: das
+flaechigste Bild im Heft Greim ist eine Landkarte, und die gehoert in den
+Artikel. Gemessen an den vier Musterheften trifft die Regel 42 von 966
+Bildrahmen, und zwar genau die Schmuckflaechen (Greim 22 Klebezettel, DMZ 170
+16 Kalenderblaetter, DMZ-Zeitgeschichte ein Zierstern, ZUERST! 3 Logos).
+
 Nachrechnen laesst sich das ohne Server und ohne Datenbank:
 
 ```bash
@@ -227,6 +245,15 @@ Zwei Angaben liest der Import aus dem Heft, damit sie niemand abtippen muss:
 Gesetzt wird nur, was am Heft noch nicht steht. Eine Eingabe der Redaktion
 bleibt unangetastet. Die Heftnummer wird nicht aus dem Text gelesen — sie steht
 im Ordnernamen, und dort steht sie eindeutig.
+
+### Einstieg an der angetippten Seite
+
+Ein Artikel laeuft ueber viele Seiten. Wer auf Seite 6 tippt, will dort
+weiterlesen und nicht am Anfang landen. Jeder Absatz und jedes Bild traegt im
+Reader seine Druckseite (`data-source-page`); beim Oeffnen springt die Ansicht
+an die erste Marke dieser Seite. Auf der Anfangsseite des Artikels bleibt es
+beim Kopf mit Titel und Unterzeile. Derselbe Einstieg gilt beim Wechsel vom
+Seiten- in den Artikelmodus.
 
 ### Klickflaechen im Seitenmodus
 

@@ -147,3 +147,43 @@ def test_kurze_meldung_nimmt_ihren_ersten_absatz_als_zeile():
     a = artikel_aus_satz(blocks)[0]
     assert a.title == "Philipp Wild geboren"
     assert a.blocks[0].kind == "heading"
+
+
+class _Rahmen:
+    """Ein Rahmen, wie ihn `extract_idml_frames` liefert."""
+
+    def __init__(self, page, x0, y0, x1, y1, story=""):
+        self.page_number = page
+        self.x0, self.y0, self.x1, self.y1 = x0, y0, x1, y1
+        self.story_id = story
+        self.link = "bild.tif"
+
+
+def test_bild_unter_einem_kasten_ist_schmuck():
+    from extractor.idml_articles import ohne_unterlagen
+
+    # Der gelbe Klebezettel: der Kastentext steckt im Bildrahmen.
+    zettel = _Rahmen(9, 0.252, 0.221, 0.523, 0.398)
+    kasten = _Rahmen(9, 0.281, 0.243, 0.479, 0.366, story="s1")
+    uebrig = ohne_unterlagen([zettel], [kasten], {"s1": "kasten"})
+    assert uebrig == []
+
+
+def test_foto_mit_textspalte_darauf_bleibt():
+    from extractor.idml_articles import ohne_unterlagen
+
+    # Ein Aufmacherfoto, ueber dem eine Textspalte liegt: kein Schmuck.
+    foto = _Rahmen(12, 0.0, 0.0, 1.0, 1.0)
+    spalte = _Rahmen(12, 0.05, 0.1, 0.5, 0.9, story="s1")
+    uebrig = ohne_unterlagen([foto], [spalte], {"s1": "mengentext"})
+    assert uebrig == [foto]
+
+
+def test_karte_mit_beschriftung_bleibt():
+    from extractor.idml_articles import ohne_unterlagen
+
+    # Kleine Beschriftungen in einer Karte decken zu wenig Flaeche ab.
+    karte = _Rahmen(4, 0.0, 0.0, 0.6, 0.6)
+    marke = _Rahmen(4, 0.1, 0.1, 0.2, 0.15, story="s1")
+    uebrig = ohne_unterlagen([karte], [marke], {"s1": "beiwerk"})
+    assert uebrig == [karte]

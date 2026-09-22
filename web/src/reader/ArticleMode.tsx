@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
@@ -13,6 +14,12 @@ type Props = {
   canNext: boolean;
   /** Lesesitzung fuer Bilder aus dem Medienspeicher. */
   sessionToken?: string | null;
+  /**
+   * Seite, von der aus der Artikel geoeffnet wurde. Ein langer Artikel laeuft
+   * ueber viele Seiten; wer auf Seite 6 tippt, will dort weiterlesen und nicht
+   * am Anfang landen.
+   */
+  fromPageIndex?: number | null;
 };
 
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
@@ -25,6 +32,7 @@ export default function ArticleMode({
   canPrev,
   canNext,
   sessionToken,
+  fromPageIndex,
 }: Props) {
   /**
    * Bilder aus dem Medienspeicher kommen ueber das Kachel-Gateway, und das
@@ -39,6 +47,23 @@ export default function ArticleMode({
     api.articles.getForReader,
     articleId ? { articleId } : "skip",
   );
+  const koerper = useRef<HTMLElement>(null);
+
+  // An die Stelle springen, die zur angetippten Seite gehoert. Jeder Absatz
+  // und jedes Bild traegt seine Druckseite; die erste Marke der Seite ist der
+  // Einstieg. Auf der Anfangsseite bleibt es beim Artikelkopf.
+  const geladen = article ?? null;
+  useEffect(() => {
+    if (!geladen || fromPageIndex == null) return;
+    const ziel =
+      fromPageIndex <= geladen.pageStart
+        ? null
+        : koerper.current?.querySelector(
+            `[data-source-page="${fromPageIndex}"]`,
+          );
+    if (ziel) ziel.scrollIntoView({ block: "start" });
+    else koerper.current?.scrollIntoView({ block: "start" });
+  }, [geladen, fromPageIndex, articleId]);
 
   if (!articleId) {
     return (
@@ -132,7 +157,7 @@ export default function ArticleMode({
         disabled={!canNext}
         onClick={onNext}
       />
-      <article className="article-body">
+      <article className="article-body" ref={koerper}>
         <h1>{article.title}</h1>
         {article.subtitle && <p className="subtitle">{article.subtitle}</p>}
         {article.author && <p className="byline">{article.author}</p>}

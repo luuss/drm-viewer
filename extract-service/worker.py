@@ -41,7 +41,11 @@ from extractor.pdf_extract import (
     mark_furniture,
     prepare_blocks,
 )
-from extractor.idml_articles import artikel_aus_satz
+from extractor.idml_articles import (
+    artikel_aus_satz,
+    ohne_unterlagen,
+    rollen_je_story,
+)
 from extractor.publication_profiles import apply_profile
 from storage import ConvexClient, Storage, issue_key
 
@@ -499,10 +503,20 @@ class Job:
         """
         bildrahmen, textrahmen = extract_idml_frames(idml_bytes)
         trims = read_trim_boxes(pdf_bytes, page_map, halves) if pdf_bytes else {}
-        satz_blocks = frames_to_blocks(
-            extract_idml_blocks(idml_bytes, textrahmen), page_map, trims
+        rohe_blocks = extract_idml_blocks(idml_bytes, textrahmen)
+        # Schmuckflaechen fallen im Netzformat des Satzes weg, bevor daraus
+        # Bildbereiche der Druckseite werden.
+        gefiltert = ohne_unterlagen(
+            bildrahmen, textrahmen, rollen_je_story(rohe_blocks)
         )
-        satz_images = frames_to_images(bildrahmen, page_map, trims)
+        if len(gefiltert) != len(bildrahmen):
+            log(
+                "job.unterlagen",
+                jobId=self.job_id,
+                entfernt=len(bildrahmen) - len(gefiltert),
+            )
+        satz_blocks = frames_to_blocks(rohe_blocks, page_map, trims)
+        satz_images = frames_to_images(gefiltert, page_map, trims)
         return satz_blocks, satz_images
 
     @staticmethod

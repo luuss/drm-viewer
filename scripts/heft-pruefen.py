@@ -25,7 +25,11 @@ HIER = Path(__file__).resolve().parent
 sys.path.insert(0, str(HIER.parent / "extract-service"))
 
 from extractor.article_assembler import assemble, flow_text_blocks  # noqa: E402
-from extractor.idml_articles import artikel_aus_satz  # noqa: E402
+from extractor.idml_articles import (  # noqa: E402
+    artikel_aus_satz,
+    ohne_unterlagen,
+    rollen_je_story,
+)
 from extractor.idml_extract import (  # noqa: E402
     extract_idml_blocks,
     extract_idml_frames,
@@ -100,10 +104,13 @@ def auswerten(pfad: Path, slug: str | None, gedruckt_ab: int = 3) -> dict:
         idml_bytes = plan["idml"].read_bytes()
         bildrahmen, textrahmen = extract_idml_frames(idml_bytes)
         trims = read_trim_boxes(pdf_bytes, page_map, None)
-        blocks = frames_to_blocks(
-            extract_idml_blocks(idml_bytes, textrahmen), page_map, trims
+        rohe = extract_idml_blocks(idml_bytes, textrahmen)
+        blocks = frames_to_blocks(rohe, page_map, trims)
+        images = frames_to_images(
+            ohne_unterlagen(bildrahmen, textrahmen, rollen_je_story(rohe)),
+            page_map,
+            trims,
         )
-        images = frames_to_images(bildrahmen, page_map, trims)
         aus_satz = bool(blocks)
     if not aus_satz:
         blocks, images = extract_pdf_pages(pdf_bytes, page_map, None)

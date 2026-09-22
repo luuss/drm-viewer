@@ -21,7 +21,7 @@ type Props = {
   sessionToken: string;
   regions: Region[];
   watermark: string;
-  onOpenArticle: (articleId: Id<"articles">) => void;
+  onOpenArticle: (articleId: Id<"articles">, fromPageIndex?: number) => void;
   onNavigatePage: (pageIndex: number) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -325,7 +325,7 @@ export default function PageMode({
                         onClick={() =>
                           region.targetPageIndex !== null
                             ? onNavigatePage(region.targetPageIndex)
-                            : onOpenArticle(region.articleId)
+                            : onOpenArticle(region.articleId, region.pageIndex)
                         }
                         aria-label={
                           region.targetPageIndex !== null

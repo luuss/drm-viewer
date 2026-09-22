@@ -81,6 +81,58 @@ def rolle_fuer(style: str | None, text_laenge: int = 0) -> str:
     return "mengentext"
 
 
+# Ein Bildrahmen, in dem ein Textrahmen steckt, ist dessen Unterlage: der
+# gelbe Klebezettel hinter dem Kasten, das Kalenderblatt hinter dem Datum, das
+# Logo hinter der Fusszeile. Als Artikelbild taugt er nicht — er ist leer.
+UNTERLAGE_ANTEIL = 0.30
+# Nur Beiwerk verraet eine Unterlage. Steht Mengentext oder eine Ueberschrift
+# im Bild, ist es ein Aufmacherfoto mit Text darauf und bleibt.
+UNTERLAGE_ROLLEN = ("kasten", "beiwerk", "zwischentitel", "quelle", "autor")
+
+
+def _steckt_drin(bild, text, rand: float = 0.004) -> float:
+    """Flaechenanteil des Textrahmens, wenn er ganz im Bildrahmen liegt."""
+    if not (
+        text.x0 >= bild.x0 - rand
+        and text.y0 >= bild.y0 - rand
+        and text.x1 <= bild.x1 + rand
+        and text.y1 <= bild.y1 + rand
+    ):
+        return 0.0
+    flaeche = (bild.x1 - bild.x0) * (bild.y1 - bild.y0)
+    if flaeche <= 0:
+        return 0.0
+    return ((text.x1 - text.x0) * (text.y1 - text.y0)) / flaeche
+
+
+def ohne_unterlagen(bildrahmen: list, textrahmen: list, rollen: dict) -> list:
+    """Schmuckflaechen aussortieren, bevor daraus Artikelbilder werden.
+
+    Gemessen an den vier Musterheften trifft das genau den Klebezettel, das
+    Kalenderblatt, den Zierstern und das Fusszeilenlogo — zusammen 43 von 966
+    Bildrahmen. Fotos mit Text darauf bleiben, weil dort Mengentext im Rahmen
+    steht und nicht Beiwerk.
+    """
+    je_seite: dict[int, list] = {}
+    for t in textrahmen:
+        je_seite.setdefault(t.page_number, []).append(t)
+    behalten = []
+    for bild in bildrahmen:
+        unterlage = any(
+            _steckt_drin(bild, t) >= UNTERLAGE_ANTEIL
+            and rollen.get(t.story_id) in UNTERLAGE_ROLLEN
+            for t in je_seite.get(bild.page_number, [])
+        )
+        if not unterlage:
+            behalten.append(bild)
+    return behalten
+
+
+def rollen_je_story(blocks: list[SourceBlock]) -> dict[str, str]:
+    """Rolle jeder Story — fuer Aufrufer, die nur die Zuordnung brauchen."""
+    return {s.story_id: s.rolle() for s in stories_bilden(blocks)}
+
+
 @dataclass
 class Story:
     """Alle Absaetze einer Story, in der Reihenfolge des Satzes."""

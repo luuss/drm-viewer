@@ -49,6 +49,9 @@ export default function ReaderShell() {
   );
   const [pageIndex, setPageIndex] = useState(0);
   const [articleId, setArticleId] = useState<Id<"articles"> | null>(null);
+  // Seite, von der aus der Artikel geoeffnet wurde — der Einstieg in den
+  // Lesetext. Null heisst: am Anfang des Artikels.
+  const [artikelEinstieg, setArtikelEinstieg] = useState<number | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
   const [restored, setRestored] = useState(false);
   const saveTimer = useRef<number | null>(null);
@@ -156,8 +159,9 @@ export default function ReaderShell() {
   );
 
   const openArticle = useCallback(
-    (id: Id<"articles"> | null) => {
+    (id: Id<"articles"> | null, fromPageIndex?: number) => {
       setArticleId(id);
+      setArtikelEinstieg(fromPageIndex ?? null);
       setMode("article");
       const hit = articleList.find((a) => a._id === id);
       // Laeuft der Artikel ueber die Seite, auf der der Leser gerade steht,
@@ -200,7 +204,8 @@ export default function ReaderShell() {
           ? a
           : best,
       );
-    openArticle(nearest._id);
+    // Auch hier steigt der Leser dort ein, wo er gerade steht.
+    openArticle(nearest._id, pageIndex);
   }, [articleList, pageIndex, openArticle]);
 
   const switchToPages = useCallback(() => {
@@ -415,6 +420,7 @@ export default function ReaderShell() {
         ) : (
           <ArticleMode
             articleId={articleId ?? articleList[0]?._id ?? null}
+            fromPageIndex={artikelEinstieg}
             watermark={watermark}
             pageLabel={pageLabel}
             onPrev={prev}
