@@ -37,8 +37,12 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Die Tests unter web/src importieren Pakete der Weboberflaeche (utif2).
+      # Deshalb muessen beide Installationen vor `npm test` laufen.
       - name: Abhaengigkeiten
-        run: npm ci
+        run: |
+          npm ci
+          npm ci --prefix web
 
       # Faellt hier auf, nicht erst beim Ausliefern: `convex deploy` prueft die
       # Typen mit derselben Konfiguration und bricht sonst ab.
@@ -57,7 +61,6 @@ jobs:
             echo "::error::Repository-Variable VITE_CONVEX_URL fehlt."
             exit 1
           fi
-          npm ci --prefix web
           npm run build --prefix web
           bundle=$(grep -oE 'src="[^"]+\.js"' web/dist/index.html | head -1 | cut -d'"' -f2)
           echo "Erwartetes Bundle: $bundle"
