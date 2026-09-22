@@ -1,36 +1,109 @@
 /**
- * Zugang zum Umwandlungsfaden. Haelt genau einen Worker und reicht die
- * Auftraege der Reihe nach hinein — ein Bild in Druckaufloesung belegt
- * waehrend der Umwandlung mehrere hundert Megabyte, mehrere gleichzeitig
- * bringen den Rechner in Bedraengnis.
+ * Zugang zu den Umwandlungsfaeden.
+ *
+ * Ein Bild in Druckaufloesung belegt waehrend der Umwandlung mehrere hundert
+ * Megabyte. Deshalb laeuft nicht jedes Bild fuer sich, sondern eine kleine
+ * feste Zahl von Faeden nebeneinander: genug, um mehrere Kerne zu nutzen,
+ * wenig genug, dass der Speicher reicht. Ein Heft bringt bis zu 250 Bilder
+ * mit; nacheinander gerechnet ist das die laengste Strecke des Imports.
  */
 
 import { convertImage, type ConvertedImage } from "./imageConvert";
 import type { ConvertResponse } from "./convertWorker";
 
-export class ImageConverter {
-  private worker: Worker | null = null;
-  private zaehler = 0;
-  private offen = new Map<
-    number,
-    { resolve: (v: ConvertedImage) => void; reject: (e: Error) => void }
-  >();
-  private kette: Promise<unknown> = Promise.resolve();
+/** Zwei Faeden sind der Kompromiss aus Tempo und Speicher. */
+export const FAEDEN = 2;
 
-  private hole(): Worker | null {
-    if (this.worker) return this.worker;
+type Auftrag = {
+  file: File | Blob;
+  name: string;
+  maxEdge: number;
+  quality: number;
+  resolve: (v: ConvertedImage) => void;
+  reject: (e: Error) => void;
+};
+
+type Faden = {
+  worker: Worker;
+  /** Auftrag, auf den dieser Faden gerade antwortet. */
+  laufend: Auftrag | null;
+  id: number;
+};
+
+export class ImageConverter {
+  private faeden: Faden[] = [];
+  private wartend: Auftrag[] = [];
+  private zaehler = 0;
+  private ohneFaden = false;
+
+  constructor(private readonly breite = FAEDEN) {}
+
+  /** Ein Bild umwandeln. */
+  convert(
+    file: File | Blob,
+    name: string,
+    maxEdge: number,
+    quality: number,
+  ): Promise<ConvertedImage> {
+    return new Promise<ConvertedImage>((resolve, reject) => {
+      this.wartend.push({ file, name, maxEdge, quality, resolve, reject });
+      this.weiter();
+    });
+  }
+
+  private weiter(): void {
+    while (this.wartend.length > 0) {
+      const faden = this.freierFaden();
+      if (!faden) return;
+      const auftrag = this.wartend.shift()!;
+      if (faden === "hauptfaden") {
+        // Kein Worker verfuegbar: im Hauptfaden rechnen. Langsamer, aber der
+        // Import bricht nicht ab.
+        convertImage(auftrag.file, auftrag.name, {
+          maxEdge: auftrag.maxEdge,
+          quality: auftrag.quality,
+        }).then(auftrag.resolve, auftrag.reject);
+        continue;
+      }
+      faden.laufend = auftrag;
+      faden.id += 1;
+      faden.worker.postMessage({
+        id: faden.id,
+        file: auftrag.file,
+        name: auftrag.name,
+        maxEdge: auftrag.maxEdge,
+        quality: auftrag.quality,
+      });
+    }
+  }
+
+  private freierFaden(): Faden | "hauptfaden" | null {
+    const frei = this.faeden.find((f) => f.laufend === null);
+    if (frei) return frei;
+    if (this.faeden.length < this.breite && !this.ohneFaden) {
+      const neu = this.baue();
+      if (neu) return neu;
+      // Faeden gibt es hier nicht (aelterer Browser, Testumgebung).
+      this.ohneFaden = true;
+      return "hauptfaden";
+    }
+    return this.ohneFaden ? "hauptfaden" : null;
+  }
+
+  private baue(): Faden | null {
     if (typeof Worker === "undefined") return null;
     try {
-      this.worker = new Worker(new URL("./convertWorker.ts", import.meta.url), {
+      const worker = new Worker(new URL("./convertWorker.ts", import.meta.url), {
         type: "module",
       });
-      this.worker.onmessage = (event: MessageEvent<ConvertResponse>) => {
+      const faden: Faden = { worker, laufend: null, id: 0 };
+      worker.onmessage = (event: MessageEvent<ConvertResponse>) => {
+        const auftrag = faden.laufend;
+        if (!auftrag || event.data.id !== faden.id) return;
+        faden.laufend = null;
         const antwort = event.data;
-        const wartend = this.offen.get(antwort.id);
-        if (!wartend) return;
-        this.offen.delete(antwort.id);
         if (antwort.ok) {
-          wartend.resolve({
+          auftrag.resolve({
             blob: antwort.blob,
             width: antwort.width,
             height: antwort.height,
@@ -38,54 +111,33 @@ export class ImageConverter {
             sourceHeight: antwort.sourceHeight,
           });
         } else {
-          wartend.reject(new Error(antwort.error));
+          auftrag.reject(new Error(antwort.error));
         }
+        this.weiter();
       };
-      this.worker.onerror = () => {
-        // Faellt der Faden aus, geht es im Hauptfaden weiter: langsamer,
-        // aber der Import bricht nicht ab.
-        for (const [, w] of this.offen) w.reject(new Error("Umwandlungsfaden ausgefallen"));
-        this.offen.clear();
-        this.worker = null;
+      worker.onerror = () => {
+        // Faellt ein Faden aus, geht sein Auftrag in den Hauptfaden und der
+        // Faden wird nicht wieder benutzt.
+        const auftrag = faden.laufend;
+        faden.laufend = null;
+        this.faeden = this.faeden.filter((f) => f !== faden);
+        if (this.faeden.length === 0) this.ohneFaden = true;
+        if (auftrag) this.wartend.unshift(auftrag);
+        this.weiter();
       };
+      this.faeden.push(faden);
+      return faden;
     } catch {
-      this.worker = null;
+      return null;
     }
-    return this.worker;
-  }
-
-  /** Ein Bild umwandeln. Auftraege laufen nacheinander. */
-  convert(
-    file: File | Blob,
-    name: string,
-    maxEdge: number,
-    quality: number,
-  ): Promise<ConvertedImage> {
-    const auftrag = () => this.starte(file, name, maxEdge, quality);
-    const ergebnis = this.kette.then(auftrag, auftrag);
-    // Die Kette darf an einem Fehler nicht zerreissen.
-    this.kette = ergebnis.catch(() => undefined);
-    return ergebnis;
-  }
-
-  private starte(
-    file: File | Blob,
-    name: string,
-    maxEdge: number,
-    quality: number,
-  ): Promise<ConvertedImage> {
-    const worker = this.hole();
-    if (!worker) return convertImage(file, name, { maxEdge, quality });
-    const id = ++this.zaehler;
-    return new Promise<ConvertedImage>((resolve, reject) => {
-      this.offen.set(id, { resolve, reject });
-      worker.postMessage({ id, file, name, maxEdge, quality });
-    });
   }
 
   dispose(): void {
-    this.worker?.terminate();
-    this.worker = null;
-    this.offen.clear();
+    for (const faden of this.faeden) faden.worker.terminate();
+    this.faeden = [];
+    for (const auftrag of this.wartend) {
+      auftrag.reject(new Error("Umwandlung abgebrochen"));
+    }
+    this.wartend = [];
   }
 }

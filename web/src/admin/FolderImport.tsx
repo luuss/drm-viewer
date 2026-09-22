@@ -15,6 +15,7 @@ import {
 import { readDirectoryInput, readDroppedFolder } from "./folderDrop";
 import { ImageConverter } from "./convertClient";
 import { jpegName } from "./imageConvert";
+import { Ladeschlange } from "./ladeschlange";
 import { buildPageOrder } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
 import { readIdmlMeta } from "./idmlMeta";
@@ -25,6 +26,9 @@ import {
 } from "./pageRender";
 
 /** Laengste Kante der umgewandelten Bilder. */
+// Wie viele Uploads gleichzeitig laufen duerfen. Vier halten die Leitung
+// ausgelastet, ohne dass sich die Blobs im Speicher stapeln.
+const GLEICHZEITIGE_UPLOADS = 4;
 const ARTWORK_KANTE = 1600;
 const ARTWORK_GUETE = 0.82;
 /** Titelseiten werden im Reader ganzseitig gezeigt und bleiben groesser. */
@@ -215,6 +219,9 @@ export default function FolderImport({
         offen.push("Netzformat aus der Satzdatei nicht lesbar — Seiten behalten den Anschnitt");
       }
       melde("innenteil", `Innenteil ${innenteil.name} wird gerendert`);
+      // Rendern und Hochladen laufen nebeneinander. Ohne das stand abwechselnd
+      // der Rechner oder die Leitung still.
+      const schlange = new Ladeschlange(GLEICHZEITIGE_UPLOADS);
       const innenSeiten: {
         assetId: Id<"assets">;
         previewKey: string;
@@ -239,23 +246,28 @@ export default function FolderImport({
               (i + 1) / total,
             );
             const dateiname = `seite-${String(i + 1).padStart(3, "0")}.jpg`;
-            const { assetId, key } = await uploadAsset(
-              deps,
-              issueId,
-              seite.blob,
-              dateiname,
-              "page",
-            );
-            innenSeiten.push({
-              assetId,
-              previewKey: key,
-              width: seite.width,
-              height: seite.height,
+            // Nicht auf den Upload warten: die naechste Seite kann schon
+            // gerendert werden, waehrend diese hochgeht.
+            await schlange.einreihen(async () => {
+              const { assetId, key } = await uploadAsset(
+                deps,
+                issueId,
+                seite.blob,
+                dateiname,
+                "page",
+              );
+              innenSeiten[i] = {
+                assetId,
+                previewKey: key,
+                width: seite.width,
+                height: seite.height,
+              };
+              hochgeladen += seite.blob.size;
             });
-            hochgeladen += seite.blob.size;
           },
           () => abbrechen.current,
         );
+        await schlange.fertig();
         innerSeiten = innenSeiten.length;
       } catch (e: any) {
         if (e instanceof Abgebrochen) throw e;
@@ -309,23 +321,26 @@ export default function FolderImport({
               pruefen();
               melde("umschlag", `Umschlagseite ${i + 1} von ${total}`, (i + 1) / total);
               const dateiname = `umschlag-${String(i + 1).padStart(2, "0")}.jpg`;
-              const { assetId, key } = await uploadAsset(
-                deps,
-                issueId,
-                seite.blob,
-                dateiname,
-                "page",
-              );
-              seiten.push({
-                assetId,
-                previewKey: key,
-                width: seite.width,
-                height: seite.height,
+              await schlange.einreihen(async () => {
+                const { assetId, key } = await uploadAsset(
+                  deps,
+                  issueId,
+                  seite.blob,
+                  dateiname,
+                  "page",
+                );
+                seiten[i] = {
+                  assetId,
+                  previewKey: key,
+                  width: seite.width,
+                  height: seite.height,
+                };
+                hochgeladen += seite.blob.size;
               });
-              hochgeladen += seite.blob.size;
             },
             () => abbrechen.current,
           );
+          await schlange.fertig();
           if (seiten.length) {
             coverPdf = {
               assetId: seiten[0].assetId,
@@ -447,6 +462,7 @@ export default function FolderImport({
           sourceWidth: number;
           sourceHeight: number;
         }[] = [];
+        const bilderschlange = new Ladeschlange(GLEICHZEITIGE_UPLOADS);
         for (let i = 0; i < gesamt; i++) {
           pruefen();
           const datei = plan.artwork[i];
@@ -458,25 +474,28 @@ export default function FolderImport({
               ARTWORK_KANTE,
               ARTWORK_GUETE,
             );
-            const { assetId } = await uploadAsset(
-              deps,
-              issueId,
-              bild.blob,
-              jpegName(datei.name),
-              "image",
-            );
-            eintraege.push({
-              assetId,
-              // Der Name aus `Links/` bleibt stehen: unter ihm nennt die
-              // Satzdatei das Bild, darueber findet der Worker es wieder.
-              filename: datei.name,
-              width: bild.width,
-              height: bild.height,
-              sourceWidth: bild.sourceWidth,
-              sourceHeight: bild.sourceHeight,
+            // Das naechste Bild wird schon umgewandelt, waehrend dieses hochgeht.
+            await bilderschlange.einreihen(async () => {
+              const { assetId } = await uploadAsset(
+                deps,
+                issueId,
+                bild.blob,
+                jpegName(datei.name),
+                "image",
+              );
+              eintraege.push({
+                assetId,
+                // Der Name aus `Links/` bleibt stehen: unter ihm nennt die
+                // Satzdatei das Bild, darueber findet der Worker es wieder.
+                filename: datei.name,
+                width: bild.width,
+                height: bild.height,
+                sourceWidth: bild.sourceWidth,
+                sourceHeight: bild.sourceHeight,
+              });
+              nachher += bild.blob.size;
             });
             vorher += datei.size;
-            nachher += bild.blob.size;
           } catch (e: any) {
             if (e instanceof Abgebrochen) throw e;
             uebergangen++;
@@ -485,6 +504,7 @@ export default function FolderImport({
             offen.push(`Bild ${datei.name} nachtragen — ${grund}`);
           }
         }
+        await bilderschlange.fertig();
         melde("bilder", `${eintraege.length} Bilder eintragen`, 1);
         for (let i = 0; i < eintraege.length; i += 40) {
           await addArtwork({ issueId, items: eintraege.slice(i, i + 40) });
