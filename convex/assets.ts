@@ -122,15 +122,53 @@ export const publicUrlInternal = internalQuery({
 });
 
 /** Hilfsfunktion fuer Queries, die Coverbilder ausliefern. */
+/**
+ * Adresse eines Bildes fuer den Browser.
+ *
+ * Liegt die Datei in der Convex-Ablage, gibt es dafuer eine fertige Adresse.
+ * Liegt sie dagegen im Medienspeicher, hat Convex keine — dort fuehrt der Weg
+ * ueber das Kachel-Gateway, das den Zugang hat und die Lesesitzung prueft.
+ */
 export async function assetUrl(
   ctx: any,
   assetId: Id<"assets"> | undefined | null,
 ): Promise<string | null> {
   if (!assetId) return null;
   const asset = await ctx.db.get(assetId);
-  if (!asset?.convexStorageId) return null;
-  return await ctx.storage.getUrl(asset.convexStorageId);
+  if (!asset) return null;
+  if (asset.convexStorageId) return await ctx.storage.getUrl(asset.convexStorageId);
+  if (!asset.bucket) return null;
+  const gateway = (process.env.PUBLIC_TILE_ORIGIN ?? "").replace(/\/$/, "");
+  return gateway ? `${gateway}/api/asset/${assetId}.jpg` : null;
 }
+
+/**
+ * Was das Kachel-Gateway braucht, um ein Bild auszuliefern: wo es liegt und
+ * ob es oeffentlich ist. Titelbilder stehen im Kiosk und sind frei; alles
+ * andere gehoert zum bezahlten Inhalt.
+ */
+export const resolveForServiceInternal = internalQuery({
+  args: { assetId: v.string() },
+  handler: async (ctx, { assetId }) => {
+    let asset;
+    try {
+      asset = await ctx.db.get(assetId as Id<"assets">);
+    } catch {
+      return null;
+    }
+    if (!asset) return null;
+    return {
+      public: asset.kind === "cover",
+      issueId: asset.issueId ?? null,
+      key: asset.key,
+      bucket: asset.bucket ?? null,
+      contentType: asset.contentType,
+      url: asset.convexStorageId
+        ? await ctx.storage.getUrl(asset.convexStorageId)
+        : null,
+    };
+  },
+});
 
 /** Upload-Adresse fuer den Import-Worker. */
 export const generateUploadUrlInternal = internalMutation({

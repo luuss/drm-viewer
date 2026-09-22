@@ -7,8 +7,10 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "httpx>=0.27",
-    "pymupdf>=1.24",
     "pillow>=11.0",
+    # Liegen die Seitenbilder im Eimer statt in der Convex-Ablage, holt dieser
+    # Dienst sie selbst — Convex hat dafuer keine Adresse.
+    "boto3>=1.35",
 ]
 
 [build-system]

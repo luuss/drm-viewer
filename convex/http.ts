@@ -182,6 +182,12 @@ tileRoute("/service/session/usage", (ctx, body) =>
   }),
 );
 
+tileRoute("/service/asset/resolve", (ctx, body) =>
+  ctx.runQuery(internal.assets.resolveForServiceInternal, {
+    assetId: String(body.assetId ?? ""),
+  }),
+);
+
 tileRoute("/service/page/resolve", (ctx, body) =>
   ctx.runQuery(internal.issuePages.resolveForServiceInternal, {
     issueId: body.issueId,

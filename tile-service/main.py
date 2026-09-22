@@ -44,6 +44,12 @@ USAGE_FLUSH_SECONDS = int(os.environ.get("USAGE_FLUSH_SECONDS", "30"))
 MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "80"))
 MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "1200"))
 
+# Medienspeicher. Liegen die Bilder in einem Eimer statt in der Convex-Ablage,
+# hat Convex keine Adresse fuer den Browser — dieser Dienst hat den Zugang und
+# liefert sie aus.
+MEDIA_BUCKET = os.environ.get("MEDIA_BUCKET", "emag-media")
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "").strip()
+
 if not CONVEX_SITE_URL or not TILE_SERVICE_SECRET:
     raise RuntimeError("CONVEX_SITE_URL und TILE_SERVICE_SECRET muessen gesetzt sein")
 
@@ -63,6 +69,32 @@ _session_cache: dict[str, tuple[float, dict]] = {}
 _rate: dict[str, deque[float]] = defaultdict(deque)
 _usage: dict[str, int] = defaultdict(int)
 _lock = asyncio.Lock()
+_s3 = None
+
+
+def s3():
+    """Zugang zum Medienspeicher, erst beim ersten Bedarf."""
+    global _s3
+    if _s3 is None:
+        import boto3
+
+        _s3 = boto3.client("s3", endpoint_url=S3_ENDPOINT_URL or None)
+    return _s3
+
+
+async def fetch_object(url: str | None, bucket: str | None, key: str | None) -> bytes:
+    """Ein Bild holen — ueber die Convex-Adresse oder aus dem Eimer."""
+    if url:
+        res = await _client.get(url, timeout=120.0)
+        if res.status_code != 200:
+            raise HTTPException(502, "Bild nicht ladbar")
+        return res.content
+    if bucket and key:
+        def lade() -> bytes:
+            return s3().get_object(Bucket=bucket, Key=key)["Body"].read()
+
+        return await asyncio.to_thread(lade)
+    raise HTTPException(409, "Bild nicht abrufbar")
 
 
 async def service_call(path: str, body: dict) -> Any:
@@ -121,14 +153,8 @@ async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
     )
     if not info or not info.get("ready"):
         raise HTTPException(409, "Seite ist noch nicht aufbereitet")
-    url = info.get("url")
-    if not url:
-        raise HTTPException(409, "Seitenbild nicht abrufbar")
-
-    res = await _client.get(url, timeout=120.0)
-    if res.status_code != 200:
-        raise HTTPException(502, "Seitenbild nicht ladbar")
-    image = Image.open(io.BytesIO(res.content)).convert("RGB")
+    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    image = Image.open(io.BytesIO(daten)).convert("RGB")
     meta = {"width": image.width, "height": image.height}
     async with _lock:
         _page_cache[key] = image
@@ -174,6 +200,39 @@ async def session_info(
         # Kurzkennung fuers Wasserzeichen im Reader.
         "watermark": session.get("watermark", ""),
     }
+
+
+@app.get("/api/asset/{asset_id}.jpg")
+async def asset(
+    asset_id: str,
+    x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
+) -> Response:
+    """Ein Bild aus dem Medienspeicher ausliefern.
+
+    Liegt der Medienspeicher in einem Eimer, hat Convex keine Adresse dafuer;
+    der Browser kaeme also nicht an Titelbilder und Artikelbilder. Dieser Dienst
+    hat den Zugang — und die Rechtepruefung gibt es hier ohnehin schon.
+
+    Ein Titelbild ist oeffentlich: es steht im Kiosk, auch ohne Anmeldung. Alles
+    andere gehoert zum bezahlten Inhalt und braucht eine gueltige Lesesitzung
+    fuer genau dieses Heft.
+    """
+    info = await service_call("/service/asset/resolve", {"assetId": asset_id})
+    if not info:
+        raise HTTPException(404, "Unbekanntes Bild")
+    if not info.get("public"):
+        session = await require_session(x_tile_session, info.get("issueId"))
+        check_rate(
+            f'assets:{session.get("userId")}:{info.get("issueId")}',
+            MAX_TILES_PER_MIN,
+            "Bilder",
+        )
+    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    return Response(
+        content=daten,
+        media_type=info.get("contentType") or "image/jpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @app.get("/api/issue/{issue_id}/page/{index}/info")

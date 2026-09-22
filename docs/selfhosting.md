@@ -190,3 +190,72 @@ Ohne wartenden Auftrag vergroessert der Worker sein Abfrageintervall von
 `WORKER_IDLE_POLL_MAX_SECONDS` (Standard 60 Sekunden). Das senkt die Convex-
 Funktionsaufrufe im Leerlauf um mehr als 90 Prozent. Nach einem bearbeiteten
 Auftrag beginnt er wieder mit dem kurzen Intervall.
+
+## Was beim ersten Probelauf auffiel
+
+Der Aufbau wurde am 22.09.2026 zum ersten Mal wirklich gestartet. Vier Punkte
+standen dem im Weg; alle sind in der Compose-Datei behoben, hier stehen sie,
+damit man sie bei einer eigenen Installation wiedererkennt.
+
+**Die Datenbank muss heissen wie die Instanz.** Das Convex-Backend verbindet
+sich mit einer Datenbank, deren Name `INSTANCE_NAME` entspricht. Legt Postgres
+sie unter einem anderen Namen an, startet das Backend nicht und meldet
+`database "emagazin" does not exist`.
+
+**MinIO kennt keine Bucket-Unterdomaenen.** Ohne
+`AWS_S3_FORCE_PATH_STYLE=true` sucht der S3-Client nach
+`convex-modules.minio` und scheitert an der Namensaufloesung
+(`dns error: failed to lookup address information`).
+
+**MinIO braucht einen Schluessel fuer die serverseitige Verschluesselung.**
+Das Convex-Backend legt seine Dateien verschluesselt ab. Fehlt
+`MINIO_KMS_SECRET_KEY`, lehnt MinIO jeden Upload mit
+`Server side encryption specified but KMS is not configured` ab. Erzeugen:
+
+```bash
+echo "emagazin-key:$(openssl rand -base64 32)"
+```
+
+**Der Medienspeicher muss von aussen erreichbar sein.** Der Browser laedt die
+Heftdateien direkt dorthin, nicht ueber den Server. Im Betrieb steht Caddy
+davor, lokal genuegt ein eigener Port (`MINIO_PORT`, Vorgabe 9100) — 9000 ist
+oft schon belegt.
+
+Dazu kam ein Fehler im Anwendungscode, der nur mit MinIO auftritt: das AWS-SDK
+rechnet seit Version 3.729 zu jedem `PutObject` eine Pruefsumme und nimmt sie
+in die Signatur auf. Der Browser sendet den Kopf beim direkten Upload nicht
+mit, also antwortet der Medienspeicher mit 403. `convex/uploads.ts` schaltet
+die Pruefsumme deshalb ab.
+
+### Bilder aus dem Medienspeicher
+
+Liegen die Dateien in einem Eimer statt in der Convex-Ablage, hat Convex keine
+Adresse fuer den Browser. Titelbilder und Artikelbilder gehen deshalb ueber das
+Kachel-Gateway (`/api/asset/<assetId>.jpg`), das den Zugang hat und die
+Lesesitzung prueft. Ein Titelbild ist frei, weil es im Kiosk steht; alles
+andere braucht eine gueltige Sitzung fuer genau dieses Heft. Damit Convex die
+Adresse des Gateways kennt, muss `PUBLIC_TILE_ORIGIN` gesetzt sein.
+
+### Erster Start, Kurzfassung
+
+```bash
+cp .env.selfhost.example .env.selfhost      # Geheimnisse ersetzen
+docker compose -f docker-compose.selfhost.yml --env-file .env.selfhost up -d
+docker exec <backend-container> ./generate_admin_key.sh
+# Schluessel als CONVEX_SELF_HOSTED_ADMIN_KEY in .env.selfhost eintragen
+npx convex deploy -y --env-file .env.selfhost
+```
+
+Die Eimer legt MinIO nicht von selbst an:
+
+```bash
+docker exec <minio-container> sh -c \
+  'mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; \
+   for b in convex-exports convex-imports convex-modules convex-files convex-search emag-media; \
+   do mc mb -p local/$b; done'
+```
+
+Ein mehrzeiliger Wert wie `JWT_PRIVATE_KEY` laesst sich nur in der Form
+`npx convex env set -- NAME=WERT` setzen, und die Zeilenumbrueche muessen
+vorher durch Leerzeichen ersetzt werden — so schreibt es auch
+`@convex-dev/auth` selbst.
