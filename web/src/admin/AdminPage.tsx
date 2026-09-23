@@ -22,6 +22,8 @@ export default function AdminPage() {
   const removeIssue = useMutation(api.issues.remove);
   const grantSelf = useMutation(api.entitlements.grantMyself);
   const ensurePrice = useAction(api.billing.ensureIssuePrice);
+  const ladenAbgleich = useAction(api.publicationCovers.refreshNow);
+  const [ladenLaeuft, setLadenLaeuft] = useState(false);
   const retryJob = useMutation(api.imports.retry);
 
   const [openIssue, setOpenIssue] = useState<Id<"issues"> | null>(null);
@@ -90,6 +92,33 @@ export default function AdminPage() {
             <button className="btn">Anlegen</button>
           </form>
         )}
+        {/* Den Verkaufspreis fuehrt der Netzladen. Nachts laeuft der Abgleich
+            von selbst; hier laesst er sich nach einer Preisaenderung sofort
+            anstossen. */}
+        <p className="muted small">
+          Preise, Titelbilder und Heftbezeichnungen kommen aus dem Verlagsshop.
+        </p>
+        <button
+          className="btn secondary"
+          disabled={ladenLaeuft}
+          onClick={async () => {
+            setLadenLaeuft(true);
+            await guard(async () => {
+              const ergebnis = await ladenAbgleich({});
+              const teile = [`${ergebnis.issues.length} Hefte abgeglichen`];
+              if (ergebnis.missing.length) {
+                teile.push(`${ergebnis.missing.length} nicht gefunden`);
+              }
+              if (ergebnis.failed.length) {
+                teile.push(`${ergebnis.failed.length} fehlgeschlagen`);
+              }
+              setMsg(teile.join(" · "));
+            });
+            setLadenLaeuft(false);
+          }}
+        >
+          {ladenLaeuft ? "Wird abgeglichen…" : "Aus dem Verlagsshop aktualisieren"}
+        </button>
       </section>
 
       <section>

@@ -33,7 +33,7 @@ from extractor.idml_extract import (
     toc_from_idml,
 )
 from extractor.image_regions import read_trim_boxes
-from extractor.issue_meta import publication_date, read_cover_meta, read_issue_meta
+from extractor.issue_meta import publication_date, read_issue_meta
 from extractor.model import SourceBlock
 from extractor.pdf_extract import (
     attach_captions,
@@ -220,29 +220,16 @@ class Job:
             ),
             None,
         )
-        titel = next(
-            (s for s in sources if s["kind"] == "image" and blobs.get(s["assetId"])),
-            None,
-        )
         meta: dict = {}
-        if titel is not None:
-            meta.update(read_cover_meta(blobs[titel["assetId"]]))
         if innen is not None:
-            # Das Impressum ist Text und damit genauer als die Texterkennung
-            # auf der Titelseite; es gilt zuletzt.
             meta.update(read_issue_meta(blobs[innen["assetId"]]))
-        # Der Preis aus dem Impressum ist der verlaessliche: er ist Text. Die
-        # Texterkennung auf der Titelseite verwechselt Ziffern (13,60 statt
-        # 12,80) und zaehlt deshalb nur, wenn das Impressum keinen nennt —
-        # ZUERST! etwa druckt dort nur Bezugspreise fuers Abo. Lieber ein
-        # Vorschlag zum Pruefen als eine Ausgabe fuer null Euro.
+        # Nur das Impressum, und nur als erster Anhaltspunkt: dort steht
+        # gelegentlich noch der Preis der Vorauflage. Den Verkaufspreis fuehrt
+        # der Netzladen, und von dort holt ihn der taegliche Abgleich — er
+        # ueberschreibt diesen Wert wieder.
         nachricht = {"issueId": self.issue_id}
-        preis = meta.get("priceAmountCents") or meta.get("coverPriceAmountCents")
-        if preis:
-            nachricht["priceAmountCents"] = preis
-            meta["priceQuelle"] = (
-                "impressum" if meta.get("priceAmountCents") else "titelseite"
-            )
+        if meta.get("priceAmountCents"):
+            nachricht["priceAmountCents"] = meta["priceAmountCents"]
         datum = publication_date(meta)
         if datum:
             nachricht["publicationDate"] = datum

@@ -1573,19 +1573,6 @@ def test_impressum_liefert_den_einzelpreis():
     assert parse_issue_meta(["ohne Angabe"]) == {}
 
 
-def test_titelseite_liefert_zeitraum_und_preis():
-    from extractor.issue_meta import parse_cover_text, publication_date
-
-    meta = parse_cover_text("Nr. 170 - März-April 2026 - € 9,80")
-
-    assert meta["monthFrom"] == 3 and meta["monthTo"] == 4 and meta["year"] == 2026
-    assert meta["coverPriceAmountCents"] == 980
-    assert publication_date(meta) is not None
-
-    einzeln = parse_cover_text("17. Jahrgang | März 2026 | € 8,70")
-    assert einzeln["monthFrom"] == einzeln["monthTo"] == 3
-
-
 def _idml_mit_ausschnitt(graphic_transform: str, bounds: str) -> bytes:
     """Ein Bogen mit einem Rahmen, hinter dem ein groesseres Bild liegt.
 

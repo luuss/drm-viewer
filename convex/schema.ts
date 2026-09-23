@@ -111,6 +111,11 @@ export default defineSchema(
     // Name, Heftbezeichnung, Unter-Ueberschrift und Produktadresse. Die
     // Oberflaeche zeigt sie vor dem eigenen Titel.
     shopTitle: v.optional(v.string()),
+    // Woher der Preis stammt. Der Laden ueberschreibt jede maschinelle
+    // Quelle, aber niemals eine Eingabe der Redaktion.
+    priceSource: v.optional(
+      v.union(v.literal("laden"), v.literal("impressum"), v.literal("redaktion")),
+    ),
     shopDesignation: v.optional(v.string()),
     shopSubtitle: v.optional(v.string()),
     shopUrl: v.optional(v.string()),

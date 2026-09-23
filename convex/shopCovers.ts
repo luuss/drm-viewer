@@ -65,6 +65,8 @@ export type ProductPage = {
   designation: string | null;
   subtitle: string | null;
   pages: string | null;
+  /** Einzelpreis in Cent, wie der Verlag ihn im Netzladen fuehrt. */
+  priceCents: number | null;
 };
 
 const ITEM = /<a\b[^>]*href="https?:\/\/lesenundschenken\.de\/\d+-([a-z0-9-]+)\/?"[^>]*>\s*<img\b([^>]*)>/gi;
@@ -153,6 +155,22 @@ function headField(html: string, klass: string): string | null {
   return text || null;
 }
 
+/**
+ * Der Einzelpreis der Produktseite.
+ *
+ * Der Laden schreibt ihn maschinenlesbar aus: `itemprop="price" content="8.7"`.
+ * Das ist die einzige verlaessliche Quelle fuer Reihen, die den Preis nur auf
+ * die Titelseite drucken — im Innenteil steht bei ZUERST! ausschliesslich der
+ * Abopreis, und die Titelseite ist ein Bild.
+ */
+export function parsePrice(html: string): number | null {
+  const treffer = /itemprop="price"[^>]*content="([0-9]+(?:[.,][0-9]{1,2})?)"/i.exec(html);
+  if (!treffer) return null;
+  const euro = Number(treffer[1].replace(",", "."));
+  if (!Number.isFinite(euro) || euro <= 0) return null;
+  return Math.round(euro * 100);
+}
+
 /** Name, Heftbezeichnung und Unter-Ueberschrift von der Produktseite. */
 export function parseProductPage(html: string): ProductPage | null {
   const start = html.indexOf("lus-product-head");
@@ -164,6 +182,8 @@ export function parseProductPage(html: string): ProductPage | null {
     designation: headField(region, "lus-head-author"),
     subtitle: headField(region, "lus-untertitel"),
     pages: headField(region, "lus-head-pages"),
+    // Der Preis steht ausserhalb des Kopfbereichs, deshalb im ganzen Dokument.
+    priceCents: parsePrice(html),
   };
 }
 

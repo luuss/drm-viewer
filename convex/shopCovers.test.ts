@@ -3,6 +3,7 @@ import {
   coverCandidates,
   designationMatches,
   parseMagazineStrip,
+  parsePrice,
   parseProductCards,
   parseProductPage,
   searchQueryForIssue,
@@ -86,11 +87,20 @@ describe("Heftbezeichnungen aus dem Verlagsshop", () => {
     ]);
   });
 
+  test("liest den Einzelpreis aus der Auszeichnung des Ladens", () => {
+    // So schreibt der Laden ihn aus; gemessen an der Seite des Greim-Heftes.
+    expect(parsePrice('<meta itemprop="price" content="13.8" />')).toBe(1380);
+    expect(parsePrice('<span itemprop="price" content="8,70">8,70 €</span>')).toBe(870);
+    expect(parsePrice("<p>kein Preis</p>")).toBeNull();
+    expect(parsePrice('<meta itemprop="price" content="0" />')).toBeNull();
+  });
+
   test("die Produktseite liefert Name, Heftbezeichnung und Unter-Ueberschrift", () => {
     expect(parseProductPage(PAGE)).toEqual({
       name: "Mscha 1943",
       designation: "DMZ-ZG Nr. 80",
       subtitle: "Ausgabe März/April 2026",
+      priceCents: null,
       pages: "68 Seiten",
     });
     expect(parseProductPage("<html><body>nichts</body></html>")).toBeNull();

@@ -104,73 +104,9 @@ def publication_date(meta: dict) -> int | None:
     return int(tag.timestamp() * 1000)
 
 
-# --- Titelseite ------------------------------------------------------------
-
-TESSERACT_SPRACHE = "deu"
-# Die Kopfzeile steht im oberen Fuenftel der Titelseite. Mehr zu lesen bringt
-# nur die Schlagzeilen mit, in denen ebenfalls Monatsnamen vorkommen koennen.
-KOPF_ANTEIL = 0.22
-
-
-def read_cover_meta(image_bytes: bytes) -> dict:
-    """Erscheinungszeitraum und Preis aus der Kopfzeile der Titelseite lesen.
-
-    Die Zeile ist bei allen Reihen gleich aufgebaut: Heftnummer, Zeitraum,
-    Preis. Sie ist klein gesetzt, deshalb wird der Streifen vergroessert und im
-    Kontrast angehoben, bevor die Texterkennung darueber geht.
-
-    Ohne Tesseract im System bleibt das Ergebnis leer; der Import laeuft dann
-    ohne diese Angaben weiter.
-    """
-    try:
-        import io
-        import subprocess
-        import tempfile
-
-        from PIL import Image, ImageOps
-    except Exception:
-        return {}
-
-    try:
-        bild = Image.open(io.BytesIO(image_bytes)).convert("L")
-        breite, hoehe = bild.size
-        kopf = bild.crop((0, 0, breite, max(1, int(hoehe * KOPF_ANTEIL))))
-        kopf = ImageOps.autocontrast(
-            kopf.resize((kopf.width * 4, kopf.height * 4), Image.LANCZOS)
-        )
-        with tempfile.NamedTemporaryFile(suffix=".png") as fh:
-            kopf.save(fh.name)
-            fertig = subprocess.run(
-                ["tesseract", fh.name, "stdout", "-l", TESSERACT_SPRACHE, "--psm", "11"],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-        return parse_cover_text(fertig.stdout)
-    except FileNotFoundError:
-        return {}
-    except Exception:
-        return {}
-
-
-def parse_cover_text(text: str) -> dict:
-    """Zeitraum und Preis aus dem erkannten Text der Kopfzeile."""
-    meta: dict = {}
-    treffer = ZEITRAUM.search(text)
-    if treffer:
-        meta["monthFrom"] = MONATE[treffer.group(1).lower()]
-        meta["monthTo"] = MONATE[treffer.group(2).lower()]
-        meta["year"] = int(treffer.group(3))
-    else:
-        treffer = EINZELMONAT.search(text)
-        if treffer:
-            meta["monthFrom"] = meta["monthTo"] = MONATE[treffer.group(1).lower()]
-            meta["year"] = int(treffer.group(2))
-    # Der Preis der Titelseite ist nur ein Rueckfall: die Texterkennung
-    # verwechselt dort gern Ziffern, das Impressum ist echter Text.
-    preis = re.search(r"\b(\d{1,2})[,.](\d{2})\b", text)
-    if preis:
-        euro, cent = int(preis.group(1)), int(preis.group(2))
-        if 1 <= euro <= 200:
-            meta["coverPriceAmountCents"] = euro * 100 + cent
-    return meta
+# Die Titelseite wird nicht gelesen.
+#
+# Sie kommt als Bild aus der Druckvorstufe, also ginge es nur ueber
+# Texterkennung — und die verwechselt Ziffern: aus 13,80 wird 13,60. Der
+# Einzelpreis steht ohnehin an einer verlaesslicheren Stelle: im Netzladen des
+# Verlags, als Text ausgezeichnet. Von dort holt ihn `publicationCovers`.

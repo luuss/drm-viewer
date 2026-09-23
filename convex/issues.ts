@@ -413,6 +413,9 @@ export const update = mutation({
     ) {
       clean.stripePriceId = undefined;
     }
+    // Was die Redaktion eintraegt, bleibt stehen — auch wenn der Laden spaeter
+    // etwas anderes sagt.
+    if (patch.priceAmountCents !== undefined) clean.priceSource = "redaktion";
     await ctx.db.patch(issueId, clean);
   },
 });
@@ -565,6 +568,7 @@ export const setCountsInternal = internalMutation({
     }
     if (priceAmountCents !== undefined && !issue?.priceAmountCents) {
       clean.priceAmountCents = priceAmountCents;
+      clean.priceSource = "impressum";
     }
     if (publicationDate !== undefined && !issue?.publicationDate) {
       clean.publicationDate = publicationDate;

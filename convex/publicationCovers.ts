@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { requireEditor } from "./roles";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import {
@@ -49,9 +50,17 @@ export const unlabeledIssuesInternal = internalQuery({
       .query("issues")
       .withIndex("by_publication", (q) => q.eq("publicationId", publicationId))
       .collect();
+    // Alle Hefte mit Nummer, auch die schon zugeordneten: der Laden fuehrt
+    // den Verkaufspreis, und der aendert sich. Wer eine Zuordnung hat, wird
+    // ueber seine Adresse geholt statt ueber die Suche.
     return rows
-      .filter((i) => i.isPublished && !i.shopUrl && i.issueNumber)
-      .map((i) => ({ _id: i._id, issueNumber: i.issueNumber as string, title: i.title }));
+      .filter((i) => i.issueNumber)
+      .map((i) => ({
+        _id: i._id,
+        issueNumber: i.issueNumber as string,
+        title: i.title,
+        shopUrl: i.shopUrl,
+      }));
   },
 });
 
@@ -120,8 +129,24 @@ export const setIssueShopLabelsInternal = internalMutation({
     designation: v.optional(v.string()),
     subtitle: v.optional(v.string()),
     url: v.string(),
+    priceAmountCents: v.optional(v.number()),
   },
-  handler: async (ctx, { issueId, title, designation, subtitle, url }) => {
+  handler: async (ctx, { issueId, title, designation, subtitle, url, priceAmountCents }) => {
+    const issue = await ctx.db.get(issueId);
+    // Der Laden fuehrt den Verkaufspreis. Er schlaegt das Impressum — dort
+    // steht oft noch der Preis der Vorauflage — und ueberschreibt auch einen
+    // alten Ladenstand. Nur was die Redaktion von Hand eingetragen hat, bleibt.
+    const preis =
+      priceAmountCents &&
+      priceAmountCents !== issue?.priceAmountCents &&
+      issue?.priceSource !== "redaktion"
+        ? {
+            priceAmountCents,
+            priceSource: "laden" as const,
+            // Ein neuer Preis macht den hinterlegten Stripe-Preis ungueltig.
+            stripePriceId: undefined,
+          }
+        : {};
     await ctx.db.patch(issueId, {
       shopTitle: title,
       shopDesignation: designation,
@@ -129,6 +154,7 @@ export const setIssueShopLabelsInternal = internalMutation({
       shopUrl: url,
       shopSyncedAt: Date.now(),
       updatedAt: Date.now(),
+      ...preis,
     });
   },
 });
@@ -213,6 +239,33 @@ async function findIssueProduct(
  * Zuordnung dieselben Angaben vom passenden Produkt, gefunden ueber die Suche
  * nach der Heftbezeichnung.
  */
+/**
+ * Denselben Abgleich von Hand anstossen — der Knopf in der Redaktion. Damit
+ * steht ein geaenderter Ladenpreis sofort am Heft, ohne auf den naechtlichen
+ * Lauf zu warten.
+ */
+export const refreshNow = action({
+  args: {},
+  handler: async (ctx): Promise<{ issues: string[]; missing: string[]; failed: string[] }> => {
+    await ctx.runQuery(internal.publicationCovers.requireEditorInternal, {});
+    const ergebnis = await ctx.runAction(internal.publicationCovers.refreshAll, {});
+    return {
+      issues: ergebnis.issues,
+      missing: ergebnis.missing,
+      failed: ergebnis.failed,
+    };
+  },
+});
+
+/** Nur die Rollenpruefung, damit die Aktion sie aufrufen kann. */
+export const requireEditorInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    await requireEditor(ctx);
+    return true;
+  },
+});
+
 export const refreshAll = internalAction({
   args: {},
   handler: async (
@@ -310,25 +363,37 @@ export const refreshAll = internalAction({
         result.failed.push(`${publication.slug}: aktuelle Ausgabe`);
       }
 
-      // 3. Eigene Hefte ohne Zuordnung
-      const issues: { _id: Id<"issues">; issueNumber: string; title: string }[] =
+      // 3. Alle eigenen Hefte mit Nummer: Bezeichnung und Preis nachziehen
+      const issues: {
+        _id: Id<"issues">;
+        issueNumber: string;
+        title: string;
+        shopUrl?: string;
+      }[] =
         await ctx.runQuery(internal.publicationCovers.unlabeledIssuesInternal, {
           publicationId: publication._id,
         });
       for (const issue of issues) {
         try {
-          const card = await findIssueProduct(series, issue.issueNumber, pageCache);
-          if (!card) continue;
-          const page = await getText(card.url);
+          const adresse =
+            issue.shopUrl ??
+            (await findIssueProduct(series, issue.issueNumber, pageCache))?.url;
+          if (!adresse) continue;
+          const page = await getText(adresse);
           const parsed = page ? parseProductPage(page) : null;
+          if (!parsed) continue;
           await ctx.runMutation(internal.publicationCovers.setIssueShopLabelsInternal, {
             issueId: issue._id,
-            title: parsed?.name ?? card.name,
-            designation: parsed?.designation ?? card.designation ?? undefined,
-            subtitle: parsed?.subtitle ?? undefined,
-            url: card.url,
+            title: parsed.name,
+            designation: parsed.designation ?? undefined,
+            subtitle: parsed.subtitle ?? undefined,
+            url: adresse,
+            priceAmountCents: parsed.priceCents ?? undefined,
           });
-          result.issues.push(`${issue.title} → ${parsed?.name ?? card.name} (${parsed?.designation ?? card.designation})`);
+          const preis = parsed.priceCents
+            ? ` · ${(parsed.priceCents / 100).toFixed(2)} €`
+            : "";
+          result.issues.push(`${issue.title} → ${parsed.name}${preis}`);
         } catch (error) {
           console.error(`Heft ${issue.title}`, error);
           result.failed.push(`${publication.slug}: ${issue.title}`);
