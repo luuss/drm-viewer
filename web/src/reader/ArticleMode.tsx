@@ -172,7 +172,17 @@ export default function ArticleMode({
             const img = item.image;
             return (
               <figure key={`image-${item.index}`} data-source-page={item.page}>
-                <img src={mitSitzung(img.url ?? "")} alt={img.caption ?? ""} loading="lazy" />
+                <img
+                  src={mitSitzung(img.url ?? "")}
+                  alt={img.caption ?? ""}
+                  loading="lazy"
+                  // Die eigene Groesse haelt das Bild davon ab, auf
+                  // Spaltenbreite hochgezogen zu werden, und haelt waehrend
+                  // des Ladens den Platz frei.
+                  {...(img.width && img.height
+                    ? { width: img.width, height: img.height }
+                    : {})}
+                />
                 {img.caption && <figcaption>{img.caption}</figcaption>}
               </figure>
             );

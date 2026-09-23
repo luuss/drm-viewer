@@ -285,12 +285,17 @@ export const getForReader = query({
       // Adresse bekommen — dort fuehrt der Weg ueber das Kachel-Gateway.
       const url = await assetUrl(ctx, img.assetId);
       if (url) {
+        // Die Groesse geht mit: ohne sie zieht der Reader jedes Bild auf
+        // Spaltenbreite, auch ein kleines, und das sieht unscharf aus.
+        const asset = await ctx.db.get(img.assetId);
         withUrls.push({
           url,
           caption: img.caption ?? null,
           page: img.sourcePageIndex ?? null,
           sourceY: img.sourceY ?? null,
           afterBlockOrder: img.afterBlockOrder ?? null,
+          width: asset?.width ?? null,
+          height: asset?.height ?? null,
         });
       }
     }

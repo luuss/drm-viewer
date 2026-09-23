@@ -722,6 +722,10 @@ class Job:
                 f"{img.page_index}-{int(img.x0 * 1000)}-{int(img.y0 * 1000)}.jpg",
             )
             stored = self.storage.put(key, cropped, "image/jpeg")
+            try:
+                breite, hoehe = render.image_size(cropped)
+            except Exception:
+                breite = hoehe = 0
             asset_id = self.convex.post(
                 "/service/assets/register",
                 {
@@ -732,6 +736,10 @@ class Job:
                     "storageId": stored.convex_storage_id,
                     "bucket": stored.bucket,
                     "bytes": stored.bytes,
+                    # Die Groesse wandert mit: der Reader zeigt ein Bild sonst
+                    # auf voller Spaltenbreite, auch wenn es viel kleiner ist,
+                    # und es wirkt unscharf neben den grossen.
+                    **({"width": breite, "height": hoehe} if breite and hoehe else {}),
                 },
             )
             entry = {
