@@ -1,0 +1,210 @@
+# Die Anlage auf dem Verlagsserver (Plesk, TLD-Host).
+#
+# Anders als bei Dokploy steht hier kein eigener Reverse Proxy davor: Apache
+# haelt 80 und 443 und reicht die vier Adressen nach innen weiter. Deshalb
+# lauscht jeder Dienst nur auf 127.0.0.1 — von aussen ist nichts erreichbar,
+# was nicht durch Apache geht.
+#
+# Start:  cd /opt/hefte-digital/code && docker compose -f docker-compose.tldhost.yml --env-file ../.env up -d --build
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-minio-zugang: &minio-zugang
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD fehlt}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  S3_ENDPOINT_URL: http://minio:9000
+  AWS_S3_FORCE_PATH_STYLE: "true"
+  S3_FORCE_PATH_STYLE: "true"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: convex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+      POSTGRES_DB: ${CONVEX_INSTANCE_NAME:-emagazin}
+    volumes:
+      - /opt/hefte-digital/files/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convex -d ${CONVEX_INSTANCE_NAME:-emagazin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-convexminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:?MINIO_KMS_SECRET_KEY fehlt}
+      MINIO_BROWSER_REDIRECT_URL: ${PUBLIC_MEDIA_ORIGIN:?PUBLIC_MEDIA_ORIGIN fehlt}
+    volumes:
+      - /opt/hefte-digital/files/minio:/data
+    ports:
+      - "127.0.0.1:9002:9000"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-convexminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:?PUBLIC_WEB_ORIGIN fehlt}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set eigen http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        for eimer in convex-exports convex-imports convex-modules convex-files \
+                     convex-search "$$MEDIA_BUCKET"; do
+          mc mb --ignore-existing "eigen/$$eimer"
+        done
+        mc admin config set eigen api cors_allow_origin="$$PUBLIC_WEB_ORIGIN"
+        echo "Eimer bereit."
+    restart: "no"
+    logging: *default-logging
+
+  convex-backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *minio-zugang
+      INSTANCE_NAME: ${CONVEX_INSTANCE_NAME:-emagazin}
+      INSTANCE_SECRET: ${CONVEX_INSTANCE_SECRET:?CONVEX_INSTANCE_SECRET fehlt}
+      CONVEX_CLOUD_ORIGIN: ${CONVEX_CLOUD_ORIGIN:?CONVEX_CLOUD_ORIGIN fehlt}
+      CONVEX_SITE_ORIGIN: ${CONVEX_SITE_ORIGIN:?CONVEX_SITE_ORIGIN fehlt}
+      DATABASE_URL: postgresql://convex:${POSTGRES_PASSWORD}@postgres:5432
+      POSTGRES_URL: postgresql://convex:${POSTGRES_PASSWORD}@postgres:5432
+      DO_NOT_REQUIRE_SSL: "true"
+      S3_STORAGE_EXPORTS_BUCKET: convex-exports
+      S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET: convex-imports
+      S3_STORAGE_MODULES_BUCKET: convex-modules
+      S3_STORAGE_FILES_BUCKET: convex-files
+      S3_STORAGE_SEARCH_BUCKET: convex-search
+      DISABLE_BEACON: "true"
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - convex-data:/convex/data
+    ports:
+      - "127.0.0.1:3210:3210"
+      - "127.0.0.1:3211:3211"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3210/version >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging
+
+  convex-setup:
+    build:
+      context: .
+      dockerfile: deploy/convex-setup.Dockerfile
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+    environment:
+      CONVEX_SELF_HOSTED_URL: http://convex-backend:3210
+      CONVEX_SELF_HOSTED_ADMIN_KEY: "${CONVEX_SELF_HOSTED_ADMIN_KEY:-}"
+      APP_PUBLIC_URL: ${PUBLIC_WEB_ORIGIN}
+      PUBLIC_TILE_ORIGIN: ${PUBLIC_WEB_ORIGIN}
+      S3_ENDPOINT_URL: ${PUBLIC_MEDIA_ORIGIN}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET}
+      EXTRACT_SERVICE_SECRET: ${EXTRACT_SERVICE_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SHOP_WEBHOOK_SECRET: ${SHOP_WEBHOOK_SECRET:-}
+    restart: "no"
+    logging: *default-logging
+
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    depends_on:
+      convex-backend:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${CONVEX_CLOUD_ORIGIN}
+    ports:
+      - "127.0.0.1:6791:6791"
+    restart: unless-stopped
+    logging: *default-logging
+
+  tile-service:
+    build:
+      context: ./tile-service
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+    environment:
+      <<: *minio-zugang
+      CONVEX_SITE_URL: http://convex-backend:3211
+      TILE_SERVICE_SECRET: ${TILE_SERVICE_SECRET:?TILE_SERVICE_SECRET fehlt}
+      CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
+      MAX_PAGES_PER_MIN: ${MAX_PAGES_PER_MIN:-80}
+      MAX_TILES_PER_MIN: ${MAX_TILES_PER_MIN:-1200}
+    expose:
+      - "8000"
+    restart: unless-stopped
+    logging: *default-logging
+
+  import-worker:
+    build:
+      context: ./extract-service
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+    environment:
+      <<: *minio-zugang
+      CONVEX_SITE_URL: http://convex-backend:3211
+      EXTRACT_SERVICE_SECRET: ${EXTRACT_SERVICE_SECRET:?EXTRACT_SERVICE_SECRET fehlt}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
+      PAGE_RENDER_WIDTH: ${PAGE_RENDER_WIDTH:-2400}
+    restart: unless-stopped
+    logging: *default-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_CONVEX_URL: ${CONVEX_CLOUD_ORIGIN}
+    depends_on:
+      - tile-service
+    ports:
+      - "127.0.0.1:8090:80"
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  convex-data:
