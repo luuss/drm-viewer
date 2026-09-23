@@ -2,19 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libmupdf-dev \
-    && rm -rf /var/lib/apt/lists/*
-
+# Die Abhaengigkeiten stehen ausschliesslich in pyproject.toml. Frueher fuehrte
+# dieses Abbild eine zweite, handgepflegte Liste — sie lief auseinander: boto3
+# fehlte, obwohl der Dienst die Seitenbilder inzwischen selbst aus dem Eimer
+# holt, und pymupdf wurde weiter installiert, obwohl es laengst draussen ist.
 COPY pyproject.toml /app/
-RUN pip install --no-cache-dir \
-    "fastapi>=0.115" \
-    "uvicorn[standard]>=0.32" \
-    "httpx>=0.27" \
-    "pymupdf>=1.24" \
-    "pillow>=11.0"
-
 COPY main.py /app/
+RUN pip install --no-cache-dir /app
 
 EXPOSE 8000
 
