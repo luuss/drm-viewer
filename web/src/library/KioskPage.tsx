@@ -18,8 +18,9 @@ const REGION_LABEL: Record<string, string> = {
 export default function KioskPage() {
   const issues = useQuery(api.issues.listPublished, {});
   const offers = useQuery(api.plans.offers, {});
+  const storefront = useQuery(api.shopIntegration.storefront, {});
 
-  if (issues === undefined || offers === undefined) {
+  if (issues === undefined || offers === undefined || storefront === undefined) {
     return <div className="centered">Laden...</div>;
   }
 
@@ -60,18 +61,26 @@ export default function KioskPage() {
                       {o.currentIssue.subtitle ?? o.currentIssue.designation}
                     </div>
                   )}
-                  <div className="price">
-                    {formatEuro(o.headline.priceAmountCents)}
-                    {o.headline.interval === "year" ? " / Jahr" : " / Monat"}
-                  </div>
-                  <div className="price-note">
-                    {[
-                      o.headline.tier,
-                      o.headline.region ? REGION_LABEL[o.headline.region] : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
+                  {/* Ohne eigenen Checkout gilt der Preis des Digital-Abos im
+                      Laden; die Stripe-Preisstufen waeren irrefuehrend. */}
+                  {storefront.stripeCheckout && o.headline ? (
+                    <>
+                      <div className="price">
+                        {formatEuro(o.headline.priceAmountCents)}
+                        {o.headline.interval === "year" ? " / Jahr" : " / Monat"}
+                      </div>
+                      <div className="price-note">
+                        {[
+                          o.headline.tier,
+                          o.headline.region ? REGION_LABEL[o.headline.region] : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="price-note">Digital-Abo im Shop</div>
+                  )}
                   <div className="card-action">
                     Abo ansehen <Icon name="arrow-right" />
                   </div>

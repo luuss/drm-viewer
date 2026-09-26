@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api, formatDate } from "../lib/api";
 import Icon from "../components/Icon";
+import ShopHinweis from "../components/ShopHinweis";
 
 /** Nur Ausgaben, auf die der angemeldete Leser Zugriff hat. */
 export default function LibraryPage() {
@@ -17,6 +18,7 @@ export default function LibraryPage() {
         </div>
         <div className="empty">
           <p>Noch keine Ausgabe freigeschaltet.</p>
+          <ShopHinweis />
           <Link className="btn" to="/kiosk">
             <Icon name="kiosk" />
             Zum Kiosk

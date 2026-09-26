@@ -1,4 +1,4 @@
-# Übergabe — Stand 26.09.2026
+# Übergabe — Stand 26.09.2026 (abends)
 
 Kurzfassung: Die Anwendung läuft vollständig selbst betrieben auf **d.chuk.dev**
 (Dokploy). Der Umzug auf den **Verlagsserver** ist zur Hälfte fertig: der Stapel
@@ -26,50 +26,58 @@ der Anwendung. Es gibt noch keine.
 
 ---
 
-## 2. Der Umzug: was noch fehlt
+## 2. Verlagsserver und Verkauf über den Shop (Stand 26.09.2026 abends)
 
-Auf 62.108.44.118 laufen alle sieben Behälter seit zwei Tagen (healthy). Die vier
-Unterdomains sind in Plesk angelegt, `digital.lesenundschenken.de` hat ein
-Zertifikat und zeigt die Plesk-Standardseite — **die Weiterleitung nach innen
-fehlt**.
-
-Entschieden ist: **zwei Adressen statt vier.**
+**Die Anlage läuft auf https://lesen.lesenundschenken.de.** Medien liegen auf
+`medien.lesen.lesenundschenken.de`. `digital.lesenundschenken.de` leitet per 301
+dorthin. Die Apache-Direktiven stehen in `deploy/apache/`. Die Daten von
+d.chuk.dev sind übernommen (2 Hefte, 130 Seiten, 82 Artikel, 588 Medienobjekte,
+Konten). d.chuk.dev läuft noch als Rückweg.
 
 ```
-digital.lesenundschenken.de/          → Oberfläche        127.0.0.1:8090
-digital.lesenundschenken.de/convex/…  → Convex-Daten      127.0.0.1:3210  (WebSocket!)
-digital.lesenundschenken.de/hooks/…   → Stripe/Shop       127.0.0.1:3211
-digital.lesenundschenken.de/api/…     → Kachel-Gateway    (innerhalb von web)
-medien.digital.lesenundschenken.de/   → MinIO             127.0.0.1:9002
+lesen.lesenundschenken.de/          → Oberfläche        127.0.0.1:8090
+lesen.lesenundschenken.de/convex/…  → Convex-Daten      127.0.0.1:3210  (WebSocket)
+lesen.lesenundschenken.de/hooks/…   → HTTP-Routen       127.0.0.1:3211
+lesen.lesenundschenken.de/api/…     → Kachel-Gateway    (innerhalb von web)
+medien.lesen.lesenundschenken.de/   → MinIO             127.0.0.1:9002
 ```
 
-`/api` ist bewusst nicht Convex: dort liegt schon das Kachel-Gateway. Die Medien
-brauchen eine eigene Adresse, weil die vorsignierte Upload-Anfrage über den Pfad
-unterschrieben wird — ein Präfix bräche die Signatur.
+**Entscheidung: Verkauf nur über den PrestaShop.** Der Leser hat keine eigene
+Zahlung. Der Stripe-Checkout ist aus (`STRIPE_CHECKOUT_ENABLED`). Die Stripe-
+Schlüssel in der `.env` bleiben leer.
 
-Zu tun:
+* **Redaktion → Shop:** In „Bearbeiten“ wählt die Redaktion das Druckheft aus
+  dem Shop, mit einem Vorschlag. „Übernehmen“ holt Preis, Link und Cover.
+  „Im Shop als E-Paper anbieten“ legt am Druckprodukt die Kombination
+  „Ausgabe: Digital“ an (Shop-API im Modul `lusdigital`).
+* **Shop → Leser:** Das Modul `lusdigital` meldet bezahlte und stornierte
+  Bestellungen an `/hooks/shop/entitlements` (Vertrag v2). Die Freischaltung
+  hängt an der E-Mail und greift auch, wenn sich der Kunde erst später anmeldet.
+* Beide Richtungen sind signiert: `SHOP_WEBHOOK_SECRET` (Leser) =
+  `LUSDIGITAL_SECRET` (Shop). Geprüft am 26.09.
+* Vertrag: `docs/shop-integration.md`. Shop-Seite:
+  `../docs/digital-verkauf-shop.md`.
 
-1. `/var/www/vhosts/system/digital.lesenundschenken.de/conf/vhost_ssl.conf`
-   schreiben. Vorbild steht auf demselben Server unter
-   `/var/www/vhosts/system/kameraden.de/conf/vhost_ssl.conf` (ProxyPreserveHost,
-   ACME-Pfade nie proxen, WebSocket über `RewriteCond %{HTTP:Upgrade}`).
-   Danach `plesk sbin httpdmng --reconfigure-domain digital.lesenundschenken.de`.
-2. Dasselbe für `medien.digital.lesenundschenken.de` → `127.0.0.1:9002`,
-   danach Zertifikat holen (fehlt dort noch):
-   `plesk bin extension --exec letsencrypt cli.php -d medien.digital.lesenundschenken.de -m chuk@chuk.dev`
-3. Überflüssige Unterdomains entfernen:
-   `plesk bin subdomain --remove api.digital -domain lesenundschenken.de` (ebenso `hooks.digital`).
-4. Admin-Schlüssel erzeugen und in `/opt/hefte-digital/.env` eintragen:
-   `cd /opt/hefte-digital/code && docker compose -f docker-compose.tldhost.yml --env-file ../.env exec convex-backend ./generate_admin_key.sh`
-5. Echte Schlüssel in dieselbe `.env`: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-   `SHOP_WEBHOOK_SECRET`. Liegen auf diesem Server beim Shop — **nicht auslesen**,
-   der Auftraggeber trägt sie ein.
-6. Neu hochfahren, dann trägt `convex-setup` alles ins Backend:
-   `docker compose -f docker-compose.tldhost.yml --env-file ../.env up -d --build`
-7. Funktionen ausliefern:
-   `CONVEX_SELF_HOSTED_URL=https://digital.lesenundschenken.de/convex CONVEX_SELF_HOSTED_ADMIN_KEY=… npx convex deploy`
-8. Erst wenn alles läuft: GitHub-Actions-Ziel von Dokploy auf diesen Server
-   umstellen (SSH-Schlüssel als Secret, `git pull && docker compose up -d --build`).
+**Auslieferung der Convex-Funktionen nur über den SSH-Tunnel.** Die CLI wirft
+das Präfix `/convex` weg:
+
+```
+ssh -N -L 13210:127.0.0.1:3210 root@62.108.44.118 &
+npx convex deploy -y --env-file _scratch/verlag-tunnel.env
+```
+
+Offen:
+
+1. **Pflicht vor dem Livegang:** E-Mail-Bestätigung einschalten
+   (`drm-viewer-pwe`). Ohne sie bekommt jeder, der sich mit einer fremden
+   Adresse registriert, deren Käufe. Das braucht `RESEND_API_KEY`.
+2. Testkauf mit echter Karte: Produkt 10778 „Testkauf Digital“ (1 €), danach
+   erstatten. Die Schritte stehen in `../docs/digital-verkauf-shop.md`, Abschnitt 5.
+3. Die Abo-Produkte 10780–10787 sind inaktiv. Die Digital-Preise sind
+   Platzhalter. Umschalten der Knöpfe:
+   `~/lusdigital-tools/abo_links_umschalten.php --schreiben`.
+4. AGB und Datenschutz beschreiben noch Stripe (`drm-viewer-kym`).
+5. GitHub Actions auf den Verlagsserver umstellen.
 
 ---
 

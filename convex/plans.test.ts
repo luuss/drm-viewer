@@ -87,7 +87,7 @@ describe("Abos im Kiosk", () => {
       ["ausland", 15300],
       ["luftpost", 17700],
     ]);
-    expect(offer!.headline._id).toBe(offer!.tiers[0].plans[0]._id);
+    expect(offer!.headline!._id).toBe(offer!.tiers[0].plans[0]._id);
   });
 
   test("abgeschaltete Stufen und Titel ohne Abo erscheinen nicht", async () => {

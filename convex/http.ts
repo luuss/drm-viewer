@@ -270,6 +270,21 @@ workerRoute("/service/issue/counts", (ctx, body) =>
 );
 
 // --- Shop-Schnittstelle -------------------------------------------------
+// Vertrag v2, siehe docs/shop-integration.md und shopIntegration.ts.
+
+const MAX_ITEMS = 500;
+const MAX_TEXT = 200;
+
+function badRequest(error: string, field?: string): Response {
+  return Response.json({ ok: false, error, ...(field ? { field } : {}) }, { status: 400 });
+}
+
+/** Zahl oder Text aus dem Rumpf als Text; PrestaShop schickt Kennungen gern als Zahl. */
+function asText(value: unknown): string | null {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
 
 http.route({
   path: "/shop/entitlements",
@@ -287,34 +302,65 @@ http.route({
     try {
       body = JSON.parse(raw);
     } catch {
-      return new Response(JSON.stringify({ ok: false, error: "bad_json" }), {
-        status: 400,
-        headers: { "content-type": "application/json" },
+      return badRequest("bad_json");
+    }
+    if (!body || typeof body !== "object") return badRequest("bad_json");
+
+    const externalOrderId = asText(body.externalOrderId);
+    if (!externalOrderId || externalOrderId.length > MAX_TEXT) {
+      return badRequest("missing_field", "externalOrderId");
+    }
+    const email = typeof body.email === "string" ? body.email.trim() : "";
+    if (!email.includes("@") || email.length > 320) {
+      return badRequest("missing_field", "email");
+    }
+    if (body.action !== "grant" && body.action !== "revoke") {
+      return badRequest("missing_field", "action");
+    }
+    const customer = asText(body.externalCustomerId);
+    const externalCustomerId =
+      customer && customer.length <= MAX_TEXT ? customer : undefined;
+
+    let result;
+    if (body.items !== undefined) {
+      // Vertrag v2: alle Positionen der Bestellung.
+      if (!Array.isArray(body.items) || body.items.length > MAX_ITEMS) {
+        return badRequest("bad_items", "items");
+      }
+      const items: { sku: string; lineId: string }[] = [];
+      for (const it of body.items) {
+        const sku = asText(it?.sku) ?? "";
+        const lineId = asText(it?.lineId);
+        if (!lineId || lineId.length > MAX_TEXT || sku.length > MAX_TEXT) {
+          return badRequest("bad_items", "items");
+        }
+        items.push({ sku, lineId });
+      }
+      result = await ctx.runMutation(internal.shopIntegration.applyOrderInternal, {
+        externalOrderId,
+        externalCustomerId,
+        email,
+        action: body.action,
+        items,
+      });
+    } else {
+      // Altes Einzelformat.
+      const issueSku = asText(body.issueSku) || undefined;
+      const issueId = asText(body.issueId) || undefined;
+      if (!issueSku && !issueId) return badRequest("missing_field", "items");
+      if ((issueSku?.length ?? 0) > MAX_TEXT || (issueId?.length ?? 0) > MAX_TEXT) {
+        return badRequest("missing_field", "issueSku");
+      }
+      result = await ctx.runMutation(internal.shopIntegration.applyInternal, {
+        externalOrderId,
+        externalCustomerId,
+        email,
+        issueSku,
+        issueId,
+        action: body.action,
       });
     }
-    for (const field of ["externalOrderId", "email", "action"]) {
-      if (!body[field]) {
-        return Response.json(
-          { ok: false, error: "missing_field", field },
-          { status: 400 },
-        );
-      }
-    }
-    if (!body.issueSku && !body.issueId) {
-      return Response.json(
-        { ok: false, error: "missing_field", field: "issueSku" },
-        { status: 400 },
-      );
-    }
-    const result: any = await ctx.runMutation(internal.shopIntegration.applyInternal, {
-      externalOrderId: String(body.externalOrderId),
-      externalCustomerId: body.externalCustomerId,
-      email: String(body.email),
-      issueSku: body.issueSku,
-      issueId: body.issueId,
-      action: body.action === "revoke" ? "revoke" : "grant",
-    });
-    return Response.json(result, { status: result.ok ? 200 : 404 });
+    return Response.json(result, { status: 200 });
   }),
 });
 

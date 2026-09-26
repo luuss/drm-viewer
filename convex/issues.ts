@@ -14,6 +14,8 @@ import { slugify } from "./publications";
 import { syncSubscription } from "./subscriptions";
 import { subscriptionIsActive } from "./access";
 import { Id } from "./_generated/dataModel";
+import { assertSkuFree } from "./shopIntegration";
+import { cleanShopUrl, cleanSku, issueShopLink } from "./shopLinks";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -110,6 +112,8 @@ export const getPublic = query({
       articleCount: issue.articleCount ?? 0,
       coverUrl: await assetUrl(ctx, issue.coverAssetId),
       owned,
+      // Kaufadresse im Laden; ohne eingetragene Produktseite die Suche.
+      shopUrl: issueShopLink(issue, publication?.name ?? null),
     };
   },
 });
@@ -213,6 +217,11 @@ export const listForEditors = query({
           includedInSubscription: i.includedInSubscription,
           stripePriceId: i.stripePriceId ?? null,
           externalSku: i.externalSku ?? null,
+          shopUrl: i.shopUrl ?? null,
+          shopProductId: i.shopProductId ?? null,
+          shopDigital: i.shopDigital ?? null,
+          priceSource: i.priceSource ?? null,
+          publicationName: (await ctx.db.get(i.publicationId))?.name ?? null,
           pageCount: pages.length || i.pageCount,
           articleCount: articles.length,
           approvedArticles: articles.filter((a) => a.reviewStatus === "approved").length,
@@ -396,9 +405,11 @@ export const update = mutation({
     publicationDate: v.optional(v.number()),
     priceAmountCents: v.optional(v.number()),
     includedInSubscription: v.optional(v.boolean()),
+    // Leerer Text entfernt Artikelnummer bzw. Ladenadresse.
     externalSku: v.optional(v.string()),
+    shopUrl: v.optional(v.string()),
   },
-  handler: async (ctx, { issueId, ...patch }) => {
+  handler: async (ctx, { issueId, externalSku, shopUrl, ...patch }) => {
     await requireEditor(ctx);
     const issue = await ctx.db.get(issueId);
     if (!issue) throw new Error("Ausgabe nicht gefunden");
@@ -406,6 +417,14 @@ export const update = mutation({
     for (const [k, val] of Object.entries(patch)) {
       if (val !== undefined) clean[k] = val;
     }
+    if (externalSku !== undefined) {
+      const sku = cleanSku(externalSku);
+      if (sku) await assertSkuFree(ctx, sku, { issueId });
+      clean.externalSku = sku;
+    }
+    // Die Redaktion kann die Produktseite im Laden festlegen; der Abgleich
+    // (publicationCovers.refreshAll) liest dann genau diese Seite.
+    if (shopUrl !== undefined) clean.shopUrl = cleanShopUrl(shopUrl);
     // Preisaenderung macht den hinterlegten Stripe-Preis ungueltig.
     if (
       patch.priceAmountCents !== undefined &&

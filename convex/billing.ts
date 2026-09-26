@@ -13,6 +13,7 @@ import {
   catalogVariants,
   missingVariants,
 } from "./subscriptionCatalog";
+import { stripeCheckoutEnabled } from "./shopLinks";
 
 const stripeClient = new StripeSubscriptions(components.stripe);
 
@@ -231,6 +232,9 @@ export const createIssueCheckout = action({
     ctx,
     { issueId, successUrl, cancelUrl, withdrawalWaiver },
   ): Promise<{ url: string }> => {
+    if (!stripeCheckoutEnabled()) {
+      throw new Error("Verkauf läuft über den Shop auf lesenundschenken.de");
+    }
     if (!withdrawalWaiver) {
       throw new Error(
         "Ohne Zustimmung zum sofortigen Zugriff (Widerrufsverzicht) ist kein Kauf möglich.",
@@ -283,6 +287,9 @@ export const createSubscriptionCheckout = action({
     ctx,
     { planId, successUrl, cancelUrl, withdrawalWaiver },
   ): Promise<{ url: string }> => {
+    if (!stripeCheckoutEnabled()) {
+      throw new Error("Verkauf läuft über den Shop auf lesenundschenken.de");
+    }
     if (!withdrawalWaiver) {
       throw new Error(
         "Ohne Zustimmung zum sofortigen Zugriff (Widerrufsverzicht) ist kein Abo möglich.",

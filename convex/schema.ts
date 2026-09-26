@@ -86,8 +86,16 @@ export default defineSchema(
     currentIssueDesignation: v.optional(v.string()),
     currentIssueSubtitle: v.optional(v.string()),
     currentIssueUrl: v.optional(v.string()),
+    // Digital-Abo der Reihe im Laden: Artikelnummer, Laufzeit in Monaten
+    // (ohne Angabe 12) und Produktseite. Der Kaufknopf fuehrt dorthin, die
+    // Freischaltung kommt ueber `/shop/entitlements`.
+    shopSubscriptionSku: v.optional(v.string()),
+    shopSubscriptionMonths: v.optional(v.number()),
+    shopSubscriptionUrl: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_slug", ["slug"]),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_shop_subscription_sku", ["shopSubscriptionSku"]),
 
   issues: defineTable({
     publicationId: v.id("publications"),
@@ -120,6 +128,22 @@ export default defineSchema(
     shopSubtitle: v.optional(v.string()),
     shopUrl: v.optional(v.string()),
     shopSyncedAt: v.optional(v.number()),
+    // Das Druckheft im Laden (PrestaShop `id_product`), von der Redaktion
+    // ausgewaehlt (shopCatalog.ts). Daran haengt die Digital-Variante, die der
+    // Leser ueber das Modul lusdigital anlegt.
+    shopProductId: v.optional(v.number()),
+    // Letzter bekannter Stand der Digital-Variante im Laden. Veroeffentlichen
+    // hier und Anbieten dort sind getrennte Schritte.
+    shopDigital: v.optional(
+      v.object({
+        offered: v.boolean(),
+        idProductAttribute: v.optional(v.number()),
+        sku: v.optional(v.string()),
+        priceCents: v.optional(v.number()),
+        url: v.optional(v.string()),
+        syncedAt: v.number(),
+      }),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -470,18 +494,62 @@ export default defineSchema(
     .index("by_issue", ["issueId"])
     .index("by_status", ["status"]),
 
+  /**
+   * Protokoll der Shop-Aufrufe, eine Zeile je Bestellposition und Aktion.
+   * Zugleich der Schluessel fuer die Idempotenz: dieselbe Position mit
+   * derselben Aktion wirkt nur einmal. Alte Zeilen aus Vertrag v1 haben
+   * keine `lineId`.
+   */
   shopGrants: defineTable({
     externalOrderId: v.string(),
     externalCustomerId: v.optional(v.string()),
     email: v.string(),
     action: v.union(v.literal("grant"), v.literal("revoke")),
+    lineId: v.optional(v.string()),
+    kind: v.optional(
+      v.union(v.literal("issue"), v.literal("subscription"), v.literal("unknown")),
+    ),
     issueId: v.optional(v.id("issues")),
+    publicationId: v.optional(v.id("publications")),
     issueSku: v.optional(v.string()),
     result: v.string(),
     createdAt: v.number(),
   })
     .index("by_order_action", ["externalOrderId", "action"])
+    .index("by_order_line_action", ["externalOrderId", "lineId", "action"])
     .index("by_email", ["email"]),
+
+  /**
+   * Was der Laden freigeschaltet hat, je Bestellposition. Haengt an der
+   * E-Mail-Adresse, nicht am Konto: so greift ein Kauf auch, wenn das Konto
+   * erst danach angelegt wird. Die Zugriffspruefung (`access.ts`) liest hier
+   * ueber die Adresse des angemeldeten Kontos nach.
+   *
+   * `issue`: ein Heft, unbefristet. `subscription`: alle Ausgaben der Reihe
+   * von `validFrom` bis `validUntil`. Mehrere Abo-Kaeufe reihen sich
+   * aneinander; ein Widerruf nimmt genau seine Position heraus und die
+   * uebrigen ruecken nach (`shopIntegration.recomputeChain`).
+   */
+  shopAccess: defineTable({
+    email: v.string(),
+    externalOrderId: v.string(),
+    lineId: v.string(),
+    externalCustomerId: v.optional(v.string()),
+    sku: v.string(),
+    kind: v.union(v.literal("issue"), v.literal("subscription")),
+    issueId: v.optional(v.id("issues")),
+    publicationId: v.optional(v.id("publications")),
+    months: v.optional(v.number()),
+    validFrom: v.optional(v.number()),
+    validUntil: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_order_line", ["externalOrderId", "lineId"])
+    .index("by_email", ["email"])
+    .index("by_email_issue", ["email", "issueId"])
+    .index("by_email_publication", ["email", "publicationId"]),
 
   auditLog: defineTable({
     actorUserId: v.optional(v.id("users")),

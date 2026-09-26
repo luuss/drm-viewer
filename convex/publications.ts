@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { requireEditor, requireAdmin, audit } from "./roles";
+import { assertSkuFree } from "./shopIntegration";
+import { cleanShopUrl, cleanSku } from "./shopLinks";
 
 function slugify(s: string): string {
   return s
@@ -68,6 +70,46 @@ export const setActive = mutation({
     await requireAdmin(ctx);
     await ctx.db.patch(publicationId, { isActive });
     await audit(ctx, "publication.setActive", publicationId, String(isActive));
+  },
+});
+
+/**
+ * Digital-Abo der Reihe im Laden. Leere Felder entfernen die Angabe; ohne
+ * Laufzeit gelten 12 Monate.
+ */
+export const updateShop = mutation({
+  args: {
+    publicationId: v.id("publications"),
+    shopSubscriptionSku: v.string(),
+    shopSubscriptionMonths: v.union(v.number(), v.null()),
+    shopSubscriptionUrl: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const publication = await ctx.db.get(args.publicationId);
+    if (!publication) throw new Error("Reihe nicht gefunden");
+    const sku = cleanSku(args.shopSubscriptionSku);
+    if (sku) await assertSkuFree(ctx, sku, { publicationId: args.publicationId });
+    const months = args.shopSubscriptionMonths;
+    if (
+      months !== null &&
+      (!Number.isInteger(months) || months < 1 || months > 120)
+    ) {
+      throw new Error("Laufzeit in ganzen Monaten zwischen 1 und 120");
+    }
+    await ctx.db.patch(args.publicationId, {
+      shopSubscriptionSku: sku,
+      shopSubscriptionMonths: months ?? undefined,
+      shopSubscriptionUrl: cleanShopUrl(args.shopSubscriptionUrl),
+    });
+    await audit(
+      ctx,
+      "publication.shop",
+      args.publicationId,
+      `${sku ?? "-"} · ${months ?? 12} Monate`,
+    );
+    return null;
   },
 });
 

@@ -2477,3 +2477,43 @@ button.small, .btn.small {
   .frage-schleier { align-items: flex-end; }
   .frage-knoepfe .btn { flex: 1 1 8rem; }
 }
+
+/* Laden als Kaufweg: Digital-Abo je Reihe in der Redaktion und der Hinweis
+   fuer Leser ohne Zugriff. */
+.shop-settings { margin: var(--s3) 0 var(--s4, 1rem); display: grid; gap: var(--s3); }
+.shop-settings h4 { margin: 0; }
+.shop-settings .inline-form > span.narrow {
+  flex: 0 0 var(--w-sm);
+  align-self: center;
+  font-weight: 600;
+}
+.issue-workspace > .inline-form { margin-bottom: var(--s3); }
+.shop-hint { margin-top: var(--s3); max-width: var(--prose); }
+
+/* Karte "Druckheft im Shop" in der Redaktion. */
+.shop-card {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3);
+  margin-bottom: var(--s3);
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  border-radius: 8px;
+}
+.shop-card h4 { margin: 0; }
+.shop-card p { margin: 0; }
+.shop-results { display: grid; gap: var(--s2); margin: 0; padding: 0; border: 0; }
+.shop-results label {
+  display: grid;
+  grid-template-columns: auto 2.5rem 1fr;
+  gap: var(--s3);
+  align-items: center;
+  padding: var(--s2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.shop-results label.selected { border-color: var(--accent); background: var(--accent-soft); }
+.shop-results img,
+.shop-results .thumb { width: 2.5rem; height: 3.4rem; object-fit: cover; background: var(--paper-sunk); border-radius: 2px; }
+.shop-results .what { display: grid; }

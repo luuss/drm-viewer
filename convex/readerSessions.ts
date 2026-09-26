@@ -89,6 +89,11 @@ export const verifyInternal = internalQuery({
       .unique();
     if (!row) return { ok: false, reason: "not_found" as const };
     if (row.expiresAt < Date.now()) return { ok: false, reason: "expired" as const };
+    // Zugriff bei jeder Pruefung neu ermitteln: ein Widerruf aus dem Laden
+    // oder ein abgelaufenes Digital-Abo beendet auch eine laufende Sitzung.
+    if (!(await hasIssueAccess(ctx, row.userId, row.issueId))) {
+      return { ok: false, reason: "no_access" as const };
+    }
     const user = await ctx.db.get(row.userId);
     return {
       ok: true as const,

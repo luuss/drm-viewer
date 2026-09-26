@@ -10,6 +10,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireAdmin, audit } from "./roles";
 import { assetUrl } from "./assets";
 import { deliveryRegion } from "./schema";
+import { subscriptionShopLink } from "./shopLinks";
 
 type OfferPlan = {
   _id: Id<"subscriptionPlans">;
@@ -72,7 +73,13 @@ async function offerFor(
   publication: Doc<"publications">,
   plans: Doc<"subscriptionPlans">[],
 ) {
-  const grouped = groupPlans(plans.filter((p) => p.isActive));
+  // Ohne Stripe-Preisstufen gibt es das Abo nur, wenn die Reihe ein
+  // Digital-Abo im Laden hat; Preis und Laufzeit stehen dann dort.
+  const grouped =
+    groupPlans(plans.filter((p) => p.isActive)) ??
+    (publication.shopSubscriptionSku || publication.shopSubscriptionUrl
+      ? { headline: null, tiers: [] as OfferTier[] }
+      : null);
   if (!grouped) return null;
   // Fuer die Reihe steht das aktuelle Titelbild aus dem Verlagsshop
   // (publicationCovers), ersatzweise der Umschlag des juengsten
@@ -99,6 +106,8 @@ async function offerFor(
       ? (publication.coverLabel ?? publication.name)
       : (latest?.title ?? null),
     latestIssueTitle: latest?.title ?? null,
+    // Kaufadresse des Digital-Abos im Laden, sonst die Suche nach der Reihe.
+    shopSubscriptionUrl: subscriptionShopLink(publication),
     // Die aktuelle Ausgabe, wie der Verlagsshop sie bezeichnet.
     currentIssue: publication.currentIssueName
       ? {
@@ -129,8 +138,7 @@ export const offers = query({
     const out = [];
     for (const publication of publications) {
       if (!publication.isActive) continue;
-      const own = byPublication.get(publication._id);
-      if (!own) continue;
+      const own = byPublication.get(publication._id) ?? [];
       const offer = await offerFor(ctx, publication, own);
       if (offer) out.push(offer);
     }

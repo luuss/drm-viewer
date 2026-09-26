@@ -7,6 +7,7 @@ import FolderImport from "./FolderImport";
 import ArticleReview from "./ArticleReview";
 import TocEditor from "./TocEditor";
 import ExtractionDebug from "./ExtractionDebug";
+import ShopDruckheft from "./ShopDruckheft";
 
 type Tab = "import" | "debug" | "articles" | "toc";
 
@@ -18,6 +19,8 @@ export default function AdminPage() {
   const createPublication = useMutation(api.publications.create);
   const createIssue = useMutation(api.issues.create);
   const updateIssue = useMutation(api.issues.update);
+  const updatePublicationShop = useMutation(api.publications.updateShop);
+  const storefront = useQuery(api.shopIntegration.storefront, {});
   const setPublished = useMutation(api.issues.setPublished);
   const removeIssue = useMutation(api.issues.remove);
   const grantSelf = useMutation(api.entitlements.grantMyself);
@@ -78,6 +81,66 @@ export default function AdminPage() {
             </li>
           ))}
         </ul>
+        {me.isAdmin && publications && publications.length > 0 && (
+          <div className="shop-settings">
+            <h4>Digital-Abo im Shop</h4>
+            <p className="muted small">
+              Artikelnummer (Referenz) des Digital-Abos im PrestaShop, Laufzeit
+              in Monaten (leer = 12) und Produktseite für den Kaufknopf. Leere
+              Felder entfernen die Angabe.
+            </p>
+            {publications.map((p) => (
+              <form
+                key={`${p._id}:${p.shopSubscriptionSku ?? ""}:${p.shopSubscriptionMonths ?? ""}:${p.shopSubscriptionUrl ?? ""}`}
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const f = e.currentTarget.elements;
+                  const value = (name: string) =>
+                    (f.namedItem(name) as HTMLInputElement).value;
+                  const months = value("months").trim();
+                  guard(
+                    () =>
+                      updatePublicationShop({
+                        publicationId: p._id,
+                        shopSubscriptionSku: value("sku"),
+                        shopSubscriptionMonths: months ? Number(months) : null,
+                        shopSubscriptionUrl: value("url"),
+                      }),
+                    `${p.name}: Digital-Abo gespeichert`,
+                  );
+                }}
+              >
+                <span className="narrow">{p.name}</span>
+                <input
+                  name="sku"
+                  defaultValue={p.shopSubscriptionSku ?? ""}
+                  placeholder="Artikelnummer Digital-Abo"
+                  aria-label={`${p.name}: Artikelnummer Digital-Abo`}
+                />
+                <input
+                  name="months"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="1"
+                  defaultValue={p.shopSubscriptionMonths ?? ""}
+                  placeholder="12"
+                  className="narrow"
+                  aria-label={`${p.name}: Laufzeit in Monaten`}
+                />
+                <input
+                  name="url"
+                  type="url"
+                  defaultValue={p.shopSubscriptionUrl ?? ""}
+                  placeholder="https://lesenundschenken.de/…"
+                  aria-label={`${p.name}: Produktseite Digital-Abo`}
+                />
+                <button className="btn secondary small">Speichern</button>
+              </form>
+            ))}
+          </div>
+        )}
         {me.isAdmin && (
           <form
             className="inline-form short"
@@ -224,6 +287,14 @@ export default function AdminPage() {
                   {i.pendingArticles > 0 && (
                     <span className="badge pending">{i.pendingArticles} offen</span>
                   )}
+                  {i.externalSku ? (
+                    <span className="badge">Shop {i.externalSku}</span>
+                  ) : (
+                    <span className="badge pending">ohne Artikelnummer</span>
+                  )}
+                  {i.isPublished && !i.shopDigital?.offered && (
+                    <span className="badge pending">nicht im Shop angeboten</span>
+                  )}
                   {i.stripePriceId && <span className="badge">Stripe</span>}
                   {i.lastJob && (
                     <span className={`badge ${i.lastJob.status === "error" ? "excluded" : ""}`}>
@@ -268,7 +339,7 @@ export default function AdminPage() {
                 >
                   {i.includedInSubscription ? "Aus Abo nehmen" : "Ins Abo geben"}
                 </button>
-                {me.isPublisher && (
+                {me.isPublisher && storefront?.stripeCheckout && (
                   <button
                     className="btn secondary small"
                     onClick={() => guard(() => ensurePrice({ issueId: i._id }), "Preis angelegt")}
@@ -310,6 +381,42 @@ export default function AdminPage() {
 
               {openIssue === i._id && (
                 <div className="issue-workspace">
+                  {me.isAdmin && <ShopDruckheft issue={i} />}
+                  <form
+                    key={`${i.externalSku ?? ""}:${i.shopUrl ?? ""}`}
+                    className="inline-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const f = e.currentTarget.elements;
+                      const value = (name: string) =>
+                        (f.namedItem(name) as HTMLInputElement).value;
+                      guard(
+                        () =>
+                          updateIssue({
+                            issueId: i._id,
+                            externalSku: value("sku"),
+                            shopUrl: value("url"),
+                          }),
+                        "Shop-Angaben gespeichert",
+                      );
+                    }}
+                  >
+                    <input
+                      name="sku"
+                      defaultValue={i.externalSku ?? ""}
+                      placeholder="Artikelnummer im Shop"
+                      aria-label="Artikelnummer im Shop"
+                      className="narrow"
+                    />
+                    <input
+                      name="url"
+                      type="url"
+                      defaultValue={i.shopUrl ?? ""}
+                      placeholder="Produktseite im Shop (leer = Suche)"
+                      aria-label="Produktseite im Shop"
+                    />
+                    <button className="btn secondary small">Speichern</button>
+                  </form>
                   <nav className="tabs">
                     <button
                       className={tab === "import" ? "active" : ""}

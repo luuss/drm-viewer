@@ -97,13 +97,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="footer-col">
             <h4>Lesen &amp; Schenken Digital</h4>
             <p>
-              Die Zeitschriften des Verlags zum Lesen am Bildschirm: einzelne
-              Ausgaben kaufen oder ein Abo abschließen, lesen auf jedem Gerät.
-              Gedruckt gibt es alles im{" "}
+              Die Zeitschriften des Verlags zum Lesen am Bildschirm. Einzelne
+              Ausgaben und Digital-Abos gibt es im{" "}
               <a href="https://lesenundschenken.de/" target="_blank" rel="noopener noreferrer">
                 Verlagsshop
               </a>
-              .
+              , gelesen wird hier auf jedem Gerät.
             </p>
           </div>
         </div>

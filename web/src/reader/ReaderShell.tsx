@@ -7,6 +7,7 @@ import ArticleMode from "./ArticleMode";
 import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
 import Icon from "../components/Icon";
+import ShopHinweis from "../components/ShopHinweis";
 
 type Mode = "page" | "article";
 type PageLayout = "single" | "spread";
@@ -300,7 +301,14 @@ export default function ReaderShell() {
   if (access === undefined || issue === undefined) {
     return <div className="centered">Laden...</div>;
   }
-  if (!access) return <div className="centered">Kein Zugriff auf diese Ausgabe.</div>;
+  if (!access) {
+    return (
+      <div className="centered">
+        <p>Kein Zugriff auf diese Ausgabe.</p>
+        <ShopHinweis />
+      </div>
+    );
+  }
 
   // Im Seitenmodus zaehlt die untere Leiste schon die laufende Nummer. Die
   // gedruckte Seitenzahl kommt nur dazu, wenn sie davon abweicht — auf dem
