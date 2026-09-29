@@ -14,6 +14,10 @@ import {
  * breiter als der Schirm; dann rollt sie seitlich in ihrem Rahmen, statt die
  * Spalten bis zur Unlesbarkeit zu quetschen. Der Rahmen ist per Tastatur
  * erreichbar, damit sich auch ohne Maus seitlich rollen laesst.
+ *
+ * Die Spaltenbreiten aus dem Satz (`columnWidths`) gelten fuer die Schrift
+ * des Drucks. Am Schirm verteilt der Browser die Breite besser selbst; fest
+ * vorgegeben trennten die Kopfzellen mitten im Wort ("Schwer-ter-Nr.").
  */
 export default function ArtikelTabelle({
   table,
@@ -59,13 +63,6 @@ export default function ArtikelTabelle({
       data-source-page={sourcePage}
     >
       <table style={stil}>
-        {table.columnWidths && table.columnWidths.length > 0 && (
-          <colgroup>
-            {table.columnWidths.map((w, i) => (
-              <col key={i} style={{ width: `${(w * 100).toFixed(2)}%` }} />
-            ))}
-          </colgroup>
-        )}
         {kopf.length > 0 && (
           <thead>
             {kopf.map((row, r) => (

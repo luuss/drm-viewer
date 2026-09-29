@@ -2123,7 +2123,7 @@ button.small, .btn.small {
 }
 .article-table th,
 .article-table td {
-  padding: var(--s2) var(--s3);
+  padding: var(--s2) 0.625rem;
   text-align: left;
   vertical-align: top;
   white-space: pre-line;
@@ -2136,6 +2136,7 @@ button.small, .btn.small {
   color: #fff;
   font-weight: 600;
   vertical-align: bottom;
+  hyphens: manual;
 }
 .article-table tbody th { font-weight: 600; }
 .article-table .zahl { text-align: center; }
