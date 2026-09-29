@@ -19,7 +19,7 @@ export default function LibraryPage() {
         <div className="empty">
           <p>Noch keine Ausgabe freigeschaltet.</p>
           <ShopHinweis />
-          <Link className="btn" to="/kiosk">
+          <Link className="btn" to="/">
             <Icon name="kiosk" />
             Zum Kiosk
           </Link>

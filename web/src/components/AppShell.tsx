@@ -36,7 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Link to="/library" className={here("/library")}>
                 <Icon name="library" /> Meine Ausgaben
               </Link>
-              <Link to="/kiosk" className={here("/kiosk")}>
+              <Link to="/" className={here("/")}>
                 <Icon name="kiosk" /> Kiosk
               </Link>
               <Link to="/suche" className={here("/suche")}>
@@ -53,11 +53,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             </Authenticated>
             <Unauthenticated>
-              <Link to="/kiosk" className={here("/kiosk")}>
+              <Link to="/" className={here("/")}>
                 <Icon name="kiosk" /> Kiosk
               </Link>
               <Link
-                to={`/login?next=${encodeURIComponent(loc.pathname)}`}
+                to={loc.pathname === "/" ? "/login" : `/login?next=${encodeURIComponent(loc.pathname)}`}
                 className="btn secondary small"
               >
                 <Icon name="login" /> Anmelden

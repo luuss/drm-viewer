@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, mutation } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import {
   getAuthUserId,
   modifyAccountCredentials,
@@ -8,6 +8,24 @@ import {
 } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
 import { DataModel, Id } from "./_generated/dataModel";
+
+/**
+ * Passwort von Hand neu setzen, ohne E-Mail. Nur mit dem Admin-Schluessel:
+ * `npx convex run account:setPasswordByEmail '{"email":"…","newPassword":"…"}'`.
+ * Alle Sitzungen des Kontos laufen danach ab.
+ */
+export const setPasswordByEmail = internalAction({
+  args: { email: v.string(), newPassword: v.string() },
+  handler: async (ctx, { email, newPassword }) => {
+    const { user } = await retrieveAccount(ctx, { provider: "password", account: { id: email } });
+    await modifyAccountCredentials(ctx, {
+      provider: "password",
+      account: { id: email, secret: newPassword },
+    });
+    await invalidateSessions(ctx, { userId: user._id });
+    return null;
+  },
+});
 
 /** Passwort aendern: altes Passwort wird geprueft, danach laufen alle Sitzungen ab. */
 export const changePassword = action({

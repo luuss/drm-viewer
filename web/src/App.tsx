@@ -22,11 +22,11 @@ export default function App() {
 
       <Unauthenticated>
         <Routes>
-          {/* Gaeste landen im Kiosk: die Hefte sollen ohne Konto sichtbar sein. */}
-          <Route path="/" element={<Navigate to="/kiosk" replace />} />
+          {/* Der Kiosk ist die Startseite: die Hefte sollen ohne Konto sichtbar sein. */}
+          <Route path="/" element={<Shell><KioskPage /></Shell>} />
+          <Route path="/kiosk" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/claim/:token" element={<ClaimPage />} />
-          <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
           <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
@@ -41,10 +41,10 @@ export default function App() {
         <Routes>
           {/* Der Reader laeuft ohne Rahmen, damit die Seite den Schirm fuellt. */}
           <Route path="/reader/:issueId" element={<ReaderShell />} />
-          <Route path="/" element={<Navigate to="/library" replace />} />
+          <Route path="/" element={<Shell><KioskPage /></Shell>} />
+          <Route path="/kiosk" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<NachAnmeldung />} />
           <Route path="/library" element={<Shell><LibraryPage /></Shell>} />
-          <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
           <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
           <Route path="/claim/:token" element={<ClaimPage />} />

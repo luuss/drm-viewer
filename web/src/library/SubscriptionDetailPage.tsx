@@ -44,7 +44,7 @@ export default function SubscriptionDetailPage() {
     return (
       <div className="centered">
         <p>Dieses Abo gibt es nicht.</p>
-        <Link to="/kiosk" className="btn secondary">Zum Kiosk</Link>
+        <Link to="/" className="btn secondary">Zum Kiosk</Link>
       </div>
     );
   }
