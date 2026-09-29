@@ -53,3 +53,10 @@ export function tabellenName(t: Tabelle): string {
   const kopf = t.rows[0]?.filter((c) => c.header).map((c) => c.text.trim()) ?? [];
   return kopf.length ? `Tabelle: ${kopf.join(", ")}` : "Tabelle";
 }
+
+/** Zellen bis zu dieser Laenge umbrechen nicht. */
+export const KURZE_ZELLE = 28;
+
+export function istKurz(text: string): boolean {
+  return text.length <= KURZE_ZELLE && !text.includes("\n");
+}

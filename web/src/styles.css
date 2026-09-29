@@ -2113,7 +2113,7 @@ button.small, .btn.small {
   width: 100%;
   min-width: calc(var(--spalten, 3) * 7rem);
   border-collapse: collapse;
-  font-size: var(--fs-sub);
+  font-size: 0.875rem;
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
   /* Der Artikel bricht notfalls mitten im Wort; in einer Zelle soll nur
@@ -2140,6 +2140,7 @@ button.small, .btn.small {
 }
 .article-table tbody th { font-weight: 600; }
 .article-table .zahl { text-align: center; }
+.article-table .kurz { white-space: nowrap; }
 .article-table .hervor { color: var(--accent-deep); background: var(--paper-sunk); }
 .review-table { align-self: stretch; }
 .review-table .article-table { margin: 0; }

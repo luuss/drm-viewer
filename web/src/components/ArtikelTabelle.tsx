@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import {
+  istKurz,
   spaltenZahl,
   tabellenName,
   zahlenSpalten,
@@ -36,7 +37,14 @@ export default function ArtikelTabelle({
       ...((c.colSpan ?? 1) > 1 ? { colSpan: c.colSpan } : {}),
       ...((c.rowSpan ?? 1) > 1 ? { rowSpan: c.rowSpan } : {}),
     };
-    const klassen = [zahlen.has(i) ? "zahl" : "", c.emphasis ? "hervor" : ""]
+    // Kurze Eintraege (Name, Datum, Dienstgrad) bleiben auf einer Zeile wie
+    // im Heft; ist die Tabelle dann zu breit, rollt ihr Rahmen seitlich.
+    const kurz = !imKopf && !c.header && istKurz(c.text);
+    const klassen = [
+      zahlen.has(i) ? "zahl" : "",
+      c.emphasis ? "hervor" : "",
+      kurz ? "kurz" : "",
+    ]
       .filter(Boolean)
       .join(" ");
     if (imKopf || c.header) {

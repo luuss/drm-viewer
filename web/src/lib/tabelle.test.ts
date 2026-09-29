@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { spaltenZahl, tabellenName, zahlenSpalten, type Tabelle } from "./tabelle";
+import { istKurz, spaltenZahl, tabellenName, zahlenSpalten, type Tabelle } from "./tabelle";
 
 const greim: Tabelle = {
   headerRows: 1,
@@ -38,5 +38,11 @@ describe("Tabellen im Artikel", () => {
       "Tabelle: Schwerter-Nr., Name, Wehrmachtteil, Dienstgrad bei Verleihung, Tag der Verleihung",
     );
     expect(tabellenName({ headerRows: 0, rows: [[{ text: "x" }]] })).toBe("Tabelle");
+  });
+
+  test("kurze Zellen bleiben einzeilig, lange und mehrzeilige nicht", () => {
+    expect(istKurz("10. Dezember 1917")).toBe(true);
+    expect(istKurz("Treppensturz auf Kreuzfahrtschiff")).toBe(false);
+    expect(istKurz("Flandern\nErste Stellung")).toBe(false);
   });
 });
