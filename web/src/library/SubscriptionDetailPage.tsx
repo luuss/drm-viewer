@@ -185,7 +185,7 @@ export default function SubscriptionDetailPage() {
               </button>
             </Authenticated>
             <Unauthenticated>
-              <button className="btn" onClick={() => navigate("/")}>
+              <button className="btn" onClick={() => navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>
                 Zum Abschluss anmelden
               </button>
             </Unauthenticated>
@@ -203,7 +203,7 @@ export default function SubscriptionDetailPage() {
                 Digital-Abo im Shop <Icon name="arrow-right" />
               </a>
               <Unauthenticated>
-                <button className="btn secondary" onClick={() => navigate("/")}>
+                <button className="btn secondary" onClick={() => navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>
                   Anmelden
                 </button>
               </Unauthenticated>

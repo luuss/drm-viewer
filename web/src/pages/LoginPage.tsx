@@ -146,6 +146,10 @@ export default function LoginPage() {
         </div>
 
         <p className="legal-line">
+          <Link to="/kiosk">Ohne Anmeldung: Hefte im Kiosk ansehen</Link>
+        </p>
+
+        <p className="legal-line">
           <Link to="/impressum">Impressum</Link> ·{" "}
           <Link to="/datenschutz">Datenschutz</Link> ·{" "}
           <Link to="/agb">AGB</Link>

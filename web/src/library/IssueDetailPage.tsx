@@ -105,7 +105,7 @@ export default function IssueDetailPage() {
               )}
             </Authenticated>
             <Unauthenticated>
-              <button className="btn" onClick={() => navigate("/")}>
+              <button className="btn" onClick={() => navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>
                 Zum Kauf anmelden
               </button>
             </Unauthenticated>
@@ -126,7 +126,7 @@ export default function IssueDetailPage() {
                 Im Shop kaufen <Icon name="arrow-right" />
               </a>
               <Unauthenticated>
-                <button className="btn secondary" onClick={() => navigate("/")}>
+                <button className="btn secondary" onClick={() => navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>
                   Anmelden
                 </button>
               </Unauthenticated>

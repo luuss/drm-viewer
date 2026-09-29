@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthLoading, Authenticated, Unauthenticated } from "convex/react";
 import LoginPage from "./pages/LoginPage";
 import LibraryPage from "./library/LibraryPage";
@@ -22,6 +22,9 @@ export default function App() {
 
       <Unauthenticated>
         <Routes>
+          {/* Gaeste landen im Kiosk: die Hefte sollen ohne Konto sichtbar sein. */}
+          <Route path="/" element={<Navigate to="/kiosk" replace />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/claim/:token" element={<ClaimPage />} />
           <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
@@ -39,6 +42,7 @@ export default function App() {
           {/* Der Reader laeuft ohne Rahmen, damit die Seite den Schirm fuellt. */}
           <Route path="/reader/:issueId" element={<ReaderShell />} />
           <Route path="/" element={<Navigate to="/library" replace />} />
+          <Route path="/login" element={<NachAnmeldung />} />
           <Route path="/library" element={<Shell><LibraryPage /></Shell>} />
           <Route path="/kiosk" element={<Shell><KioskPage /></Shell>} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
@@ -60,4 +64,12 @@ export default function App() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AppShell>{children}</AppShell>;
+}
+
+/** Nach der Anmeldung zurueck auf die Seite, von der der Gast kam. */
+function NachAnmeldung() {
+  const [params] = useSearchParams();
+  const next = params.get("next");
+  const ziel = next && next.startsWith("/") && !next.startsWith("//") ? next : "/library";
+  return <Navigate to={ziel} replace />;
 }
