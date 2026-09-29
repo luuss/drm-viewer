@@ -145,6 +145,11 @@ class Story:
         return sum(len(b.text) for b in self.blocks)
 
     @property
+    def textzeichen(self) -> int:
+        """Zeichen ohne Tabellen: eine Tabelle allein macht keinen Artikel."""
+        return sum(len(b.text) for b in self.blocks if b.kind != "table")
+
+    @property
     def seiten(self) -> list[int]:
         return sorted({b.page_index for b in self.blocks})
 
@@ -316,7 +321,7 @@ def artikel_aus_satz(
     koerper = [
         s
         for s in stories
-        if s.rolle() == "mengentext" and s.zeichen >= ARTIKEL_MINDESTZEICHEN
+        if s.rolle() == "mengentext" and s.textzeichen >= ARTIKEL_MINDESTZEICHEN
     ]
     koerper.sort(key=lambda s: (s.erste_seite, s.oben, s.links))
 
@@ -328,7 +333,7 @@ def artikel_aus_satz(
     kurze = [
         s
         for s in stories
-        if s.rolle() == "mengentext" and s.zeichen < ARTIKEL_MINDESTZEICHEN
+        if s.rolle() == "mengentext" and s.textzeichen < ARTIKEL_MINDESTZEICHEN
     ]
 
     kopf_zu = _kopf_zuordnen(koerper, ueberschriften)
@@ -404,10 +409,18 @@ def artikel_aus_satz(
     # richtigen Stelle stehen und nicht am Ende des Artikels.
     for rest in kaesten + kurze:
         ziel = belegte_seiten.get(rest.erste_seite)
+        if ziel is None and any(b.kind == "table" for b in rest.blocks):
+            # Eine Tabelle steht oft allein auf der Nachbarseite ihres Textes,
+            # etwa rechts auf der Doppelseite neben dem Beitrag. Ohne diesen
+            # Schritt ginge sie verloren oder wuerde ein eigener "Artikel".
+            ziel = belegte_seiten.get(rest.erste_seite - 1) or belegte_seiten.get(
+                rest.erste_seite + 1
+            )
         if ziel is None:
             continue
         art = "box" if rest.rolle() == "kasten" else "paragraph"
-        neue = [_als(b, art) for b in rest.blocks]
+        # Eine Tabelle bleibt eine Tabelle, auch in einem Kasten.
+        neue = [b if b.kind == "table" else _als(b, art) for b in rest.blocks]
         stelle = _letzte_stelle(ziel.blocks, rest.erste_seite)
         ziel.blocks[stelle:stelle] = neue
 
@@ -421,7 +434,16 @@ def artikel_aus_satz(
 
 
 def _letzte_stelle(blocks: list[SourceBlock], seite: int) -> int:
-    """Hinter den letzten Absatz dieser Seite; sonst ans Ende."""
+    """Hinter den letzten Absatz dieser Seite; sonst ans Ende.
+
+    Beginnt der Artikel erst nach dieser Seite, steht das Stueck vor seinem
+    Text, aber hinter Ueberschrift und Vorspann.
+    """
+    if blocks and all(b.page_index > seite for b in blocks):
+        return next(
+            (i for i, b in enumerate(blocks) if b.kind not in ("heading", "lead")),
+            len(blocks),
+        )
     stelle = len(blocks)
     for i, b in enumerate(blocks):
         if b.page_index <= seite:

@@ -8,7 +8,7 @@ import {
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, requirePublisher, audit } from "./roles";
 import { hasIssueAccess, accessibleIssueIds } from "./access";
-import { blockType } from "./schema";
+import { blockType, tableData } from "./schema";
 import { assetUrl } from "./assets";
 import { Id } from "./_generated/dataModel";
 
@@ -39,6 +39,7 @@ const blockInput = v.object({
   sourceFrameId: v.optional(v.string()),
   styleName: v.optional(v.string()),
   confidence: v.optional(v.number()),
+  table: v.optional(tableData),
 });
 
 export const articleInput = v.object({
@@ -315,6 +316,7 @@ export const getForReader = query({
         text: b.text,
         page: b.sourcePageIndex ?? null,
         sourceY: b.sourceY ?? null,
+        table: b.type === "table" ? (b.table ?? null) : null,
       })),
       images: withUrls,
     };
@@ -404,6 +406,7 @@ export const listForEditors = query({
             type: b.type,
             text: b.text,
             sourcePageIndex: b.sourcePageIndex ?? null,
+            table: b.table ?? null,
           })),
           regions: regions.map((r) => ({
             _id: r._id,
@@ -459,6 +462,14 @@ export const updateBlock = mutation({
     await requireEditor(ctx);
     const block = await ctx.db.get(blockId);
     if (!block) throw new Error("Block nicht gefunden");
+    // Der Text eines Tabellenblocks ist nur der flache Suchtext; geaendert
+    // wuerde er von der Tabelle abweichen, die der Leser sieht.
+    if (block.type === "table" && text !== undefined && text !== block.text) {
+      throw new Error("Tabellen lassen sich hier nicht als Text bearbeiten");
+    }
+    if (type !== undefined && (type === "table") !== (block.type === "table")) {
+      throw new Error("Eine Tabelle bleibt eine Tabelle, ein Absatz ein Absatz");
+    }
     const clean: Record<string, unknown> = {};
     if (text !== undefined) clean.text = text;
     if (type !== undefined) clean.type = type;
@@ -842,6 +853,7 @@ export const replaceForIssueInternal = internalMutation({
           sourceFrameId: b.sourceFrameId,
           styleName: b.styleName,
           confidence: b.confidence,
+          table: b.table,
         });
       }
       for (const [i, r] of a.regions.entries()) {

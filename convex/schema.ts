@@ -41,8 +41,31 @@ export const blockType = v.union(
   v.literal("quote"),
   v.literal("caption"),
   v.literal("box"),
+  v.literal("table"),
   v.literal("other"),
 );
+
+/**
+ * Eine Tabelle aus dem Satz. Jede Zeile nennt nur die Zellen, die in ihr
+ * beginnen (verbundene Zellen einmal, mit `rowSpan`/`colSpan`), genau wie
+ * HTML. Mehrere Absaetze einer Zelle trennt "\n". Der Block traegt daneben
+ * in `text` den flachen Tabellentext fuer Suche und Zaehlung.
+ */
+export const tableCell = v.object({
+  text: v.string(),
+  header: v.optional(v.boolean()),
+  rowSpan: v.optional(v.number()),
+  colSpan: v.optional(v.number()),
+  // Im Druck farbig hervorgehoben, etwa die Zeile der Hauptperson.
+  emphasis: v.optional(v.boolean()),
+});
+
+export const tableData = v.object({
+  headerRows: v.number(),
+  // Relative Spaltenbreiten aus dem Satz, zusammen 1.
+  columnWidths: v.optional(v.array(v.number())),
+  rows: v.array(v.array(tableCell)),
+});
 
 export const regionBox = {
   x0: v.number(),
@@ -276,6 +299,8 @@ export default defineSchema(
     sourceFrameId: v.optional(v.string()),
     styleName: v.optional(v.string()),
     confidence: v.optional(v.number()),
+    // Nur bei `type: "table"`. Alte Bloecke haben das Feld nicht.
+    table: v.optional(tableData),
   })
     .index("by_article", ["articleId"])
     .index("by_article_order", ["articleId", "order"])

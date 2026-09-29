@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
+import ArtikelTabelle from "../components/ArtikelTabelle";
 
 type Props = {
   articleId: Id<"articles"> | null;
@@ -197,6 +198,9 @@ export default function ArticleMode({
           }
           if (b.type === "lead") {
             return <p key={key} className="lead" data-source-page={item.page}>{b.text}</p>;
+          }
+          if (b.type === "table" && b.table) {
+            return <ArtikelTabelle key={key} table={b.table} sourcePage={item.page} />;
           }
           if (b.type === "caption") {
             return <p key={key} className="caption" data-source-page={item.page}>{b.text}</p>;

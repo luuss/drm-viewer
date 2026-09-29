@@ -362,6 +362,7 @@ export const activateResultInternal = internalMutation({
           sourceFrameId: b.sourceFrameId,
           styleName: b.styleName,
           confidence: b.confidence,
+          table: b.table,
         });
       }
       for (const [i, r] of a.regions.entries()) {

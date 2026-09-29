@@ -553,8 +553,10 @@ class Job:
                     "order": i + 1,
                     "type": b.kind if b.kind in
                     ("heading", "subheading", "lead", "paragraph", "quote", "caption", "box")
+                    or (b.kind == "table" and b.table is not None)
                     else "other",
                     "text": b.text,
+                    **({"table": b.table.to_payload()} if b.table is not None else {}),
                     "sourcePageIndex": b.page_index,
                     "sourceY": round(max(0.0, min(1.0, b.y0)), 5),
                     **({"sourceStoryId": b.story_id} if b.story_id else {}),

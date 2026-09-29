@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFrage } from "../components/Frage";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id , cleanError } from "../lib/api";
+import ArtikelTabelle from "../components/ArtikelTabelle";
 
 /**
  * Pruefansicht: links die Seitenlage der Regionen, rechts die Bloecke.
@@ -209,14 +210,23 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
             <ol className="blocks">
               {open.blocks.map((b) => (
                 <li key={b._id}>
-                  <span className="badge">{b.type}</span>
-                  <textarea
-                    defaultValue={b.text}
-                    rows={Math.min(6, Math.ceil(b.text.length / 90) + 1)}
-                    onBlur={(e) =>
-                      guard(() => updateBlock({ blockId: b._id, text: e.target.value }))
-                    }
-                  />
+                  <span className="badge">{b.type === "table" ? "Tabelle" : b.type}</span>
+                  {b.type === "table" && b.table ? (
+                    // Eine Tabelle wird so gezeigt, wie der Leser sie sieht.
+                    // Als Text bearbeiten laesst sie sich nicht; verschieben,
+                    // trennen und loeschen schon.
+                    <div className="review-table">
+                      <ArtikelTabelle table={b.table} />
+                    </div>
+                  ) : (
+                    <textarea
+                      defaultValue={b.text}
+                      rows={Math.min(6, Math.ceil(b.text.length / 90) + 1)}
+                      onBlur={(e) =>
+                        guard(() => updateBlock({ blockId: b._id, text: e.target.value }))
+                      }
+                    />
+                  )}
                   <span className="block-actions">
                     <button
                       className="btn quiet small"

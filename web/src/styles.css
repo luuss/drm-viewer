@@ -2096,6 +2096,53 @@ button.small, .btn.small {
   line-height: 1.5;
 }
 
+/* Tabellen aus dem Heft. Der Rahmen rollt seitlich, wenn die Spalten nicht
+   in die Breite passen (Telefon); die Tabelle selbst wird dafuer nie
+   schmaler als etwa sieben Zeichen je Spalte. Kopf wie im Druck: weisse
+   Schrift auf dem dunklen Verlagsrot. */
+.article-table {
+  margin: clamp(1.5rem, 4vw, 2.5rem) 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.article-table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.article-table table {
+  width: 100%;
+  min-width: calc(var(--spalten, 3) * 7rem);
+  border-collapse: collapse;
+  font-size: var(--fs-sub);
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  /* Der Artikel bricht notfalls mitten im Wort; in einer Zelle soll nur
+     an Silben getrennt werden. */
+  overflow-wrap: normal;
+  hyphens: auto;
+}
+.article-table th,
+.article-table td {
+  padding: var(--s2) var(--s3);
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-line;
+  border-bottom: 1px solid var(--rule);
+}
+.article-table tr:last-child > td,
+.article-table tr:last-child > th { border-bottom: 0; }
+.article-table thead th {
+  background: var(--accent-deep);
+  color: #fff;
+  font-weight: 600;
+  vertical-align: bottom;
+}
+.article-table tbody th { font-weight: 600; }
+.article-table .zahl { text-align: center; }
+.article-table .hervor { color: var(--accent-deep); background: var(--paper-sunk); }
+.review-table { align-self: stretch; }
+.review-table .article-table { margin: 0; }
+
 .reader-rail {
   display: flex;
   align-items: center;

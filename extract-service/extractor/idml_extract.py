@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 
 from lxml import etree
 
-from .model import SourceBlock, SourceImage, TocHint
+from .model import SourceBlock, SourceImage, TableCell, TableData, TocHint
 from .textutil import clean_text, first_sentence  # noqa: F401  (Re-Export)
 
 # Die Absatzformate der Hefte sind sprechend benannt ("Ueberschrift 2023",
@@ -200,6 +200,227 @@ def _verteile_auf_rahmen(
     return out
 
 
+# --- Tabellen --------------------------------------------------------------
+#
+# Eine Tabelle steht im Satz mitten im Text: als `<Table>` in einem
+# Zeichenbereich des Absatzes, an dem sie verankert ist. Jede Zelle traegt
+# eigene Absaetze. Die Tabelle wird deshalb an genau dieser Stelle zu einem
+# eigenen Block, und ihre Zellen tauchen nicht mehr als Absaetze auf.
+
+# Farben, die nichts hervorheben: Schwarz, Papierweiss, Passermarken, "keine".
+NEUTRALE_FARBEN = {
+    "",
+    "n",
+    "Swatch/None",
+    "Color/Black",
+    "Color/Paper",
+    "Color/Registration",
+}
+FETT = ("bold", "semibold", "black", "heavy", "fett", "halbfett")
+
+
+def _lokal(element) -> str:
+    return etree.QName(element).localname if isinstance(element.tag, str) else ""
+
+
+def _in_zelle(element) -> bool:
+    return any(_lokal(a) == "Cell" for a in element.iterancestors())
+
+
+def _absatz_teile(psr) -> list["str | TableData"]:
+    """Die Absaetze eines Formatbereichs, Tabellen an ihrer Stelle.
+
+    Liefert rohen Text je Absatz (getrennt an `<Br/>`) und dazwischen die
+    Tabellen als `TableData`. Text vor und nach einer Tabelle im selben
+    Absatz bleibt je ein eigener Absatz.
+    """
+    teile: list[str | TableData] = []
+    laufend: list[str] = []
+
+    def abschliessen() -> None:
+        teile.append("".join(laufend))
+        laufend.clear()
+
+    def gehen(element) -> None:
+        for node in element:
+            # Ein Kommentar oder eine Verarbeitungsanweisung traegt kein
+            # auswertbares Tag; InDesign schreibt beides in die Stories.
+            tag = _lokal(node)
+            if not tag:
+                continue
+            if tag == "Table":
+                tabelle = _tabelle_lesen(node)
+                abschliessen()
+                if tabelle is not None:
+                    teile.append(tabelle)
+                continue
+            if tag == "Content" and node.text:
+                laufend.append(node.text)
+            elif tag == "Br":
+                abschliessen()
+            gehen(node)
+
+    gehen(psr)
+    abschliessen()
+    return teile
+
+
+def _zellen_text(cell) -> str:
+    """Text einer Zelle; mehrere Absaetze durch Zeilenumbruch getrennt."""
+    absaetze: list[str] = []
+    for psr in cell.iter("{*}ParagraphStyleRange"):
+        # Nur die Absaetze dieser Zelle, nicht die einer Tabelle darin.
+        naechste = next(
+            (a for a in psr.iterancestors() if _lokal(a) == "Cell"), None
+        )
+        if naechste is not cell:
+            continue
+        for teil in _absatz_teile(psr):
+            roh = teil.as_text() if isinstance(teil, TableData) else teil
+            text = clean_text(roh)
+            if text:
+                absaetze.append(text)
+    return "\n".join(absaetze)
+
+
+def _schrift(cell) -> list[tuple[str, str]]:
+    """Schriftfarbe und Schnitt aller Zeichenbereiche mit Text."""
+    out = []
+    for csr in cell.iter("{*}CharacterStyleRange"):
+        if not any(
+            _lokal(c) == "Content" and (c.text or "").strip() for c in csr
+        ):
+            continue
+        out.append((csr.get("FillColor") or "", (csr.get("FontStyle") or "").lower()))
+    return out
+
+
+def _ist_fett(cell) -> bool:
+    schrift = _schrift(cell)
+    return bool(schrift) and all(any(f in stil for f in FETT) for _farbe, stil in schrift)
+
+
+def _hervorgehoben(cell) -> bool:
+    schrift = _schrift(cell)
+    return bool(schrift) and all(
+        farbe not in NEUTRALE_FARBEN for farbe, _stil in schrift
+    )
+
+
+def _flaeche(cell) -> str:
+    farbe = cell.get("FillColor") or ""
+    return "" if farbe in NEUTRALE_FARBEN else farbe
+
+
+def _sieht_aus_wie_kopf(erste: list, zweite: list) -> bool:
+    """Eine Kopfzeile, die der Satz nicht als solche ausweist.
+
+    Viele Setzer legen keine Tabellenkopfzeile an, sondern faerben die erste
+    Zeile ein und setzen sie fett. Beides zusammen oder eine Flaeche, die in
+    der zweiten Zeile nicht wiederkehrt, macht die erste Zeile zum Kopf.
+    """
+    if not erste:
+        return False
+    flaechen = {_flaeche(c) for c in erste}
+    eigene_flaeche = "" not in flaechen and flaechen != {_flaeche(c) for c in zweite}
+    fett = all(_ist_fett(c) for c in erste)
+    return eigene_flaeche or fett
+
+
+def _tabelle_lesen(table) -> "TableData | None":
+    """Eine `<Table>` aus dem Satz in Zeilen und Zellen zerlegen."""
+    spalten_breiten: list[float] = []
+    for column in table.findall("{*}Column"):
+        try:
+            spalten_breiten.append(max(0.0, float(column.get("SingleColumnWidth") or 0)))
+        except ValueError:
+            spalten_breiten.append(0.0)
+
+    zellen: dict[tuple[int, int], object] = {}
+    for cell in table.findall("{*}Cell"):
+        name = (cell.get("Name") or "").split(":")
+        if len(name) != 2:
+            continue
+        try:
+            spalte, zeile = int(name[0]), int(name[1])
+        except ValueError:
+            continue
+        zellen[(zeile, spalte)] = cell
+    if not zellen:
+        return None
+
+    zeilen_anzahl = max(
+        len(table.findall("{*}Row")), max(z for z, _s in zellen) + 1
+    )
+    spalten_anzahl = max(
+        len(spalten_breiten), max(s for _z, s in zellen) + 1
+    )
+
+    def spanne(cell, attr: str) -> int:
+        try:
+            return max(1, int(cell.get(attr) or 1))
+        except ValueError:
+            return 1
+
+    # Welche Plaetze eine verbundene Zelle schon belegt. InDesign fuehrt die
+    # verdeckten Zellen je nach Version mit oder nicht; beides geht.
+    belegt: set[tuple[int, int]] = set()
+    roh: list[list[tuple[object, int, int]]] = []
+    for z in range(zeilen_anzahl):
+        zeile: list[tuple[object, int, int]] = []
+        for s in range(spalten_anzahl):
+            if (z, s) in belegt:
+                continue
+            cell = zellen.get((z, s))
+            if cell is None:
+                continue
+            rs = min(spanne(cell, "RowSpan"), zeilen_anzahl - z)
+            cs = min(spanne(cell, "ColumnSpan"), spalten_anzahl - s)
+            for dz in range(rs):
+                for ds in range(cs):
+                    belegt.add((z + dz, s + ds))
+            zeile.append((cell, rs, cs))
+        roh.append(zeile)
+
+    kopf = 0
+    try:
+        kopf = max(0, int(table.get("HeaderRowCount") or 0))
+    except ValueError:
+        kopf = 0
+    if kopf == 0 and len(roh) > 1 and _sieht_aus_wie_kopf(
+        [c for c, _rs, _cs in roh[0]], [c for c, _rs, _cs in roh[1]]
+    ):
+        kopf = 1
+    kopf = min(kopf, len(roh))
+
+    zeilen: list[tuple[TableCell, ...]] = []
+    for z, zeile in enumerate(roh):
+        ist_kopf = z < kopf
+        zeilen.append(
+            tuple(
+                TableCell(
+                    text=_zellen_text(cell),
+                    header=ist_kopf,
+                    row_span=rs,
+                    col_span=cs,
+                    emphasis=(not ist_kopf) and _hervorgehoben(cell),
+                )
+                for cell, rs, cs in zeile
+            )
+        )
+    # Eine Tabelle ganz ohne Text ist ein Gestaltungsraster, keine Tabelle.
+    if not any(c.text for zeile in zeilen for c in zeile):
+        return None
+
+    summe = sum(spalten_breiten)
+    breiten = (
+        tuple(round(b / summe, 4) for b in spalten_breiten)
+        if summe > 0 and len(spalten_breiten) == spalten_anzahl
+        else ()
+    )
+    return TableData(rows=tuple(zeilen), header_rows=kopf, column_widths=breiten)
+
+
 def extract_idml_blocks(
     idml_bytes: bytes,
     text_frames: list["IdmlTextFrame"] | None = None,
@@ -228,7 +449,13 @@ def extract_idml_blocks(
             story_id = story.get("Self") if story is not None else name
 
             absaetze: list[tuple[str, str]] = []
+            # Je Absatz die Tabelle, falls der Absatz eine ist; sonst None.
+            tabellen: list[TableData | None] = []
             for psr in root.iter("{*}ParagraphStyleRange"):
+                # Die Absaetze in Tabellenzellen gehoeren zur Tabelle. Frueher
+                # kamen sie hier ein zweites Mal als einzelne Absaetze heraus.
+                if _in_zelle(psr):
+                    continue
                 style = re.sub(
                     r"^ParagraphStyle/", "", psr.get("AppliedParagraphStyle", "") or ""
                 )
@@ -236,23 +463,16 @@ def extract_idml_blocks(
                 # werden sie durch `<Br/>`. Frueher landete der ganze Bereich
                 # als ein Block — 150.000 Zeichen Mengentext in fuenf Kloetzen,
                 # im Reader eine Wand ohne Absaetze.
-                parts: list[str] = []
-                for node in psr.iter():
-                    # Ein Kommentar oder eine Verarbeitungsanweisung traegt
-                    # kein auswertbares Tag; InDesign schreibt beides in die
-                    # Stories, und `QName` wirft darueber.
-                    if not isinstance(node.tag, str):
+                for teil in _absatz_teile(psr):
+                    if isinstance(teil, TableData):
+                        absaetze.append((teil.as_text(), style))
+                        tabellen.append(teil)
                         continue
-                    tag = etree.QName(node).localname
-                    if tag == "Content" and node.text:
-                        parts.append(node.text)
-                    elif tag == "Br":
-                        parts.append("\x00")
-                for roh in "".join(parts).split("\x00"):
-                    text = clean_text(roh)
+                    text = clean_text(teil)
                     if not text:
                         continue
                     absaetze.append((text, style))
+                    tabellen.append(None)
 
             if not absaetze:
                 continue
@@ -264,8 +484,8 @@ def extract_idml_blocks(
                 # gehoeren nicht in die Ausgabe.
                 continue
             lagen = _verteile_auf_rahmen(absaetze, rahmen)
-            for (text, style), (seite, x0, y0, x1, y1, frame_id, kasten) in zip(
-                absaetze, lagen
+            for (text, style), tabelle, (seite, x0, y0, x1, y1, frame_id, kasten) in zip(
+                absaetze, tabellen, lagen
             ):
                 if _ist_beiwerk(style):
                     continue
@@ -277,7 +497,8 @@ def extract_idml_blocks(
                         y0=y0,
                         x1=x1,
                         y1=y1,
-                        kind=_style_kind(style),
+                        kind="table" if tabelle is not None else _style_kind(style),
+                        table=tabelle,
                         origin="idml",
                         story_id=story_id,
                         frame_id=frame_id or None,

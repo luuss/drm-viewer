@@ -380,7 +380,8 @@ def mark_furniture(blocks: list[SourceBlock], page_count: int) -> None:
     pages_present = len({b.page_index for b in blocks}) or 1
     buckets: dict[tuple[str, int], list[SourceBlock]] = defaultdict(list)
     for b in blocks:
-        if b.char_count > 120:
+        # Eine Tabelle ist nie Beiwerk, auch wenn sie kurz ist.
+        if b.char_count > 120 or b.kind == "table":
             continue
         key = (re.sub(r"\d+", "", normalize_compare(b.text))[:40], int(b.y0 * 50))
         if not key[0]:
@@ -393,6 +394,8 @@ def mark_furniture(blocks: list[SourceBlock], page_count: int) -> None:
                 b.drop = True
 
     for b in blocks:
+        if b.kind == "table":
+            continue
         t = b.text.strip()
         if t.isdigit() and len(t) <= 3:
             b.drop = True
