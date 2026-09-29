@@ -314,7 +314,7 @@ export const select = action({
     }
     const json = await shop("product", { id: productId });
     const product = parseProduct(json.product);
-    if (!product) throw new Error("Der Shop lieferte kein gültiges Produkt.");
+    if (!product) throw new Error("Der Netzladen lieferte kein gültiges Produkt.");
     const applied: { priceTaken: boolean; sku: string; needsCover: boolean } =
       await ctx.runMutation(internal.shopCatalog.applyProductInternal, {
       issueId,
@@ -322,13 +322,13 @@ export const select = action({
     });
     const messages: string[] = [`Zugeordnet: ${product.name}`, `Artikelnummer ${applied.sku}`];
     if (applied.priceTaken && product.priceCents !== null) {
-      messages.push(`Preis ${(product.priceCents / 100).toFixed(2)} € aus dem Shop`);
+      messages.push(`Preis ${(product.priceCents / 100).toFixed(2)} € aus dem Netzladen`);
     }
     if (applied.needsCover && product.coverUrl) {
       messages.push(
         (await takeCover(ctx, issueId, product.coverUrl))
-          ? "Titelbild aus dem Shop übernommen"
-          : "Titelbild aus dem Shop nicht ladbar",
+          ? "Titelbild aus dem Netzladen übernommen"
+          : "Titelbild aus dem Netzladen nicht ladbar",
       );
     }
     return { messages };
@@ -352,7 +352,7 @@ async function takeCover(ctx: any, issueId: Id<"issues">, url: string): Promise<
       bytes: blob.size,
     });
   } catch (error) {
-    console.error("Titelbild aus dem Shop", error);
+    console.error("Titelbild aus dem Netzladen", error);
     return false;
   }
 }
@@ -366,7 +366,7 @@ export const offer = action({
     const c: IssueContext = await ctx.runQuery(internal.shopCatalog.contextInternal, {
       issueId,
     });
-    if (!c.shopProductId) throw new Error("Erst das Druckheft im Shop auswählen.");
+    if (!c.shopProductId) throw new Error("Erst das Druckheft im Netzladen auswählen.");
     if (c.priceAmountCents <= 0) throw new Error("Die Ausgabe hat keinen Preis.");
     const sku: string = await ctx.runMutation(internal.shopCatalog.ensureSkuInternal, {
       issueId,
@@ -407,7 +407,7 @@ export const withdraw = action({
       issueId,
     });
     if (!c.shopProductId || !c.externalSku) {
-      throw new Error("Diese Ausgabe ist im Shop nicht angeboten.");
+      throw new Error("Diese Ausgabe ist im Netzladen nicht angeboten.");
     }
     await shop("withdraw_digital", { id_product: c.shopProductId, sku: c.externalSku });
     // Kaufknopf zurueck auf die Produktseite; scheitert das, bleibt die alte.
@@ -437,9 +437,9 @@ export const refresh = action({
     const c: IssueContext = await ctx.runQuery(internal.shopCatalog.contextInternal, {
       issueId,
     });
-    if (!c.shopProductId) throw new Error("Erst das Druckheft im Shop auswählen.");
+    if (!c.shopProductId) throw new Error("Erst das Druckheft im Netzladen auswählen.");
     const product = parseProduct((await shop("product", { id: c.shopProductId })).product);
-    if (!product) throw new Error("Der Shop lieferte kein gültiges Produkt.");
+    if (!product) throw new Error("Der Netzladen lieferte kein gültiges Produkt.");
     const status: DigitalStatus = statusFrom(product);
     await ctx.runMutation(internal.shopCatalog.setDigitalInternal, { issueId, status });
     return status;

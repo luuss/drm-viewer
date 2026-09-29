@@ -447,7 +447,7 @@ export const bestellungErgebnis = internalMutation({
         shopOrderId: a.shopOrderId,
         shopReference: a.shopReference,
         shopState: a.shopState,
-        fehler: sauber ? undefined : (a.fehler ?? "Bestellung im Shop nicht bezahlt"),
+        fehler: sauber ? undefined : (a.fehler ?? "Bestellung im Netzladen nicht bezahlt"),
         versuche,
         updatedAt: Date.now(),
       });

@@ -105,7 +105,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               Die Zeitschriften des Verlags zum Lesen am Bildschirm. Einzelne
               Ausgaben und Digital-Abos gibt es im{" "}
               <a href="https://lesenundschenken.de/" target="_blank" rel="noopener noreferrer">
-                Verlagsshop
+                Netzladen
               </a>
               , gelesen wird hier auf jedem Gerät.
             </p>

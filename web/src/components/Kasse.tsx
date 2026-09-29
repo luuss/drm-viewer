@@ -66,7 +66,7 @@ function ShopLink({ href }: { href: string | null }) {
   if (!href) return null;
   return (
     <a className="kasse-andere" href={href}>
-      Andere Zahlart (Rechnung, Vorkasse, SEPA) im Shop
+      Andere Zahlart (Rechnung, Vorkasse, SEPA) im Netzladen
     </a>
   );
 }
@@ -374,7 +374,7 @@ function KasseKonto({
         ) : angebotFehler ? (
           <div className="err">{angebotFehler}</div>
         ) : (
-          <span className="hint">Preis wird im Shop abgefragt …</span>
+          <span className="hint">Preis wird im Netzladen abgefragt …</span>
         )}
       </div>
 

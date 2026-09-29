@@ -81,7 +81,7 @@ export default function KioskPage() {
                       </div>
                     </>
                   ) : (
-                    <div className="price-note">Digital-Abo im Shop</div>
+                    <div className="price-note">Digital-Abo im Netzladen</div>
                   )}
                   <div className="card-action">
                     Abo ansehen <Icon name="arrow-right" />

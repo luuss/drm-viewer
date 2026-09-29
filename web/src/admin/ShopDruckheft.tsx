@@ -98,7 +98,7 @@ export default function ShopDruckheft({
 
   return (
     <div className="shop-card">
-      <h4>Druckheft im Shop</h4>
+      <h4>Druckheft im Netzladen</h4>
 
       {issue.shopProductId ? (
         <p className="small">
@@ -107,7 +107,7 @@ export default function ShopDruckheft({
             <>
               {" · "}
               <a href={issue.shopUrl} target="_blank" rel="noopener noreferrer">
-                im Shop ansehen
+                im Netzladen ansehen
               </a>
             </>
           )}
@@ -119,7 +119,7 @@ export default function ShopDruckheft({
 
       {issue.shopProductId && (
         <p className="small">
-          E-Paper im Shop:{" "}
+          E-Paper im Netzladen:{" "}
           <span className={`badge ${offered ? "live" : "pending"}`}>
             {offered ? "angeboten" : "nicht angeboten"}
           </span>
@@ -137,7 +137,7 @@ export default function ShopDruckheft({
       )}
       {issue.isPublished && !offered && (
         <p className="err small">
-          Im Leser veröffentlicht, im Shop aber nicht als E-Paper angeboten.
+          Im Leser veröffentlicht, im Netzladen aber nicht als E-Paper angeboten.
         </p>
       )}
 
@@ -151,8 +151,8 @@ export default function ShopDruckheft({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Im Shop suchen"
-          aria-label="Im Shop suchen"
+          placeholder="Im Netzladen suchen"
+          aria-label="Im Netzladen suchen"
         />
         <button className="btn secondary small" disabled={busy !== null}>
           {busy === "search" ? "Sucht…" : "Suchen"}
@@ -214,12 +214,12 @@ export default function ShopDruckheft({
             run("offer", async () => {
               const s = await offer({ issueId: issue._id });
               setMsg(
-                `Im Shop angeboten${s.priceCents !== undefined ? ` für ${formatEuro(s.priceCents)}` : ""}`,
+                `Im Netzladen angeboten${s.priceCents !== undefined ? ` für ${formatEuro(s.priceCents)}` : ""}`,
               );
             })
           }
         >
-          {busy === "offer" ? "Wird angeboten…" : "Im Shop als E-Paper anbieten"}
+          {busy === "offer" ? "Wird angeboten…" : "Im Netzladen als E-Paper anbieten"}
         </button>
         {offered && (
           <button
@@ -227,19 +227,19 @@ export default function ShopDruckheft({
             disabled={busy !== null}
             onClick={async () => {
               const weiter = await frage({
-                titel: "E-Paper aus dem Shop nehmen?",
-                text: "Die Variante ist danach im Shop nicht mehr kaufbar. Wer schon gekauft hat, behält den Zugriff.",
-                ja: "Aus dem Shop nehmen",
+                titel: "E-Paper aus dem Netzladen nehmen?",
+                text: "Die Variante ist danach im Netzladen nicht mehr kaufbar. Wer schon gekauft hat, behält den Zugriff.",
+                ja: "Aus dem Netzladen nehmen",
                 gefahr: true,
               });
               if (!weiter) return;
               await run("withdraw", async () => {
                 await withdraw({ issueId: issue._id });
-                setMsg("Aus dem Shop genommen");
+                setMsg("Aus dem Netzladen genommen");
               });
             }}
           >
-            Aus dem Shop nehmen
+            Aus dem Netzladen nehmen
           </button>
         )}
         {issue.shopProductId && (
@@ -249,7 +249,7 @@ export default function ShopDruckheft({
             onClick={() =>
               run("refresh", async () => {
                 await refresh({ issueId: issue._id });
-                setMsg("Stand aus dem Shop geholt");
+                setMsg("Stand aus dem Netzladen geholt");
               })
             }
           >

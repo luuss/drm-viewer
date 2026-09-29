@@ -182,7 +182,7 @@ export default function IssueDetailPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Im Shop kaufen <Icon name="arrow-right" />
+                  Im Netzladen kaufen <Icon name="arrow-right" />
                 </a>
               )}
               <Unauthenticated>

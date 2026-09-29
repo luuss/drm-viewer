@@ -90,7 +90,7 @@ export default function SubscriptionDetailPage() {
         <div className="meta">
           {stripeMode && selected
             ? `${selected.interval === "year" ? "Jahresabonnement" : "Monatsabonnement"} · Preise inkl. MwSt.`
-            : "Digital-Abo · Preis und Laufzeit im Shop"}
+            : "Digital-Abo · Preis und Laufzeit im Netzladen"}
         </div>
         {offer.currentIssue && (
           <div className="current-issue">
@@ -200,7 +200,7 @@ export default function SubscriptionDetailPage() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Digital-Abo im Shop <Icon name="arrow-right" />
+                Digital-Abo im Netzladen <Icon name="arrow-right" />
               </a>
               <Unauthenticated>
                 <button className="btn secondary" onClick={() => navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>

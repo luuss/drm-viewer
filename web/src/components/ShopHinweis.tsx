@@ -4,7 +4,7 @@
  * nach dem Kauf angelegt wird.
  */
 export const SHOP_HINWEIS =
-  "Gekauft im Shop? Mit derselben E-Mail anmelden, dann ist das Heft freigeschaltet.";
+  "Gekauft im Netzladen? Mit derselben E-Mail anmelden, dann ist das Heft freigeschaltet.";
 
 export default function ShopHinweis({ className = "hint" }: { className?: string }) {
   return <p className={`${className} shop-hint`}>{SHOP_HINWEIS}</p>;

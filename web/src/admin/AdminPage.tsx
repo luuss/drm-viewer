@@ -83,7 +83,7 @@ export default function AdminPage() {
         </ul>
         {me.isAdmin && publications && publications.length > 0 && (
           <div className="shop-settings">
-            <h4>Digital-Abo im Shop</h4>
+            <h4>Digital-Abo im Netzladen</h4>
             <p className="muted small">
               Artikelnummer (Referenz) des Digital-Abos im PrestaShop, Laufzeit
               in Monaten (leer = 12) und Produktseite für den Kaufknopf. Leere
@@ -159,7 +159,7 @@ export default function AdminPage() {
             von selbst; hier laesst er sich nach einer Preisaenderung sofort
             anstossen. */}
         <p className="muted small">
-          Preise, Titelbilder und Heftbezeichnungen kommen aus dem Verlagsshop.
+          Preise, Titelbilder und Heftbezeichnungen kommen aus dem Netzladen.
         </p>
         <button
           className="btn secondary"
@@ -180,7 +180,7 @@ export default function AdminPage() {
             setLadenLaeuft(false);
           }}
         >
-          {ladenLaeuft ? "Wird abgeglichen…" : "Aus dem Verlagsshop aktualisieren"}
+          {ladenLaeuft ? "Wird abgeglichen…" : "Aus dem Netzladen aktualisieren"}
         </button>
       </section>
 
@@ -288,12 +288,12 @@ export default function AdminPage() {
                     <span className="badge pending">{i.pendingArticles} offen</span>
                   )}
                   {i.externalSku ? (
-                    <span className="badge">Shop {i.externalSku}</span>
+                    <span className="badge">Netzladen {i.externalSku}</span>
                   ) : (
                     <span className="badge pending">ohne Artikelnummer</span>
                   )}
                   {i.isPublished && !i.shopDigital?.offered && (
-                    <span className="badge pending">nicht im Shop angeboten</span>
+                    <span className="badge pending">nicht im Netzladen angeboten</span>
                   )}
                   {i.stripePriceId && <span className="badge">Stripe</span>}
                   {i.lastJob && (
@@ -397,23 +397,23 @@ export default function AdminPage() {
                             externalSku: value("sku"),
                             shopUrl: value("url"),
                           }),
-                        "Shop-Angaben gespeichert",
+                        "Netzladen-Angaben gespeichert",
                       );
                     }}
                   >
                     <input
                       name="sku"
                       defaultValue={i.externalSku ?? ""}
-                      placeholder="Artikelnummer im Shop"
-                      aria-label="Artikelnummer im Shop"
+                      placeholder="Artikelnummer im Netzladen"
+                      aria-label="Artikelnummer im Netzladen"
                       className="narrow"
                     />
                     <input
                       name="url"
                       type="url"
                       defaultValue={i.shopUrl ?? ""}
-                      placeholder="Produktseite im Shop (leer = Suche)"
-                      aria-label="Produktseite im Shop"
+                      placeholder="Produktseite im Netzladen (leer = Suche)"
+                      aria-label="Produktseite im Netzladen"
                     />
                     <button className="btn secondary small">Speichern</button>
                   </form>

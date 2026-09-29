@@ -233,7 +233,7 @@ export const createIssueCheckout = action({
     { issueId, successUrl, cancelUrl, withdrawalWaiver },
   ): Promise<{ url: string }> => {
     if (!stripeCheckoutEnabled()) {
-      throw new Error("Verkauf läuft über den Shop auf lesenundschenken.de");
+      throw new Error("Verkauf läuft über den Netzladen auf lesenundschenken.de");
     }
     if (!withdrawalWaiver) {
       throw new Error(
@@ -288,7 +288,7 @@ export const createSubscriptionCheckout = action({
     { planId, successUrl, cancelUrl, withdrawalWaiver },
   ): Promise<{ url: string }> => {
     if (!stripeCheckoutEnabled()) {
-      throw new Error("Verkauf läuft über den Shop auf lesenundschenken.de");
+      throw new Error("Verkauf läuft über den Netzladen auf lesenundschenken.de");
     }
     if (!withdrawalWaiver) {
       throw new Error(

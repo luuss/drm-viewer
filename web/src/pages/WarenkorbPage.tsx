@@ -117,14 +117,14 @@ export default function WarenkorbPage() {
             <>
               <div className="row actions">
                 <button className="btn" onClick={zurKasse}>
-                  Zur Kasse im Shop <Icon name="arrow-right" />
+                  Zur Kasse im Netzladen <Icon name="arrow-right" />
                 </button>
                 <Link className="btn secondary" to="/">
                   Weiter aussuchen
                 </Link>
               </div>
               <p className="hint">
-                Bezahlt wird im Shop auf lesenundschenken.de, die Hefte liegen dort schon im
+                Bezahlt wird im Netzladen auf lesenundschenken.de, die Hefte liegen dort schon im
                 Warenkorb.
                 {me?.email ? ` Die Freischaltung geht an ${me.email}.` : ""}
               </p>

@@ -58,12 +58,12 @@ async function angebotHolen(
     json = await callShopApi("quote", { skus: hefte.map((h) => h.sku), country_iso: land });
   } catch (e) {
     console.error(JSON.stringify({ event: "leser.angebot.fehler", fehler: String((e as Error).message) }));
-    throw new Error("Der Preis ließ sich im Shop gerade nicht abfragen. Bitte gleich noch einmal versuchen.");
+    throw new Error("Der Preis ließ sich im Netzladen gerade nicht abfragen. Bitte gleich noch einmal versuchen.");
   }
   const zeilen: any[] = Array.isArray(json.items) ? json.items : [];
   const betragCents = Number(json.total_cents);
   if (!Number.isInteger(betragCents) || betragCents <= 0) {
-    throw new Error("Der Shop lieferte keinen gültigen Preis.");
+    throw new Error("Der Netzladen lieferte keinen gültigen Preis.");
   }
   return {
     betragCents,

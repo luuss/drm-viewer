@@ -211,7 +211,7 @@ export function adressePruefen(roh: Rechnungsadresse): Rechnungsadresse {
   if (!a.vorname || !a.nachname) throw new Error("Bitte Vor- und Nachnamen angeben.");
   const name = /^[^0-9!<>,;?=+()@#"°{}_$%:¤|]+$/u;
   if (!name.test(a.vorname) || !name.test(a.nachname)) {
-    throw new Error("Der Name enthält Zeichen, die der Shop nicht annimmt.");
+    throw new Error("Der Name enthält Zeichen, die der Netzladen nicht annimmt.");
   }
   if (!a.strasse) throw new Error("Bitte Straße und Hausnummer angeben.");
   if (!a.ort) throw new Error("Bitte den Ort angeben.");
