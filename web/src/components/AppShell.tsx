@@ -3,7 +3,6 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { Authenticated, Unauthenticated, useQuery } from "convex/react";
 import { api } from "../lib/api";
 import Icon from "./Icon";
-import { useWarenkorb } from "../lib/warenkorb";
 
 /**
  * Rahmen der Anwendung. Mit `?embed=1` faellt er weg — fuer die Einbettung in
@@ -33,7 +32,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="brand-sub">Digital</span>
           </Link>
           <nav>
-            <WarenkorbLink active={here("/warenkorb")} />
             <Authenticated>
               <Link to="/library" className={here("/library")}>
                 <Icon name="library" /> Meine Ausgaben
@@ -121,17 +119,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </footer>
     </div>
-  );
-}
-
-/** Nur sichtbar, solange etwas ausgewaehlt ist. */
-function WarenkorbLink({ active }: { active?: string }) {
-  const anzahl = useWarenkorb().length;
-  if (anzahl === 0) return null;
-  return (
-    <Link to="/warenkorb" className={active}>
-      <Icon name="cart" /> Warenkorb <span className="count">{anzahl}</span>
-    </Link>
   );
 }
 
