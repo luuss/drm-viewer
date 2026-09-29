@@ -129,7 +129,7 @@ export default function IssueDetailPage() {
             {!kasseOffen && (
               <div className="row actions">
                 <button className="btn" onClick={() => setKasseOffen(true)}>
-                  Jetzt kaufen <Icon name="arrow-right" />
+                  Sofort kaufen <Icon name="arrow-right" />
                 </button>
                 {auswahl.includes(issue._id) ? (
                   <Link className="btn secondary" to="/warenkorb">
@@ -163,7 +163,7 @@ export default function IssueDetailPage() {
                     href={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
                     onClick={() => heraus(issue._id)}
                   >
-                    Jetzt kaufen <Icon name="arrow-right" />
+                    Sofort kaufen <Icon name="arrow-right" />
                   </a>
                   {auswahl.includes(issue._id) ? (
                     <Link className="btn secondary" to="/warenkorb">
