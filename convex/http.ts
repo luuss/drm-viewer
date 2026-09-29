@@ -5,6 +5,7 @@ import { registerRoutes } from "@convex-dev/stripe";
 import { auth } from "./auth";
 import { requestLinkHttp } from "./magicLink";
 import { checkExtractSecret, checkTileSecret, checkShopSignature } from "./serviceAuth";
+import { stripeWebhook } from "./leserWebhook";
 
 const http = httpRouter();
 
@@ -17,10 +18,16 @@ function secs(ts: number | null | undefined): number | undefined {
   return ts == null ? undefined : ts * 1000;
 }
 
-// Die Component prueft die Signatur und spiegelt Stripe-Objekte; danach laufen
-// diese Handler mit der Fachlogik.
+// Kartenkauf im Leser (leserWebhook.ts): Stripe-Konto des Shops, nur eigene
+// Zahlungen (metadata.source = "leser"). Von aussen: /hooks/stripe/webhook.
+http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
+
+// Alter eigener Stripe-Checkout (STRIPE_CHECKOUT_ENABLED, aus). Die Component
+// prueft die Signatur und spiegelt Stripe-Objekte; danach laufen diese
+// Handler mit der Fachlogik. Eigener Pfad, weil /stripe/webhook jetzt dem
+// Kartenkauf gehoert.
 registerRoutes(http, components.stripe, {
-  webhookPath: "/stripe/webhook",
+  webhookPath: "/stripe/checkout-alt/webhook",
   events: {
     // SEPA, Klarna und Sofort melden "completed" auch unbezahlt.
     "checkout.session.completed": async (ctx, event) => {

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/react";
 import { api, formatEuro, formatDate, type Id , cleanError } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import Kasse from "../components/Kasse";
 import { heraus, hinein, kassenUrl, useWarenkorb } from "../lib/warenkorb";
 
 export default function IssueDetailPage() {
@@ -19,6 +20,12 @@ export default function IssueDetailPage() {
   const storefront = useQuery(api.shopIntegration.storefront, {});
   const checkout = useAction(api.billing.createIssueCheckout);
   const me = useQuery(api.users.me, {});
+  // Kartenkauf im Leser (Stripe, gebucht im Shop). Aus: Sprung in die Kasse des Shops.
+  const kasse = useQuery(api.leserKasse.status, {});
+  const [params] = useSearchParams();
+  const [kasseOffen, setKasseOffen] = useState(params.has("kaufen") || params.has("kauf"));
+  // Nach dem Bezahlen bleibt die Kasse mit dem Stand stehen, auch wenn das Heft schon frei ist.
+  const [gekauft, setGekauft] = useState(params.has("kauf"));
   const auswahl = useWarenkorb();
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -113,10 +120,38 @@ export default function IssueDetailPage() {
               </button>
             </Unauthenticated>
           </>
-        ) : issue.owned ? (
+        ) : issue.owned && !gekauft ? (
           <button className="btn" onClick={() => navigate(`/reader/${issueId}`)}>
             Jetzt lesen
           </button>
+        ) : issue.shopSku && kasse?.aktiv ? (
+          <>
+            {!kasseOffen && (
+              <div className="row actions">
+                <button className="btn" onClick={() => setKasseOffen(true)}>
+                  Jetzt kaufen <Icon name="arrow-right" />
+                </button>
+                {auswahl.includes(issue._id) ? (
+                  <Link className="btn secondary" to="/warenkorb">
+                    <Icon name="cart" /> Im Warenkorb
+                  </Link>
+                ) : (
+                  <button className="btn secondary" onClick={() => hinein(issue._id)}>
+                    <Icon name="cart" /> In den Warenkorb
+                  </button>
+                )}
+              </div>
+            )}
+            {kasseOffen && (
+              <Kasse
+                issueIds={[issue._id]}
+                shopKasse={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
+                leseZiel={`/reader/${issueId}`}
+                onBezahlt={() => setGekauft(true)}
+                onFertig={() => heraus(issue._id)}
+              />
+            )}
+          </>
         ) : (
           <>
             <div className="row actions">

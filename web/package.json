@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.95",
+    "@stripe/stripe-js": "^9.17.0",
     "@types/openseadragon": "^5.0.2",
     "convex": "^1.46.0",
     "jszip": "^3.10.2",

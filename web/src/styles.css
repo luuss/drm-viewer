@@ -2569,3 +2569,67 @@ button.small, .btn.small {
   .warenkorb-liste li .btn { grid-column: 2 / -1; justify-self: start; }
   .warenkorb-cover img, .warenkorb-cover .cover-placeholder { width: 48px; }
 }
+
+/* ============================================================
+   Kasse im Leser (components/Kasse.tsx): Kartenzahlung mit Stripe
+   ============================================================ */
+.kasse {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s4);
+  max-width: var(--measure);
+  padding: var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.kasse h3, .kasse h4 { margin: 0; }
+.kasse > .hint, .kasse .consent { max-width: none; }
+.kasse-teil { display: flex; flex-direction: column; gap: var(--s3); align-self: stretch; }
+.kasse-test {
+  align-self: stretch;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--fs-sub);
+}
+.kasse-adresse {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s3);
+}
+.kasse-adresse label { min-width: 0; }
+.kasse-adresse input, .kasse-adresse select { width: 100%; max-width: none; }
+.kasse-adresse .breit { grid-column: 1 / -1; }
+.kasse-zeile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2) var(--s3);
+  font-size: var(--fs-sub);
+  color: var(--ink-soft);
+}
+.kasse-karte { align-self: stretch; min-height: var(--ctl-h); }
+.kasse-summe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: baseline;
+  align-self: stretch;
+  padding-top: var(--s3);
+  border-top: 1px solid var(--rule-soft);
+}
+.kasse-summe strong { font-size: var(--fs-h3); }
+.kasse-summe .hint { flex-basis: 100%; }
+.kasse-kaufen { align-self: stretch; white-space: normal; height: auto; min-height: var(--ctl-h); }
+.kasse-andere { font-size: var(--fs-sub); color: var(--muted); }
+.kasse-andere:hover { color: var(--accent); }
+.kasse .inline-auth { align-self: stretch; }
+@media (max-width: 600px) {
+  .kasse { padding: var(--s4); }
+  .kasse-adresse { grid-template-columns: 1fr; }
+}

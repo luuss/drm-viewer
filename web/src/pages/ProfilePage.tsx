@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useFrage } from "../components/Frage";
+import ZahlungsdatenKonto from "../components/ZahlungsdatenKonto";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api, formatEuro } from "../lib/api";
@@ -182,6 +183,8 @@ export default function ProfilePage() {
           <p className="hint">Keine Anmeldung gefunden.</p>
         )}
       </section>
+
+      <ZahlungsdatenKonto />
 
       <section>
         <h3>Käufe</h3>

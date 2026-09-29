@@ -4,6 +4,7 @@ import { Id } from "./_generated/dataModel";
 import { getAuthUserId, invalidateSessions } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
 import { endAuthSession } from "./sessions";
+import { leserDatenLoeschen } from "./leserKasse";
 
 export const setName = mutation({
   args: { name: v.string() },
@@ -60,6 +61,9 @@ export const purgeUserData = internalMutation({
 });
 
 async function purgeUser(ctx: MutationCtx, userId: Id<"users">) {
+  // Kartenkauf im Leser: Adresse und Karte weg, Kaeufe anonym.
+  await leserDatenLoeschen(ctx, userId);
+
   const ents = await ctx.db
     .query("entitlements")
     .withIndex("by_user", (q) => q.eq("userId", userId))

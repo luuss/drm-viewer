@@ -28,7 +28,11 @@ export type ShopAction =
   | "offer_digital"
   | "withdraw_digital"
   // Anmeldelink per Shop-Mail (magicLink.ts)
-  | "send_mail";
+  | "send_mail"
+  // Kartenkauf im Leser (leserZahlung.ts)
+  | "quote"
+  | "create_order"
+  | "refund_order";
 
 export type ShopDigital = {
   idProductAttribute: number;
@@ -49,7 +53,11 @@ export type ShopProduct = {
   digital: ShopDigital | null;
 };
 
-export class ShopApiError extends Error {}
+export class ShopApiError extends Error {
+  /** Fehlerkennung des Shops (`error`), falls er eine geliefert hat. */
+  code?: string;
+  status?: number;
+}
 
 export async function hmacHex(body: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -67,6 +75,8 @@ export async function hmacHex(body: string, secret: string): Promise<string> {
 
 type CallOptions = {
   fetch?: typeof fetch;
+  /** Wartezeit in ms, Standard 15 s. `create_order` braucht laenger (Mails, Freischaltung). */
+  timeoutMs?: number;
   url?: string;
   secret?: string;
   now?: () => number;
@@ -91,7 +101,8 @@ export async function callShopApi(
   const doFetch = opts.fetch ?? fetch;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timeoutMs = opts.timeoutMs ?? TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
     response = await doFetch(url, {
@@ -105,7 +116,7 @@ export async function callShopApi(
       signal: controller.signal,
     });
   } catch (error: any) {
-    const why = error?.name === "AbortError" ? "keine Antwort nach 15 s" : String(error?.message ?? error);
+    const why = error?.name === "AbortError" ? `keine Antwort nach ${Math.round(timeoutMs / 1000)} s` : String(error?.message ?? error);
     throw new ShopApiError(`Shop nicht erreichbar (${why}).`);
   } finally {
     clearTimeout(timer);
@@ -139,9 +150,12 @@ export async function callShopApi(
     );
   }
   if (!response.ok || json.ok !== true) {
-    throw new ShopApiError(
+    const fehler = new ShopApiError(
       `Der Shop meldet einen Fehler${shopMessage ? `: ${shopMessage}` : ` (HTTP ${response.status})`}.`,
     );
+    fehler.code = typeof json.error === "string" ? json.error : undefined;
+    fehler.status = response.status;
+    throw fehler;
   }
   return json;
 }

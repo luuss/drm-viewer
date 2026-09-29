@@ -42,9 +42,9 @@ lesen.lesenundschenken.de/api/…     → Kachel-Gateway    (innerhalb von web)
 medien.lesen.lesenundschenken.de/   → MinIO             127.0.0.1:9002
 ```
 
-**Entscheidung: Verkauf nur über den PrestaShop.** Der Leser hat keine eigene
-Zahlung. Der Stripe-Checkout ist aus (`STRIPE_CHECKOUT_ENABLED`). Die Stripe-
-Schlüssel in der `.env` bleiben leer.
+**Entscheidung: gebucht wird im PrestaShop.** Seit 29.09.2026 zahlt man im
+Leser mit Karte (Abschnitt 3), die Bestellung entsteht trotzdem im Shop. Der
+alte eigene Stripe-Checkout ist aus (`STRIPE_CHECKOUT_ENABLED`).
 
 * **Redaktion → Shop:** In „Bearbeiten“ wählt die Redaktion das Druckheft aus
   dem Shop, mit einem Vorschlag. „Übernehmen“ holt Preis, Link und Cover.
@@ -111,22 +111,27 @@ Abschnitt „Anmeldung“.
   Browsers über die Kontoseite; Bestandskonto (altes Passwortkonto mit
   Shop-Kauf) behält Id und Heft. Skript: `_scratch/magiclink/e2e.mjs`.
 
-## 3. Stripe
+## 3. Stripe: Kartenkauf im Leser (seit 29.09.2026 live)
 
-Testschlüssel, kein Livebetrieb. In Stripe hängen zwei Endpunkte:
+Leser zahlen mit Karte direkt im Leser (Payment Element, gespeicherte Karte,
+ein Klick), gebucht wird im Shop als Bestellung „Stripe (Leser)“, frei
+geschaltet über den bestehenden grant-Weg. Beschreibung, Testprotokoll und
+Schritte für den ersten Livekauf: `docs/shop-integration.md`, Abschnitt
+„Kartenkauf im Leser“.
 
-* alt: `…convex.site/stripe/webhook` (Cloud, tot, als Rückweg stehengelassen)
-* neu: `https://hooks.d.chuk.dev/stripe/webhook` (`we_1UIp57Rzq…`, 7 Ereignisse)
-
-Nach dem Umzug muss ein dritter auf `https://digital.lesenundschenken.de/hooks/stripe/webhook`
-zeigen. Jeder Endpunkt hat sein eigenes Signaturgeheimnis, das Stripe nur beim
-Anlegen herausgibt. Das des zweiten liegt in `_scratch/stripe-webhook-secret.txt`
-(nicht im Repo).
-
-**Der Kaufweg ist nie durchgetestet worden** — Testkarte 4242…, Freischaltung
-über den Webhook, Heft lesen. Das steht aus.
-
----
+* Stripe-Konto des Shops. Convex-Umgebung: `LESER_STRIPE_MODE` (live),
+  `LESER_STRIPE_SECRET_KEY_TEST|_LIVE`, `LESER_STRIPE_PUBLISHABLE_KEY_TEST|_LIVE`,
+  `LESER_STRIPE_WEBHOOK_SECRET_TEST|_LIVE`. Nicht in der `.env`, nicht im Repo.
+* Webhook-Endpunkte `we_1UL6eY…` (test) und `we_1UL6tJ…` (live) auf
+  `https://lesen.lesenundschenken.de/hooks/stripe/webhook`.
+* Apple Pay / Google Pay: Domain `lesen.lesenundschenken.de` in Stripe
+  registriert (test und live aktiv); die Apple-Datei liefert `web/public`,
+  Apache reicht sie durch (`deploy/apache/lesen.vhost_ssl.conf`).
+* **Node-Aktionen gehen auf dem Verlagsserver nicht** (Rückruf ohne
+  `/convex`-Präfix, Tracker). Neue Aktionen ohne `"use node"` schreiben.
+* Der alte eigene Checkout (`billing.ts`, `STRIPE_CHECKOUT_ENABLED`, Test-
+  schlüssel eines anderen Kontos) ist aus; sein Webhook liegt unter
+  `/stripe/checkout-alt/webhook`.
 
 ## 4. Hefte
 

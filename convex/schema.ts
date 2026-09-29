@@ -581,6 +581,77 @@ export default defineSchema(
     .index("by_email_issue", ["email", "issueId"])
     .index("by_email_publication", ["email", "publicationId"]),
 
+  // --- Kartenkauf im Leser (leserKasse.ts, leserZahlung.ts) -----------------
+  // Bezahlt wird mit Stripe im Leser, gebucht im Shop (create_order), frei
+  // geschaltet ueber /shop/entitlements wie jeder andere Shop-Kauf.
+
+  /** Rechnungsadresse eines Kontos, fuer die Bestellung im Shop. */
+  leserKunden: defineTable({
+    userId: v.id("users"),
+    vorname: v.string(),
+    nachname: v.string(),
+    firma: v.optional(v.string()),
+    strasse: v.string(),
+    zusatz: v.optional(v.string()),
+    plz: v.string(),
+    ort: v.string(),
+    land: v.string(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  /**
+   * Stripe-Kunde und gespeicherte Karte je Konto und Modus. Test und live
+   * haben bei Stripe getrennte Kunden.
+   */
+  leserKarten: defineTable({
+    userId: v.id("users"),
+    modus: v.union(v.literal("test"), v.literal("live")),
+    stripeCustomerId: v.string(),
+    paymentMethodId: v.optional(v.string()),
+    marke: v.optional(v.string()),
+    letzte4: v.optional(v.string()),
+    ablaufMonat: v.optional(v.number()),
+    ablaufJahr: v.optional(v.number()),
+    wallet: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_user_modus", ["userId", "modus"])
+    .index("by_customer", ["stripeCustomerId"]),
+
+  /**
+   * Ein Kauf im Leser, ein PaymentIntent. `status`: angelegt → bezahlt →
+   * bestellt (Bestellung im Shop steht), sonst fehlgeschlagen, fehler
+   * (bezahlt, aber keine saubere Bestellung) oder erstattet.
+   */
+  leserKaeufe: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    modus: v.union(v.literal("test"), v.literal("live")),
+    issueIds: v.array(v.id("issues")),
+    skus: v.array(v.string()),
+    betragCents: v.number(),
+    karteGespeichert: v.boolean(),
+    paymentIntentId: v.optional(v.string()),
+    status: v.union(
+      v.literal("angelegt"),
+      v.literal("bezahlt"),
+      v.literal("bestellt"),
+      v.literal("fehlgeschlagen"),
+      v.literal("fehler"),
+      v.literal("erstattet"),
+    ),
+    shopOrderId: v.optional(v.number()),
+    shopReference: v.optional(v.string()),
+    shopState: v.optional(v.number()),
+    versuche: v.number(),
+    fehler: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_payment_intent", ["paymentIntentId"])
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"]),
+
   auditLog: defineTable({
     actorUserId: v.optional(v.id("users")),
     actorEmail: v.optional(v.string()),

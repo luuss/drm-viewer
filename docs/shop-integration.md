@@ -215,6 +215,9 @@ aktiv ist. Nach `withdraw_digital` steht `id_product_attribute: null`,
 | `product` | `{"action":"product","id":10528,"ts":…}` | `{"ok":true,"product":{…}}`, 404 `product_not_found` |
 | `offer_digital` | `{"action":"offer_digital","id_product":10528,"sku":"ST-36-DIGITAL","price_gross":4.9,"available":true,"ts":…}` | `{"ok":true,"id_product_attribute":659,"available":true,"price_gross":4.9,"url":"…#/68-ausgabe-digital"}` |
 | `withdraw_digital` | `{"action":"withdraw_digital","id_product":10528,"sku":"ST-36-DIGITAL","ts":…}` | `{"ok":true,"id_product_attribute":null,"available":false}` |
+| `quote` | `{"action":"quote","skus":["ST-36-DIGITAL"],"country_iso":"DE","ts":…}` | `{"ok":true,"total_cents":1380,"tax_cents":90,"items":[{"sku":…,"price_cents":1380,"tax_rate":7}]}`; 409 `sku_unknown` (nur Digitalausgaben) |
+| `create_order` | siehe „Kartenkauf im Leser“ | `{"ok":true,"id_order":291,"reference":"CRGATIWJM","state":2,"paid":true,"total_cents":1380,"repeated":false}` |
+| `refund_order` | `{"action":"refund_order","mode":"live","payment_intent":"pi_…","ts":…}` | `{"ok":true,"state":7,"refunded_cents":1380,"full":true}` |
 | `send_mail` | `{"action":"send_mail","template":"lusdigital_login","to":"kunde@example.de","link":"https://lesen.lesenundschenken.de/anmelden?t=…","ts":…}` | `{"ok":true}`; 400 `bad_template`/`bad_email`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
 
 **Suche.** Jedes Wort muss in Name, Referenz, Hersteller, Merkmal „Ausgabe“
@@ -264,16 +267,19 @@ Stand und Betrieb des Moduls: `../../docs/digital-verkauf-shop.md`.
 
 ## Kaufknoepfe im Leser
 
-Der eigene Stripe-Checkout ist aus. Einschalten nur mit
-`STRIPE_CHECKOUT_ENABLED=true` in der Convex-Umgebung; das gilt fuer die
-Oberflaeche und fuer die Aktionen `billing.createIssueCheckout` /
-`createSubscriptionCheckout`.
+Der alte eigene Stripe-Checkout ist aus (`STRIPE_CHECKOUT_ENABLED`, Aktionen
+`billing.createIssueCheckout` / `createSubscriptionCheckout`); sein Webhook
+liegt jetzt unter `/stripe/checkout-alt/webhook`.
 
-Ohne Checkout fuehren die Knoepfe in den Laden. Ist die Digital-Kombination
-eines Hefts im Laden angeboten (`issues.shopDigital.offered`, SKU in
-`shopSku` der Abfragen), geht es direkt in die Kasse:
+Ist die Digital-Kombination eines Hefts im Laden angeboten
+(`issues.shopDigital.offered`, SKU in `shopSku` der Abfragen):
 
-* „Jetzt kaufen“ (Heftseite) und „Zur Kasse im Shop“ (`/warenkorb`) oeffnen
+* **Kartenkauf eingeschaltet** (`LESER_STRIPE_MODE`): „Jetzt kaufen“
+  (Heftseite) und „Zur Kasse“ (`/warenkorb`) oeffnen die Kasse im Leser
+  (`web/src/components/Kasse.tsx`), siehe naechster Abschnitt. Darunter der
+  Link „Andere Zahlart (Rechnung, Vorkasse, SEPA) im Shop“ auf
+  `lusdigital/warenkorb` (unten).
+* **Kartenkauf aus**: „Jetzt kaufen“ und „Zur Kasse im Shop“ oeffnen
   `https://lesenundschenken.de/module/lusdigital/warenkorb?artikel=<SKUs>&email=<Konto>`.
   Der Laden legt die Hefte in den Warenkorb und leitet in die Kasse, die
   E-Mail ist dort vorbelegt.
@@ -290,6 +296,139 @@ Sonst:
 
 `issues.shopUrl` ist zugleich die Seite, die der naechtliche Abgleich
 (`publicationCovers.refreshAll`) fuer Heftbezeichnung und Preis liest.
+
+## Kartenkauf im Leser (seit 29.09.2026)
+
+Angemeldete Leser zahlen mit Karte direkt im Leser, ohne Umleitung. Beim ersten
+Kauf Karte im Stripe Payment Element (Karte, Apple Pay, Google Pay; Link aus),
+auf Wunsch gespeichert. Danach ein Klick: „Jetzt zahlungspflichtig kaufen –
+13,80 € mit Visa •••• 4242“. Gaeste sehen in der Kasse das Anmeldeformular
+(E-Mail-Link, `next` fuehrt mit `?kaufen=1` zurueck in die Kasse) und den
+Shop-Link fuer andere Zahlarten.
+
+**Gebucht wird im Shop.** Jede Zahlung wird dort eine echte Bestellung mit
+Rechnung; erst deren Status „bezahlt“ schaltet frei, ueber denselben Weg wie
+jeder Shop-Kauf (`actionOrderStatusPostUpdate` → `/shop/entitlements`). Der
+Leser schaltet nichts selbst frei.
+
+```
+Kasse (Browser)                      Leser (Convex)                  Shop (lusdigital)          Stripe
+angebot ───────────────────────────► leserZahlung.angebot ─────────► quote
+kaufen (Adresse, Verzicht) ────────► leserZahlung.kaufen ──────────────────────────────────────► PaymentIntent
+  neue Karte: confirmPayment ─────────────────────────────────────────────────────────────────► (3-D Secure im Dialog)
+  gespeicherte Karte: confirm auf dem Server, bei requires_action handleNextAction
+kaufPruefen ───────────────────────► zahlungEingegangen ◄──────────── Webhook payment_intent.succeeded
+                                     bestellungAnlegen ─────────────► create_order ──► prueft PI bei Stripe
+                                                                      validateOrder (bezahlt) ──► grant an /shop/entitlements
+```
+
+* Stripe-Konto: das des Shops (`acct_1QuW3G…`). Schluessel in der
+  Convex-Umgebung: `LESER_STRIPE_MODE` (`test`|`live`, leer = aus),
+  `LESER_STRIPE_SECRET_KEY_TEST|_LIVE`, `LESER_STRIPE_PUBLISHABLE_KEY_TEST|_LIVE`,
+  `LESER_STRIPE_WEBHOOK_SECRET_TEST|_LIVE`. Die Schluessel stammen aus der
+  Shop-Konfiguration (`STRIPE_TEST_KEY`, `STRIPE_KEY`, …). Umschalten:
+  `npx convex env set LESER_STRIPE_MODE test` (ueber den Tunnel).
+* Webhook: `https://lesen.lesenundschenken.de/hooks/stripe/webhook`
+  (`convex/leserWebhook.ts`), je Modus ein Endpunkt in Stripe (test
+  `we_1UL6eY…`, live `we_1UL6tJ…`), Ereignisse `payment_intent.succeeded`,
+  `payment_intent.payment_failed`, `charge.refunded`, `charge.dispute.created`.
+  Beachtet wird nur, was `metadata.source = "leser"` traegt bzw. zu einem
+  Kauf in `leserKaeufe` gehoert.
+* Jeder PaymentIntent: `payment_method_types: ["card"]`, Metadaten `source`,
+  `kaufId`, `userId`, `email`, `skus`; nach der Buchung `shop_order`,
+  `shop_reference`. Nie `id_cart`: sonst legte `stripe_official` selbst
+  eine Bestellung an.
+* Preis: kommt vor dem Bezahlen aus dem Shop (`quote`, gleicher Warenkorb wie
+  bei `create_order`). `kaufen` bricht ab, wenn er sich seit der Anzeige
+  geaendert hat.
+* Rechnungsadresse (Pflicht beim ersten Kauf, Tabelle `leserKunden`), Karte
+  nur als Marke/letzte 4/Ablauf (`leserKarten`, je Modus eigener
+  Stripe-Kunde), Kaeufe in `leserKaeufe`, Widerrufsverzicht je Heft in
+  `consents` (PaymentIntent in `stripeSessionId`). Konto → „Zahlungsdaten“:
+  Karte entfernen (loest sie bei Stripe). Kontoloeschung nimmt Adresse und
+  Karte mit (`leserDatenLoeschen`).
+* Schlaegt `create_order` fehl, wiederholt der Leser nach 30 s, 2, 10, 30,
+  60 min, 3, 6, 12 h; danach Status `fehler` und `auditLog`
+  `leser.bestellfehler`. Die Kasse sagt dem Kunden: Zahlung da,
+  Freischaltung verzoegert.
+* Erstattung **nur im Stripe-Dashboard**: `charge.refunded` → `refund_order`
+  → Status „Erstattet“ (7) → revoke. Teilerstattung: nur Notiz an der
+  Bestellung. Rueckbuchungen werden nur geloggt.
+* Kein `"use node"`: Node-Aktionen erreichen auf dem Verlagsserver das Backend
+  nicht. Stripe wird per `fetch` angesprochen (`convex/stripeRest.ts`).
+
+### `create_order`
+
+```json
+{"action":"create_order","ts":…,"mode":"live","payment_intent":"pi_…","amount_cents":1380,
+ "email":"kunde@example.de","skus":["SCHWERTERTRAEGER-36-DIGITAL"],
+ "firstname":"Erika","lastname":"Mustermann","company":"","address1":"Hauptstraße 1",
+ "address2":"","postcode":"10115","city":"Berlin","country_iso":"DE"}
+```
+
+Im Shop (`classes/LeserKauf.php`):
+
+1. Idempotent je PaymentIntent (Tabelle `ps_lusdigital_leserkauf`). Liegt
+   schon eine Bestellung vor, kommt sie mit `repeated: true` zurueck; laeuft
+   gerade ein Aufruf, 409 `busy`.
+2. Fragt Stripe selbst (Schluessel aus `stripe_official`): Status
+   `succeeded`, Betrag, EUR, `metadata.source = leser`, richtiger Modus.
+3. Gastkunde zur E-Mail (immer ein Gastkonto, nie ein registriertes
+   Shop-Konto), Rechnungsadresse (Alias „Leser“), Warenkorb nur mit
+   Digitalausgaben (Kombination „Ausgabe: Digital“ oder virtuelles Produkt).
+4. `validateOrder` mit Zahlart „Stripe (Leser)“, Status 2 „Zahlung
+   eingegangen“ (Rechnung, Mails wie sonst), `transaction_id` = PaymentIntent,
+   private Notiz mit Widerrufsverzicht. Weicht die Warenkorbsumme vom
+   bezahlten Betrag ab, setzt PrestaShop selbst „Fehler bei der Bezahlung“
+   (8), es steht im Log, die Antwort traegt `warnings`, der Leser vermerkt
+   `fehler`.
+5. Testmodus: Zahlart „Stripe (Leser, TEST)“, eigener Status 28
+   „Testzahlung Leser (keine Rechnung)“ (bezahlt, ohne Rechnung, damit keine
+   Rechnungsnummer verbraucht wird), keine Mails (Hook
+   `actionEmailSendBefore`), Erstattung setzt „Storniert“ (6) statt 7.
+
+`stripe_official` bekommt die Leser-Ereignisse ebenfalls (ein Konto). Es
+findet keinen Warenkorb, antwortet 200, legt nichts an und schreibt eine
+Zeile „Not a valid cart“ (Schwere 3, keine Mail) ins Shop-Log. Geprueft am
+29.09.2026 mit einem signierten Probeereignis. Auch weltkrieg-online.de
+(WooCommerce) und zuerst.de haengen am Konto und ignorieren fremde Zahlungen.
+
+### Durchgangstest (29.09.2026, Testmodus)
+
+Heft „Greim“ (10528/662, 13,80 €), Wegwerfkonten `kasse-test-20260929{a,b,c}@example.com`:
+
+| Fall | Ergebnis |
+|---|---|
+| Erstkauf, Karte 4000 0025 0000 3155 mit 3-D Secure, speichern | bezahlt → Bestellung CRGATIWJM, Status Testzahlung, 13,80 € brutto / 12,90 € netto, 7 %, Versand 0, grant ok, Heft lesbar, 5 s |
+| Erstattung im Stripe-Dashboard (API) | Status Erstattet, revoke ok, Heft zu |
+| Ein Klick mit gespeicherter 3155 | 3-D Secure per `handleNextAction`, bezahlt, grant ok |
+| Erstkauf 4242, Erstattung, ein Klick 4242 | ohne Rueckfrage bezahlt, 2 s bis frei |
+| Warenkorb (`/warenkorb`), Adresse Oesterreich | bezahlt, frei, Auswahl geleert |
+| Konto: Karte entfernen | bei Stripe geloest, im Konto weg |
+
+Danach geloescht: 5 Testbestellungen, 3 Gastkunden, Konten im Leser
+(`account:purgeByEmailInternal`), Testkaeufe (`leserKasse:testkaeufeLoeschen`),
+Stripe-Testkunden. Werkzeuge auf dem Server in `~/lusdigital-tools/`:
+`bestellungen-pruefen.php`, `testbestellungen-loeschen.php` (Probelauf,
+`--los` loescht nur Bestellungen mit „TEST“ in der Zahlart), `shop-api.php`
+(signierter Aufruf), `wert.php` (ein Konfigurationswert fuer Pipes).
+
+### Erster Livekauf (Betreiber)
+
+1. Unter https://lesen.lesenundschenken.de mit der eigenen Adresse anmelden.
+2. Heft mit Digitalausgabe oeffnen (z. B. „Greim“), „Jetzt kaufen“,
+   Rechnungsadresse, echte Karte, „Karte speichern“ an, Widerrufsverzicht,
+   „Jetzt zahlungspflichtig kaufen – 13,80 €“.
+3. Erwartung: nach wenigen Sekunden „Bezahlt und freigeschaltet, Bestellung
+   …“, „Jetzt lesen“ oeffnet das Heft. Mail mit Bestellbestaetigung vom Shop.
+4. Shop-Backoffice: Bestellung mit Zahlart „Stripe (Leser)“, Status
+   „Zahlung eingegangen“, Rechnung, 7 %, kein Versand; Module → lusdigital →
+   „Letzte Meldungen“: grant ok.
+5. Konto → Zahlungsdaten: Karte steht dort.
+6. Stripe-Dashboard → Zahlung → voll erstatten. Erwartung: Bestellung
+   „Erstattet“, Meldung revoke ok, Heft wieder zu.
+7. Wer mag: noch einmal kaufen, jetzt ein Klick mit der gespeicherten Karte,
+   und wieder erstatten.
 
 ## Anmeldung
 
