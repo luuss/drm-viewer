@@ -1,5 +1,6 @@
 import { QueryCtx, MutationCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { rolesOf } from "./roles";
 
 /**
  * Zugriff haengt an zwei Quellen.
@@ -10,6 +11,7 @@ import { Id } from "./_generated/dataModel";
  *    lesbar, was waehrend der Laufzeit dazugehoerte — auch nach einer
  *    Kuendigung — und eine Abo-Luecke schaltet nichts rueckwirkend frei.
  * 2. Kaeufe im Laden (`shopAccess`), ueber die E-Mail-Adresse des Kontos.
+ * 3. Admins lesen jedes Heft, auch unveroeffentlichte, ohne Kauf.
  *    Ein Heft gilt unbefristet, ein Digital-Abo alle veroeffentlichten
  *    Abo-Ausgaben der Reihe bis zum Ablaufdatum. Nach Ablauf ist die Reihe
  *    wieder zu — anders als beim Stripe-Abo bleibt nichts dauerhaft.
@@ -19,6 +21,7 @@ export async function hasIssueAccess(
   userId: Id<"users">,
   issueId: Id<"issues">,
 ): Promise<boolean> {
+  if (await isAdmin(ctx, userId)) return true;
   const now = Date.now();
   // Alle Zeilen pruefen: neben einer abgelaufenen Freischaltung kann eine
   // gueltige liegen.
@@ -40,6 +43,10 @@ export async function accessibleIssueIds(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<Set<string>> {
+  if (await isAdmin(ctx, userId)) {
+    const all = await ctx.db.query("issues").take(5000);
+    return new Set(all.map((i) => i._id as string));
+  }
   const now = Date.now();
   const ids = new Set<string>();
   const ents = await ctx.db
@@ -76,6 +83,12 @@ export async function accessibleIssueIds(
     }
   }
   return ids;
+}
+
+/** Admins haben immer Zugriff auf alle Hefte. */
+async function isAdmin(ctx: QueryCtx | MutationCtx, userId: Id<"users">): Promise<boolean> {
+  const user = await ctx.db.get(userId);
+  return !!user && rolesOf(user).includes("admin");
 }
 
 // --- Kaeufe im Laden ------------------------------------------------------

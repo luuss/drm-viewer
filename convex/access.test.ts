@@ -201,3 +201,29 @@ describe("Abo schaltet Ausgaben dauerhaft frei", () => {
     expect(ids).not.toContain(draft);
   });
 });
+
+describe("Admins", () => {
+  test("lesen jedes Heft ohne Kauf, auch unveroeffentlichte", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, publicationId } = await setup(t);
+    const adminId = await t.run(async (ctx: any) =>
+      ctx.db.insert("users", { email: "chef@example.de", roles: ["admin"] }),
+    );
+    const offen = await addIssue(t, publicationId);
+    const entwurf = await addIssue(t, publicationId, { published: false });
+    const ergebnis = await t.run(async (ctx: any) => {
+      const { hasIssueAccess, accessibleIssueIds } = await import("./access");
+      return {
+        admin: [
+          await hasIssueAccess(ctx, adminId, offen),
+          await hasIssueAccess(ctx, adminId, entwurf),
+        ],
+        kunde: await hasIssueAccess(ctx, userId, offen),
+        bibliothek: [...(await accessibleIssueIds(ctx, adminId))].sort(),
+      };
+    });
+    expect(ergebnis.admin).toEqual([true, true]);
+    expect(ergebnis.kunde).toBe(false);
+    expect(ergebnis.bibliothek).toEqual([offen, entwurf].map(String).sort());
+  });
+});
