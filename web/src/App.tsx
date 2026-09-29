@@ -16,6 +16,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
 import LegalPage from "./pages/LegalPage";
 import AppShell from "./components/AppShell";
+import WarenkorbPage from "./pages/WarenkorbPage";
 
 export default function App() {
   return (
@@ -35,7 +36,7 @@ export default function App() {
           <Route path="/claim/:token" element={<Navigate to="/login" replace />} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
           <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
-          <Route path="/warenkorb" element={<Navigate to="/" replace />} />
+          <Route path="/warenkorb" element={<Shell><WarenkorbPage /></Shell>} />
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
@@ -58,7 +59,7 @@ export default function App() {
           <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
           {/* Alte Einloeselinks aus Kaufmails: die Ausgabe haengt an der Adresse. */}
           <Route path="/claim/:token" element={<Navigate to="/login" replace />} />
-          <Route path="/warenkorb" element={<Navigate to="/" replace />} />
+          <Route path="/warenkorb" element={<Shell><WarenkorbPage /></Shell>} />
           <Route path="/suche" element={<Shell><SearchPage /></Shell>} />
           <Route path="/account" element={<Shell><ProfilePage /></Shell>} />
           <Route path="/admin" element={<Shell><AdminPage /></Shell>} />

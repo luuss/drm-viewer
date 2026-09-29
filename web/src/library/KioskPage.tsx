@@ -1,7 +1,8 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
+import { heraus, hinein, useWarenkorb } from "../lib/warenkorb";
 
 const REGION_LABEL: Record<string, string> = {
   inland: "Inland",
@@ -19,7 +20,7 @@ export default function KioskPage() {
   const issues = useQuery(api.issues.listPublished, {});
   const offers = useQuery(api.plans.offers, {});
   const storefront = useQuery(api.shopIntegration.storefront, {});
-  const navigate = useNavigate();
+  const auswahl = useWarenkorb();
 
   if (issues === undefined || offers === undefined || storefront === undefined) {
     return <div className="centered">Laden...</div>;
@@ -114,15 +115,18 @@ export default function KioskPage() {
                 {i.shopSku && (
                   <button
                     type="button"
-                    className="card-cart"
+                    className={`card-cart${auswahl.includes(i._id) ? " on" : ""}`}
+                    aria-pressed={auswahl.includes(i._id)}
                     onClick={(e) => {
-                      // Die Karte ist ein Link; der Knopf oeffnet gleich die Kasse.
+                      // Die Karte ist ein Link; der Knopf waehlt nur aus.
                       e.preventDefault();
                       e.stopPropagation();
-                      navigate(`/issue/${i.slug}?kaufen`);
+                      if (auswahl.includes(i._id)) heraus(i._id);
+                      else hinein(i._id);
                     }}
                   >
-                    Jetzt kaufen
+                    <Icon name="cart" size={15} />
+                    {auswahl.includes(i._id) ? "Im Warenkorb" : "In den Warenkorb"}
                   </button>
                 )}
                 <div className="card-action">

@@ -5,7 +5,7 @@ import { api, formatEuro, formatDate, type Id , cleanError } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import Kasse from "../components/Kasse";
-import { kassenUrl } from "../lib/shopKasse";
+import { heraus, hinein, kassenUrl, useWarenkorb } from "../lib/warenkorb";
 
 export default function IssueDetailPage() {
   const { slug } = useParams();
@@ -26,6 +26,7 @@ export default function IssueDetailPage() {
   const [kasseOffen, setKasseOffen] = useState(params.has("kaufen") || params.has("kauf"));
   // Nach dem Bezahlen bleibt die Kasse mit dem Stand stehen, auch wenn das Heft schon frei ist.
   const [gekauft, setGekauft] = useState(params.has("kauf"));
+  const auswahl = useWarenkorb();
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -130,6 +131,15 @@ export default function IssueDetailPage() {
                 <button className="btn" onClick={() => setKasseOffen(true)}>
                   Jetzt kaufen <Icon name="arrow-right" />
                 </button>
+                {auswahl.includes(issue._id) ? (
+                  <Link className="btn secondary" to="/warenkorb">
+                    <Icon name="cart" /> Im Warenkorb
+                  </Link>
+                ) : (
+                  <button className="btn secondary" onClick={() => hinein(issue._id)}>
+                    <Icon name="cart" /> In den Warenkorb
+                  </button>
+                )}
               </div>
             )}
             {kasseOffen && (
@@ -138,6 +148,7 @@ export default function IssueDetailPage() {
                 shopKasse={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
                 leseZiel={`/reader/${issueId}`}
                 onBezahlt={() => setGekauft(true)}
+                onFertig={() => heraus(issue._id)}
               />
             )}
           </>
@@ -145,13 +156,25 @@ export default function IssueDetailPage() {
           <>
             <div className="row actions">
               {issue.shopSku ? (
-                // Direkt in die Kasse des Ladens, das Heft liegt dort schon bereit.
-                <a
-                  className="btn"
-                  href={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
-                >
-                  Jetzt kaufen <Icon name="arrow-right" />
-                </a>
+                <>
+                  {/* Direkt in die Kasse des Ladens, das Heft liegt dort schon im Warenkorb. */}
+                  <a
+                    className="btn"
+                    href={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
+                    onClick={() => heraus(issue._id)}
+                  >
+                    Jetzt kaufen <Icon name="arrow-right" />
+                  </a>
+                  {auswahl.includes(issue._id) ? (
+                    <Link className="btn secondary" to="/warenkorb">
+                      <Icon name="cart" /> Im Warenkorb
+                    </Link>
+                  ) : (
+                    <button className="btn secondary" onClick={() => hinein(issue._id)}>
+                      <Icon name="cart" /> In den Warenkorb
+                    </button>
+                  )}
+                </>
               ) : (
                 <a
                   className="btn"
