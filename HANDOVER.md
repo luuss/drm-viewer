@@ -137,7 +137,7 @@ Schritte für den ersten Livekauf: `docs/shop-integration.md`, Abschnitt
 
 | Heft | Ordner → hochgeladen | Seiten | Artikel |
 |---|---|---|---|
-| Schwerterträger 36 (Greim) | 1,4 GB → 89 MB | 49 | 8, freigegeben, veröffentlicht |
+| Schwerterträger 36 (Greim) | 1,4 GB → 89 MB | 49 | 7, freigegeben, veröffentlicht (Tabelle S. 33 seit 29.09.) |
 | ZUERST! 3/2026 | 1,5 GB → 169 MB | 81 | 74, zur Prüfung |
 | DMZ 170 | — | — | **nicht importiert** |
 | DMZ-Zeitgeschichte 80 | — | — | **nicht importiert** |
@@ -148,6 +148,31 @@ darf nur innerhalb des Projektordners lesen, deshalb vor dem Import kopieren:
 
 Ein vollständiger Durchgang Seite für Seite durch alle vier Hefte steht noch aus
 — Artikelgrenzen, Bildzuordnung, Reihenfolge.
+
+## 4a. Tabellen aus dem Satz (seit 29.09.2026)
+
+Eine `<Table>` der IDML wird ein Artikelblock `type: "table"` mit
+`articleBlocks.table` (Zeilen, Zellen, `headerRows`, `rowSpan`/`colSpan`,
+`emphasis`), an ihrer Stelle im Textfluss. `text` traegt den flachen Text
+fuer die Suche. Die Zellen kommen nicht mehr als lose Absaetze. Ohne
+ausgewiesene Kopfzeile gilt eine eingefaerbte oder fette erste Zeile als
+Kopf. Steht eine Tabelle allein auf einer Seite, geht sie in den Artikel der
+Nachbarseite auf. Leser: `components/ArtikelTabelle.tsx` (echte `<table>`,
+rollt auf dem Telefon seitlich); die Pruefansicht zeigt dieselbe Tabelle,
+als Text bearbeiten laesst sie sich nicht.
+
+* Nur Greim hat Tabellen: S. 33 (gedruckt) und eine zweite (16 Zeilen,
+  Todesarten) auf der ungenutzten Musterseite „B" — nicht gedruckt, nicht
+  uebernommen. ZUERST! 3/2026, DMZ 170, DMZ-Zeitgeschichte 80: keine.
+* Greim live ohne Neuimport nachgezogen: `scripts/tabellen-aus-satz.py <idml>
+  --seitenversatz 1 --json …` erzeugt den Block,
+  `npx convex run tabellen:einsetzenInternal` setzt ihn ein (mit
+  `probelauf: true` vorher pruefen). Der alte Zellen-„Artikel" Nr. 5 ist in
+  „Pour le Mérite" aufgegangen (Bilder, Klickflaechen, Lesestand mit), sein
+  Verzeichniseintrag entfernt. Alle anderen Artikel und Freigaben unveraendert;
+  Nr. 6–8 heissen jetzt 5–7.
+* Die gespeicherte IDML im Medienspeicher ist dieselbe wie auf dem Stick
+  (ETag `195db0e9…`).
 
 ---
 
