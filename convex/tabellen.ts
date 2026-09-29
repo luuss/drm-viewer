@@ -164,12 +164,31 @@ async function aufgehenLassen(
     });
   }
 
+  // Das automatische Verzeichnis traegt den Zellentext als Eintrag; ein
+  // neuer Import legt ihn nicht mehr an, also faellt er weg. Ein von Hand
+  // gesetzter Eintrag zeigt kuenftig auf den Zielartikel.
   const toc = await ctx.db
     .query("tocEntries")
-    .withIndex("by_issue", (q) => q.eq("issueId", alt.issueId))
+    .withIndex("by_issue_order", (q) => q.eq("issueId", alt.issueId))
     .collect();
+  let geloescht = false;
   for (const t of toc) {
-    if (t.articleId === alt._id) await ctx.db.patch(t._id, { articleId: ziel });
+    if (t.articleId !== alt._id) continue;
+    if (t.label === alt.title.slice(0, 300)) {
+      await ctx.db.delete(t._id);
+      geloescht = true;
+    } else {
+      await ctx.db.patch(t._id, { articleId: ziel });
+    }
+  }
+  if (geloescht) {
+    let i = 1;
+    for (const t of toc) {
+      const noch = await ctx.db.get(t._id);
+      if (!noch) continue;
+      if (noch.order !== i) await ctx.db.patch(t._id, { order: i });
+      i++;
+    }
   }
   // Lesestaende haben keinen Index auf den Artikel. Die Tabelle ist klein,
   // und dieser Weg laeuft einmal je Heft.

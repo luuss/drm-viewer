@@ -214,8 +214,31 @@ describe("Tabellen", () => {
       await ctx.db.insert("tocEntries", {
         issueId,
         order: 1,
-        label: "Tabelle",
+        label: "Pour le Mérite",
+        articleId: plm,
+        level: 1,
+      });
+      // Automatisch aus dem Zellentext entstanden: faellt weg.
+      await ctx.db.insert("tocEntries", {
+        issueId,
+        order: 2,
+        label: "Nr.Name1Erwin Rommel",
         articleId: zellen,
+        level: 1,
+      });
+      // Von Hand gesetzt: zeigt danach auf den Zielartikel.
+      await ctx.db.insert("tocEntries", {
+        issueId,
+        order: 3,
+        label: "Tabelle der Träger",
+        articleId: zellen,
+        level: 2,
+      });
+      await ctx.db.insert("tocEntries", {
+        issueId,
+        order: 4,
+        label: "Ungleicher Kampf",
+        articleId: danach,
         level: 1,
       });
       return { plm, zellen, danach };
@@ -287,7 +310,15 @@ describe("Tabellen", () => {
     expect(stand.regionen.map((r: any) => r.pageIndex).sort()).toEqual([30, 31]);
     expect(stand.bilder).toHaveLength(1);
     expect(stand.bilder[0].caption).toBe("Erwin Rommel");
-    expect(stand.toc[0].articleId).toBe(ids.plm);
+    expect(
+      stand.toc
+        .sort((a: any, b: any) => a.order - b.order)
+        .map((e: any) => [e.order, e.label, e.articleId]),
+    ).toEqual([
+      [1, "Pour le Mérite", ids.plm],
+      [2, "Tabelle der Träger", ids.plm],
+      [3, "Ungleicher Kampf", ids.danach],
+    ]);
     const plm = stand.articles[0];
     expect([plm.pageStart, plm.pageEnd]).toEqual([30, 31]);
     expect(plm.searchText).toContain("Robert von Greim");
