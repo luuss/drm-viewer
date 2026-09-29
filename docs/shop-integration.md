@@ -267,7 +267,19 @@ Der eigene Stripe-Checkout ist aus. Einschalten nur mit
 Oberflaeche und fuer die Aktionen `billing.createIssueCheckout` /
 `createSubscriptionCheckout`.
 
-Ohne Checkout fuehren die Knoepfe in den Laden:
+Ohne Checkout fuehren die Knoepfe in den Laden. Ist die Digital-Kombination
+eines Hefts im Laden angeboten (`issues.shopDigital.offered`, SKU in
+`shopSku` der Abfragen), geht es direkt in die Kasse:
+
+* „Jetzt kaufen“ (Heftseite) und „Zur Kasse im Shop“ (`/warenkorb`) oeffnen
+  `https://lesenundschenken.de/module/lusdigital/warenkorb?artikel=<SKUs>&email=<Konto>`.
+  Der Laden legt die Hefte in den Warenkorb und leitet in die Kasse, die
+  E-Mail ist dort vorbelegt.
+* Der Warenkorb im Leser ist nur eine Auswahl im Browser
+  (`web/src/lib/warenkorb.ts`, localStorage), Knopf „In den Warenkorb“ auf
+  Heftseite und Kiosk-Karte.
+
+Sonst:
 
 * Ausgabe: `issues.shopUrl` (Redaktion → Ausgabe → Bearbeiten), sonst
   `https://lesenundschenken.de/suche?s=<Heftname>`.

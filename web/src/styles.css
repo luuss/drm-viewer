@@ -2517,3 +2517,55 @@ button.small, .btn.small {
 .shop-results img,
 .shop-results .thumb { width: 2.5rem; height: 3.4rem; object-fit: cover; background: var(--paper-sunk); border-radius: 2px; }
 .shop-results .what { display: grid; }
+
+/* Warenkorb: Auswahl im Leser, bezahlt wird im Laden */
+.app-header nav a .count {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+.issue-card-body .card-cart {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  align-self: flex-start;
+  margin-top: var(--s2);
+  padding: 0.3em 0.7em;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-mini);
+  font-weight: 600;
+  cursor: pointer;
+}
+.issue-card-body .card-cart.on { background: var(--accent); color: #fff; }
+.warenkorb-liste { list-style: none; margin: 0 0 var(--s4); padding: 0; }
+.warenkorb-liste li {
+  display: grid;
+  grid-template-columns: 64px 1fr auto auto;
+  gap: var(--s3);
+  align-items: center;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line, #ddd);
+}
+.warenkorb-cover img,
+.warenkorb-cover .cover-placeholder { width: 64px; height: auto; display: block; }
+.warenkorb-text .title { font-weight: 600; }
+.warenkorb-text .meta { font-size: var(--fs-mini); color: var(--muted); }
+.warenkorb-text .meta.strong { color: var(--ink); font-weight: 600; }
+.warenkorb-preis { font-weight: 600; white-space: nowrap; }
+.warenkorb-summe { display: flex; gap: var(--s2); align-items: baseline; margin-bottom: var(--s4); font-size: var(--fs-sub); }
+@media (max-width: 600px) {
+  .warenkorb-liste li { grid-template-columns: 48px 1fr auto; }
+  .warenkorb-liste li .btn { grid-column: 2 / -1; justify-self: start; }
+  .warenkorb-cover img, .warenkorb-cover .cover-placeholder { width: 48px; }
+}

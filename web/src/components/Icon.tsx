@@ -2,6 +2,7 @@ export type IconName =
   | "arrow-left"
   | "arrow-right"
   | "book-open"
+  | "cart"
   | "close"
   | "edit"
   | "kiosk"
@@ -51,6 +52,9 @@ export default function Icon({ name, className = "", size = 18 }: Props) {
       )}
       {name === "book-open" && (
         <><path d="M3.5 5.5A7 7 0 0 1 12 7v12a7 7 0 0 0-8.5-1.5z" /><path d="M20.5 5.5A7 7 0 0 0 12 7v12a7 7 0 0 1 8.5-1.5z" /></>
+      )}
+      {name === "cart" && (
+        <><circle cx="9" cy="20" r="1.4" /><circle cx="18" cy="20" r="1.4" /><path d="M2.5 3.5h3l2.4 11.2a1.5 1.5 0 0 0 1.5 1.2h8.4a1.5 1.5 0 0 0 1.5-1.1L21 7.5H6.4" /></>
       )}
       {name === "close" && (
         <><path d="m6 6 12 12" /><path d="M18 6 6 18" /></>

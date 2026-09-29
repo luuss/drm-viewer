@@ -32,6 +32,18 @@ export function issueShopLink(
   return shopSearchUrl(withNumber);
 }
 
+/**
+ * Artikelnummer der Digital-Kombination im Laden, nur solange sie angeboten
+ * wird. Damit legt `lusdigital/warenkorb` das Heft direkt in den Warenkorb.
+ */
+export function issueShopSku(issue: {
+  externalSku?: string;
+  shopDigital?: { offered: boolean; sku?: string };
+}): string | null {
+  if (!issue.shopDigital?.offered) return null;
+  return issue.shopDigital.sku ?? issue.externalSku ?? null;
+}
+
 /** Kaufadresse des Digital-Abos einer Reihe. */
 export function subscriptionShopLink(publication: {
   name: string;

@@ -4,6 +4,7 @@ import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/reac
 import { api, formatEuro, formatDate, type Id , cleanError } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import { heraus, hinein, kassenUrl, useWarenkorb } from "../lib/warenkorb";
 
 export default function IssueDetailPage() {
   const { slug } = useParams();
@@ -17,6 +18,8 @@ export default function IssueDetailPage() {
   // Verkauft wird im Laden; der eigene Checkout ist nur per Schalter an.
   const storefront = useQuery(api.shopIntegration.storefront, {});
   const checkout = useAction(api.billing.createIssueCheckout);
+  const me = useQuery(api.users.me, {});
+  const auswahl = useWarenkorb();
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -117,14 +120,36 @@ export default function IssueDetailPage() {
         ) : (
           <>
             <div className="row actions">
-              <a
-                className="btn"
-                href={issue.shopUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Im Shop kaufen <Icon name="arrow-right" />
-              </a>
+              {issue.shopSku ? (
+                <>
+                  {/* Direkt in die Kasse des Ladens, das Heft liegt dort schon im Warenkorb. */}
+                  <a
+                    className="btn"
+                    href={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
+                    onClick={() => heraus(issue._id)}
+                  >
+                    Jetzt kaufen <Icon name="arrow-right" />
+                  </a>
+                  {auswahl.includes(issue._id) ? (
+                    <Link className="btn secondary" to="/warenkorb">
+                      <Icon name="cart" /> Im Warenkorb
+                    </Link>
+                  ) : (
+                    <button className="btn secondary" onClick={() => hinein(issue._id)}>
+                      <Icon name="cart" /> In den Warenkorb
+                    </button>
+                  )}
+                </>
+              ) : (
+                <a
+                  className="btn"
+                  href={issue.shopUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Im Shop kaufen <Icon name="arrow-right" />
+                </a>
+              )}
               <Unauthenticated>
                 <button className="btn secondary" onClick={() => navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>
                   Anmelden

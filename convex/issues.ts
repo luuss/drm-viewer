@@ -15,7 +15,7 @@ import { syncSubscription } from "./subscriptions";
 import { subscriptionIsActive } from "./access";
 import { Id } from "./_generated/dataModel";
 import { assertSkuFree } from "./shopIntegration";
-import { cleanShopUrl, cleanSku, issueShopLink } from "./shopLinks";
+import { cleanShopUrl, cleanSku, issueShopLink, issueShopSku } from "./shopLinks";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -81,6 +81,7 @@ export const listPublished = query({
           publicationSlug: publication?.slug ?? null,
           coverUrl: await assetUrl(ctx, i.coverAssetId),
           ...shopLabels(i, publication?.name ?? null),
+          shopSku: issueShopSku(i),
         };
       }),
     );
@@ -114,6 +115,8 @@ export const getPublic = query({
       owned,
       // Kaufadresse im Laden; ohne eingetragene Produktseite die Suche.
       shopUrl: issueShopLink(issue, publication?.name ?? null),
+      // Digitalausgabe im Laden: damit geht es direkt in die Kasse.
+      shopSku: issueShopSku(issue),
     };
   },
 });
