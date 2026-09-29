@@ -22,7 +22,13 @@ import {
 export const DEFAULT_SHOP_API_URL = `${SHOP_URL}/module/lusdigital/api`;
 const TIMEOUT_MS = 15_000;
 
-export type ShopAction = "search" | "product" | "offer_digital" | "withdraw_digital";
+export type ShopAction =
+  | "search"
+  | "product"
+  | "offer_digital"
+  | "withdraw_digital"
+  // Anmeldelink per Shop-Mail (magicLink.ts)
+  | "send_mail";
 
 export type ShopDigital = {
   idProductAttribute: number;

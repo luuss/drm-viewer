@@ -108,7 +108,8 @@ lesbar. Direktkaeufe, Gutscheine und Stripe-Abos bleiben unberuehrt.
 
 Es wird kein Konto angelegt. Die Freischaltung haengt an der E-Mail-Adresse
 und greift, sobald sich jemand mit dieser Adresse anmeldet, auch wenn das Konto
-erst nach dem Kauf entsteht oder noch unbestaetigt ist. Der Laden sollte dem
+erst nach dem Kauf entsteht. Angemeldet wird nur per Link an diese Adresse
+(Abschnitt "Anmeldung"), die Adresse ist also bewiesen. Der Laden sollte dem
 Kunden sagen: "Mit derselben E-Mail unter lesen.lesenundschenken.de anmelden."
 
 ### Idempotenz
@@ -214,6 +215,7 @@ aktiv ist. Nach `withdraw_digital` steht `id_product_attribute: null`,
 | `product` | `{"action":"product","id":10528,"ts":…}` | `{"ok":true,"product":{…}}`, 404 `product_not_found` |
 | `offer_digital` | `{"action":"offer_digital","id_product":10528,"sku":"ST-36-DIGITAL","price_gross":4.9,"available":true,"ts":…}` | `{"ok":true,"id_product_attribute":659,"available":true,"price_gross":4.9,"url":"…#/68-ausgabe-digital"}` |
 | `withdraw_digital` | `{"action":"withdraw_digital","id_product":10528,"sku":"ST-36-DIGITAL","ts":…}` | `{"ok":true,"id_product_attribute":null,"available":false}` |
+| `send_mail` | `{"action":"send_mail","template":"lusdigital_login","to":"kunde@example.de","link":"https://lesen.lesenundschenken.de/anmelden?t=…","ts":…}` | `{"ok":true}`; 400 `bad_template`/`bad_email`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
 
 **Suche.** Jedes Wort muss in Name, Referenz, Hersteller, Merkmal „Ausgabe“
 oder einem Kategorienamen vorkommen. Reine Zahlen zaehlen nur als ganze Zahl
@@ -291,6 +293,56 @@ Sonst:
 
 ## Anmeldung
 
-Die Plattform hat einen eigenen Login. SSO ist im MVP nicht vorgesehen. Bietet
-der Shop spaeter OIDC an, kann Convex Auth darauf umgestellt werden; bis dahin
-ist die doppelte Anmeldung die bewusste Grenze.
+Ohne Passwort, per E-Mail-Link (seit 29.09.2026). Anmelden und Registrieren
+sind derselbe Weg: Adresse eingeben, Link aus der Mail anklicken, angemeldet.
+Das Konto entsteht beim ersten gueltigen Klick, erst dann ist die Adresse
+bewiesen. Bestehende Konten (frueher mit Passwort) werden ueber `users.email`
+gefunden und behalten Id, Rollen, Kaeufe und Freischaltungen.
+
+```
+POST https://lesen.lesenundschenken.de/hooks/auth/link
+Rumpf: {"email":"kunde@example.de","next":"/issue/zuerst-3-2026"}
+200 {"ok":true} · 400 bad_email · 429 rate_limited · 502 mail_failed
+```
+
+* Die Antwort ist fuer bekannte und unbekannte Adressen gleich. Die Seite
+  sagt: "Wenn die Adresse stimmt, kommt gleich eine E-Mail."
+* Der Leser hat keinen eigenen Mailversand. Er ruft die Shop-API `send_mail`
+  (signiert wie alle Aktionen). Der Shop verschickt ueber sein Postfix mit
+  DKIM, Absender `bestellung-netzladen@lesenundschenken.de`, Vorlage
+  `lusdigital/mails/de/lusdigital_login.{html,txt}`. Der Shop nimmt nur diese
+  Vorlage, nur Links auf `https://lesen.lesenundschenken.de/` und hoechstens
+  5 Mails je Empfaenger und Stunde (Tabelle `ps_lusdigital_mail`).
+* Link: `https://lesen.lesenundschenken.de/anmelden?t=<token>&next=<pfad>`.
+  Token: 32 Zufallsbytes, gespeichert nur als SHA-256 (`magicLinks`), gilt
+  15 Minuten und einmal. `next` nur als Pfad auf derselben Seite
+  (`magicLinkRules.safeNext`), sonst `/library`.
+* Grenzen im Leser je Stunde: 5 Links je Adresse, 20 je IP
+  (`cf-connecting-ip`, sonst `x-forwarded-for`), 500 insgesamt.
+* Die Seite `/anmelden` ruft `signIn("magic-link", {token})` (Convex Auth,
+  `ConvexCredentials` in `convex/auth.ts`). Der Link meldet den Browser an,
+  in dem er sich oeffnet, auf dem Handy also meist den Browser der Mail-App.
+* Oeffnet eine Mail-Pruefung (z. B. Outlook Safe Links) den Link mit
+  JavaScript, ist er verbraucht. Die Seite bietet dann sofort einen neuen an.
+* Gastkaeufe ueber Stripe (`claimTokens`) werden beim Anmelden mit der
+  Kaufadresse automatisch eingeloest. `/claim/<token>` fuehrt nur noch auf
+  `/login`.
+
+### Hoechstens zwei Browser
+
+Ein Konto ist in hoechstens zwei Browsern zugleich angemeldet
+(`MAX_LOGIN_SESSIONS`, Standard 2). Die dritte Anmeldung beendet die aelteste
+(`authSessions` samt `authRefreshTokens`, Callback `beforeSessionCreation`,
+`convex/sessions.ts`). Der verdraengte Browser merkt es sofort ueber die
+Abfrage `sessions.current` und meldet sich ab. Das JWT gilt 15 Minuten; danach
+scheitert ohnehin jedes Auffrischen.
+
+Lesesitzungen (`readerSessions`, Token fuer das Kachel-Gateway) haengen an der
+Anmeldung (`authSessionId`) und enden mit ihr. Je Anmeldung hoechstens zwei
+offene Hefte (`MAX_ACTIVE_SESSIONS`). Frueher galt die Grenze je Konto, dann
+warfen sich zwei eigene Geraete mit demselben Heft gegenseitig hinaus.
+
+Die Kontoseite zeigt die angemeldeten Browser mit "Abmelden" je Browser.
+
+Sitzungsdauer: 30 Tage ohne Nutzung, hoechstens 90 Tage, danach neuer Link.
+SSO mit dem Shop gibt es nicht.

@@ -25,4 +25,7 @@ crons.daily(
   {},
 );
 
+/** Anmeldelinks aelter als ein Tag loeschen (gueltig sind sie nur 15 min). */
+crons.interval("anmeldelinks aufraeumen", { hours: 6 }, internal.magicLink.cleanupInternal, {});
+
 export default crons;

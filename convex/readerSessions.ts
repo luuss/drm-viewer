@@ -1,13 +1,18 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { hasIssueAccess } from "./access";
 import { Id } from "./_generated/dataModel";
 
 const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 
-/** Gleichzeitige Lesesitzungen je Konto. Bremst geteilte Zugaenge. */
-const MAX_ACTIVE_SESSIONS = Number(process.env.MAX_ACTIVE_SESSIONS ?? "2");
+/**
+ * Offene Hefte je Anmeldung (Browser). Die Zahl der Browser begrenzt
+ * `sessions.ts` (MAX_LOGIN_SESSIONS, Standard 2); zusammen bremst das
+ * geteilte Zugaenge. Frueher galt die Grenze je Konto, dadurch warfen sich
+ * zwei eigene Geraete mit demselben Heft gegenseitig hinaus.
+ */
+const MAX_PER_LOGIN = Number(process.env.MAX_ACTIVE_SESSIONS ?? "2");
 
 /** Innerhalb dieser Zeit wird dieselbe Sitzung zurueckgegeben. */
 const REISSUE_COOLDOWN_MS = Number(
@@ -26,7 +31,10 @@ export const issue = mutation({
   args: { issueId: v.id("issues") },
   handler: async (ctx, { issueId }) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Nicht angemeldet");
+    const authSessionId = await getAuthSessionId(ctx);
+    if (!userId || !authSessionId) throw new Error("Nicht angemeldet");
+    // Das JWT gilt noch bis zu 15 min, nachdem die Anmeldung beendet wurde.
+    if (!(await ctx.db.get(authSessionId))) throw new Error("Nicht angemeldet");
     if (!(await hasIssueAccess(ctx, userId as Id<"users">, issueId))) {
       throw new Error("Kein Zugriff auf diese Ausgabe");
     }
@@ -35,11 +43,13 @@ export const issue = mutation({
     const all = await ctx.db
       .query("readerSessions")
       .withIndex("by_user", (q) => q.eq("userId", userId as Id<"users">))
-      .collect();
+      .take(200);
     for (const o of all) {
       if (o.expiresAt < now) await ctx.db.delete(o._id);
     }
-    const active = all.filter((o) => o.expiresAt >= now);
+    const active = all.filter(
+      (o) => o.expiresAt >= now && o.authSessionId === authSessionId,
+    );
 
     const sameIssue = active.filter((o) => o.issueId === issueId);
     const fresh = sameIssue.find((o) => now - o.createdAt < REISSUE_COOLDOWN_MS);
@@ -49,11 +59,9 @@ export const issue = mutation({
     for (const o of sameIssue) await ctx.db.delete(o._id);
 
     const others = active.filter((o) => o.issueId !== issueId);
-    if (others.length >= MAX_ACTIVE_SESSIONS) {
-      // Die aelteste Sitzung weicht: das Konto bleibt nutzbar, das Weitergeben
-      // an mehrere Leser aber nicht.
+    if (others.length >= MAX_PER_LOGIN) {
       others.sort((a, b) => a.createdAt - b.createdAt);
-      for (const d of others.slice(0, others.length - MAX_ACTIVE_SESSIONS + 1)) {
+      for (const d of others.slice(0, others.length - MAX_PER_LOGIN + 1)) {
         await ctx.db.delete(d._id);
         console.log(
           JSON.stringify({
@@ -69,6 +77,7 @@ export const issue = mutation({
     const token = randomToken();
     await ctx.db.insert("readerSessions", {
       userId: userId as Id<"users">,
+      authSessionId,
       sessionToken: token,
       issueId,
       createdAt: now,
@@ -89,6 +98,11 @@ export const verifyInternal = internalQuery({
       .unique();
     if (!row) return { ok: false, reason: "not_found" as const };
     if (row.expiresAt < Date.now()) return { ok: false, reason: "expired" as const };
+    // Abgemeldeter Browser (selbst, von der Kontoseite oder durch einen
+    // dritten Login verdraengt): seine Lesesitzungen enden sofort.
+    if (row.authSessionId && !(await ctx.db.get(row.authSessionId))) {
+      return { ok: false, reason: "logged_out" as const };
+    }
     // Zugriff bei jeder Pruefung neu ermitteln: ein Widerruf aus dem Laden
     // oder ein abgelaufenes Digital-Abo beendet auch eine laufende Sitzung.
     if (!(await hasIssueAccess(ctx, row.userId, row.issueId))) {

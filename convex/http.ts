@@ -3,11 +3,15 @@ import { httpAction } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import { registerRoutes } from "@convex-dev/stripe";
 import { auth } from "./auth";
+import { requestLinkHttp } from "./magicLink";
 import { checkExtractSecret, checkTileSecret, checkShopSignature } from "./serviceAuth";
 
 const http = httpRouter();
 
 auth.addHttpRoutes(http);
+
+// Anmeldelink anfordern (magicLink.ts). Von aussen: /hooks/auth/link.
+http.route({ path: "/auth/link", method: "POST", handler: requestLinkHttp });
 
 function secs(ts: number | null | undefined): number | undefined {
   return ts == null ? undefined : ts * 1000;

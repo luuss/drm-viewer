@@ -68,9 +68,8 @@ npx convex deploy -y --env-file _scratch/verlag-tunnel.env
 
 Offen:
 
-1. **Pflicht vor dem Livegang:** E-Mail-Bestätigung einschalten
-   (`drm-viewer-pwe`). Ohne sie bekommt jeder, der sich mit einer fremden
-   Adresse registriert, deren Käufe. Das braucht `RESEND_API_KEY`.
+1. ~~E-Mail-Bestätigung~~ erledigt am 29.09.2026: Anmeldung nur noch per
+   E-Mail-Link (Abschnitt 2a). Wer sich anmeldet, hat die Adresse bewiesen.
 2. Testkauf mit echter Karte: Produkt 10778 „Testkauf Digital“ (1 €), danach
    erstatten. Die Schritte stehen in `../docs/digital-verkauf-shop.md`, Abschnitt 5.
 3. Die Abo-Produkte 10780–10787 sind inaktiv. Die Digital-Preise sind
@@ -80,6 +79,37 @@ Offen:
 5. GitHub Actions auf den Verlagsserver umstellen.
 
 ---
+
+## 2a. Anmeldung per E-Mail-Link (seit 29.09.2026)
+
+**Keine Passwörter mehr.** Adresse eingeben → Mail → Link anklicken →
+angemeldet. Anmelden und Registrieren sind derselbe Weg; das Konto entsteht
+beim ersten Klick. Vertrag und Einzelheiten: `docs/shop-integration.md`,
+Abschnitt „Anmeldung“.
+
+* Mail verschickt der **Shop** (Shop-API `send_mail`, Vorlage im Modul
+  `lusdigital`, Absender `bestellung-netzladen@`, DKIM von PrestaShop). Der
+  Leser braucht keinen Mail-Schlüssel. Link 15 min, einmal, nur SHA-256
+  gespeichert. Grenzen: 5 je Adresse/h (Leser und Shop), 20 je IP/h.
+* Höchstens **zwei angemeldete Browser** je Konto (`MAX_LOGIN_SESSIONS`); die
+  dritte Anmeldung beendet die älteste, der Browser meldet sich sofort ab.
+  Lesesitzungen hängen an der Anmeldung. Kontoseite: Liste mit „Abmelden“.
+* Bestehende Konten behalten Id, Rollen, Käufe (Suche über `users.email`).
+  Die alten `password`-Konten liegen noch in `authAccounts`, können aber nicht
+  mehr anmelden. `/claim/<token>` → `/login`; offene Gastkauf-Links werden
+  beim Anmelden eingelöst.
+* Code: `convex/magicLink.ts`, `magicLinkRules.ts`, `sessions.ts`, `auth.ts`;
+  Oberfläche `web/src/components/MagicLinkForm.tsx` (`next?`),
+  `pages/LoginPage.tsx`, `pages/LinkLoginPage.tsx` (`/anmelden`).
+* Konto samt Shop-Freischaltungen einer Adresse löschen (Tests,
+  Löschanfragen): `npx convex run account:purgeByEmailInternal '{"email":"…"}'`.
+* Geprüft am 29.09.2026 im echten Betrieb (Testpostfächer auf dem Plesk,
+  danach gelöscht): Mail kommt an mit `dkim=pass`, `dmarc=pass`; Link meldet
+  an und führt auf `next`; zweiter Klick „schon benutzt“; Link nach 15 min
+  „abgelaufen“; drei Browser nacheinander → der erste ist sofort abgemeldet
+  (Hinweis ohne Neuladen), zweiter und dritter bleiben; Abmelden eines
+  Browsers über die Kontoseite; Bestandskonto (altes Passwortkonto mit
+  Shop-Kauf) behält Id und Heft. Skript: `_scratch/magiclink/e2e.mjs`.
 
 ## 3. Stripe
 

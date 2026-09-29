@@ -1,63 +1,9 @@
 import { v } from "convex/values";
-import { action, internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
-import {
-  getAuthUserId,
-  modifyAccountCredentials,
-  retrieveAccount,
-  invalidateSessions,
-} from "@convex-dev/auth/server";
+import { action, internalMutation, internalQuery, mutation, MutationCtx } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
+import { getAuthUserId, invalidateSessions } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
-import { DataModel, Id } from "./_generated/dataModel";
-
-/**
- * Passwort von Hand neu setzen, ohne E-Mail. Nur mit dem Admin-Schluessel:
- * `npx convex run account:setPasswordByEmail '{"email":"…","newPassword":"…"}'`.
- * Alle Sitzungen des Kontos laufen danach ab.
- */
-export const setPasswordByEmail = internalAction({
-  args: { email: v.string(), newPassword: v.string() },
-  handler: async (ctx, { email, newPassword }) => {
-    const { user } = await retrieveAccount(ctx, { provider: "password", account: { id: email } });
-    await modifyAccountCredentials(ctx, {
-      provider: "password",
-      account: { id: email, secret: newPassword },
-    });
-    await invalidateSessions(ctx, { userId: user._id });
-    return null;
-  },
-});
-
-/** Passwort aendern: altes Passwort wird geprueft, danach laufen alle Sitzungen ab. */
-export const changePassword = action({
-  args: { currentPassword: v.string(), newPassword: v.string() },
-  handler: async (ctx, { currentPassword, newPassword }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Nicht eingeloggt");
-    const me: any = await ctx.runQuery(api.users.me, {});
-    if (!me?.email) throw new Error("Kein E-Mail-Konto vorhanden");
-
-    if (newPassword.length < 10) {
-      throw new Error("Passwort muss mindestens 10 Zeichen haben");
-    }
-    if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-      throw new Error("Passwort braucht Buchstaben und Ziffern");
-    }
-
-    const account = await retrieveAccount(ctx, {
-      provider: "password",
-      account: { id: me.email, secret: currentPassword },
-    });
-    if (!account) throw new Error("Aktuelles Passwort stimmt nicht");
-
-    await modifyAccountCredentials(ctx, {
-      provider: "password",
-      account: { id: me.email, secret: newPassword },
-    });
-    // Andere Geraete abmelden — Passwortwechsel soll gestohlene Sitzungen beenden.
-    await invalidateSessions(ctx, { userId });
-    return { ok: true };
-  },
-});
+import { endAuthSession } from "./sessions";
 
 export const setName = mutation({
   args: { name: v.string() },
@@ -110,75 +56,134 @@ export const deleteMyAccount = action({
 
 export const purgeUserData = internalMutation({
   args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
-    const ents = await ctx.db
-      .query("entitlements")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    for (const e of ents) await ctx.db.delete(e._id);
-
-    const sessions = await ctx.db
-      .query("readerSessions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    for (const s of sessions) await ctx.db.delete(s._id);
-
-    const progress = await ctx.db
-      .query("readingProgress")
-      .withIndex("by_user_issue", (q) => q.eq("userId", userId))
-      .collect();
-    for (const p of progress) await ctx.db.delete(p._id);
-
-    const subs = await ctx.db
-      .query("subscriptions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    for (const s of subs) await ctx.db.delete(s._id);
-
-    // Kaeufe bleiben, aber ohne Personenbezug.
-    const purchases = await ctx.db
-      .query("purchases")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    for (const p of purchases) {
-      await ctx.db.patch(p._id, { userId: undefined, email: "geloescht" });
-    }
-
-    // Nicht eingeloeste Gutschein-Links des Kontos entfernen, eingeloeste
-    // Verweise loesen. Beides ueber Index, damit die Loeschung auch bei
-    // vielen Nutzern innerhalb der Leselimits bleibt.
-    const claimed = await ctx.db
-      .query("claimTokens")
-      .withIndex("by_claimed_by", (q) => q.eq("claimedByUserId", userId))
-      .collect();
-    for (const c of claimed) await ctx.db.delete(c._id);
-
-    // Zustimmungen bleiben als Nachweis, aber ohne Personenbezug.
-    const consents = await ctx.db
-      .query("consents")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    for (const c of consents) {
-      await ctx.db.patch(c._id, { userId: undefined, email: undefined });
-    }
-
-    const accounts = await ctx.db
-      .query("authAccounts")
-      .withIndex("userIdAndProvider", (q) => q.eq("userId", userId))
-      .collect();
-    for (const a of accounts) await ctx.db.delete(a._id);
-
-    const authSessions = await ctx.db
-      .query("authSessions")
-      .withIndex("userId", (q) => q.eq("userId", userId))
-      .collect();
-    for (const s of authSessions) await ctx.db.delete(s._id);
-
-    await ctx.db.delete(userId);
-  },
+  handler: async (ctx, { userId }) => await purgeUser(ctx, userId),
 });
+
+async function purgeUser(ctx: MutationCtx, userId: Id<"users">) {
+  const ents = await ctx.db
+    .query("entitlements")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const e of ents) await ctx.db.delete(e._id);
+
+  const sessions = await ctx.db
+    .query("readerSessions")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const s of sessions) await ctx.db.delete(s._id);
+
+  const progress = await ctx.db
+    .query("readingProgress")
+    .withIndex("by_user_issue", (q) => q.eq("userId", userId))
+    .collect();
+  for (const p of progress) await ctx.db.delete(p._id);
+
+  const subs = await ctx.db
+    .query("subscriptions")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const s of subs) await ctx.db.delete(s._id);
+
+  // Kaeufe bleiben, aber ohne Personenbezug.
+  const purchases = await ctx.db
+    .query("purchases")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const p of purchases) {
+    await ctx.db.patch(p._id, { userId: undefined, email: "geloescht" });
+  }
+
+  // Nicht eingeloeste Gutschein-Links des Kontos entfernen, eingeloeste
+  // Verweise loesen. Beides ueber Index, damit die Loeschung auch bei
+  // vielen Nutzern innerhalb der Leselimits bleibt.
+  const claimed = await ctx.db
+    .query("claimTokens")
+    .withIndex("by_claimed_by", (q) => q.eq("claimedByUserId", userId))
+    .collect();
+  for (const c of claimed) await ctx.db.delete(c._id);
+
+  // Zustimmungen bleiben als Nachweis, aber ohne Personenbezug.
+  const consents = await ctx.db
+    .query("consents")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const c of consents) {
+    await ctx.db.patch(c._id, { userId: undefined, email: undefined });
+  }
+
+  const accounts = await ctx.db
+    .query("authAccounts")
+    .withIndex("userIdAndProvider", (q) => q.eq("userId", userId))
+    .collect();
+  for (const a of accounts) await ctx.db.delete(a._id);
+
+  const authSessions = await ctx.db
+    .query("authSessions")
+    .withIndex("userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const s of authSessions) await endAuthSession(ctx, s._id);
+
+  const infos = await ctx.db
+    .query("sessionInfo")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const i of infos) await ctx.db.delete(i._id);
+
+  // Anmeldelinks tragen die Adresse; sie gehen mit.
+  const email = ((await ctx.db.get(userId))?.email ?? "").toLowerCase();
+  if (email) {
+    const links = await ctx.db
+      .query("magicLinks")
+      .withIndex("by_email_and_createdAt", (q) => q.eq("email", email))
+      .take(500);
+    for (const l of links) await ctx.db.delete(l._id);
+  }
+
+  await ctx.db.delete(userId);
+}
 
 export const myAccountSummary = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => await ctx.db.get(userId),
+});
+
+/**
+ * Alles zu einer Adresse entfernen: Konto (wie `purgeUserData`),
+ * Freischaltungen aus dem Shop und Anmeldelinks. Fuer Testkonten und
+ * Loeschanfragen per Mail. Nur mit dem Admin-Schluessel:
+ * `npx convex run account:purgeByEmailInternal '{"email":"…"}'`.
+ */
+export const purgeByEmailInternal = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const e = email.trim().toLowerCase();
+    const users = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", e))
+      .take(10);
+    for (const u of users) {
+      await purgeUser(ctx, u._id);
+    }
+    let shop = 0;
+    for (const row of await ctx.db
+      .query("shopAccess")
+      .withIndex("by_email", (q) => q.eq("email", e))
+      .take(500)) {
+      await ctx.db.delete(row._id);
+      shop++;
+    }
+    for (const row of await ctx.db
+      .query("shopGrants")
+      .withIndex("by_email", (q) => q.eq("email", e))
+      .take(500)) {
+      await ctx.db.delete(row._id);
+      shop++;
+    }
+    const links = await ctx.db
+      .query("magicLinks")
+      .withIndex("by_email_and_createdAt", (q) => q.eq("email", e))
+      .take(500);
+    for (const l of links) await ctx.db.delete(l._id);
+    return { users: users.length, shop, links: links.length };
+  },
 });

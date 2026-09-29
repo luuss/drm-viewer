@@ -314,7 +314,11 @@ describe("Lesesitzung und Kachel-Gateway", () => {
       internal.shopIntegration.applyOrderInternal,
       order("R-1", "grant", [{ sku: "ZUERST-3-2026", lineId: "1" }]),
     );
-    const asReader = t.withIdentity({ subject: userId, email: "kunde@example.de" });
+    // Lesesitzungen haengen an einer Anmeldung (Subject "userId|sessionId").
+    const sessionId = await t.run((ctx: any) =>
+      ctx.db.insert("authSessions", { userId, expirationTime: Date.now() + DAY }),
+    );
+    const asReader = t.withIdentity({ subject: `${userId}|${sessionId}`, email: "kunde@example.de" });
     const { token } = await asReader.mutation(api.readerSessions.issue, { issueId });
     const ok = await t.query(internal.readerSessions.verifyInternal, { sessionToken: token });
     expect(ok.ok).toBe(true);

@@ -1,31 +1,48 @@
-import { Password } from "@convex-dev/auth/providers/Password";
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { convexAuth } from "@convex-dev/auth/server";
-import { DataModel } from "./_generated/dataModel";
-import { ResendOTPPasswordReset, ResendOTPVerification } from "./otp";
+import { ConvexError } from "convex/values";
+import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
+import { MutationCtx } from "./_generated/server";
+import { looksLikeToken } from "./magicLinkRules";
+import { makeRoomForLogin } from "./sessions";
 
 /**
- * E-Mail-Bestaetigung ist optional schaltbar (REQUIRE_EMAIL_VERIFICATION=true),
- * damit bestehende Konten nicht ploetzlich ausgesperrt werden.
+ * Anmeldung nur per E-Mail-Link (magicLink.ts). Passwoerter gibt es nicht
+ * mehr. Die alten `password`-Konten bleiben in `authAccounts` liegen, koennen
+ * aber nicht mehr anmelden, weil der Provider fehlt.
  */
-const requireVerification = process.env.REQUIRE_EMAIL_VERIFICATION === "true";
-
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
-    Password<DataModel>({
-      reset: ResendOTPPasswordReset,
-      verify: requireVerification ? ResendOTPVerification : undefined,
-      validatePasswordRequirements: (password: string) => {
-        if (password.length < 10) {
-          throw new Error("Passwort muss mindestens 10 Zeichen haben");
+    ConvexCredentials({
+      id: "magic-link",
+      authorize: async (params, ctx) => {
+        if (!looksLikeToken(params.token)) {
+          throw new ConvexError({ grund: "unbekannt" });
         }
-        if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
-          throw new Error("Passwort braucht Buchstaben und Ziffern");
-        }
-      },
-      profile(params) {
-        const email = String(params.email ?? "").trim().toLowerCase();
-        return { email };
+        const { userId }: { userId: Id<"users">; next: string } = await ctx.runMutation(
+          internal.magicLink.consumeInternal,
+          { token: params.token },
+        );
+        return { userId };
       },
     }),
   ],
+  session: {
+    // Wer nicht liest, muss nach 30 Tagen wieder einen Link anfordern,
+    // spaetestens nach 90 Tagen jeder.
+    totalDurationMs: 90 * 24 * 60 * 60 * 1000,
+    inactiveDurationMs: 30 * 24 * 60 * 60 * 1000,
+  },
+  jwt: {
+    // Kurz, damit ein beendeter Browser schnell ausgesperrt ist, auch wenn er
+    // das Abmeldesignal (sessions.current) ignoriert.
+    durationMs: 15 * 60 * 1000,
+  },
+  callbacks: {
+    // Hoechstens zwei angemeldete Browser: die aeltesten weichen.
+    async beforeSessionCreation(ctx, { userId }) {
+      await makeRoomForLogin(ctx as unknown as MutationCtx, userId as Id<"users">);
+    },
+  },
 });

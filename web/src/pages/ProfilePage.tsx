@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFrage } from "../components/Frage";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api, formatEuro } from "../lib/api";
 
 /** Der Zahlungsdienst liefert die Zustaende englisch; im Konto stehen sie
@@ -17,16 +18,14 @@ export default function ProfilePage() {
   const me = useQuery(api.users.me, {});
   const subStatus = useQuery(api.subscriptions.myStatus, {});
   const purchases = useQuery(api.purchases.mine, {});
-  const sessions = useQuery(api.readerSessions.mine, {});
-  const changePassword = useAction(api.account.changePassword);
+  const logins = useQuery(api.sessions.mine, {});
   const deleteAccount = useAction(api.account.deleteMyAccount);
   const portal = useAction(api.billing.createPortalSession);
   const cancelSub = useAction(api.billing.cancelMySubscription);
-  const revokeSessions = useMutation(api.readerSessions.revokeAllMine);
+  const revokeLogin = useMutation(api.sessions.revoke);
+  const { signOut } = useAuthActions();
   const setName = useMutation(api.account.setName);
 
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
   const [name, setNameValue] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -54,7 +53,6 @@ export default function ProfilePage() {
         <h2>Profil</h2>
         <p className="hint">
           Angemeldet als <strong>{me.email}</strong>
-          {me.emailVerified ? " · E-Mail bestätigt" : " · E-Mail nicht bestätigt"}
         </p>
       </div>
 
@@ -137,77 +135,51 @@ export default function ProfilePage() {
       </section>
 
       <section>
-        <h3>Passwort ändern</h3>
-        <form
-          className="stack-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            guard(async () => {
-              await changePassword({
-                currentPassword: current,
-                newPassword: next,
-              });
-              setCurrent("");
-              setNext("");
-              setMsg("Passwort geändert. Andere Geräte wurden abgemeldet.");
-            });
-          }}
-        >
-          <label>
-            Aktuelles Passwort
-            <input
-              type="password"
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </label>
-          <label>
-            Neues Passwort
-            <input
-              type="password"
-              value={next}
-              onChange={(e) => setNext(e.target.value)}
-              required
-              minLength={10}
-              autoComplete="new-password"
-            />
-          </label>
-          <button className="btn" disabled={busy}>
-            Passwort ändern
-          </button>
-        </form>
-      </section>
-
-      <section>
-        <h3>Aktive Lesesitzungen</h3>
-        {sessions && sessions.length > 0 ? (
-          <>
-            <ul className="session-list">
-              {sessions.map((s) => (
-                <li key={s._id}>
-                  {s.issueTitle} · seit{" "}
-                  {new Date(s.createdAt).toLocaleString("de-DE")} · {s.tileCount}{" "}
-                  Kacheln
-                </li>
-              ))}
-            </ul>
-            <button
-              className="btn secondary"
-              disabled={busy}
-              onClick={() =>
-                guard(async () => {
-                  const n = await revokeSessions({});
-                  setMsg(`${n} Sitzungen beendet.`);
-                })
-              }
-            >
-              Alle Sitzungen beenden
-            </button>
-          </>
+        <h3>Angemeldete Browser</h3>
+        <p className="hint">
+          Ein Konto kann in höchstens zwei Browsern zugleich angemeldet sein. Eine dritte
+          Anmeldung beendet die älteste.
+        </p>
+        {logins && logins.length > 0 ? (
+          <ul className="plain session-list">
+            {logins.map((l) => (
+              <li key={l._id} className="sub-line">
+                <span>
+                  <strong>{l.device ?? "Browser"}</strong>
+                  {l.current ? " (dieser Browser)" : ""} · angemeldet seit{" "}
+                  {new Date(l.createdAt).toLocaleString("de-DE", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}{" "}
+                  · zuletzt aktiv{" "}
+                  {new Date(l.lastActiveAt).toLocaleString("de-DE", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                  {l.reading.length > 0 ? ` · liest ${l.reading.join(", ")}` : ""}
+                </span>
+                <button
+                  className="btn secondary small"
+                  disabled={busy}
+                  onClick={() =>
+                    guard(async () => {
+                      const { current } = await revokeLogin({ sessionId: l._id });
+                      if (current) {
+                        await signOut();
+                        window.location.href = "/";
+                        return;
+                      }
+                      setMsg("Browser abgemeldet.");
+                    })
+                  }
+                >
+                  Abmelden
+                </button>
+              </li>
+            ))}
+          </ul>
         ) : (
-          <p className="hint">Keine offenen Sitzungen.</p>
+          <p className="hint">Keine Anmeldung gefunden.</p>
         )}
       </section>
 

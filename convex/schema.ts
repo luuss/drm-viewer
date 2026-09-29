@@ -453,6 +453,9 @@ export default defineSchema(
 
   readerSessions: defineTable({
     userId: v.id("users"),
+    // Anmeldung (Browser), zu der die Lesesitzung gehoert; endet mit ihr.
+    // Fehlt nur bei Sitzungen von vor dem 29.09.2026.
+    authSessionId: v.optional(v.id("authSessions")),
     sessionToken: v.string(),
     issueId: v.id("issues"),
     lastSeenAt: v.optional(v.number()),
@@ -462,6 +465,33 @@ export default defineSchema(
   })
     .index("by_token", ["sessionToken"])
     .index("by_user_issue", ["userId", "issueId"])
+    .index("by_user", ["userId"])
+    .index("by_auth_session", ["authSessionId"]),
+
+  // Anmeldelinks (magicLink.ts). Nur der SHA-256 des Tokens wird gespeichert.
+  magicLinks: defineTable({
+    email: v.string(),
+    tokenHash: v.string(),
+    ip: v.string(),
+    next: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+    sendError: v.optional(v.string()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_email_and_createdAt", ["email", "createdAt"])
+    .index("by_ip_and_createdAt", ["ip", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
+
+  // Geraetebezeichnung je Anmeldung, nur fuer die Kontoseite.
+  sessionInfo: defineTable({
+    sessionId: v.id("authSessions"),
+    userId: v.id("users"),
+    device: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_session", ["sessionId"])
     .index("by_user", ["userId"]),
 
   importJobs: defineTable({

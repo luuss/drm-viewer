@@ -5,21 +5,23 @@ import { sendMail, layout, escapeHtml, appUrl } from "./mail";
 
 export const sendClaimEmail = internalAction({
   args: { email: v.string(), issueId: v.id("issues"), token: v.string() },
-  handler: async (ctx, { email, issueId, token }): Promise<{ ok: boolean; stubbed: boolean }> => {
+  handler: async (ctx, { email, issueId }): Promise<{ ok: boolean; stubbed: boolean }> => {
     const issue: any = await ctx.runQuery(api.issues.getPublic, { issueId });
     const title: string = issue?.title ?? "deine Ausgabe";
-    const claimUrl = `${appUrl()}/claim/${token}`;
+    // Kein Einloeselink mehr: die Ausgabe haengt an der Kaufadresse und ist
+    // da, sobald man sich mit dieser Adresse anmeldet.
+    const loginUrl = `${appUrl()}/login`;
     return await sendMail({
       to: email,
       subject: `Deine Ausgabe: ${title}`,
       html: layout(
         "Deine Ausgabe ist bereit",
         `<p>vielen Dank fuer deinen Kauf von <strong>${escapeHtml(title)}</strong>.</p>
-         <p><a href="${claimUrl}" style="display:inline-block;background:#e94560;color:#fff;
-            padding:12px 20px;border-radius:6px;text-decoration:none">Ausgabe freischalten</a></p>
-         <p style="color:#666;font-size:13px">Der Link ist 30 Tage gueltig und kann einmal
-            eingeloest werden. Danach ist die Ausgabe dauerhaft an deinen Account gebunden.</p>
-         <p style="color:#999;font-size:12px">Falls der Button nicht geht: ${claimUrl}</p>`,
+         <p>Melde dich mit dieser E-Mail-Adresse (${escapeHtml(email)}) an, dann steht
+            die Ausgabe in deiner Bibliothek.</p>
+         <p><a href="${loginUrl}" style="display:inline-block;background:#e94560;color:#fff;
+            padding:12px 20px;border-radius:6px;text-decoration:none">Anmelden</a></p>
+         <p style="color:#999;font-size:12px">Falls der Button nicht geht: ${loginUrl}</p>`,
       ),
     });
   },
