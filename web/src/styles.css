@@ -2288,14 +2288,13 @@ button.small, .btn.small {
   padding: 0 0 var(--s5);
 }
 .toc-list li + li { border-top: 1px solid var(--rule-soft); }
-/* Titel links, Seitenzahl rechts auf derselben Grundlinie. Die Zeile
-   "Sie sind hier" des aktuellen Eintrags liegt als eigene Reihe darueber. */
+/* Titel links, Seitenzahl rechts auf derselben Grundlinie. */
 .toc-entry {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
   justify-content: stretch;
-  gap: var(--s1) var(--s4);
+  gap: var(--s4);
   width: 100%;
   min-height: var(--ctl-h);
   padding: var(--s3) var(--s5);
@@ -2305,9 +2304,8 @@ button.small, .btn.small {
   /* Der Balken des aktuellen Eintrags liegt als Schatten innen, damit die
      Zeile beim Wechsel nicht um seine Breite springt. */
   box-shadow: inset 4px 0 0 transparent;
-  font-family: var(--serif);
   font-size: var(--fs-body);
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.35;
   letter-spacing: 0;
   color: var(--ink);
@@ -2318,7 +2316,6 @@ button.small, .btn.small {
 .toc-entry:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
 .toc-entry:hover:not(:disabled) .label { color: var(--accent); }
 .toc-entry .page-num {
-  font-family: var(--sans);
   font-size: var(--fs-sub);
   font-weight: 400;
   color: var(--muted);
@@ -2326,32 +2323,21 @@ button.small, .btn.small {
 }
 .toc-list .level-2 .toc-entry {
   padding-left: var(--s7);
-  font-family: var(--sans);
   font-size: var(--fs-sub);
-  font-weight: 400;
   color: var(--ink-soft);
 }
-/* Wo der Leser gerade steht: Flaeche, Balken und ein Wort. Die Farbe allein
-   reicht nicht, sie muss auch ohne Farbsehen zu finden sein. */
+/* Wo der Leser gerade steht: Flaeche, Balken und fette Schrift — auch ohne
+   Farbsehen zu finden. */
 .toc-entry.current,
 .toc-entry.current:hover:not(:disabled) {
   background: var(--accent-soft);
   box-shadow: inset 4px 0 0 var(--accent);
   color: var(--accent-deep);
-  font-weight: 700;
+  font-weight: 600;
 }
 .toc-entry.current .label,
 .toc-entry.current:hover:not(:disabled) .label { color: var(--accent-deep); }
 .toc-entry.current .page-num { color: var(--accent-deep); font-weight: 600; }
-.toc-entry .here {
-  grid-column: 1 / -1;
-  font-family: var(--sans);
-  font-size: var(--fs-mini);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
 
 /* ============================================================
    Schmale Schirme

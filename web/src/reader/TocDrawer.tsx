@@ -121,8 +121,6 @@ export default function TocDrawer({
                     onClose();
                   }}
                 >
-                  {/* Die Hervorhebung steht auch als Wort da, nicht nur als Farbe. */}
-                  {current && <span className="here">Sie sind hier</span>}
                   <span className="label">{e.label}</span>
                   {e.pageIndex !== null && (
                     /* Nicht `page`: diese Klasse gehoert dem Seitenrahmen und
