@@ -440,6 +440,23 @@ Zählung in der unteren Leiste lief eins neben den gedruckten Seitenzahlen.
   (`articleProducts:matchInternal`): mit Produkt im Laden fragt der Tipp
   „bestellen oder lesen“, sonst öffnet er den Anzeigentext. Die Titelseite
   bekommt keinen Artikel.
+* **Abo-Aufrufe sind keine Artikel** (seit 30.09. abends). Wirbt eine Tafel
+  (oder eine Anzeige im Innenteil bis 3000 Zeichen) mehrfach ums Abonnement,
+  wird sie ein Seitenlink (`pageLinks`, Worker `_abo_links`,
+  `extractor/abo.py`): im Seitenmodus öffnet ein Tipp darauf ohne
+  Zwischenfrage das Abo-Formular der beworbenen Reihe im Laden, im neuen Tab.
+  Welche Reihe: die Nennungen im Text; „DMZ Zeitgeschichte“ zählt nicht als
+  DMZ, das Kombi-Abo mit der Schwester und die Verlagsanschrift nicht als
+  Werbung, bei Gleichstand gilt die eigene Reihe; das Impressum ist kein
+  Aufruf. Ziel je Reihe: `publications.shopPrintSubscriptionUrl` (Admin →
+  „Abo-Formular Druckheft“), ohne Eintrag
+  `lesenundschenken.de/module/luszeitformulare/formular?f=abo-<slug>`. Der
+  Import ersetzt seine Links bei jedem Lauf; von der Redaktion angelegte
+  (`source: editor`) bleiben. Bestand: sechs Links (ZUERST! wirbt auf U2 für
+  sich, auf U3 für die DMZ; DMZ 170 auf U2 für sich, auf U3 für die
+  Zeitgeschichte; Zeitgeschichte 80 und Greim auf U2 für sich), die sechs
+  Anzeigen-Artikel dazu sind entfernt (`_scratch/umschlag/abo-links.py`).
+  Buchanzeigen auf U3/U4 bleiben Artikel mit Ladenknopf.
 * **Bestand nachgerüstet** (`_scratch/umschlag/nachruesten.py <issueId>
   <umschlag.pdf> [--echt]`, Probelauf ohne `--echt`): `issuePages:insertInternal`
   fügt Seiten ein und rückt alles nach, was Seiten zählt — Artikel (Anfang,
