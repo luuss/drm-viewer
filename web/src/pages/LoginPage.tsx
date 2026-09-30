@@ -45,11 +45,11 @@ export function AnmeldeRahmen({ titel, children }: { titel: string; children: Re
         <p className="legal-line">
           <Link to="/">Zurück zur Vorschau ohne Anmeldung</Link>
         </p>
-        <p className="legal-line">
+        {/* <p className="legal-line">
           <Link to="/impressum">Impressum</Link> ·{" "}
           <Link to="/datenschutz">Datenschutz</Link> ·{" "}
           <Link to="/agb">AGB</Link>
-        </p>
+        </p> */}
       </div>
     </div>
   );
