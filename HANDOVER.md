@@ -418,6 +418,40 @@ Rahmen war nur nach Zeichenanteil geschätzt (`_verteile_auf_rahmen`).
   Verzeichnis (Drawer) ändert der Auftrag nicht; die zusammengesetzten
   zweizeiligen Titel kommen erst mit einem neuen Import.
 
+## 4f. Umschlag: U1 bis U4 im Reader, Anzeigen darauf anklickbar (seit 30.09.2026)
+
+Vom Umschlag kam bisher nur die Titelseite als Bild in den Reader; U2, U3 und
+U4 fehlten. Der Doppelseitenmodus paarte deshalb 3|4 statt U2|3, und die
+Zählung in der unteren Leiste lief eins neben den gedruckten Seitenzahlen.
+
+* **Import.** Liegt ein Umschlag-PDF im Heftordner, rendert der Browser es
+  als einzelne Tafeln in Netzbreite (`web/src/admin/coverPages.ts`,
+  `renderUmschlag` in `pageRender.ts`): zwei Bögen quer ergeben U4|U1 und
+  U2|U3 — auch mit Rücken (Greim) oder Klappe (DMZ-Zeitgeschichte: drei Tafeln
+  je Bogen, die Mitte gehört keiner Seite) —, vier Einzelseiten gelten als
+  Bogenreihenfolge U4, U1, U2, U3 (ZUERST!), eine Einzelseite ist U1. Das
+  Netzformat kommt aus der TrimBox der Datei. Die Leserreihenfolge nimmt die
+  fertigen Tafeln (`buildPageOrder`, `coverReading`). Nur ein Titelbild (TIF)
+  ohne Umschlag-PDF ergibt weiter allein U1.
+* **Anzeigen auf U2 bis U4.** Je Tafel geht die Textebene als Quelle `text`
+  mit Rolle `cover` hoch. Der Worker macht daraus je Tafel einen Artikel
+  (`assemble_cover_pages`; Titel ist die größte Zeile mit Wörtern) mit
+  ganzseitiger Klickfläche. Die Ladenzuordnung behandelt ihn wie jede Anzeige
+  (`articleProducts:matchInternal`): mit Produkt im Laden fragt der Tipp
+  „bestellen oder lesen“, sonst öffnet er den Anzeigentext. Die Titelseite
+  bekommt keinen Artikel.
+* **Bestand nachgerüstet** (`_scratch/umschlag/nachruesten.py <issueId>
+  <umschlag.pdf> [--echt]`, Probelauf ohne `--echt`): `issuePages:insertInternal`
+  fügt Seiten ein und rückt alles nach, was Seiten zählt — Artikel (Anfang,
+  Ende, Hauptseite), Absätze, Klickflächen samt Sprungziel, Bildanker,
+  Verzeichniseinträge, Lesestände. U1 ersetzt das Titelbild (2400 px statt
+  1241 px). Ergebnis: DMZ 170 84 Seiten (1221 Datensätze nachgerückt),
+  DMZ-Zeitgeschichte 80 68 (1044), ZUERST! 3/2026 84 (1695), Greim 36 52 (740);
+  je Heft drei Anzeigen-Artikel, freigegeben (`articles:setReviewStatusInternal`).
+  Die Umschlag-PDFs liegen in `~/Schreibtisch/Kiel/`.
+* Reader: nichts geändert. Mit U2 an Stelle 1 stimmen Paare (U2|3, 4|5 …,
+  82|U3, U4 allein) und Zähler („Seite 3“ ist die gedruckte 3, U2 zeigt „U2“).
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde
