@@ -168,6 +168,34 @@ def test_gleicher_eintrag_in_spalte_und_anreisser_wird_je_nach_lage_gewaehlt():
     assert abs(mitte.x0 - (0.36 - 0.004)) < 1e-9
 
 
+def test_anreisser_unterzeile_beginnt_an_der_seitenzahl():
+    """ZUERST!-Anreisser: grosse Zahl, Titel eingerueckt, Unterzeile buendig zur Zahl."""
+    seite = [
+        item("8", 0.357, 0.168, 0.375, 0.19, 18),
+        item("Vergiftete Nachbarschaft", 0.39, 0.172, 0.576, 0.186, 11.5),
+        item("Polen verleibte sich 1945 Ostdeutschland ein und", 0.357, 0.194, 0.63, 0.205, 9),
+        item("vertrieb von dort Millionen Deutsche.", 0.357, 0.206, 0.58, 0.217, 9),
+        # Naechster Anreisser, deutlich darunter.
+        item("24", 0.357, 0.346, 0.38, 0.368, 18),
+    ]
+    out, bilanz = refine_toc_hints(
+        [
+            hint(
+                "Vergiftete Nachbarschaft",
+                8,
+                y0=0.181,
+                x0=0.357,
+                details="Polen verleibte sich 1945 Ostdeutschland ein und vertrieb von dort Millionen Deutsche.",
+            )
+        ],
+        {2: seite},
+    )
+    assert bilanz["placed"] == 1
+    assert abs(out[0].x0 - (0.357 - 0.004)) < 1e-9
+    assert abs(out[0].x1 - (0.63 + 0.004)) < 1e-9
+    assert abs(out[0].y1 - (0.217 + 0.003)) < 1e-9
+
+
 def test_zahl_in_der_naechsten_spalte_wird_nicht_genommen():
     seite = [
         item("Neuaufstellung", 0.0619, 0.7249, 0.1772, 0.738),

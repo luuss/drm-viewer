@@ -237,15 +237,34 @@ def _varianten(text: str, zahl: int | None) -> list[str]:
     return out
 
 
+def _linke_kanten(cur: Segment, segs: list[Segment]) -> list[float]:
+    """Wo eine Folgezeile von `cur` beginnen darf.
+
+    Buendig mit dem Text — oder mit einer freistehenden Seitenzahl daneben:
+    im Anreisser steht die grosse Zahl vor dem Titel, und die Unterzeile
+    darunter beginnt an der Zahl, nicht am eingerueckten Titel.
+    """
+    kanten = [cur.text_x0, cur.x0]
+    for s in segs:
+        if (
+            s.numeric
+            and _ueberlappung(s, cur) >= 0.3 * (s.y1 - s.y0)
+            and _abstand(s, cur) <= 0.08
+        ):
+            kanten.append(s.x0)
+    return kanten
+
+
 def _zeile_darunter(cur: Segment, segs: list[Segment]) -> Segment | None:
     """Die naechste Textzeile unmittelbar unter `cur` in derselben Spalte."""
+    kanten = _linke_kanten(cur, segs)
     kandidaten = [
         s
         for s in segs
         if s is not cur
         and not s.numeric
         and s.y0 >= cur.text_y1 - 0.3 * cur.text_height
-        and abs(s.text_x0 - cur.text_x0) <= BUENDIG
+        and any(abs(s.text_x0 - k) <= BUENDIG for k in kanten)
     ]
     if not kandidaten:
         return None
