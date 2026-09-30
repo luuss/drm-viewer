@@ -701,15 +701,25 @@ class Job:
     def _build_toc_entries(self, hints, articles, payload_articles) -> list[dict]:
         """Gedruckten Inhalt mit Artikeln und Seitensprung-Regionen verbinden."""
         out = []
-        for order, hint in enumerate(hints, start=1):
-            article_order = next(
+        ziele = {h.page_index for h in hints}
+
+        def artikel_ab(seite: int) -> int | None:
+            return next(
                 (
                     index + 1
                     for index, article in enumerate(articles)
-                    if article.pages and article.pages[0] == hint.page_index
+                    if article.pages and article.pages[0] == seite
                 ),
                 None,
             )
+
+        for order, hint in enumerate(hints, start=1):
+            article_order = artikel_ab(hint.page_index)
+            # Aufmacherseite: das Verzeichnis nennt die Seite mit Bild und
+            # Titel, der Text der Story beginnt erst auf der naechsten. Die
+            # Folgeseite zaehlt nur, wenn kein eigener Eintrag auf sie zeigt.
+            if article_order is None and hint.page_index + 1 not in ziele:
+                article_order = artikel_ab(hint.page_index + 1)
             entry = {
                 "order": order,
                 "label": hint.label,

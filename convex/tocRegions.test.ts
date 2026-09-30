@@ -47,6 +47,8 @@ async function heft(t: any) {
       });
     const erster = await artikel(1, 5);
     const zweiter = await artikel(2, 8);
+    // Beginnt eine Seite nach seiner Aufmacherseite 9.
+    const dritter = await artikel(3, 10);
     await ctx.db.insert("tocEntries", {
       issueId,
       order: 1,
@@ -86,14 +88,14 @@ async function heft(t: any) {
       workerId: "w1",
       createdAt: now,
     });
-    return { issueId, jobId, erster, zweiter };
+    return { issueId, jobId, erster, zweiter, dritter };
   });
 }
 
 describe("Klickflaechen des Inhaltsverzeichnisses", () => {
   test("ersetzt nur die Verzeichnisflaechen und haengt sie an den Zielartikel", async () => {
     const t = convexTest(schema, modules);
-    const { issueId, jobId, erster, zweiter } = await heft(t);
+    const { issueId, jobId, erster, zweiter, dritter } = await heft(t);
 
     const result = await t.mutation(internal.imports.activateTocRegionsInternal, {
       jobId,
@@ -104,11 +106,13 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
         { pageIndex: 2, x0: 0.06, y0: 0.11, x1: 0.35, y1: 0.14, targetPageIndex: 5 },
         // Kein Eintrag, aber ein Artikel beginnt dort.
         { pageIndex: 2, x0: 0.06, y0: 0.2, x1: 0.35, y1: 0.23, targetPageIndex: 8 },
-        // Weder Eintrag noch Artikel: faellt weg.
+        // Aufmacherseite: der Artikel beginnt eine Seite spaeter.
         { pageIndex: 2, x0: 0.06, y0: 0.3, x1: 0.35, y1: 0.33, targetPageIndex: 9 },
+        // Weder Eintrag noch Artikel: faellt weg.
+        { pageIndex: 2, x0: 0.06, y0: 0.4, x1: 0.35, y1: 0.43, targetPageIndex: 12 },
       ],
     });
-    expect(result).toEqual({ regions: 2, skipped: 1 });
+    expect(result).toEqual({ regions: 3, skipped: 1 });
 
     const regions = await t.run(async (ctx: any) =>
       await ctx.db
@@ -122,11 +126,35 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
     expect(verzeichnis.map((r: any) => [r.articleId, r.targetPageIndex, r.y0])).toEqual([
       [erster, 5, 0.11],
       [zweiter, 8, 0.2],
+      [dritter, 9, 0.3],
     ]);
     // Die Textflaeche des Artikels ist unangetastet.
     const text = regions.filter((r: any) => r.targetPageIndex === undefined);
     expect(text).toHaveLength(1);
     expect(text[0].kind).toBe("body");
+  });
+
+  test("die Folgeseite zaehlt nicht, wenn ein eigener Eintrag auf sie zeigt", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, jobId, dritter } = await heft(t);
+    const result = await t.mutation(internal.imports.activateTocRegionsInternal, {
+      jobId,
+      workerId: "w1",
+      issueId,
+      regions: [
+        { pageIndex: 2, x0: 0.06, y0: 0.3, x1: 0.35, y1: 0.33, targetPageIndex: 9 },
+        { pageIndex: 2, x0: 0.06, y0: 0.4, x1: 0.35, y1: 0.43, targetPageIndex: 10 },
+      ],
+    });
+    expect(result).toEqual({ regions: 1, skipped: 1 });
+    const regions = await t.run(async (ctx: any) =>
+      await ctx.db
+        .query("articleRegions")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect(),
+    );
+    const neu = regions.filter((r: any) => r.targetPageIndex !== undefined);
+    expect(neu.map((r: any) => [r.articleId, r.targetPageIndex])).toEqual([[dritter, 10]]);
   });
 
   test("weist einen fremden Worker ab", async () => {

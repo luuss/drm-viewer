@@ -347,6 +347,55 @@ Seite — im Lesetext ein loser Halbsatz zwischen zwei Absätzen.
 * Convex-Funktionen und `import-worker` sind auf dem Verlagsserver ausgerollt,
   d.chuk.dev über den Push.
 
+## 4e. Inhaltsverzeichnis: Klickflächen auf den gedruckten Zeilen (seit 30.09.2026)
+
+Die Links auf der Inhaltsseite (DMZ: Leseseite 2, DMZ-Zeitgeschichte: Seite 1
+unter dem Editorial, ZUERST!: Seite 2) lagen übereinander und neben den
+Einträgen. Der Satz kennt keine Zeilenpositionen; die Lage eines Absatzes im
+Rahmen war nur nach Zeichenanteil geschätzt (`_verteile_auf_rahmen`).
+
+* **Textebene als Quelle `text`.** Der Browser liest beim Rendern jeder
+  Innenseite mit pdf.js die Textstücke samt Rechteck (`web/src/admin/textLayer.ts`,
+  `pageRender.ts` mit `mitText`), normiert auf das Netzformat wie die
+  Seitenbilder, und lädt sie als `textebene.json` hoch (rund 500 KB je Heft;
+  `uploadRules.ts` erlaubt JSON). Die Druckdatei bleibt weiter auf dem Rechner.
+* **Worker legt die Einträge auf die Zeilen** (`extractor/toc_layout.py`):
+  Textstücke zu Zeilen und Spaltenstücken bündeln, je Eintrag die Titelzeilen
+  (auch umbrochene), die gedruckte Seitenzahl daneben und die Unterzeile
+  darunter suchen. Verglichen wird ohne Satzzeichen, Trennstriche und
+  Ligaturen. Steht derselbe Eintrag zweimal (Spalte und Anreißer bei ZUERST!),
+  gewinnt der Fundort, der dem Schätzwert am nächsten liegt. Ein nicht
+  gefundener Eintrag verliert seine Fläche, statt auf dem Nachbarn zu liegen;
+  `job.tocPlaced` im Worker-Log zeigt die Bilanz. Ohne Textebene bleibt der
+  Schätzwert wie bisher.
+* **Satz-Leser genauer** (`toc_from_idml`): ein Titel über zwei Absätze
+  („Wahlrechtsentzug“ / „statt Strafpsychiatrie 23“) wird ein Eintrag,
+  Rubrikzeilen mit Seitenzahl („Kalenderblatt Personen 16“) sind eigene
+  Einträge, Rubrikzeilen ohne Zahl geben `section`, die Unterzeile bleibt als
+  `details` am Eintrag.
+* **Auftrag `toc`** (`imports.enqueue` mit `kind: "toc"`; Worker
+  `_nur_verzeichnis`; Backend `activateTocRegionsInternal` über
+  `/service/jobs/toc-regions`) ersetzt nur die Verzeichnisflächen
+  (`articleRegions` mit `targetPageIndex`). Artikel, Freigaben und
+  Verknüpfungen bleiben. Im Importdialog: „Textebene aus Innenteil (PDF)“
+  liest die Textebene aus einem lokalen PDF (Netzformat aus der TrimBox der
+  Datei) und stellt den Auftrag ein; „Inhaltsverzeichnis-Flächen neu legen“
+  stellt ihn allein ein. **Achtung:** ein Worker ohne diesen Stand kennt die
+  Auftragsart nicht und würde einen `toc`-Auftrag als vollen Lauf ausführen.
+* Ohne Oberfläche (Deploy-Schlüssel): `issueSources:addInternal`,
+  `imports:enqueueInternal`; `_scratch/textebene/nachtragen.py <issueId>
+  <textebene.json>` macht alle Schritte, `dump.mjs` erzeugt die Textebene mit
+  pdf.js in Node (wie der Browser), `validate.py` zeichnet die Flächen auf das
+  Seitenbild.
+* **Bestand:** siehe unten (Abschnitt 5) — DMZ 170 und DMZ-Zeitgeschichte 80
+  wurden mit der Textebene aus den PDFs auf dem Schreibtisch nachgetragen
+  („DMZ Zeit 78 innen.pdf“ ist das Innenteil der Nr. 80). ZUERST! 3/2026:
+  das Innenteil-PDF liegt nicht auf diesem Rechner → im Importdialog
+  „Textebene aus Innenteil (PDF)“ mit der Datei vom Stick. Greim hat kein
+  Inhaltsverzeichnis. Die Beschriftungen im Verzeichnis (Drawer) ändert der
+  Auftrag nicht; die zusammengesetzten zweizeiligen Titel kommen erst mit
+  einem neuen Import.
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde

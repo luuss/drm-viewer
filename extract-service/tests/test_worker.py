@@ -49,6 +49,36 @@ def test_inhaltseintrag_ohne_verzeichnisseite_bekommt_keine_klickflaeche():
     assert payload[0]["regions"] == []
 
 
+def test_aufmacherseite_ohne_text_fuehrt_zum_artikel_der_folgeseite():
+    """Das Verzeichnis nennt die Bildseite, die Story beginnt eine Seite spaeter."""
+    from extractor.model import AssembledArticle, SourceBlock, TocHint
+
+    def artikel(titel: str, seite: int) -> AssembledArticle:
+        block = SourceBlock(page_index=seite, text=titel, x0=0.1, y0=0.1, x1=0.9, y1=0.2)
+        return AssembledArticle(title=titel, blocks=[block])
+
+    articles = [artikel("Offizier", 9), artikel("Orden", 13)]
+    payload = [{"order": 1, "regions": []}, {"order": 2, "regions": []}]
+    hints = [
+        TocHint("Offizier", 8, 2, 0.1, 0.2, 0.4, 0.3, printed=10),
+        TocHint("Orden", 13, 2, 0.1, 0.4, 0.4, 0.5, printed=15),
+    ]
+    entries = worker.Job._build_toc_entries(None, hints, articles, payload)
+    assert [e.get("articleOrder") for e in entries] == [1, 2]
+    assert payload[0]["regions"][0]["targetPageIndex"] == 8
+
+    # Zeigt ein eigener Eintrag auf die Folgeseite, bleibt der erste ohne Artikel.
+    payload = [{"order": 1, "regions": []}, {"order": 2, "regions": []}]
+    hints = [
+        TocHint("Bildseite", 8, 2, 0.1, 0.2, 0.4, 0.3, printed=10),
+        TocHint("Offizier", 9, 2, 0.1, 0.4, 0.4, 0.5, printed=11),
+    ]
+    entries = worker.Job._build_toc_entries(None, hints, articles, payload)
+    assert [e.get("articleOrder") for e in entries] == [None, 1]
+    # Nur der Eintrag der Folgeseite selbst bekommt eine Klickflaeche.
+    assert [r["targetPageIndex"] for r in payload[0]["regions"]] == [9]
+
+
 # --- Platzierte Bilder aus dem Satz ----------------------------------------
 
 

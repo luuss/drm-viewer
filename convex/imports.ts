@@ -346,7 +346,8 @@ export const activateTocRegionsInternal = internalMutation({
       .query("tocEntries")
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
-    const zielArtikel = (pageIndex: number): Id<"articles"> | undefined => {
+    const ziele = new Set(regions.map((r) => r.targetPageIndex));
+    const artikelAb = (pageIndex: number): Id<"articles"> | undefined => {
       const eintrag = toc.find(
         (t) =>
           t.pageIndex === pageIndex &&
@@ -355,6 +356,14 @@ export const activateTocRegionsInternal = internalMutation({
       );
       if (eintrag?.articleId) return eintrag.articleId;
       return articles.find((a) => a.pageStart === pageIndex)?._id;
+    };
+    const zielArtikel = (pageIndex: number): Id<"articles"> | undefined => {
+      const genau = artikelAb(pageIndex);
+      // Aufmacherseite: das Verzeichnis nennt die Seite mit Bild und Titel,
+      // der Text der Story beginnt erst auf der naechsten. Die Folgeseite
+      // zaehlt nur, wenn kein eigener Eintrag auf sie zeigt.
+      if (genau || ziele.has(pageIndex + 1)) return genau;
+      return artikelAb(pageIndex + 1);
     };
 
     let eingetragen = 0;
