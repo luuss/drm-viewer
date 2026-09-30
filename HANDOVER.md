@@ -265,6 +265,29 @@ als Text bearbeiten laesst sie sich nicht.
 * Die gespeicherte IDML im Medienspeicher ist dieselbe wie auf dem Stick
   (ETag `195db0e9…`).
 
+## 4b. Dasselbe Bild nur einmal je Artikel (30.09.2026, noch nicht ausgerollt)
+
+Zwei Ursachen, zwei Regeln im Import-Worker:
+
+* **Schmuckrahmen um ein Foto** (`Bilderrahmen hoch.tif` u. ä., das Buchmodell
+  unter einem Umschlag): ein Bildrahmen, in dem ein kleineres Bild liegt und
+  ihn zu mindestens 60 % füllt, ist dessen Unterlage und fällt weg
+  (`ohne_unterlagen` in `extractor/idml_articles.py`). Die Bildunterschrift
+  hängt danach am Foto.
+* **Dasselbe Bild mehrfach** (Aufmacher über die Doppelseite, Buchtitel als
+  Stapel, Rahmen doppelt im Satz): `_store_images` vergleicht die fertigen
+  Bilder (`render.fingerprint`/`same_picture`) und legt je Artikel nur das
+  erste ab. Gleiche Datei mit anderem Aufdruck (Kalenderblatt) bleibt.
+
+Im Bestand betrifft das 43 Bilder in 14 Artikeln: DMZ-Zeitgeschichte 80
+(35 Rahmen, 6 Dubletten), Greim S. 12/13 und DMZ 170 S. 1 (je eine Dublette),
+ZUERST! 3/2026 keine. Für den Bestand gibt es
+`devtools:removeArticleImagesInternal` (mit `probelauf`), damit die Freigaben
+bleiben.
+
+Offen: Convex-Funktionen und Worker auf den Verlagsserver ausrollen
+(Abschnitt 1b, Dienst `import-worker`), danach die 43 Zeilen entfernen.
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde

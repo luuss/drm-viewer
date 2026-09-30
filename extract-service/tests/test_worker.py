@@ -306,3 +306,98 @@ def test_preis_kommt_aus_dem_impressum(monkeypatch):
     )
 
     assert gesendet[0]["priceAmountCents"] == 1280
+
+
+# --- Dasselbe Bild nur einmal je Artikel -------------------------------------
+
+
+def _foto(breite: int, hoehe: int, start: int) -> bytes:
+    """Ein Bild mit Inhalt: ein Verlauf, damit der Abdruck etwas zu greifen hat."""
+    import io
+
+    from PIL import Image
+
+    bild = Image.new("RGB", (breite, hoehe))
+    bild.putdata(
+        [
+            ((start + x * 255 // breite) % 256, (y * 255 // hoehe), 90)
+            for y in range(hoehe)
+            for x in range(breite)
+        ]
+    )
+    buf = io.BytesIO()
+    bild.save(buf, format="JPEG", quality=85)
+    return buf.getvalue()
+
+
+class _BildJob:
+    """Gerade so viel Job, wie `_store_images` braucht."""
+
+    job_id = "j1"
+    issue_id = "i1"
+    publication_id = "p1"
+    _store_images = worker.Job._store_images
+
+    def __init__(self, vorlagen: dict) -> None:
+        self._vorlagen = vorlagen
+        self.abgelegt: list[str] = []
+        self.storage = self
+        self.convex = self
+
+    def _artwork_image(self, img, page_jpeg):
+        return self._vorlagen.get(img.link)
+
+    def put(self, key, data, content_type):
+        from storage import StoredObject
+
+        self.abgelegt.append(key)
+        return StoredObject(key, "eimer", None, len(data))
+
+    def post(self, path, body):
+        return f"asset-{len(self.abgelegt)}"
+
+
+def test_aufmacher_ueber_die_doppelseite_steht_nur_einmal():
+    """Der Rahmen gehoert im Satz zu beiden Seiten, das Bild ist dasselbe."""
+    from extractor.model import AssembledArticle, SourceImage
+
+    links = SourceImage(page_index=12, x0=0.0, y0=0.0, x1=1.0, y1=1.0, link="greim.tif")
+    rechts = SourceImage(
+        page_index=13, x0=0.0, y0=0.0, x1=1.0, y1=1.0, link="greim.tif",
+        caption="Greim an der Maginotlinie",
+    )
+    anderes = SourceImage(page_index=13, x0=0.5, y0=0.5, x1=0.9, y1=0.9, link="karte.tif")
+    artikel = AssembledArticle(title="Durchbruch", images=[links, rechts, anderes])
+    seite = _jpeg(1000, 1400)
+    job = _BildJob({"greim.tif": _foto(800, 560, 0), "karte.tif": _foto(800, 560, 128)})
+
+    bilder = job._store_images(artikel, {12: seite, 13: seite}, [])
+
+    assert [b["sourcePageIndex"] for b in bilder] == [12, 13]
+    assert len(job.abgelegt) == 2
+    # Die Unterschrift hing nur am zweiten Vorkommen und bleibt erhalten.
+    assert bilder[0]["caption"] == "Greim an der Maginotlinie"
+    assert "caption" not in bilder[1]
+
+
+def test_gleiche_vorlage_mit_anderem_aufdruck_bleibt():
+    """Das Kalenderblatt ist je Meldung ein eigenes Bild: das Datum unterscheidet."""
+    from extractor.model import AssembledArticle, SourceImage
+
+    blaetter = [
+        SourceImage(page_index=47, x0=0.05, y0=y, x1=0.19, y1=y + 0.09, link=f"cal-{i}")
+        for i, y in enumerate((0.08, 0.385))
+    ]
+    artikel = AssembledArticle(title="Kalenderblatt", images=blaetter)
+    job = _BildJob({"cal-0": _foto(320, 300, 0), "cal-1": _foto(320, 300, 60)})
+
+    bilder = job._store_images(artikel, {47: _jpeg(1000, 1400)}, [])
+
+    assert len(bilder) == 2
+
+
+def test_einfarbige_flaechen_verschiedener_form_sind_nicht_dasselbe():
+    quer = worker.render.fingerprint(_jpeg(1237, 933))
+    hoch = worker.render.fingerprint(_jpeg(771, 933))
+    assert worker.render.same_picture(quer, worker.render.fingerprint(_jpeg(1237, 933)))
+    assert not worker.render.same_picture(quer, hoch)

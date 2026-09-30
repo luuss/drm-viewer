@@ -187,3 +187,40 @@ def test_karte_mit_beschriftung_bleibt():
     marke = _Rahmen(4, 0.1, 0.1, 0.2, 0.15, story="s1")
     uebrig = ohne_unterlagen([karte], [marke], {"s1": "beiwerk"})
     assert uebrig == [karte]
+
+
+def test_papierrahmen_um_ein_foto_ist_schmuck():
+    from extractor.idml_articles import ohne_unterlagen
+
+    # DMZ-Zeitgeschichte 80, S. 9: "Bilderrahmen hoch.tif" mit dem Foto darin.
+    rahmen = _Rahmen(8, 0.509, 0.060, 0.982, 0.537)
+    foto = _Rahmen(8, 0.530, 0.080, 0.962, 0.517)
+    uebrig = ohne_unterlagen([rahmen, foto], [], {})
+    assert uebrig == [foto]
+
+
+def test_aufmacher_mit_eingeklinktem_bild_bleibt():
+    from extractor.idml_articles import ohne_unterlagen
+
+    # Das kleine Bild fuellt den Aufmacher nur zu einem Viertel.
+    aufmacher = _Rahmen(12, 0.0, 0.0, 1.0, 1.0)
+    klein = _Rahmen(12, 0.5, 0.5, 1.0, 1.0)
+    uebrig = ohne_unterlagen([aufmacher, klein], [], {})
+    assert uebrig == [aufmacher, klein]
+
+
+def test_gefaecherte_bilder_bleiben_alle():
+    from extractor.idml_articles import ohne_unterlagen
+
+    # Drei Buchtitel als Faecher: sie ueberdecken sich, keiner steckt im anderen.
+    baende = [_Rahmen(11, 0.10 + 0.03 * i, 0.10 + 0.02 * i, 0.40 + 0.03 * i, 0.50 + 0.02 * i) for i in range(3)]
+    assert ohne_unterlagen(baende, [], {}) == baende
+
+
+def test_deckungsgleiche_rahmen_bleiben_beide():
+    from extractor.idml_articles import ohne_unterlagen
+
+    # Dass beide dasselbe zeigen, merkt erst der Worker am fertigen Bild.
+    a = _Rahmen(0, 0.486, 0.867, 0.853, 0.933)
+    b = _Rahmen(0, 0.486, 0.867, 0.853, 0.933)
+    assert ohne_unterlagen([a, b], [], {}) == [a, b]

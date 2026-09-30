@@ -190,3 +190,37 @@ def fit_image(image_bytes: bytes, max_edge: int = 1600, quality: int = 82) -> by
 def image_size(image_bytes: bytes) -> tuple[int, int]:
     with Image.open(io.BytesIO(image_bytes)) as image:
         return image.width, image.height
+
+
+# Zwei Artikelbilder gelten als dasselbe Bild, wenn ihre verkleinerten
+# Graustufenfassungen sich kaum unterscheiden. An den vier Musterheften
+# gemessen (2333 Paare innerhalb eines Artikels): dieselbe Vorlage ergibt 0,
+# das aehnlichste Paar verschiedener Bilder — zwei Seiten desselben
+# Schriftstuecks — 16.
+SAME_PICTURE_EDGE = 32
+SAME_PICTURE_RMS = 6.0
+SAME_PICTURE_ASPECT = 0.03
+
+Fingerprint = tuple[float, bytes]
+
+
+def fingerprint(image_bytes: bytes) -> Fingerprint:
+    """Seitenverhaeltnis und grobe Graustufenfassung eines Bildes."""
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        verhaeltnis = image.width / max(1, image.height)
+        klein = image.convert("L").resize(
+            (SAME_PICTURE_EDGE, SAME_PICTURE_EDGE), Image.LANCZOS
+        )
+        return verhaeltnis, klein.tobytes()
+
+
+def same_picture(a: Fingerprint, b: Fingerprint) -> bool:
+    """Zeigen zwei Abdruecke dasselbe Bild?
+
+    Das Seitenverhaeltnis zaehlt mit: einfarbige Flaechen verschiedener Form
+    sehen verkleinert gleich aus.
+    """
+    if abs(a[0] - b[0]) > SAME_PICTURE_ASPECT * max(a[0], b[0]):
+        return False
+    quadrate = sum((x - y) ** 2 for x, y in zip(a[1], b[1]))
+    return (quadrate / len(a[1])) ** 0.5 < SAME_PICTURE_RMS

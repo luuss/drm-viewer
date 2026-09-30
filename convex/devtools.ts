@@ -282,6 +282,89 @@ export const setArticleStatusInternal = internalMutation({
   },
 });
 
+/**
+ * Bilder aus bestehenden Artikeln nehmen, ohne Neuimport — der verwuerfe die
+ * Freigaben der Redaktion. Gedacht fuer Hefte, die eingelesen wurden, bevor
+ * der Worker doppelte Bilder und Schmuckrahmen selbst aussortierte. Welche
+ * Zeilen das sind, rechnet dieselbe Auswertung wie beim Import aus.
+ *
+ * `captionTo` nennt das Bild, das stehen bleibt: hat es noch keine
+ * Bildunterschrift, erbt es die des entfernten. Die Bilddateien selbst
+ * bleiben im Medienspeicher liegen.
+ */
+export const removeArticleImagesInternal = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    remove: v.array(
+      v.object({
+        id: v.id("articleAssets"),
+        captionTo: v.optional(v.id("articleAssets")),
+      }),
+    ),
+    probelauf: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    removed: v.number(),
+    captionsMoved: v.number(),
+    articles: v.number(),
+    probelauf: v.boolean(),
+  }),
+  handler: async (ctx, { issueId, remove, probelauf }) => {
+    const weg = new Set<string>(remove.map((r) => r.id));
+    const betroffen = new Set<Id<"articles">>();
+    let removed = 0;
+    let captionsMoved = 0;
+    for (const { id, captionTo } of remove) {
+      const row = await ctx.db.get(id);
+      // Wiederholbar: was schon fehlt, ist erledigt.
+      if (!row) continue;
+      if (row.issueId !== issueId) {
+        throw new Error(`Bild ${id} gehoert nicht zu dieser Ausgabe`);
+      }
+      if (captionTo) {
+        const ziel = await ctx.db.get(captionTo);
+        if (!ziel || ziel.articleId !== row.articleId || weg.has(captionTo)) {
+          throw new Error(`Bild ${captionTo} bleibt nicht im selben Artikel stehen`);
+        }
+        if (row.caption && !ziel.caption) {
+          if (!probelauf) await ctx.db.patch(captionTo, { caption: row.caption });
+          captionsMoved++;
+        }
+      }
+      if (!probelauf) await ctx.db.delete(id);
+      betroffen.add(row.articleId);
+      removed++;
+    }
+    if (!probelauf) {
+      // Die Reihenfolge bleibt lueckenlos, wie der Import sie anlegt.
+      for (const articleId of betroffen) {
+        const rest = await ctx.db
+          .query("articleAssets")
+          .withIndex("by_article", (q) => q.eq("articleId", articleId))
+          .collect();
+        rest.sort((a, b) => a.order - b.order);
+        for (const [i, r] of rest.entries()) {
+          if (r.order !== i) await ctx.db.patch(r._id, { order: i });
+        }
+      }
+      if (removed > 0) {
+        await audit(
+          ctx,
+          "article.removeImages",
+          issueId,
+          `${removed} Bilder in ${betroffen.size} Artikeln (Kommandozeile)`,
+        );
+      }
+    }
+    return {
+      removed,
+      captionsMoved,
+      articles: betroffen.size,
+      probelauf: probelauf === true,
+    };
+  },
+});
+
 /** Die juengsten Importauftraege, um den Worker von aussen zu beobachten. */
 export const recentJobsInternal = internalQuery({
   args: {},

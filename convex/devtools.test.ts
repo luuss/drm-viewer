@@ -198,3 +198,113 @@ describe("Quellen einer Ausgabe", () => {
     expect(pages[1]).toMatchObject({ index: 1, sourcePageIndex: 1, sourceHalf: null });
   });
 });
+
+describe("Bilder per Kommandozeile aus Artikeln nehmen", () => {
+  async function artikelMitBildern(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => {
+      const now = Date.now();
+      const publicationId = await ctx.db.insert("publications", {
+        name: "DMZ-Zeitgeschichte",
+        slug: "dmz-zeitgeschichte",
+        isActive: true,
+        createdAt: now,
+      });
+      const issueId = await ctx.db.insert("issues", {
+        publicationId,
+        title: "DMZ-Zeitgeschichte 80",
+        slug: "dmz-zg-80",
+        pageCount: 65,
+        priceAmountCents: 990,
+        isPublished: false,
+        includedInSubscription: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const articleId = await ctx.db.insert("articles", {
+        issueId,
+        order: 1,
+        title: "Standartenführer Alfons Rebane",
+        source: "idml",
+        reviewStatus: "approved",
+        primaryPageIndex: 9,
+        pageStart: 9,
+        pageEnd: 12,
+        searchText: "Rebane",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const bilder = [];
+      for (const [i, caption] of [undefined, "Rebane als Oberleutnant", undefined].entries()) {
+        const assetId = await ctx.db.insert("assets", {
+          key: `images/9-${i}.jpg`,
+          contentType: "image/jpeg",
+          kind: "image",
+          issueId,
+          createdAt: now,
+        });
+        bilder.push(
+          await ctx.db.insert("articleAssets", { articleId, issueId, assetId, order: i, caption }),
+        );
+      }
+      return { issueId, articleId, bilder };
+    });
+  }
+
+  test("Rahmen faellt weg, seine Bildunterschrift geht an das Foto", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, articleId, bilder } = await artikelMitBildern(t);
+    const [aufmacher, rahmen, foto] = bilder;
+    const remove = [{ id: rahmen, captionTo: foto }];
+
+    const probe = await t.mutation(internal.devtools.removeArticleImagesInternal, {
+      issueId,
+      remove,
+      probelauf: true,
+    });
+    expect(probe).toEqual({ removed: 1, captionsMoved: 1, articles: 1, probelauf: true });
+    expect(await t.run(async (ctx) => await ctx.db.get(rahmen))).not.toBeNull();
+
+    const result = await t.mutation(internal.devtools.removeArticleImagesInternal, { issueId, remove });
+    expect(result).toEqual({ removed: 1, captionsMoved: 1, articles: 1, probelauf: false });
+
+    const rest = await t.run(async (ctx) =>
+      ctx.db
+        .query("articleAssets")
+        .withIndex("by_article", (q) => q.eq("articleId", articleId))
+        .collect(),
+    );
+    expect(rest.map((r) => [r._id, r.order, r.caption])).toEqual([
+      [aufmacher, 0, undefined],
+      [foto, 1, "Rebane als Oberleutnant"],
+    ]);
+
+    // Wiederholbar: beim zweiten Lauf ist nichts mehr zu tun.
+    const nochmal = await t.mutation(internal.devtools.removeArticleImagesInternal, { issueId, remove });
+    expect(nochmal.removed).toBe(0);
+  });
+
+  test("Bild einer anderen Ausgabe bricht ab", async () => {
+    const t = convexTest(schema, modules);
+    const { bilder } = await artikelMitBildern(t);
+    const fremd = await t.run(async (ctx) => {
+      const publicationId = (await ctx.db.query("publications").first())!._id;
+      return await ctx.db.insert("issues", {
+        publicationId,
+        title: "Anderes Heft",
+        slug: "anderes-heft",
+        pageCount: 1,
+        priceAmountCents: 990,
+        isPublished: false,
+        includedInSubscription: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+    await expect(
+      t.mutation(internal.devtools.removeArticleImagesInternal, {
+        issueId: fremd,
+        remove: [{ id: bilder[0] }],
+      }),
+    ).rejects.toThrow(/gehoert nicht zu dieser Ausgabe/);
+  });
+});

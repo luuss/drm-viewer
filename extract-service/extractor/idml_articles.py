@@ -88,6 +88,14 @@ UNTERLAGE_ANTEIL = 0.30
 # Nur Beiwerk verraet eine Unterlage. Steht Mengentext oder eine Ueberschrift
 # im Bild, ist es ein Aufmacherfoto mit Text darauf und bleibt.
 UNTERLAGE_ROLLEN = ("kasten", "beiwerk", "zwischentitel", "quelle", "autor")
+# Dasselbe gilt fuer ein Bild im Bild: der Papierrahmen mit Buettenrand um das
+# Foto, das Buchmodell unter dem Umschlag. Als eigenes Artikelbild zeigt die
+# Unterlage das Foto ein zweites Mal — oder, aus der verknuepften Datei, nur
+# den leeren Rahmen. An den vier Musterheften gemessen fuellt das Foto seinen
+# Rahmen zu 73 bis 88 Prozent; ein Aufmacher mit eingeklinktem Bild kommt auf
+# hoechstens 46.
+BILD_UNTERLAGE_ANTEIL = 0.60
+BILD_UNTERLAGE_RAND = 0.01
 
 
 def _steckt_drin(bild, text, rand: float = 0.004) -> float:
@@ -112,6 +120,10 @@ def ohne_unterlagen(bildrahmen: list, textrahmen: list, rollen: dict) -> list:
     Kalenderblatt, den Zierstern und das Fusszeilenlogo — zusammen 43 von 966
     Bildrahmen. Fotos mit Text darauf bleiben, weil dort Mengentext im Rahmen
     steht und nicht Beiwerk.
+
+    Danach faellt weg, was nur ein anderes Bild einfasst (siehe
+    `BILD_UNTERLAGE_ANTEIL`): in DMZ-Zeitgeschichte 80 sind das 35 Rahmen, in
+    den anderen drei Heften keiner.
     """
     je_seite: dict[int, list] = {}
     for t in textrahmen:
@@ -125,7 +137,28 @@ def ohne_unterlagen(bildrahmen: list, textrahmen: list, rollen: dict) -> list:
         )
         if not unterlage:
             behalten.append(bild)
-    return behalten
+    return [b for b in behalten if not _fasst_bild_ein(b, behalten)]
+
+
+def _flaeche(rahmen) -> float:
+    return max(0.0, rahmen.x1 - rahmen.x0) * max(0.0, rahmen.y1 - rahmen.y0)
+
+
+def _fasst_bild_ein(bild, alle: list) -> bool:
+    """Liegt ein kleineres Bild im Rahmen und fuellt ihn weitgehend aus?
+
+    Nur der groessere von beiden ist Unterlage. Zwei deckungsgleiche Rahmen
+    bleiben deshalb beide stehen; dass sie dasselbe zeigen, merkt der Worker
+    am fertigen Bild.
+    """
+    flaeche = _flaeche(bild)
+    return any(
+        anderes is not bild
+        and anderes.page_number == bild.page_number
+        and _flaeche(anderes) < flaeche
+        and _steckt_drin(bild, anderes, BILD_UNTERLAGE_RAND) >= BILD_UNTERLAGE_ANTEIL
+        for anderes in alle
+    )
 
 
 def rollen_je_story(blocks: list[SourceBlock]) -> dict[str, str]:

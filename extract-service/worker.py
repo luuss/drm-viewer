@@ -165,6 +165,7 @@ class Job:
             jobId=self.job_id,
             fromArtwork=getattr(self, "_artwork_used", 0),
             artworkAvailable=len(getattr(self, "_artwork", {})),
+            duplicatesDropped=getattr(self, "_doppelt", 0),
         )
         toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
         self.beat(92, "Ergebnis wird uebernommen")
@@ -703,13 +704,18 @@ class Job:
         self, article, page_images: dict[int, bytes], reader_blocks
     ) -> list[dict]:
         out = []
+        # Dasselbe Bild steht in einem Artikel nur einmal: ein Aufmacher ueber
+        # die Doppelseite gehoert im Satz zu beiden Seiten, ein Buchtitel liegt
+        # als Stapel fuenfmal uebereinander. Verglichen wird das fertige Bild,
+        # nicht der Dateiname — dieselbe Vorlage mit anderem Aufdruck (das
+        # Kalenderblatt mit seinem Datum) ist ein anderes Bild.
+        gesehen: list[tuple[render.Fingerprint, dict]] = []
         for img in article.images:
             page_jpeg = page_images.get(img.page_index)
             if not page_jpeg:
                 continue
             cropped = self._artwork_image(img, page_jpeg)
-            if cropped is not None:
-                self._artwork_used = getattr(self, "_artwork_used", 0) + 1
+            aus_vorlage = cropped is not None
             if cropped is None:
                 try:
                     cropped = render.crop_region(
@@ -717,6 +723,23 @@ class Job:
                     )
                 except Exception:
                     continue
+            try:
+                abdruck = render.fingerprint(cropped)
+            except Exception:
+                abdruck = None
+            if abdruck is not None:
+                erstes = next(
+                    (e for a, e in gesehen if render.same_picture(a, abdruck)), None
+                )
+                if erstes is not None:
+                    # Die Unterschrift geht nicht verloren, wenn sie nur am
+                    # zweiten Vorkommen hing.
+                    if img.caption and "caption" not in erstes:
+                        erstes["caption"] = img.caption
+                    self._doppelt = getattr(self, "_doppelt", 0) + 1
+                    continue
+            if aus_vorlage:
+                self._artwork_used = getattr(self, "_artwork_used", 0) + 1
             key = issue_key(
                 self.publication_id,
                 self.issue_id,
@@ -767,6 +790,8 @@ class Job:
                 if anchor is not None:
                     entry["afterBlockOrder"] = anchor
             out.append(entry)
+            if abdruck is not None:
+                gesehen.append((abdruck, entry))
         return out
 
 
