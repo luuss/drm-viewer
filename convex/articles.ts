@@ -10,6 +10,8 @@ import { requireEditor, requirePublisher, audit } from "./roles";
 import { hasIssueAccess, accessibleIssueIds } from "./access";
 import { blockType, tableData } from "./schema";
 import { assetUrl } from "./assets";
+import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 const regionInput = v.object({
@@ -312,6 +314,8 @@ export const getForReader = query({
       pageStart: article.pageStart,
       pageEnd: article.pageEnd,
       blocks: blocks.map((b) => ({
+        // Anker fuer Bestellknoepfe (articleProducts.forReader: `blockOrder`).
+        order: b.order,
         type: b.type,
         text: b.text,
         page: b.sourcePageIndex ?? null,
@@ -484,6 +488,7 @@ export const deleteBlock = mutation({
     await requireEditor(ctx);
     const block = await ctx.db.get(blockId);
     if (!block) return;
+    await deleteLinksForBlock(ctx, blockId);
     await ctx.db.delete(blockId);
     await rebuildSearchText(ctx, block.articleId);
   },
@@ -782,7 +787,10 @@ export const removeArticle = mutation({
         .query(table)
         .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
         .collect();
-      for (const r of rows) await ctx.db.delete(r._id);
+      for (const r of rows) {
+        if (table === "articleBlocks") await deleteLinksForBlock(ctx, r._id as Id<"articleBlocks">);
+        await ctx.db.delete(r._id);
+      }
     }
     await ctx.db.delete(articleId);
     await renumber(ctx, article.issueId);
@@ -814,6 +822,7 @@ export const replaceForIssueInternal = internalMutation({
         }
         await ctx.db.delete(a._id);
       }
+      await deleteLinksForIssue(ctx, issueId);
     }
 
     const now = Date.now();
@@ -888,6 +897,7 @@ export const replaceForIssueInternal = internalMutation({
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
     await ctx.db.patch(issueId, { articleCount: all.length, updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.articleProducts.matchInternal, { issueId });
     return all.length;
   },
 });

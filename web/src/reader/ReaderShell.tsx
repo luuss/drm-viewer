@@ -8,6 +8,7 @@ import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import { ProductChoice } from "./ShopProduct";
 
 type Mode = "page" | "article";
 type PageLayout = "single" | "spread";
@@ -36,6 +37,7 @@ export default function ReaderShell() {
   const pages = useQuery(api.issuePages.listForReader, { issueId });
   const articles = useQuery(api.articles.listForReader, { issueId });
   const regions = useQuery(api.articles.regionsForReader, { issueId });
+  const productLinks = useQuery(api.articleProducts.forReader, { issueId });
   const progress = useQuery(api.progress.get, { issueId });
   const openSession = useMutation(api.readerSessions.issue);
   const saveProgress = useMutation(api.progress.save);
@@ -54,6 +56,11 @@ export default function ReaderShell() {
   // Lesetext. Null heisst: am Anfang des Artikels.
   const [artikelEinstieg, setArtikelEinstieg] = useState<number | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
+  // Angetippte Anzeige im Seitenmodus: erst die Auswahl "bestellen oder lesen".
+  const [adChoice, setAdChoice] = useState<{
+    articleId: Id<"articles">;
+    fromPageIndex?: number;
+  } | null>(null);
   const [restored, setRestored] = useState(false);
   const saveTimer = useRef<number | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -197,6 +204,32 @@ export default function ReaderShell() {
     [articleList, pageIndex, persist, searchParams, setSearchParams],
   );
 
+  const productsByArticle = useMemo(
+    () => new Map((productLinks ?? []).map((entry) => [entry.articleId, entry])),
+    [productLinks],
+  );
+
+  /**
+   * Tipp auf eine Artikelflaeche im Seitenmodus. Eine Anzeige mit Produkt im
+   * Laden oeffnet nicht gleich ihren Text, sondern fragt erst.
+   */
+  const openFromPage = useCallback(
+    (id: Id<"articles">, fromPageIndex?: number) => {
+      if (!productsByArticle.get(id)?.isAd) {
+        openArticle(id, fromPageIndex);
+        return;
+      }
+      // Ein Tipp erreicht die Seite auf zwei Wegen (Flaeche und Zeichenflaeche);
+      // die angetippte Seite des ersten bleibt stehen.
+      setAdChoice((current) =>
+        current?.articleId === id
+          ? { articleId: id, fromPageIndex: current.fromPageIndex ?? fromPageIndex }
+          : { articleId: id, fromPageIndex },
+      );
+    },
+    [productsByArticle, openArticle],
+  );
+
   const goArticle = useCallback(
     (index: number) => {
       const clamped = Math.max(0, Math.min(index, articleList.length - 1));
@@ -282,8 +315,11 @@ export default function ReaderShell() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setTocOpen(false);
+        setAdChoice(null);
         return;
       }
+      // Solange die Auswahl offen ist, blaettert nichts dahinter.
+      if (adChoice) return;
       // Liegt der Fokus auf einem Bedienelement — vor allem auf dem Regler der
       // unteren Leiste —, gehoert die Pfeiltaste diesem Element. Sonst blaettert
       // ein einziger Tastendruck zwei Seiten weiter.
@@ -311,7 +347,7 @@ export default function ReaderShell() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [prev, next, canPrev, canNext]);
+  }, [prev, next, canPrev, canNext, adChoice]);
 
   if (access === undefined || issue === undefined) {
     return <div className="centered">Laden...</div>;
@@ -430,7 +466,7 @@ export default function ReaderShell() {
               sessionToken={sessionToken}
               regions={regions ?? []}
               watermark={watermark}
-              onOpenArticle={openArticle}
+              onOpenArticle={openFromPage}
               onNavigatePage={goPage}
               onPrev={prev}
               onNext={next}
@@ -443,6 +479,10 @@ export default function ReaderShell() {
         ) : (
           <ArticleMode
             articleId={articleId ?? articleList[0]?._id ?? null}
+            products={
+              productsByArticle.get((articleId ?? articleList[0]?._id) as Id<"articles">)
+                ?.products ?? []
+            }
             fromPageIndex={artikelEinstieg}
             watermark={watermark}
             pageLabel={pageLabel}
@@ -478,6 +518,17 @@ export default function ReaderShell() {
         }}
         onArticle={openArticle}
       />
+
+      {adChoice && mode === "page" && (
+        <ProductChoice
+          products={productsByArticle.get(adChoice.articleId)?.products ?? []}
+          onRead={() => {
+            setAdChoice(null);
+            openArticle(adChoice.articleId, adChoice.fromPageIndex);
+          }}
+          onClose={() => setAdChoice(null)}
+        />
+      )}
     </div>
   );
 }

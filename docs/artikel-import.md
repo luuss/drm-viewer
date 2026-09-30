@@ -267,6 +267,13 @@ Sichtbar sind die Flaechen erst, wenn der Artikel freigegeben und die Ausgabe
 veroeffentlicht ist. Zum Durchsehen eines frisch importierten Hefts gibt es in
 der Pruefansicht den Knopf **Alle offenen freigeben**.
 
+### Buchanzeigen
+
+Nach der Aktivierung gleicht der Leser die Buchanzeigen und Besprechungen des
+Hefts mit dem Laden ab und haengt den Bestellknopf an den Anzeigenabsatz
+(Artikelnummer, sonst Titel). Regeln, Daten und Korrekturen:
+[shop-integration.md](shop-integration.md), Abschnitt "Buchanzeigen im Heft".
+
 ## 4. Redaktionelle Pruefung
 
 Importierte Artikel haben den Reviewstatus `pending`. Die Redaktion kann:
@@ -276,6 +283,7 @@ Importierte Artikel haben den Reviewstatus `pending`. Die Redaktion kann:
 * Artikel zusammenfuehren,
 * an einer Blockgrenze trennen — dabei wandern Regionen und Seitenbezug mit,
 * Artikel freigeben (`approved`) oder ausschliessen (`excluded`),
+* die Produkte im Netzladen zu einer Anzeige korrigieren,
 * das Inhaltsverzeichnis korrigieren.
 
 Es gibt **keinen** eigenen Veroeffentlichungsschritt je Artikel. Sichtbar wird

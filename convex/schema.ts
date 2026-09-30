@@ -351,6 +351,62 @@ export default defineSchema(
     .index("by_issue", ["issueId"])
     .index("by_issue_order", ["issueId", "order"]),
 
+  /**
+   * Produkte des Verlagsladens, auf die Anzeigen im Heft zeigen: letzter
+   * Stand aus der Shop-API, nachts nachgefuehrt (articleProducts.ts). Der
+   * Leser zeigt nur aktive Produkte; ein geloeschtes verliert seinen Knopf.
+   */
+  shopProducts: defineTable({
+    productId: v.number(),
+    reference: v.string(),
+    name: v.string(),
+    url: v.string(),
+    priceCents: v.optional(v.number()),
+    active: v.boolean(),
+    checkedAt: v.number(),
+  })
+    .index("by_product", ["productId"])
+    .index("by_checked", ["checkedAt"]),
+
+  /**
+   * Buchanzeige im Heft → Produkt im Laden. Die Zeile haengt am Absatz, in
+   * dem Artikelnummer oder Umfangsangabe stehen; so wandert sie mit, wenn die
+   * Redaktion Artikel trennt oder zusammenfuehrt. Ohne `productId` ist die
+   * Anzeige erkannt, aber (noch) keinem Produkt zugeordnet.
+   *
+   * `source`: `number` = Artikelnummer ist die Referenz im Laden, `title` =
+   * Titelabgleich, `editor` = von der Redaktion gesetzt (productOverrides).
+   */
+  articleProducts: defineTable({
+    issueId: v.id("issues"),
+    blockId: v.id("articleBlocks"),
+    order: v.number(),
+    source: v.union(v.literal("number"), v.literal("title"), v.literal("editor")),
+    reference: v.optional(v.string()),
+    productId: v.optional(v.number()),
+    // Fuer die Redaktion: woran die Anzeige erkannt wurde und warum sie
+    // ohne Produkt blieb.
+    label: v.optional(v.string()),
+    note: v.optional(v.string()),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_block", ["blockId"])
+    .index("by_product", ["productId"]),
+
+  /**
+   * Entscheidung der Redaktion fuer einen Anzeigenabsatz, abgelegt unter dem
+   * Schluessel seines Textes (articleProductRules.blockKey). Sie gilt damit
+   * auch nach einem neuen Import und fuer dieselbe Anzeige in spaeteren
+   * Heften. Eine leere Liste heisst: ausdruecklich kein Produkt.
+   */
+  productOverrides: defineTable({
+    key: v.string(),
+    productIds: v.array(v.number()),
+    excerpt: v.string(),
+    updatedByUserId: v.optional(v.id("users")),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   entitlements: defineTable({
     userId: v.id("users"),
     issueId: v.id("issues"),

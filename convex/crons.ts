@@ -25,6 +25,17 @@ crons.daily(
   {},
 );
 
+/**
+ * Taeglich Preis, Adresse und Verfuegbarkeit der Produkte nachfuehren, auf die
+ * Anzeigen im Heft zeigen, und offene Anzeigen juengerer Hefte erneut versuchen.
+ */
+crons.cron(
+  "buchanzeigen mit dem laden abgleichen",
+  "45 4 * * *",
+  internal.articleProducts.refreshInternal,
+  {},
+);
+
 /** Anmeldelinks aelter als ein Tag loeschen (gueltig sind sie nur 15 min). */
 crons.interval("anmeldelinks aufraeumen", { hours: 6 }, internal.magicLink.cleanupInternal, {});
 

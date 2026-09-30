@@ -265,6 +265,88 @@ Freigrenze.
 
 Stand und Betrieb des Moduls: `../../docs/digital-verkauf-shop.md`.
 
+## Buchanzeigen im Heft (seit 30.09.2026)
+
+Die Hefte tragen Anzeigen fuer Buecher aus dem eigenen Laden und
+Buchbesprechungen. Der Import macht daraus kurze Artikel. Der Leser verbindet
+sie mit dem Produkt im Laden: im Artikel steht unter dem Anzeigentext der
+Knopf "Im Shop bestellen", im Seitenmodus oeffnet ein Tipp auf die Anzeige die
+Auswahl "bestellen oder Text lesen". Der Knopf fuehrt auf die Produktseite,
+immer in einem neuen Tab. Fremdanzeigen haben kein Produkt im Laden und
+bleiben ohne Knopf.
+
+Code: `convex/articleProductRules.ts` (Regeln, reine Funktionen),
+`convex/articleProducts.ts` (Abgleich, Abfragen, Korrekturen),
+`web/src/reader/ShopProduct.tsx`, `web/src/admin/ArticleProducts.tsx`.
+
+### Zuordnung
+
+Nach jedem Import laeuft `articleProducts:matchInternal` fuer die Ausgabe
+(Shop-API `search`, je Suchbegriff ein Aufruf):
+
+1. **Artikelnummer.** "Art. 101208", "Art.-Nr.", "Artikelnummer", "Best.-Nr."
+   mit fuenf oder sechs Ziffern ist die Produktreferenz im Laden. Verlinkt
+   wird nur bei genau einem Produkt mit genau dieser Referenz.
+2. **Titel**, wenn keine Nummer dabeisteht. Erkannt wird die Buchbeschreibung
+   an der Umfangsangabe ("216 S., s/w. Abb., Pb., € 17,90"). Gesucht wird mit
+   den Titelzeilen darueber bzw. mit der Literaturangabe einer Besprechung
+   ("Verfasser. Titel. 368 S., geb., …"). Die Ladensuche ist unscharf, deshalb
+   zaehlt ein Treffer nur, wenn sein Name woertlich in der Titelzone steht,
+   und nach Punkten: Preis gleich +2, Verfasser (Herstellerfeld) in der
+   Titelzone +2, Name ist genau eine Zeile +1, Name hat drei Woerter +1, Name
+   ist ein Wort -1, Preis verschieden -1. Ab 3 Punkten wird verlinkt; bei
+   Gleichstand (Baende gleichen Namens und Preises) nicht.
+
+Das Euro-Zeichen kommt in den DMZ-Schriften als "t" aus dem Satz ("t 29,80");
+die Preiserkennung nimmt beides.
+
+Stand der vier Hefte am 30.09.2026: 22 von 22 Artikelnummern zugeordnet
+(DMZ 170, DMZ-Zeitgeschichte 80), 9 von 15 Beschreibungen ohne Nummer. Offen
+bleiben drei Buecher, die der Laden nicht fuehrt, "Veteranen der Waffen-SS
+berichten, Bd. 12" (zwei Baende gleichen Namens und Preises) und zwei
+Anzeigen, deren Titel nur auf dem abgebildeten Umschlag steht.
+
+### Daten
+
+| Tabelle | Inhalt |
+|---|---|
+| `articleProducts` | je Anzeigenabsatz eine Zeile: `blockId`, `source` (`number`, `title`, `editor`), `productId`; ohne `productId` ist die Anzeige erkannt, aber offen (`note` sagt warum) |
+| `shopProducts` | Name, Adresse, Preis, `active` je Produkt, Stand der Shop-API |
+| `productOverrides` | Entscheidung der Redaktion je Absatz, unter dem Schluessel seines Textes |
+
+Die Zeile haengt am Absatz, nicht am Artikel: sie wandert mit, wenn die
+Redaktion Artikel trennt oder zusammenfuehrt. Adressen kommen nur aus der
+Antwort des Ladens und nur von `lesenundschenken.de`.
+
+Der Seitenmodus fragt nur bei kurzen Artikeln (bis 3000 Zeichen) erst nach.
+Steht eine Anzeige in einem langen Artikel, oeffnet der Tipp den Artikel und
+der Knopf steht an seiner Stelle im Text.
+
+### Redaktion
+
+Pruefansicht → Artikel oeffnen → "Produkte im Netzladen": falsche Verknuepfung
+entfernen, offener Anzeige ein Produkt geben, weiteres Produkt ergaenzen
+(Suche nach Titel, Artikelnummer oder eingefuegter Produktadresse),
+"Automatik" nimmt die Entscheidung zurueck. Eine Entscheidung gilt auch nach
+einem neuen Import und fuer denselben Anzeigentext in spaeteren Heften.
+"Mit dem Netzladen abgleichen" stoesst den Abgleich von Hand an.
+
+### Nachfuehren
+
+Taeglich 04:45 UTC (`articleProducts:refreshInternal`): bis zu 200 Produkte
+mit der aeltesten Pruefung per `product` neu lesen (Preis, Adresse, `active`;
+ein geloeschtes Produkt verliert den Knopf) und Hefte der letzten 60 Tage mit
+offenen Anzeigen neu abgleichen, weil ein Buch oft erst nach dem Heft im
+Laden steht. Antwortet der Laden beim Abgleich nicht, bleibt der alte Stand
+und der Lauf wiederholt sich nach 5 min, 30 min und 2 h.
+
+Von Hand:
+
+```bash
+npx convex run --env-file _scratch/verlag-direkt.env \
+  articleProducts:matchInternal '{"issueId":"<id>"}'
+```
+
 ## Kaufknoepfe im Leser
 
 Der alte eigene Stripe-Checkout ist aus (`STRIPE_CHECKOUT_ENABLED`, Aktionen

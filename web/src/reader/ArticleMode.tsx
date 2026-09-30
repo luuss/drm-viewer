@@ -1,11 +1,14 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import ArtikelTabelle from "../components/ArtikelTabelle";
+import { ShopProductLink, type ReaderProduct } from "./ShopProduct";
 
 type Props = {
   articleId: Id<"articles"> | null;
+  /** Bestellbare Produkte zu Anzeigen in diesem Artikel. */
+  products?: ReaderProduct[];
   watermark: string;
   /** Gedruckte Seitenzahl zu einer Leseseite (U1 statt 1 auf dem Umschlag). */
   pageLabel: (index: number) => string;
@@ -26,6 +29,7 @@ type Props = {
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
 export default function ArticleMode({
   articleId,
+  products = [],
   watermark,
   pageLabel,
   onPrev,
@@ -144,6 +148,16 @@ export default function ArticleMode({
       ];
     });
 
+  // Der Bestellknopf steht unter dem Absatz der Anzeige, zu dem er gehoert.
+  // Was keinen sichtbaren Absatz findet (der Titel steht schon im Kopf), kommt
+  // ans Ende des Artikels.
+  const shownOrders = new Set(visibleBlocks.map((item) => item.block.order));
+  const productsAfter = (order: number) =>
+    products
+      .filter((product) => product.blockOrder === order)
+      .map((product) => <ShopProductLink key={`product-${product.productId}`} product={product} />);
+  const productsAtEnd = products.filter((product) => !shownOrders.has(product.blockOrder));
+
   return (
     <div className="article-mode">
       <ReaderTurnButton
@@ -190,23 +204,30 @@ export default function ArticleMode({
           }
           const b = item.block;
           const key = `block-${item.index}`;
-          if (b.type === "heading" || b.type === "subheading") {
-            return <h2 key={key} data-source-page={item.page}>{b.text}</h2>;
-          }
-          if (b.type === "quote") {
-            return <blockquote key={key} data-source-page={item.page}>{b.text}</blockquote>;
-          }
-          if (b.type === "lead") {
-            return <p key={key} className="lead" data-source-page={item.page}>{b.text}</p>;
-          }
-          if (b.type === "table" && b.table) {
-            return <ArtikelTabelle key={key} table={b.table} sourcePage={item.page} />;
-          }
-          if (b.type === "caption") {
-            return <p key={key} className="caption" data-source-page={item.page}>{b.text}</p>;
-          }
-          return <p key={key} data-source-page={item.page}>{b.text}</p>;
+          const block =
+            b.type === "heading" || b.type === "subheading" ? (
+              <h2 data-source-page={item.page}>{b.text}</h2>
+            ) : b.type === "quote" ? (
+              <blockquote data-source-page={item.page}>{b.text}</blockquote>
+            ) : b.type === "lead" ? (
+              <p className="lead" data-source-page={item.page}>{b.text}</p>
+            ) : b.type === "table" && b.table ? (
+              <ArtikelTabelle table={b.table} sourcePage={item.page} />
+            ) : b.type === "caption" ? (
+              <p className="caption" data-source-page={item.page}>{b.text}</p>
+            ) : (
+              <p data-source-page={item.page}>{b.text}</p>
+            );
+          return (
+            <Fragment key={key}>
+              {block}
+              {productsAfter(b.order)}
+            </Fragment>
+          );
         })}
+        {productsAtEnd.map((product) => (
+          <ShopProductLink key={`product-${product.productId}`} product={product} />
+        ))}
       </article>
       {watermark && <div className="watermark">{watermark}</div>}
     </div>

@@ -3,6 +3,7 @@ import { useFrage } from "../components/Frage";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id , cleanError } from "../lib/api";
 import ArtikelTabelle from "../components/ArtikelTabelle";
+import ArticleProducts from "./ArticleProducts";
 
 /**
  * Pruefansicht: links die Seitenlage der Regionen, rechts die Bloecke.
@@ -15,6 +16,8 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
   const frage = useFrage();
   const articles = useQuery(api.articles.listForEditors, { issueId });
   const summary = useQuery(api.articles.reviewSummary, { issueId });
+  const productRows = useQuery(api.articleProducts.listForEditors, { issueId });
+  const rematch = useMutation(api.articleProducts.rematch);
   const update = useMutation(api.articles.updateArticle);
   const updateBlock = useMutation(api.articles.updateBlock);
   const deleteBlock = useMutation(api.articles.deleteBlock);
@@ -30,6 +33,7 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
   const [err, setErr] = useState<string | null>(null);
   const [approvingAll, setApprovingAll] = useState(false);
   const [approveNote, setApproveNote] = useState<string | null>(null);
+  const [rematching, setRematching] = useState(false);
 
   if (articles === undefined) return <p className="hint">Laden...</p>;
   if (articles.length === 0)
@@ -38,6 +42,11 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
   const open = articles.find((a) => a._id === openId) ?? null;
   const pendingCount =
     summary?.pending ?? articles.filter((a) => a.reviewStatus === "pending").length;
+  const productsOf = (articleId: Id<"articles">) =>
+    (productRows ?? []).filter((r) => r.articleId === articleId);
+  const linkedCount = (productRows ?? []).filter((r) => r.product).length;
+  // Erkannte Anzeigen, die der Abgleich keinem Produkt zuordnen konnte.
+  const openCount = (productRows ?? []).filter((r) => !r.product && r.source !== "editor").length;
 
   async function guard(fn: () => Promise<unknown>) {
     setErr(null);
@@ -85,6 +94,25 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
         )}
       </div>
       {approveNote && <div className="approve-note">{approveNote}</div>}
+      <div className="review-summary">
+        <span className="hint">
+          Buchanzeigen: {linkedCount} mit Produkt im Netzladen
+          {openCount > 0 ? ` · ${openCount} ohne Zuordnung` : ""}
+        </span>
+        <button
+          className="btn quiet small"
+          disabled={rematching}
+          onClick={() => {
+            setRematching(true);
+            // Der Abgleich laeuft im Hintergrund; die Liste fuellt sich von selbst.
+            guard(() => rematch({ issueId })).finally(() =>
+              window.setTimeout(() => setRematching(false), 4000),
+            );
+          }}
+        >
+          {rematching ? "Gleicht ab..." : "Mit dem Netzladen abgleichen"}
+        </button>
+      </div>
       {err && <div className="err">{err}</div>}
 
       {/* Solange kein Artikel offen ist, braucht die rechte Haelfte keinen Platz;
@@ -105,6 +133,10 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
                   {a.charCount} Zeichen · {a.blocks.length} Blöcke
                   {a.confidence !== null && a.confidence < 0.8
                     ? ` · unsicher (${a.confidence})`
+                    : ""}
+                  {productsOf(a._id).some((r) => r.product) ? " · Bestellknopf" : ""}
+                  {productsOf(a._id).some((r) => !r.product && r.source !== "editor")
+                    ? " · Anzeige ohne Zuordnung"
                     : ""}
                 </span>
               </button>
@@ -206,6 +238,8 @@ export default function ArticleReview({ issueId }: { issueId: Id<"issues"> }) {
               Regionen: {open.regions.length} Klickflächen auf Seite{" "}
               {open.regions.map((r) => r.pageIndex + 1).join(", ") || "—"}
             </p>
+
+            <ArticleProducts key={open._id} articleId={open._id} rows={productsOf(open._id)} />
 
             <ol className="blocks">
               {open.blocks.map((b) => (

@@ -2,7 +2,8 @@
 
 **Neu am 30.09.:** Heftimport auf dem Verlagsserver repariert (lief dort nie),
 alle vier Hefte vom Stick importiert, Import schneller. Einzelheiten in
-Abschnitt 1a und 4.
+Abschnitt 1a und 4. Buchanzeigen im Heft führen jetzt zum Produkt im Shop
+(Abschnitt 4c).
 
 Kurzfassung: Die Anwendung läuft vollständig selbst betrieben auf **d.chuk.dev**
 (Dokploy). Der Umzug auf den **Verlagsserver** ist zur Hälfte fertig: der Stapel
@@ -286,6 +287,30 @@ ZUERST! 3/2026 keine. Sie sind am 30.09. mit
 Neuimport: Freigaben unverändert, 26 Bildunterschriften vom Rahmen ans Foto
 übernommen. Convex-Funktionen und `import-worker` sind auf dem Verlagsserver
 ausgerollt, d.chuk.dev über den Push.
+
+## 4c. Buchanzeigen führen in den Shop (seit 30.09.2026)
+
+Anzeigen für eigene Bücher und Buchbesprechungen tragen im Artikel den Knopf
+„Im Shop bestellen" (Produktseite, immer neuer Tab). Im Seitenmodus öffnet ein
+Tipp auf die Anzeige die Auswahl „bestellen oder Text lesen". Fremdanzeigen
+bleiben ohne Knopf. Regeln, Tabellen und Abläufe: `docs/shop-integration.md`,
+Abschnitt „Buchanzeigen im Heft".
+
+* Zuordnung nach jedem Import von selbst (`articleProducts:matchInternal`):
+  zuerst über die Artikelnummer („Art. 101208" = Referenz im Shop), sonst über
+  Titel, Verfasser und Preis. Verlinkt wird nur ein eindeutiger Treffer.
+* Stand live: DMZ 170 9 Knöpfe, DMZ-Zeitgeschichte 80 16, ZUERST! 3/2026 6,
+  Greim keine Anzeige; 30 Produkte. Sechs Anzeigen bleiben offen (Buch nicht
+  im Shop, zwei Bände gleichen Namens und Preises, Titel nur im Bild).
+* Redaktion → Artikel → „Produkte im Netzladen": entfernen, ergänzen,
+  „Automatik". Eine Entscheidung gilt auch nach einem neuen Import.
+* Täglich 04:45 UTC Preise und Verfügbarkeit nachführen, offene Anzeigen der
+  Hefte der letzten 60 Tage erneut versuchen.
+* Geprüft im Betrieb am 30.09. (Wegwerfkonto, danach gelöscht), Rechner und
+  Telefonbreite mit Berührung: Knopf im Artikel öffnet den Shop im neuen Tab,
+  Auswahl im Seitenmodus, „Text lesen", Esc; Redaktionskasten und Suche.
+* Offen: In den DMZ-Texten steht „t" statt „€" („Art. 102474 t 29,80"); die
+  Preiserkennung kommt damit zurecht, der Lesetext zeigt es aber so.
 
 ---
 

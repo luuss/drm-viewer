@@ -8,6 +8,8 @@ import {
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, audit } from "./roles";
 import { articleInput } from "./articles";
+import { deleteLinksForIssue } from "./articleProducts";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 /** Wie lange ein Worker einen Auftrag fuer sich behalten darf. */
@@ -313,6 +315,9 @@ export const activateResultInternal = internalMutation({
       }
       await ctx.db.delete(a._id);
     }
+    // Die Verknuepfungen zum Laden haengen an den alten Absaetzen; der
+    // Abgleich unten legt sie fuer die neuen wieder an.
+    await deleteLinksForIssue(ctx, issueId);
     const oldToc = await ctx.db
       .query("tocEntries")
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
@@ -418,6 +423,8 @@ export const activateResultInternal = internalMutation({
     }
 
     await ctx.db.patch(issueId, { articleCount: articles.length, updatedAt: now });
+    // Buchanzeigen erkennen und mit dem Laden verbinden (articleProducts.ts).
+    await ctx.scheduler.runAfter(0, internal.articleProducts.matchInternal, { issueId });
     console.log(
       JSON.stringify({
         event: "import.activated",

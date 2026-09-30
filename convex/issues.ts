@@ -511,6 +511,7 @@ export const remove = mutation({
       "articleBlocks",
       "articleRegions",
       "articleAssets",
+      "articleProducts",
       "tocEntries",
       "importJobs",
     ] as const;

@@ -1785,6 +1785,23 @@ button.small, .btn.small {
 }
 .block-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
 
+/* Produkte im Netzladen zu einem Artikel (Buchanzeigen). */
+.article-products {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+.article-products h5 { margin: 0; font-family: var(--sans); font-size: var(--fs-sub); }
+.article-products ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.article-products li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.article-products .what { display: flex; flex-direction: column; flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
+.article-products .row-actions { display: flex; flex-wrap: wrap; gap: var(--s1); }
+
 .toc-editor { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
 /* Wie die Artikelliste ein gerahmter Kasten mit eigener Hoehe. Ein Heft hat
    achtzig Eintraege; ungedeckelt schiebt das Verzeichnis alles andere aus
@@ -2601,6 +2618,45 @@ button.small, .btn.small {
 @media (max-width: 480px) {
   .frage-schleier { align-items: flex-end; }
   .frage-knoepfe .btn { flex: 1 1 8rem; }
+}
+
+/* Bestellknopf zu einer Buchanzeige: im Artikel unter dem Anzeigentext, im
+   Seitenmodus in der Auswahl "bestellen oder lesen". Die ganze Karte ist der
+   Link zur Produktseite im Laden. */
+.shop-produkt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3) var(--s4);
+  padding: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-family: var(--sans);
+  line-height: 1.35;
+}
+.shop-produkt:hover { border-color: var(--accent); color: var(--ink); }
+.shop-produkt:hover .shop-produkt-knopf { background: var(--accent-deep); border-color: var(--accent-deep); }
+.shop-produkt-text { display: flex; flex-direction: column; gap: var(--s1); flex: 1 1 12rem; min-width: 0; }
+.shop-produkt-name { font-weight: 600; font-size: var(--fs-body); overflow-wrap: anywhere; }
+.shop-produkt-preis { color: var(--muted); font-size: var(--fs-sub); }
+.shop-produkt-knopf { flex: 0 0 auto; }
+.article-body .shop-produkt { margin-top: var(--s5); margin-bottom: var(--s5); }
+.article-body .shop-produkt + .shop-produkt { margin-top: calc(-1 * var(--s3)); }
+
+.produkt-wahl { display: flex; flex-direction: column; gap: var(--s4); }
+.produkt-wahl-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.frage .produkt-wahl-kopf h2 { margin: 0; }
+.produkt-wahl-liste { display: grid; gap: var(--s3); max-height: 60vh; overflow: auto; }
+/* In der Auswahl stehen beide Wege gleich breit untereinander. */
+.produkt-wahl .shop-produkt-knopf,
+.produkt-wahl .frage-knoepfe .btn { flex: 1 1 100%; }
+@media (max-width: 480px) {
+  .shop-produkt-knopf { flex: 1 1 100%; }
 }
 
 /* Laden als Kaufweg: Digital-Abo je Reihe in der Redaktion und der Hinweis
