@@ -467,5 +467,34 @@ def refine_toc_hints(
         belegt.add(id(zahl) if zahl is not None else id(zeilen[0]))
         x0, y0, x1, y1 = _flaeche(zeilen + ([zahl] if zahl else []) + unter)
         out.append(replace(hint, x0=x0, y0=y0, x1=x1, y1=y1))
+    _nachbarn_trennen(out)
     out.sort(key=lambda h: (h.page_index, h.toc_page_index or 0, h.y0))
     return out, bilanz
+
+
+def _nachbarn_trennen(hints: list[TocHint]) -> None:
+    """Untereinanderstehende Flaechen teilen sich die Luecke, statt sich zu ueberlappen.
+
+    Der Rand um die Zeilen reicht bei eng gesetzten Verzeichnissen in den
+    Nachbareintrag hinein. Ueberlappen sich zwei Flaechen derselben Spalte
+    nur um diesen Rand, endet die obere und beginnt die untere in der Mitte
+    der Luecke. Groessere Ueberschneidungen sind kein Randproblem und bleiben.
+    """
+    je_seite: dict[int, list[TocHint]] = {}
+    for h in hints:
+        if h.toc_page_index is not None:
+            je_seite.setdefault(h.toc_page_index, []).append(h)
+    for gruppe in je_seite.values():
+        gruppe.sort(key=lambda h: (h.y0, h.x0))
+        for i, oben in enumerate(gruppe):
+            for unten in gruppe[i + 1 :]:
+                breite = min(oben.x1 - oben.x0, unten.x1 - unten.x0)
+                seitlich = min(oben.x1, unten.x1) - max(oben.x0, unten.x0)
+                if breite <= 0 or seitlich < 0.5 * breite:
+                    continue
+                ueberlappung = oben.y1 - unten.y0
+                if ueberlappung <= 0 or ueberlappung > 2 * RAND_Y + 1e-6:
+                    continue
+                mitte = (oben.y1 + unten.y0) / 2
+                oben.y1 = mitte
+                unten.y0 = mitte

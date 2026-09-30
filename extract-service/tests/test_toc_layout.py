@@ -258,6 +258,43 @@ def test_getrennte_woerter_und_anfuehrungszeichen_stoeren_nicht():
     assert abs(out[0].x0 - (0.517 - 0.004)) < 1e-9
 
 
+def test_eng_gesetzte_nachbarn_teilen_sich_die_luecke():
+    """Der Rand reicht sonst in den naechsten Eintrag hinein."""
+    seite = [
+        item("Vergiftete Nachbarschaft", 0.063, 0.1236, 0.250, 0.1366),
+        item("8", 0.305, 0.1236, 0.314, 0.1366),
+        item("Im komplexbeladenen Polen nimmt", 0.063, 0.1366, 0.256, 0.1461, 9),
+        item("die Deutschenfeindlichkeit weiter zu", 0.063, 0.1461, 0.259, 0.1556, 9),
+        item("„Slawischer Landraub“", 0.063, 0.1580, 0.237, 0.1711),
+        item("18", 0.296, 0.1580, 0.314, 0.1711),
+    ]
+    out, _ = refine_toc_hints(
+        [
+            hint(
+                "Vergiftete Nachbarschaft",
+                8,
+                y0=0.083,
+                details="Im komplexbeladenen Polen nimmt die Deutschenfeindlichkeit weiter zu",
+            ),
+            hint("„Slawischer Landraub“", 18, y0=0.125),
+        ],
+        {2: seite},
+    )
+    erster = next(h for h in out if h.printed == 8)
+    zweiter = next(h for h in out if h.printed == 18)
+    mitte = (0.1556 + 0.1580) / 2
+    assert abs(erster.y1 - mitte) < 1e-9
+    assert abs(zweiter.y0 - mitte) < 1e-9
+    # Nebeneinander stehende Flaechen bleiben unangetastet.
+    seite.append(item("Deutschland", 0.56, 0.124, 0.65, 0.137))
+    out, _ = refine_toc_hints(
+        [hint("Vergiftete Nachbarschaft", 8, y0=0.083), hint("Deutschland", 5, y0=0.1, x0=0.5)],
+        {2: seite},
+    )
+    daneben = next(h for h in out if h.printed == 5)
+    assert abs(daneben.y0 - (0.124 - 0.003)) < 1e-9
+
+
 # --- Datei lesen --------------------------------------------------------------
 
 

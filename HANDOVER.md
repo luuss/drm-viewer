@@ -387,16 +387,19 @@ Rahmen war nur nach Zeichenanteil geschätzt (`_verteile_auf_rahmen`).
   <textebene.json>` macht alle Schritte, `dump.mjs` erzeugt die Textebene mit
   pdf.js in Node (wie der Browser), `validate.py` zeichnet die Flächen auf das
   Seitenbild.
-* **Bestand:** DMZ 170 (25 Einträge, 25 Flächen) und DMZ-Zeitgeschichte 80
-  (15 Einträge, 15 Flächen; vorher 11) sind mit der Textebene aus den PDFs auf
-  dem Schreibtisch nachgetragen („DMZ Zeit 78 innen.pdf“ ist das Innenteil der
-  Nr. 80). Ein Eintrag, dessen Artikel erst auf der Folgeseite beginnt
-  (Aufmacherseite mit Bild), führt zu diesem Artikel. ZUERST! 3/2026:
-  das Innenteil-PDF liegt nicht auf diesem Rechner → im Importdialog
-  „Textebene aus Innenteil (PDF)“ mit der Datei vom Stick. Greim hat kein
-  Inhaltsverzeichnis. Die Beschriftungen im Verzeichnis (Drawer) ändert der
-  Auftrag nicht; die zusammengesetzten zweizeiligen Titel kommen erst mit
-  einem neuen Import.
+* Eng gesetzte Einträge untereinander teilen sich die Lücke: der Rand von
+  drei Tausendsteln reichte sonst in den Nachbareintrag. Im Anreißer (ZUERST!)
+  beginnt die Unterzeile bündig mit der großen Seitenzahl, nicht mit dem
+  eingerückten Titel; die Zeilensuche kennt beide linken Kanten.
+* **Bestand (alle drei Hefte mit Verzeichnis nachgetragen, Textebene aus den
+  PDFs in `~/Schreibtisch/Kiel/`):** DMZ 170 25 Einträge, 25 Flächen;
+  DMZ-Zeitgeschichte 80 15 Einträge, 15 Flächen (vorher 11; „DMZ Zeit 78
+  innen.pdf“ ist das Innenteil der Nr. 80); ZUERST! 3/2026 46 Einträge, 45
+  Flächen („Leserbriefe/Impressum 81“ hat keinen Artikel). Ein Eintrag, dessen
+  Artikel erst auf der Folgeseite beginnt (Aufmacherseite mit Bild), führt zu
+  diesem Artikel. Greim hat kein Inhaltsverzeichnis. Die Beschriftungen im
+  Verzeichnis (Drawer) ändert der Auftrag nicht; die zusammengesetzten
+  zweizeiligen Titel kommen erst mit einem neuen Import.
 
 ---
 
