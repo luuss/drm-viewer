@@ -39,13 +39,11 @@ export function AnmeldeRahmen({ titel, children }: { titel: string; children: Re
         </div>
         <div className="titles">
           <h1>{titel}</h1>
-          <p className="subtitle">
-            Die Zeitschriften von Lesen &amp; Schenken digital lesen — auf jedem Gerät.
-          </p>
+
         </div>
         {children}
         <p className="legal-line">
-          <Link to="/">Ohne Anmeldung: Hefte im Kiosk ansehen</Link>
+          <Link to="/">Zurück zur Vorschau ohne Anmeldung</Link>
         </p>
         <p className="legal-line">
           <Link to="/impressum">Impressum</Link> ·{" "}
