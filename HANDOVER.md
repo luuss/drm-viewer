@@ -387,9 +387,11 @@ Rahmen war nur nach Zeichenanteil geschätzt (`_verteile_auf_rahmen`).
   <textebene.json>` macht alle Schritte, `dump.mjs` erzeugt die Textebene mit
   pdf.js in Node (wie der Browser), `validate.py` zeichnet die Flächen auf das
   Seitenbild.
-* **Bestand:** siehe unten (Abschnitt 5) — DMZ 170 und DMZ-Zeitgeschichte 80
-  wurden mit der Textebene aus den PDFs auf dem Schreibtisch nachgetragen
-  („DMZ Zeit 78 innen.pdf“ ist das Innenteil der Nr. 80). ZUERST! 3/2026:
+* **Bestand:** DMZ 170 (25 Einträge, 25 Flächen) und DMZ-Zeitgeschichte 80
+  (15 Einträge, 15 Flächen; vorher 11) sind mit der Textebene aus den PDFs auf
+  dem Schreibtisch nachgetragen („DMZ Zeit 78 innen.pdf“ ist das Innenteil der
+  Nr. 80). Ein Eintrag, dessen Artikel erst auf der Folgeseite beginnt
+  (Aufmacherseite mit Bild), führt zu diesem Artikel. ZUERST! 3/2026:
   das Innenteil-PDF liegt nicht auf diesem Rechner → im Importdialog
   „Textebene aus Innenteil (PDF)“ mit der Datei vom Stick. Greim hat kein
   Inhaltsverzeichnis. Die Beschriftungen im Verzeichnis (Drawer) ändert der
