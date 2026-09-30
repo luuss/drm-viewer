@@ -301,9 +301,11 @@ Abschnitt „Buchanzeigen im Heft".
   Titel, Verfasser und Preis. Verlinkt wird nur ein eindeutiger Treffer.
 * Stand live: DMZ 170 9 Knöpfe, DMZ-Zeitgeschichte 80 16, ZUERST! 3/2026 6,
   Greim keine Anzeige; 30 Produkte. Sechs Anzeigen bleiben offen (Buch nicht
-  im Shop, zwei Bände gleichen Namens und Preises, Titel nur im Bild).
+  im Shop, zwei Bände gleichen Namens und Preises, Titel nur im Bild); sie
+  tragen den Knopf „Zum Shop" auf die Startseite des Shops.
 * Redaktion → Artikel → „Produkte im Netzladen": entfernen, ergänzen,
-  „Automatik". Eine Entscheidung gilt auch nach einem neuen Import.
+  „Kein Knopf", „Automatik". Eine Entscheidung gilt auch nach einem neuen
+  Import.
 * Täglich 04:45 UTC Preise und Verfügbarkeit nachführen, offene Anzeigen der
   Hefte der letzten 60 Tage erneut versuchen.
 * Geprüft im Betrieb am 30.09. (Wegwerfkonto, danach gelöscht), Rechner und

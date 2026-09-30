@@ -3,7 +3,7 @@ import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import ArtikelTabelle from "../components/ArtikelTabelle";
-import { ShopProductLink, type ReaderProduct } from "./ShopProduct";
+import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
 
 type Props = {
   articleId: Id<"articles"> | null;
@@ -155,7 +155,7 @@ export default function ArticleMode({
   const productsAfter = (order: number) =>
     products
       .filter((product) => product.blockOrder === order)
-      .map((product) => <ShopProductLink key={`product-${product.productId}`} product={product} />);
+      .map((product) => <ShopProductLink key={productKey(product)} product={product} />);
   const productsAtEnd = products.filter((product) => !shownOrders.has(product.blockOrder));
 
   return (
@@ -226,7 +226,7 @@ export default function ArticleMode({
           );
         })}
         {productsAtEnd.map((product) => (
-          <ShopProductLink key={`product-${product.productId}`} product={product} />
+          <ShopProductLink key={productKey(product)} product={product} />
         ))}
       </article>
       {watermark && <div className="watermark">{watermark}</div>}

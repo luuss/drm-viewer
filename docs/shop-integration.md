@@ -297,6 +297,12 @@ Nach jedem Import laeuft `articleProducts:matchInternal` fuer die Ausgabe
    ist ein Wort -1, Preis verschieden -1. Ab 3 Punkten wird verlinkt; bei
    Gleichstand (Baende gleichen Namens und Preises) nicht.
 
+Fuehrt der Laden das Buch einer erkannten Anzeige nicht (nicht gefunden, kein
+eindeutiger Treffer, Titel nur im Bild, Produkt inzwischen herausgenommen),
+zeigt der Leser stattdessen den Knopf "Zum Shop" auf die Startseite des
+Ladens, hoechstens einen je Artikel. Die Redaktion stellt ihn mit "Kein Knopf"
+ab oder waehlt ein Produkt.
+
 Das Euro-Zeichen kommt in den DMZ-Schriften als "t" aus dem Satz ("t 29,80");
 die Preiserkennung nimmt beides.
 
@@ -310,7 +316,7 @@ Anzeigen, deren Titel nur auf dem abgebildeten Umschlag steht.
 
 | Tabelle | Inhalt |
 |---|---|
-| `articleProducts` | je Anzeigenabsatz eine Zeile: `blockId`, `source` (`number`, `title`, `editor`), `productId`; ohne `productId` ist die Anzeige erkannt, aber offen (`note` sagt warum) |
+| `articleProducts` | je Anzeigenabsatz eine Zeile: `blockId`, `source` (`number`, `title`, `editor`), `productId`; ohne `productId` ist die Anzeige erkannt, aber offen (`note` sagt warum, Knopf "Zum Shop"), bei `source: editor` ausdruecklich ohne Knopf |
 | `shopProducts` | Name, Adresse, Preis, `active` je Produkt, Stand der Shop-API |
 | `productOverrides` | Entscheidung der Redaktion je Absatz, unter dem Schluessel seines Textes |
 
@@ -325,7 +331,8 @@ der Knopf steht an seiner Stelle im Text.
 ### Redaktion
 
 Pruefansicht → Artikel oeffnen → "Produkte im Netzladen": falsche Verknuepfung
-entfernen, offener Anzeige ein Produkt geben, weiteres Produkt ergaenzen
+entfernen, offener Anzeige ein Produkt geben oder den Knopf abstellen ("Kein
+Knopf"), weiteres Produkt ergaenzen
 (Suche nach Titel, Artikelnummer oder eingefuegter Produktadresse),
 "Automatik" nimmt die Entscheidung zurueck. Eine Entscheidung gilt auch nach
 einem neuen Import und fuer denselben Anzeigentext in spaeteren Heften.

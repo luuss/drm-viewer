@@ -71,7 +71,7 @@ export default function ArticleProducts({
                     row.product.reference && `Art. ${row.product.reference}`,
                     row.product.priceCents !== null && formatEuro(row.product.priceCents),
                     SOURCE_LABEL[row.source],
-                    !row.product.active && "im Netzladen nicht aktiv, im Leser ohne Knopf",
+                    !row.product.active && "im Netzladen nicht aktiv, im Leser: Knopf „Zum Shop“",
                   ]
                     .filter(Boolean)
                     .join(" · ")}
@@ -80,7 +80,10 @@ export default function ArticleProducts({
             ) : (
               <span className="what">
                 <span>{row.note ?? "Ohne Produkt"}</span>
-                <span className="hint">„{row.label}“</span>
+                <span className="hint">
+                  {row.label ? `„${row.label}“ · ` : ""}
+                  {row.source === "editor" ? "im Leser ohne Knopf" : "im Leser: Knopf „Zum Shop“ (Startseite)"}
+                </span>
               </span>
             )}
             <span className="row-actions">
@@ -93,13 +96,24 @@ export default function ArticleProducts({
                   Entfernen
                 </button>
               ) : (
-                <button
-                  className="btn quiet small"
-                  disabled={busy}
-                  onClick={() => setTarget(row.blockId)}
-                >
-                  Produkt wählen
-                </button>
+                <>
+                  <button
+                    className="btn quiet small"
+                    disabled={busy}
+                    onClick={() => setTarget(row.blockId)}
+                  >
+                    Produkt wählen
+                  </button>
+                  {row.source !== "editor" && (
+                    <button
+                      className="btn quiet small danger"
+                      disabled={busy}
+                      onClick={() => run(() => removeLink({ linkId: row._id }))}
+                    >
+                      Kein Knopf
+                    </button>
+                  )}
+                </>
               )}
               {row.source === "editor" && (
                 <button

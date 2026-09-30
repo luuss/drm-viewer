@@ -50,6 +50,14 @@ const POLNISCH = {
   digital: null,
 };
 const CATALOG = [GENERALE, THESEN, POLNISCH];
+/** Knopf zur Startseite des Ladens, wenn er das Buch nicht fuehrt. */
+const shopHome = (blockOrder: number) => ({
+  productId: null,
+  name: "",
+  url: "https://lesenundschenken.de/",
+  priceCents: null,
+  blockOrder,
+});
 
 /** Laden nachstellen: Suche ueber Name, Referenz und Hersteller, jedes Wort muss vorkommen. */
 function stubShop(catalog: any[] = CATALOG) {
@@ -269,14 +277,15 @@ describe("Plan gegen den Laden aufloesen", () => {
     await expect(resolvePlan(plan, shop)).rejects.toThrow(ShopApiError);
   });
 
-  test("Produkt mit fremder Adresse wird nicht verlinkt", async () => {
+  test("Produkt mit fremder Adresse wird nicht verlinkt, der Knopf fuehrt zur Startseite", async () => {
     const t = convexTest(schema, modules);
     vi.useFakeTimers();
     const { issueId, readerId } = await setup(t);
     stubShop([{ ...GENERALE, url: "https://boese.example.com/10623-x.html" }]);
     await importIssue(t, issueId, [AD_NUMBER]);
     await approveAll(t, issueId);
-    expect(await asUser(t, readerId).query(api.articleProducts.forReader, { issueId })).toEqual([]);
+    const seen = await asUser(t, readerId).query(api.articleProducts.forReader, { issueId });
+    expect(seen.map((e: any) => e.products)).toEqual([[shopHome(4)]]);
   });
 });
 
@@ -330,8 +339,10 @@ describe("Abgleich nach dem Import", () => {
           },
         ],
       },
+      // Der Titel steht nicht im Text, der Laden kennt das Buch so nicht:
+      // Knopf zur Startseite.
+      { articleId: third, isAd: true, products: [shopHome(1)] },
     ]);
-    expect(seen.some((e: any) => e.articleId === third)).toBe(false);
 
     expect(await asUser(t, strangerId).query(api.articleProducts.forReader, { issueId })).toEqual([]);
     expect(await t.query(api.articleProducts.forReader, { issueId })).toEqual([]);
@@ -457,6 +468,35 @@ describe("Korrekturen der Redaktion", () => {
     expect(await t.run(async (ctx: any) => (await ctx.db.query("productOverrides").collect()).length)).toBe(0);
   });
 
+  test("offene Anzeige: Knopf zur Startseite, bis die Redaktion ihn abstellt", async () => {
+    const t = convexTest(schema, modules);
+    vi.useFakeTimers();
+    const { issueId, editorId, readerId } = await setup(t);
+    stubShop();
+    // Zwei offene Anzeigen in einem Artikel ergeben einen Knopf, nicht zwei.
+    await importIssue(t, issueId, [
+      [...AD_UNTITLED, "Richard Overy. Warum Krieg? 368 S., geb., t 28,–. Berlin: Rowohlt Berlin Verlag, 2024."],
+      EDITORIAL,
+    ]);
+    await approveAll(t, issueId);
+    const editor = asUser(t, editorId);
+    const reader = asUser(t, readerId);
+    let seen = await reader.query(api.articleProducts.forReader, { issueId });
+    expect(seen.map((e: any) => e.products)).toEqual([[shopHome(1)]]);
+
+    const open = await editor.query(api.articleProducts.listForEditors, { issueId });
+    expect(open.map((r: any) => r.note)).toEqual(["Kein Titel im Anzeigentext", "Im Netzladen nicht gefunden"]);
+    for (const row of open) {
+      await editor.mutation(api.articleProducts.removeLink, { linkId: row._id });
+    }
+    seen = await reader.query(api.articleProducts.forReader, { issueId });
+    expect(seen).toEqual([]);
+    // Bleibt auch nach einem neuen Abgleich abgestellt.
+    await editor.mutation(api.articleProducts.rematch, { issueId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(await reader.query(api.articleProducts.forReader, { issueId })).toEqual([]);
+  });
+
   test("Produkt an einen Artikel ohne erkannte Anzeige haengen, ueber die Produktadresse", async () => {
     const t = convexTest(schema, modules);
     vi.useFakeTimers();
@@ -526,16 +566,19 @@ describe("naechtlicher Lauf", () => {
     await importIssue(t, issueId, [AD_NUMBER, AD_TITLE, AD_UNTITLED]);
     await approveAll(t, issueId);
     const reader = asUser(t, readerId);
-    expect(await reader.query(api.articleProducts.forReader, { issueId })).toHaveLength(2);
+    const products = async () =>
+      (await reader.query(api.articleProducts.forReader, { issueId })).map((e: any) =>
+        e.products.map((p: any) => [p.productId, p.priceCents]),
+      );
+    expect(await products()).toEqual([[[10623, 2980]], [[2590, 1790]], [[null, null]]]);
 
     // Einen Tag spaeter: ein Produkt ist weg, das andere teurer.
     vi.setSystemTime(Date.now() + 25 * 3_600_000);
     stubShop([{ ...THESEN, price_gross: 19.9 }]);
     const result = await t.action(internal.articleProducts.refreshInternal, {});
     expect(result).toEqual({ checked: 1, gone: 1, retried: 1 });
-    const seen = await reader.query(api.articleProducts.forReader, { issueId });
-    expect(seen).toHaveLength(1);
-    expect(seen[0].products[0]).toMatchObject({ productId: 2590, priceCents: 1990 });
+    // Das verschwundene Produkt wird zum Knopf "Zum Shop".
+    expect(await products()).toEqual([[[null, null]], [[2590, 1990]], [[null, null]]]);
 
     // Die Redaktion sieht das verschwundene Produkt weiterhin, als inaktiv.
     const rows = await asUser(t, editorId).query(api.articleProducts.listForEditors, { issueId });

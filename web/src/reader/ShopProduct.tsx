@@ -3,15 +3,21 @@ import { createPortal } from "react-dom";
 import { formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
 
-/** Ein bestellbares Produkt zu einer Anzeige (articleProducts.forReader). */
+/**
+ * Ein bestellbares Produkt zu einer Anzeige (articleProducts.forReader). Ohne
+ * `productId` fuehrt der Laden das Buch nicht (oder nicht eindeutig); der
+ * Knopf fuehrt dann auf die Startseite des Ladens.
+ */
 export type ReaderProduct = {
-  productId: number;
+  productId: number | null;
   name: string;
   url: string;
   priceCents: number | null;
   /** Absatz des Artikels, unter dem der Knopf steht. */
   blockOrder: number;
 };
+
+export const productKey = (product: ReaderProduct) => `product-${product.productId ?? "shop"}`;
 
 /**
  * Bestellknopf zu einer Buchanzeige. Die ganze Karte ist ein gewoehnlicher
@@ -26,6 +32,7 @@ export function ShopProductLink({
   product: ReaderProduct;
   onFollow?: () => void;
 }) {
+  const inShop = product.productId !== null;
   return (
     <a
       className="shop-produkt"
@@ -35,14 +42,18 @@ export function ShopProductLink({
       onClick={onFollow}
     >
       <span className="shop-produkt-text">
-        <span className="shop-produkt-name">{product.name}</span>
-        {product.priceCents !== null && (
-          <span className="shop-produkt-preis">{formatEuro(product.priceCents)}</span>
-        )}
+        <span className="shop-produkt-name">{inShop ? product.name : "Lesen & Schenken"}</span>
+        <span className="shop-produkt-preis">
+          {!inShop
+            ? "lesenundschenken.de"
+            : product.priceCents !== null
+              ? formatEuro(product.priceCents)
+              : ""}
+        </span>
       </span>
       <span className="btn shop-produkt-knopf">
         <Icon name="cart" />
-        Im Shop bestellen
+        {inShop ? "Im Shop bestellen" : "Zum Shop"}
       </span>
     </a>
   );
@@ -89,18 +100,17 @@ export function ProductChoice({
         className="frage produkt-wahl"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="produkt-wahl-titel"
+        aria-label="Bestellen oder lesen"
         ref={box}
       >
         <div className="produkt-wahl-kopf">
-          <h2 id="produkt-wahl-titel">Bestellen oder lesen?</h2>
           <button className="btn quiet small" aria-label="Schließen" onClick={onClose}>
             <Icon name="close" />
           </button>
         </div>
         <div className="produkt-wahl-liste">
           {products.map((product) => (
-            <ShopProductLink key={product.productId} product={product} onFollow={onClose} />
+            <ShopProductLink key={productKey(product)} product={product} onFollow={onClose} />
           ))}
         </div>
         <div className="frage-knoepfe">

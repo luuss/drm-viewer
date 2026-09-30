@@ -2635,8 +2635,7 @@ button.small, .btn.small {
 .article-body .shop-produkt + .shop-produkt { margin-top: calc(-1 * var(--s3)); }
 
 .produkt-wahl { display: flex; flex-direction: column; gap: var(--s4); }
-.produkt-wahl-kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
-.frage .produkt-wahl-kopf h2 { margin: 0; }
+.produkt-wahl-kopf { display: flex; align-items: center; justify-content: flex-end; }
 .produkt-wahl-liste { display: grid; gap: var(--s3); max-height: 60vh; overflow: auto; }
 /* In der Auswahl stehen beide Wege gleich breit untereinander. */
 .produkt-wahl .shop-produkt-knopf,

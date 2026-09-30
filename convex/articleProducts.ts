@@ -13,6 +13,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { hasIssueAccess } from "./access";
 import { requireEditor, audit } from "./roles";
+import { SHOP_URL } from "./shopCovers";
 import {
   ShopApiError,
   ShopProduct,
@@ -497,6 +498,12 @@ export const refreshInternal = internalAction({
  * auf den Artikel erst die Auswahl "bestellen oder lesen" zeigt: nur bei
  * kurzen Texten, also Anzeigen und Besprechungen. In einem langen Artikel
  * steht der Knopf nur an seiner Stelle im Text.
+ *
+ * Fuehrt der Laden das Buch einer erkannten Anzeige nicht (nicht gefunden,
+ * nicht eindeutig, inzwischen herausgenommen), bekommt der Artikel einen
+ * Eintrag ohne `productId`: der Knopf fuehrt auf die Startseite des Ladens.
+ * Hat die Redaktion den Absatz ausdruecklich ohne Produkt gelassen, gibt es
+ * keinen Knopf.
  */
 export const forReader = query({
   args: { issueId: v.id("issues") },
@@ -513,7 +520,7 @@ export const forReader = query({
       articleId: Id<"articles">;
       isAd: boolean;
       products: {
-        productId: number;
+        productId: number | null;
         name: string;
         url: string;
         priceCents: number | null;
@@ -524,7 +531,7 @@ export const forReader = query({
     const articles = new Map<Id<"articles">, Entry | null>();
     const products = new Map<number, Doc<"shopProducts"> | null>();
     for (const row of rows) {
-      if (row.productId === undefined) continue;
+      if (row.productId === undefined && row.source === "editor") continue;
       const block = await ctx.db.get(row.blockId);
       if (!block) continue;
       if (!articles.has(block.articleId)) {
@@ -542,7 +549,7 @@ export const forReader = query({
       }
       const entry = articles.get(block.articleId);
       if (!entry) continue;
-      if (!products.has(row.productId)) {
+      if (row.productId !== undefined && !products.has(row.productId)) {
         products.set(
           row.productId,
           await ctx.db
@@ -551,8 +558,20 @@ export const forReader = query({
             .first(),
         );
       }
-      const product = products.get(row.productId);
-      if (!product || !product.active || !isShopUrl(product.url)) continue;
+      const product = row.productId === undefined ? null : products.get(row.productId);
+      if (!product || !product.active || !isShopUrl(product.url)) {
+        // Je Artikel hoechstens ein Knopf zur Startseite.
+        if (entry.products.some((p) => p.productId === null)) continue;
+        entry.products.push({
+          productId: null,
+          name: "",
+          url: `${SHOP_URL}/`,
+          priceCents: null,
+          blockOrder: block.order,
+          order: row.order,
+        });
+        continue;
+      }
       if (entry.products.some((p) => p.productId === product.productId)) continue;
       entry.products.push({
         productId: product.productId,
