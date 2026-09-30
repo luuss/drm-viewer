@@ -47,8 +47,20 @@ export type RenderedSource<Asset = string> = {
  */
 export type CoverLayout = "auto" | "sheets" | "spreads" | "reading";
 
+/** Eine fertig gerenderte Umschlagseite mit ihrer Rolle. */
+export type CoverPage<Asset = string> = RenderedSource<Asset> & {
+  role: PageRole;
+  printedLabel: string;
+};
+
 export type OrderInput<Asset = string> = {
   inner: { assetId: Asset; pageCount: number; rendered?: RenderedSource<Asset>[] };
+  /**
+   * Umschlagseiten, die der Browser schon als einzelne Leserseiten gerendert
+   * hat: `vorn` vor dem Innenteil (U1, U2), `hinten` danach (U3, U4). Geht
+   * `cover` und `coverImage` vor.
+   */
+  coverReading?: { vorn: CoverPage<Asset>[]; hinten: CoverPage<Asset>[] };
   /** Umschlag als PDF, falls vorhanden. */
   cover?: { assetId: Asset; pageCount: number; rendered?: RenderedSource<Asset>[] };
   /** Titelseite als Bild — dann gibt es nur U1, kein Umschlagbogen. */
@@ -71,6 +83,7 @@ export function resolveLayout(
 
 export function buildPageOrder<Asset = string>({
   inner,
+  coverReading,
   cover,
   coverImageAssetId,
   coverImage,
@@ -78,6 +91,32 @@ export function buildPageOrder<Asset = string>({
   printedStart = 3,
 }: OrderInput<Asset>): PageDraft<Asset>[] {
   const roh: PageDraft<Asset>[] = [];
+  if (coverReading) {
+    const seite = (s: CoverPage<Asset>, position: number): PageDraft<Asset> => ({
+      sourceAssetId: s.assetId,
+      sourcePageIndex: position,
+      role: s.role,
+      printedLabel: s.printedLabel,
+      previewKey: s.previewKey,
+      width: s.width,
+      height: s.height,
+    });
+    coverReading.vorn.forEach((s, i) => roh.push(seite(s, i)));
+    for (let i = 0; i < inner.pageCount; i++) {
+      const fertig = inner.rendered?.[i];
+      roh.push({
+        sourceAssetId: fertig?.assetId ?? inner.assetId,
+        sourcePageIndex: i,
+        role: "content",
+        printedLabel: String(printedStart + i),
+        ...(fertig
+          ? { previewKey: fertig.previewKey, width: fertig.width, height: fertig.height }
+          : {}),
+      });
+    }
+    coverReading.hinten.forEach((s, i) => roh.push(seite(s, coverReading.vorn.length + i)));
+    return roh;
+  }
   const draft = {
     push(seite: PageDraft<Asset>) {
       // Liegt die Seite schon als Bild vor, zeigt sie auf ihr eigenes Asset

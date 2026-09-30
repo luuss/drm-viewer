@@ -51,6 +51,30 @@ def _continues_sentence(prev: SourceBlock | None, block: SourceBlock) -> bool:
     return bool(tail) and tail not in ".!?:»“\"" and head.islower()
 
 
+def assemble_cover_pages(blocks: list[SourceBlock]) -> list[AssembledArticle]:
+    """Je Umschlagtafel ein Artikel: die Anzeige auf U2, U3 oder U4.
+
+    Die Regeln fuer Innenseiten (`assemble`) suchen Ueberschriften und
+    trennen daran; auf einer Anzeigenseite steht aber alles zu einem Stueck,
+    und nichts laeuft auf die naechste Tafel weiter. Die groesste Zeile der
+    Seite ist ihr Titel.
+    """
+    je_seite: dict[int, list[SourceBlock]] = {}
+    for b in blocks:
+        if b.drop or not b.text.strip():
+            continue
+        je_seite.setdefault(b.page_index, []).append(b)
+    out: list[AssembledArticle] = []
+    for page_index in sorted(je_seite):
+        seite = je_seite[page_index]
+        groesste = max(seite, key=lambda b: (b.max_size, -b.y0))
+        titel = " ".join(groesste.text.split())
+        if len(titel) > 120:
+            titel = titel[:117].rstrip() + "…"
+        out.append(AssembledArticle(title=titel, blocks=list(seite)))
+    return out
+
+
 def assemble(
     blocks: list[SourceBlock],
     images: list[SourceImage] | None = None,

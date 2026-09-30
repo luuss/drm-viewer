@@ -701,6 +701,21 @@ export const moveRegion = mutation({
  * freigegeben ist, wird mit der Ausgabe sichtbar — und Aenderungen daran sind
  * bei einer veroeffentlichten Ausgabe sofort live.
  */
+/** Freigabe ohne Anmeldung — fuer Werkzeuge mit Deploy-Schluessel (`npx convex run`). */
+export const setReviewStatusInternal = internalMutation({
+  args: {
+    articleId: v.id("articles"),
+    reviewStatus: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("excluded"),
+    ),
+  },
+  handler: async (ctx, { articleId, reviewStatus }) => {
+    await ctx.db.patch(articleId, { reviewStatus, updatedAt: Date.now() });
+  },
+});
+
 export const setReviewStatus = mutation({
   args: {
     articleId: v.id("articles"),
@@ -806,7 +821,8 @@ export const replaceForIssueInternal = internalMutation({
     replace: v.boolean(),
     articles: v.array(articleInput),
   },
-  handler: async (ctx, { issueId, replace, articles }) => {
+  handler: async (ctx, { issueId, replace, articles }): Promise<{ ids: Id<"articles">[] }> => {
+    const ids: Id<"articles">[] = [];
     if (replace) {
       const old = await ctx.db
         .query("articles")
@@ -849,6 +865,7 @@ export const replaceForIssueInternal = internalMutation({
         createdAt: now,
         updatedAt: now,
       });
+      ids.push(articleId);
       for (const b of a.blocks) {
         await ctx.db.insert("articleBlocks", {
           articleId,
@@ -875,6 +892,7 @@ export const replaceForIssueInternal = internalMutation({
           x1: r.x1,
           y1: r.y1,
           kind: r.kind ?? "body",
+          targetPageIndex: r.targetPageIndex,
           order: i,
         });
       }
@@ -898,6 +916,6 @@ export const replaceForIssueInternal = internalMutation({
       .collect();
     await ctx.db.patch(issueId, { articleCount: all.length, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.articleProducts.matchInternal, { issueId });
-    return all.length;
+    return { ids };
   },
 });

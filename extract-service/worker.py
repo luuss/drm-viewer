@@ -25,7 +25,7 @@ from dataclasses import asdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import render
-from extractor.article_assembler import assemble, flow_text_blocks
+from extractor.article_assembler import assemble, assemble_cover_pages, flow_text_blocks
 from extractor.idml_extract import (
     extract_idml_blocks,
     extract_idml_frames,
@@ -40,6 +40,7 @@ from extractor.issue_meta import publication_date, read_issue_meta
 from extractor.model import SourceBlock
 from extractor.pdf_extract import (
     attach_captions,
+    blocks_from_text_layer,
     extract_pdf_pages,
     mark_furniture,
     prepare_blocks,
@@ -53,6 +54,7 @@ from extractor.publication_profiles import apply_profile
 from extractor.toc_layout import (
     refine_toc_hints,
     text_items_from_pdf,
+    text_layer_for_cover,
     text_layer_for_pages,
 )
 from storage import ConvexClient, Storage, issue_key
@@ -65,6 +67,8 @@ WORKER_ID = os.environ.get("WORKER_ID") or f"{socket.gethostname()}-{os.getpid()
 POLL_SECONDS = float(os.environ.get("WORKER_POLL_SECONDS", "5"))
 IDLE_POLL_MAX_SECONDS = float(os.environ.get("WORKER_IDLE_POLL_MAX_SECONDS", "60"))
 MAX_SOURCE_BYTES = int(os.environ.get("MAX_SOURCE_BYTES", 400 * 1024 * 1024))
+# Umschlagtafeln, auf denen Anzeigen stehen. Die Titelseite gehoert nicht dazu.
+COVER_AD_ROLES = ("inside_front", "inside_back", "back_cover")
 
 
 def log(event: str, **detail) -> None:
@@ -101,6 +105,9 @@ class Job:
         # die Meldung an die Redaktion. None: keine Textebene, nur geschaetzt.
         self._toc_bilanz: dict[str, int] | None = None
         self._toc_eintraege = 0
+        # Leserseiten der Umschlaganzeigen: ihre Artikel sind ganzseitig
+        # anklickbar.
+        self._cover_pages: set[int] = set()
 
     def beat(self, progress: int, message: str) -> None:
         res = self.convex.post(
@@ -157,14 +164,27 @@ class Job:
 
         page_images = self._render_pages(pages, blobs)
         self._store_meta(sources, blobs)
+        self._cover_pages = {
+            p["index"] for p in pages if p.get("role") in COVER_AD_ROLES
+        }
         blocks, images, toc_hints = self._extract(pages, blobs, sources)
         satz = [b for b in blocks if b.origin == "idml"]
+        rest = [b for b in blocks if b.origin != "idml"]
         if satz:
             # Der Satz kennt seine Artikel selbst: eine Mengentext-Story ist
             # ein Artikel, die Reihenfolge der Absaetze steht in der Datei.
             # Damit braucht es weder Inhaltsverzeichnis noch Seitenbereiche.
             articles = artikel_aus_satz(satz, images)
             quelle = "satz"
+            if rest:
+                # Seiten ohne Satz sind die Umschlagtafeln: je Tafel eine
+                # Anzeige, je Anzeige ein Artikel. Sie reihen sich nach der
+                # Seite ein; die Satzartikel stehen schon in Seitenfolge.
+                umschlag = assemble_cover_pages(
+                    [b for b in rest if b.page_index in self._cover_pages]
+                )
+                articles = sorted(articles + umschlag, key=lambda a: a.pages[0])
+                quelle = "satz+umschlag"
         else:
             articles = assemble(blocks, images, toc_hints=toc_hints)
             quelle = "pdf"
@@ -420,7 +440,10 @@ class Job:
         idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
         # Die Textebene der Innenseiten, vom Browser beim Import gelesen. Sie
         # ist wie der Satz nach Quellseiten geordnet.
-        text_source = next((s for s in sources if s["kind"] == "text"), None)
+        text_source = next(
+            (s for s in sources if s["kind"] == "text" and s.get("role") != "cover"),
+            None,
+        )
         text_bytes = blobs.get(text_source["assetId"]) if text_source else None
         # Der Satz beschreibt den Innenteil: die Inhaltsseiten in der
         # Reihenfolge, in der sie aus ihrer Quelle kommen.
@@ -462,6 +485,33 @@ class Job:
                 images=len(satz_images),
                 pages=len(aus_satz),
                 trimFrom="pdf" if partner else "netzformat",
+            )
+
+        # Umschlagtafeln: der Satz beschreibt sie nicht, und ein Druck-PDF gibt
+        # es dazu nicht mehr — aber die Textebene, die der Browser je Tafel
+        # gelesen hat. Daraus werden die Anzeigen auf U2 bis U4 Artikel.
+        cover_source = next(
+            (s for s in sources if s["kind"] == "text" and s.get("role") == "cover"),
+            None,
+        )
+        cover_bytes = blobs.get(cover_source["assetId"]) if cover_source else None
+        if cover_bytes:
+            try:
+                umschlag = text_layer_for_cover(cover_bytes, pages)
+            except ValueError as exc:
+                log("job.coverTextFailed", jobId=self.job_id, error=str(exc)[:200])
+                umschlag = {}
+            umschlag = {i: t for i, t in umschlag.items() if i in self._cover_pages}
+            aspekte = {
+                p["index"]: p["width"] / p["height"] for p in pages if p.get("height")
+            }
+            umschlag_blocks = blocks_from_text_layer(umschlag, aspekte)
+            blocks.extend(umschlag_blocks)
+            log(
+                "job.coverText",
+                jobId=self.job_id,
+                pages=len(umschlag),
+                blocks=len(umschlag_blocks),
             )
 
         # Was der Satz nicht abdeckt — ein Umschlag aus einer zweiten Datei,
@@ -726,6 +776,14 @@ class Job:
                 for i, b in enumerate(reader_blocks)
             ]
             regions = _text_regions(article.blocks)
+            seiten = {b.page_index for b in article.blocks}
+            if seiten and seiten <= getattr(self, "_cover_pages", set()):
+                # Eine Umschlagtafel ist eine Anzeige: die ganze Seite ist die
+                # Klickflaeche, nicht nur die Zeilen darauf.
+                regions = [
+                    {"pageIndex": s, "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0, "kind": "other"}
+                    for s in sorted(seiten)
+                ]
             # Auch das Bild selbst gehoert zur Artikel-Trefferflaeche. Damit
             # bleibt die Zuordnung im Debugger sichtbar und Leser koennen nicht
             # nur auf den danebenliegenden Text klicken.

@@ -14,7 +14,14 @@
 
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { normiereTextelemente, type TextItem, type TextPage } from "./textLayer";
+import {
+  normiereTextelemente,
+  trimBoxAusPdf,
+  type Schnitt,
+  type TextItem,
+  type TextPage,
+} from "./textLayer";
+import { umschlagTafeln, type Netz, type Tafel } from "./coverPages";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -158,6 +165,21 @@ async function renderSeite(
   const page = await doc.getPage(i + 1);
   const roh = page.getViewport({ scale: 1 });
   const schnitt = anschnitt(roh.width, roh.height, options.trimWidthPt, options.trimHeightPt);
+  return await renderAusschnitt(page, i, schnitt, options);
+}
+
+/**
+ * Einen Ausschnitt einer Seite rendern — die Seite ohne Anschnitt, oder eine
+ * Tafel eines Umschlagbogens. Die Textebene wird auf denselben Ausschnitt
+ * bezogen, damit Bild und Zeilen sich decken.
+ */
+async function renderAusschnitt(
+  page: pdfjs.PDFPageProxy,
+  i: number,
+  schnitt: Schnitt,
+  options: RenderOptions,
+): Promise<RenderedPage> {
+  const roh = page.getViewport({ scale: 1 });
   const scale = options.targetWidth / schnitt.breite;
   const viewport = page.getViewport({ scale });
   const breite = Math.round(schnitt.breite * scale);
@@ -187,6 +209,50 @@ async function renderSeite(
     height: hoehe,
     ...(text ? { text } : {}),
   };
+}
+
+export type UmschlagTafel = Tafel & RenderedPage;
+
+/**
+ * Den Umschlag als Leserseiten rendern: U1 und U2 vorn, U3 und U4 hinten.
+ *
+ * Welche Stelle welcher Quellseite eine Tafel ist, rechnet `umschlagTafeln`
+ * aus Bogenform und Netzformat; das Netzformat kommt aus der TrimBox der
+ * Datei. Jede Tafel geht durch `onTafel`, in Lesereihenfolge.
+ */
+export async function renderUmschlag(
+  file: Blob,
+  netz: Netz | undefined,
+  options: { targetWidth: number; quality: number },
+  onTafel: (tafel: UmschlagTafel, position: number, total: number) => Promise<void>,
+  abgebrochen?: () => boolean,
+): Promise<{ vorn: number; hinten: number }> {
+  const trim = await trimBoxAusPdf(file);
+  return await mitPdf(file, async (doc) => {
+    const quellseiten = [];
+    for (let i = 0; i < doc.numPages; i++) {
+      const page = await doc.getPage(i + 1);
+      const roh = page.getViewport({ scale: 1 });
+      quellseiten.push({
+        breite: roh.width,
+        hoehe: roh.height,
+        trim: trim ? anschnitt(roh.width, roh.height, trim.breitePt, trim.hoehePt) : undefined,
+      });
+      page.cleanup();
+    }
+    const { vorn, hinten } = umschlagTafeln(quellseiten, netz);
+    const alle = [...vorn, ...hinten];
+    for (const [position, tafel] of alle.entries()) {
+      if (abgebrochen?.()) break;
+      const page = await doc.getPage(tafel.quellSeite + 1);
+      const gerendert = await renderAusschnitt(page, tafel.quellSeite, tafel.schnitt, {
+        ...options,
+        mitText: true,
+      });
+      await onTafel({ ...tafel, ...gerendert }, position, alle.length);
+    }
+    return { vorn: vorn.length, hinten: hinten.length };
+  });
 }
 
 /**

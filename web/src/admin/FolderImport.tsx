@@ -16,7 +16,7 @@ import { readDirectoryInput, readDroppedFolder } from "./folderDrop";
 import { FAEDEN, ImageConverter } from "./convertClient";
 import { jpegName } from "./imageConvert";
 import { Ladeschlange } from "./ladeschlange";
-import { buildPageOrder } from "./pageOrder";
+import { buildPageOrder, type CoverPage } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
 import { readIdmlMeta } from "./idmlMeta";
 import { textebeneAlsBlob, type TextPage } from "./textLayer";
@@ -25,6 +25,7 @@ import {
   RENDER_SPUREN,
   readPriceFromImprint,
   renderPdfPages,
+  renderUmschlag,
   type OffenesPdf,
   type RenderedPage,
 } from "./pageRender";
@@ -381,64 +382,78 @@ export default function FolderImport({
       pruefen();
 
       // Der Umschlag geht denselben Weg: gerendert wird hier, hoch gehen die
-      // Seiten. Er traegt keinen Satz, deshalb bleibt sein Anschnitt stehen —
-      // ein Umschlagbogen wird ohnehin in Haelften gelesen.
-      let coverPdf:
-        | {
-            assetId: Id<"assets">;
-            pageCount: number;
-            rendered: {
-              assetId: Id<"assets">;
-              previewKey: string;
-              width: number;
-              height: number;
-            }[];
-          }
-        | undefined;
+      // Tafeln als einzelne Leserseiten U1 bis U4 — aus zwei Boegen, vier
+      // Einzelseiten oder einer Titelseite, je nachdem, wie die Druckerei ihn
+      // liefert. Der Anschnitt faellt weg wie beim Innenteil.
+      let umschlagSeiten: { vorn: CoverPage<Id<"assets">>[]; hinten: CoverPage<Id<"assets">>[] } | undefined;
       if (plan.cover) {
         const umschlag = plan.cover;
         melde("umschlag", `Umschlag ${umschlag.name} wird gerendert`);
         try {
-          const seiten: {
-            assetId: Id<"assets">;
-            previewKey: string;
-            width: number;
-            height: number;
-          }[] = [];
-          await renderPdfPages(
+          const tafeln: (CoverPage<Id<"assets">> & { position: number })[] = [];
+          // Die Textebene je Tafel: daraus macht der Worker die Anzeigen auf
+          // U2 bis U4 zu Artikeln, die im Seitenmodus anklickbar sind.
+          const umschlagText: { sourcePageIndex: number; role: string; items: TextPage["items"] }[] = [];
+          const anzahl = await renderUmschlag(
             umschlag.file,
+            satzMass ?? undefined,
             { targetWidth: SEITEN_BREITE, quality: SEITEN_GUETE },
-            async (seite, i, total) => {
+            async (tafel, position, total) => {
               pruefen();
-              melde("umschlag", `Umschlagseite ${i + 1} von ${total}`, (i + 1) / total);
-              const dateiname = `umschlag-${String(i + 1).padStart(2, "0")}.jpg`;
+              melde("umschlag", `Umschlag ${tafel.printedLabel} (${position + 1} von ${total})`, (position + 1) / total);
+              const dateiname = `umschlag-${tafel.printedLabel}.jpg`;
               await schlange.einreihen(async () => {
                 const { assetId, key } = await uploadAsset(
                   deps,
                   issueId,
-                  seite.blob,
+                  tafel.blob,
                   dateiname,
                   "page",
                 );
-                seiten[i] = {
+                tafeln.push({
                   assetId,
                   previewKey: key,
-                  width: seite.width,
-                  height: seite.height,
-                };
-                hochgeladen += seite.blob.size;
+                  width: tafel.width,
+                  height: tafel.height,
+                  role: tafel.role,
+                  printedLabel: tafel.printedLabel,
+                  position,
+                });
+                if (tafel.text) {
+                  umschlagText.push({ sourcePageIndex: position, role: tafel.role, items: tafel.text });
+                }
+                hochgeladen += tafel.blob.size;
               });
             },
             () => abbrechen.current,
           );
           await schlange.fertig();
-          if (seiten.length) {
-            coverPdf = {
-              assetId: seiten[0].assetId,
-              pageCount: seiten.length,
-              rendered: seiten,
+          tafeln.sort((a, b) => a.position - b.position);
+          if (tafeln.length) {
+            umschlagSeiten = {
+              vorn: tafeln.slice(0, anzahl.vorn),
+              hinten: tafeln.slice(anzahl.vorn),
             };
-            notiere(`Umschlag ${umschlag.name}: ${seiten.length} Seiten gerendert`);
+            notiere(
+              `Umschlag ${umschlag.name}: ${tafeln.map((t) => t.printedLabel).join(", ")} gerendert`,
+            );
+          }
+          umschlagText.sort((a, b) => a.sourcePageIndex - b.sourcePageIndex);
+          if (umschlagText.some((s) => s.items.length)) {
+            const textBlob = new Blob(
+              [JSON.stringify({ version: 1, cover: true, pages: umschlagText })],
+              { type: "application/json" },
+            );
+            const { assetId } = await uploadAsset(deps, issueId, textBlob, "textebene-umschlag.json");
+            await addSource({
+              issueId,
+              assetId,
+              kind: "text",
+              role: "cover",
+              filename: "textebene-umschlag.json",
+              pageCount: umschlagText.length,
+            });
+            hochgeladen += textBlob.size;
           }
         } catch (e: any) {
           if (e instanceof Abgebrochen) throw e;
@@ -640,7 +655,7 @@ export default function FolderImport({
               pageCount: innerSeiten,
               rendered: innenSeiten,
             },
-            cover: coverPdf,
+            coverReading: umschlagSeiten,
             coverImage: coverImageAsset,
             printedStart: gedruckteStartseite,
           });

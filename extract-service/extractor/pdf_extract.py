@@ -775,6 +775,60 @@ def extract_pdf_pages(
     return blocks, images
 
 
+def blocks_from_text_layer(
+    items_by_page: dict[int, list],
+    aspect_by_page: dict[int, float] | None = None,
+) -> list[SourceBlock]:
+    """Bloecke aus der Textebene, die der Browser gelesen hat (toc_layout.TextItem).
+
+    Fuer Seiten, die der Satz nicht beschreibt und zu denen kein Druck-PDF
+    mehr auf dem Server liegt — die Umschlagtafeln. Die Textebene ist auf die
+    Seite normiert; die Zeilen- und Blockregeln oben rechnen in Punkt. Die
+    Seitenhoehe folgt aus Schriftgroesse und Hoehe der Stuecke, die Breite
+    aus dem Seitenverhaeltnis des gerenderten Bildes.
+    """
+    blocks: list[SourceBlock] = []
+    for page_index, items in sorted(items_by_page.items()):
+        items = [i for i in items if i.text.strip() and i.y1 > i.y0 and i.size > 0]
+        if not items:
+            continue
+        hoehen = sorted(i.size / (i.y1 - i.y0) for i in items)
+        page_height = hoehen[len(hoehen) // 2]
+        page_width = page_height * (aspect_by_page or {}).get(page_index, 1 / 1.4142)
+        words = [
+            {
+                "text": i.text,
+                "x0": i.x0 * page_width,
+                "x1": i.x1 * page_width,
+                "top": i.y0 * page_height,
+                "bottom": i.y1 * page_height,
+                "size": float(i.size),
+                "fontname": "",
+                "upright": True,
+            }
+            for i in items
+        ]
+        starts = _column_starts(words)
+        gutters = [] if starts else _detect_gutters(words, page_width)
+        segments: list[dict] = []
+        for line in _words_to_lines(words):
+            segments.extend(_split_line_at_gaps(line))
+        by_column: dict[int, list[dict]] = defaultdict(list)
+        for piece in segments:
+            column = (
+                _column_by_start(piece["x0"], starts)
+                if starts
+                else _column_of((piece["x0"] + piece["x1"]) / 2, gutters)
+            )
+            by_column[column].append(piece)
+        for column in sorted(by_column):
+            lines = sorted(by_column[column], key=lambda l: (round(l["top"], 1), l["x0"]))
+            for b in _lines_to_blocks(lines, page_width, page_height, page_index):
+                b.column = column
+                blocks.append(b)
+    return blocks
+
+
 def prepare_blocks(
     blocks: list[SourceBlock], images: list[SourceImage], page_count: int
 ) -> list[SourceBlock]:

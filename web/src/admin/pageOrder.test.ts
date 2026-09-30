@@ -53,6 +53,44 @@ describe("buildPageOrder", () => {
     ]);
   });
 
+  it("nimmt fertig gerenderte Umschlagseiten in Lesereihenfolge", () => {
+    const tafel = (label: string, role: any) => ({
+      assetId: `t-${label}`,
+      previewKey: `k-${label}`,
+      width: 2400,
+      height: 3394,
+      role,
+      printedLabel: label,
+    });
+    const pages = buildPageOrder({
+      inner: {
+        assetId: "innen",
+        pageCount: 2,
+        rendered: [
+          { assetId: "s1", previewKey: "k1", width: 2400, height: 3394 },
+          { assetId: "s2", previewKey: "k2", width: 2400, height: 3394 },
+        ],
+      },
+      coverReading: {
+        vorn: [tafel("U1", "front_cover"), tafel("U2", "inside_front")],
+        hinten: [tafel("U3", "inside_back"), tafel("U4", "back_cover")],
+      },
+      // Wird von den fertigen Seiten verdraengt.
+      coverImage: { assetId: "titel", previewKey: "kt", width: 1200, height: 1700 },
+      printedStart: 3,
+    });
+    expect(pages.map((p) => [p.printedLabel, p.role, p.sourceAssetId, p.sourcePageIndex])).toEqual([
+      ["U1", "front_cover", "t-U1", 0],
+      ["U2", "inside_front", "t-U2", 1],
+      ["3", "content", "s1", 0],
+      ["4", "content", "s2", 1],
+      ["U3", "inside_back", "t-U3", 2],
+      ["U4", "back_cover", "t-U4", 3],
+    ]);
+    expect(pages[0].previewKey).toBe("k-U1");
+    expect(pages[2].previewKey).toBe("k1");
+  });
+
   it("kommt ohne Umschlag aus", () => {
     const pages = buildPageOrder({ inner: { assetId: "innen", pageCount: 2 }, printedStart: 1 });
     expect(pages.map((p) => p.printedLabel)).toEqual(["1", "2"]);
