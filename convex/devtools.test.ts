@@ -308,3 +308,159 @@ describe("Bilder per Kommandozeile aus Artikeln nehmen", () => {
     ).rejects.toThrow(/gehoert nicht zu dieser Ausgabe/);
   });
 });
+
+describe("Absaetze per Kommandozeile aus Artikeln nehmen", () => {
+  async function artikelMitZungen(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => {
+      const now = Date.now();
+      const publicationId = await ctx.db.insert("publications", {
+        name: "DMZ-Zeitgeschichte",
+        slug: "dmz-zeitgeschichte",
+        isActive: true,
+        createdAt: now,
+      });
+      const issueId = await ctx.db.insert("issues", {
+        publicationId,
+        title: "DMZ-Zeitgeschichte 80",
+        slug: "dmz-zg-80",
+        pageCount: 65,
+        priceAmountCents: 990,
+        isPublished: false,
+        includedInSubscription: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const articleId = await ctx.db.insert("articles", {
+        issueId,
+        order: 1,
+        title: "Warschauer Aufstand 1944",
+        source: "idml",
+        reviewStatus: "approved",
+        primaryPageIndex: 20,
+        pageStart: 20,
+        pageEnd: 23,
+        searchText: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      // Seite 22 traegt nur die Zunge, etwa neben einem ganzseitigen Bild.
+      const absaetze: [string, number, string][] = [
+        ["Die Panzerschlacht vor Warschau begann am 1. August.", 20, "Mengentext DMZ-Zeit 2018"],
+        ["Das 3. Panzerkorps war völlig aufgerieben worden.", 21, "Mengentext DMZ-Zeit 2018"],
+        ["Russische Panzerkorps", 21, "Zungentext DMZ-Zeit 2018"],
+        ["schwer angeschlagen", 21, "Zungentext DMZ-Zeit 2018"],
+        ["Heftige deutsche Gegenangriffe", 22, "Zungentext DMZ-Zeit 2018"],
+        ["Am Abend des 31. Juli gab Komorowski den Befehl.", 23, "Mengentext DMZ-Zeit 2018"],
+      ];
+      const bloecke = [];
+      for (const [i, [text, sourcePageIndex, styleName]] of absaetze.entries()) {
+        bloecke.push(
+          await ctx.db.insert("articleBlocks", {
+            articleId,
+            issueId,
+            order: i + 1,
+            type: "paragraph",
+            text,
+            sourcePageIndex,
+            styleName,
+          }),
+        );
+      }
+      const bilder = [];
+      for (const [i, [sourcePageIndex, afterBlockOrder]] of [
+        [21, 4],
+        [22, 5],
+        [23, 6],
+        [20, 1],
+      ].entries()) {
+        const assetId = await ctx.db.insert("assets", {
+          key: `images/${sourcePageIndex}-${i}.jpg`,
+          contentType: "image/jpeg",
+          kind: "image",
+          issueId,
+          createdAt: now,
+        });
+        bilder.push(
+          await ctx.db.insert("articleAssets", {
+            articleId,
+            issueId,
+            assetId,
+            order: i,
+            sourcePageIndex,
+            afterBlockOrder,
+          }),
+        );
+      }
+      return { issueId, articleId, bloecke, bilder };
+    });
+  }
+
+  test("Zungen fallen weg, Reihenfolge und Bildanker ruecken nach", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, articleId, bloecke, bilder } = await artikelMitZungen(t);
+    const remove = [bloecke[2], bloecke[3], bloecke[4]];
+
+    const probe = await t.mutation(internal.devtools.removeArticleBlocksInternal, {
+      issueId,
+      remove,
+      probelauf: true,
+    });
+    expect(probe).toEqual({ removed: 3, articles: 1, imagesMoved: 3, probelauf: true });
+    expect(await t.run(async (ctx) => await ctx.db.get(bloecke[2]))).not.toBeNull();
+
+    const result = await t.mutation(internal.devtools.removeArticleBlocksInternal, { issueId, remove });
+    expect(result).toEqual({ removed: 3, articles: 1, imagesMoved: 3, probelauf: false });
+
+    const rest = await t.run(async (ctx) =>
+      ctx.db
+        .query("articleBlocks")
+        .withIndex("by_article_order", (q) => q.eq("articleId", articleId))
+        .collect(),
+    );
+    expect(rest.map((b) => [b._id, b.order])).toEqual([
+      [bloecke[0], 1],
+      [bloecke[1], 2],
+      [bloecke[5], 3],
+    ]);
+
+    const anker = await t.run(async (ctx) =>
+      Promise.all(bilder.map(async (id) => (await ctx.db.get(id))?.afterBlockOrder ?? null)),
+    );
+    // Hinter der Zunge: jetzt hinter dem Absatz davor auf derselben Seite.
+    // Allein mit der Zunge auf der Seite: ohne Anker. Dahinter: rueckt nach.
+    expect(anker).toEqual([2, null, 3, 1]);
+
+    const article = await t.run(async (ctx) => await ctx.db.get(articleId));
+    expect(article?.searchText).toContain("völlig aufgerieben");
+    expect(article?.searchText).not.toContain("schwer angeschlagen");
+
+    // Wiederholbar: beim zweiten Lauf ist nichts mehr zu tun.
+    const nochmal = await t.mutation(internal.devtools.removeArticleBlocksInternal, { issueId, remove });
+    expect(nochmal.removed).toBe(0);
+  });
+
+  test("Absatz einer anderen Ausgabe bricht ab", async () => {
+    const t = convexTest(schema, modules);
+    const { bloecke } = await artikelMitZungen(t);
+    const fremd = await t.run(async (ctx) => {
+      const publicationId = (await ctx.db.query("publications").first())!._id;
+      return await ctx.db.insert("issues", {
+        publicationId,
+        title: "Anderes Heft",
+        slug: "anderes-heft",
+        pageCount: 1,
+        priceAmountCents: 990,
+        isPublished: false,
+        includedInSubscription: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+    await expect(
+      t.mutation(internal.devtools.removeArticleBlocksInternal, {
+        issueId: fremd,
+        remove: [bloecke[2]],
+      }),
+    ).rejects.toThrow(/gehoert nicht zu dieser Ausgabe/);
+  });
+});

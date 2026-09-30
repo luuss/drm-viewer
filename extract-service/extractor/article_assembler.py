@@ -58,7 +58,11 @@ def assemble(
     toc_hints: list[TocHint] | None = None,
 ) -> list[AssembledArticle]:
     """Bloecke in Lesereihenfolge zu Artikeln gruppieren."""
-    usable = _merge_heading_runs([b for b in blocks if not b.drop])
+    # Ein Schmuckzitat ist ein Blickfang auf der Druckseite. Im Fliesstext
+    # stuende es als loser Halbsatz zwischen zwei Absaetzen.
+    usable = _merge_heading_runs(
+        [b for b in blocks if not b.drop and b.kind != "quote"]
+    )
     if toc_hints:
         grouped = _assemble_by_toc(usable, toc_hints)
         if grouped:

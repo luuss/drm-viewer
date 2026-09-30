@@ -223,6 +223,17 @@ def test_artikel_beginnt_an_der_ueberschrift():
     assert [a.title for a in articles] == ["Erste Meldung", "Zweite Meldung"]
 
 
+def test_schmuckzitat_steht_nicht_im_fliesstext():
+    blocks = [
+        block("Die Schlacht", kind="heading", y=0.1),
+        block("Anfang des Textes. " * 20, y=0.2),
+        block("Russische Panzerkorps schwer angeschlagen", kind="quote", y=0.5),
+        block("Fortsetzung des Textes. " * 20, y=0.6),
+    ]
+    [artikel] = assemble(blocks)
+    assert [b.kind for b in artikel.blocks] == ["heading", "paragraph", "paragraph"]
+
+
 def test_inhaltsanker_halten_mehrseitigen_artikel_zusammen():
     blocks = [
         block("Grosser Titel", page=7, kind="heading"),

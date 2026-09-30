@@ -48,7 +48,12 @@ def test_formatnamen_werden_zu_rollen():
     assert rolle_fuer("hauptüberschrift schwerter") == "ueberschrift"
     assert rolle_fuer("Bildunterschrift DMZ 2023") == "bildunterschrift"
     assert rolle_fuer("Bildquelle") == "quelle"
-    assert rolle_fuer("Zitatkasten 2023") == "kasten"
+    assert rolle_fuer("Kasten Text 2023") == "kasten"
+    # Blickfang am Seitenrand: kein Text des Artikels.
+    assert rolle_fuer("Zungentext DMZ-Zeit 2018") == "schmuckzitat"
+    assert rolle_fuer("Zitatkasten 2023") == "schmuckzitat"
+    assert rolle_fuer("Seitenrubrik") == "beiwerk"
+    assert rolle_fuer("Seitenrubrik ZUERST") == "beiwerk"
     assert rolle_fuer("Inhaltsverzeichnis Überschrift") == "verzeichnis"
     assert rolle_fuer("Zwischenüberschrift rot") == "zwischentitel"
     # Ohne eigenes Format: kurz ist Beiwerk, lang ist Text.
@@ -119,12 +124,64 @@ def test_kasten_steht_an_seiner_seite_im_lesefluss():
         block("Titel", story="k1", style="hauptüberschrift", page=0, y0=0.09),
         block("Seite eins " + "x" * 500, story="t1", style="mengentext", page=0, y0=0.3),
         block("Seite zwei " + "x" * 500, story="t1", style="mengentext", page=1, y0=0.3),
-        block("Merke dies", story="b1", style="Zitatkasten 2023", page=0, y0=0.8),
+        block("Merke dies", story="b1", style="Kasten Text 2023", page=0, y0=0.8),
     ]
     a = artikel_aus_satz(blocks)[0]
     texte = [b.text[:10] for b in a.blocks]
     assert texte.index("Merke dies") < texte.index("Seite zwei")
     assert a.blocks[texte.index("Merke dies")].kind == "box"
+
+
+def test_zunge_und_seitenrubrik_stehen_nicht_im_fliesstext():
+    blocks = [
+        block("Titel", story="k1", style="Überschrift DMZ-Zeit 2018", page=0, y0=0.09),
+        block(
+            "Seite eins " + "x" * 500,
+            story="t1",
+            style="Mengentext DMZ-Zeit 2018",
+            page=0,
+            y0=0.3,
+        ),
+        block(
+            "Seite zwei " + "x" * 500,
+            story="t1",
+            style="Mengentext DMZ-Zeit 2018",
+            page=1,
+            y0=0.3,
+        ),
+        # Die Zunge am Seitenrand, im Satz zwei Absaetze einer eigenen Story.
+        block(
+            "Russische Panzerkorps",
+            story="z1",
+            style="Zungentext DMZ-Zeit 2018",
+            page=0,
+            y0=0.68,
+        ),
+        block(
+            "schwer angeschlagen",
+            story="z1",
+            style="Zungentext DMZ-Zeit 2018",
+            page=0,
+            y0=0.70,
+        ),
+        block("Als Diplomat gefragt.", story="z2", style="Zitatkasten 2023", page=1, y0=0.5),
+        block("Geschichte", story="r1", style="Seitenrubrik", page=1, y0=0.03),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert [b.text[:10] for b in a.blocks] == ["Titel", "Seite eins", "Seite zwei"]
+
+
+def test_zitat_im_mengentext_bleibt_stehen():
+    # Ein Zitat, das der Autor in den Text gesetzt hat, gehoert zur Story des
+    # Artikels. Nur der Blickfang im eigenen Rahmen faellt weg.
+    blocks = [
+        block("Titel", story="k1", style="hauptüberschrift", page=0, y0=0.09),
+        block("Davor " + "x" * 500, story="t1", style="mengentext", page=0, y0=0.3),
+        block("So sprach der General.", story="t1", style="Zitat im Text", page=0, y0=0.5),
+        block("Danach " + "x" * 500, story="t1", style="mengentext", page=0, y0=0.6),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert "So sprach der General." in [b.text for b in a.blocks]
 
 
 def test_kurze_meldung_nimmt_ihren_ersten_absatz_als_zeile():

@@ -4,6 +4,8 @@ import { Id } from "./_generated/dataModel";
 import { slugify } from "./publications";
 import { publishIssue } from "./issues";
 import { audit } from "./roles";
+import { rebuildSearchText } from "./articles";
+import { deleteLinksForBlock } from "./articleProducts";
 
 /**
  * Hilfen fuer Entwicklung und Integrationspruefung.
@@ -360,6 +362,104 @@ export const removeArticleImagesInternal = internalMutation({
       removed,
       captionsMoved,
       articles: betroffen.size,
+      probelauf: probelauf === true,
+    };
+  },
+});
+
+/**
+ * Absaetze aus bestehenden Artikeln nehmen, ohne Neuimport — der verwuerfe die
+ * Freigaben der Redaktion. Gedacht fuer Hefte, die eingelesen wurden, bevor
+ * der Import Schmuckzitate und Seitenrubriken aus dem Fliesstext hielt: die
+ * Zunge am Seitenrand ("Russische Panzerkorps schwer angeschlagen") stand als
+ * loser Halbsatz zwischen zwei Absaetzen. Welche Absaetze das sind, rechnet
+ * dieselbe Auswertung wie beim Import aus.
+ *
+ * Die Reihenfolge bleibt lueckenlos. Ein Bild, das hinter einem entfernten
+ * Absatz verankert war, rueckt hinter den Absatz davor. Steht der auf einer
+ * anderen Seite, faellt der Anker weg — der Leser setzt Bilder seitenweise
+ * und ordnet es dann nach seiner Hoehe ein.
+ */
+export const removeArticleBlocksInternal = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    remove: v.array(v.id("articleBlocks")),
+    probelauf: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    removed: v.number(),
+    articles: v.number(),
+    imagesMoved: v.number(),
+    probelauf: v.boolean(),
+  }),
+  handler: async (ctx, { issueId, remove, probelauf }) => {
+    const weg = new Set<Id<"articleBlocks">>();
+    const betroffen = new Set<Id<"articles">>();
+    for (const id of remove) {
+      const row = await ctx.db.get(id);
+      // Wiederholbar: was schon fehlt, ist erledigt.
+      if (!row) continue;
+      if (row.issueId !== issueId) {
+        throw new Error(`Absatz ${id} gehoert nicht zu dieser Ausgabe`);
+      }
+      weg.add(id);
+      betroffen.add(row.articleId);
+    }
+
+    let imagesMoved = 0;
+    for (const articleId of betroffen) {
+      const article = await ctx.db.get(articleId);
+      const seite = (s: number | undefined) => s ?? article?.pageStart;
+      const bloecke = await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_article_order", (q) => q.eq("articleId", articleId))
+        .collect();
+      const bilder = await ctx.db
+        .query("articleAssets")
+        .withIndex("by_article", (q) => q.eq("articleId", articleId))
+        .collect();
+      for (const bild of bilder) {
+        // Der Anker zaehlt die Stelle im Artikel, so wie der Leser ihn liest.
+        const anker = bild.afterBlockOrder;
+        if (anker === undefined || anker <= 0) continue;
+        const davor = bloecke.slice(0, anker);
+        const rest = davor.filter((b) => !weg.has(b._id));
+        if (rest.length === davor.length) continue;
+        const halt = rest.at(-1);
+        const ankerBleibt = !weg.has(davor[davor.length - 1]._id);
+        const neu =
+          halt &&
+          (ankerBleibt || seite(halt.sourcePageIndex) === seite(bild.sourcePageIndex))
+            ? rest.length
+            : undefined;
+        if (!probelauf) await ctx.db.patch(bild._id, { afterBlockOrder: neu });
+        imagesMoved++;
+      }
+      if (probelauf) continue;
+      let order = 1;
+      for (const b of bloecke) {
+        if (weg.has(b._id)) {
+          await deleteLinksForBlock(ctx, b._id);
+          await ctx.db.delete(b._id);
+          continue;
+        }
+        if (b.order !== order) await ctx.db.patch(b._id, { order });
+        order++;
+      }
+      await rebuildSearchText(ctx, articleId);
+    }
+    if (!probelauf && weg.size > 0) {
+      await audit(
+        ctx,
+        "article.removeBlocks",
+        issueId,
+        `${weg.size} Absaetze in ${betroffen.size} Artikeln (Kommandozeile)`,
+      );
+    }
+    return {
+      removed: weg.size,
+      articles: betroffen.size,
+      imagesMoved,
       probelauf: probelauf === true,
     };
   },

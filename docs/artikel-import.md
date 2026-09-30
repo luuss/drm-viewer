@@ -134,9 +134,15 @@ keine Schaetzung mehr:
 * Ueberschrift, Unterzeile, Vorspann und Autor stehen in eigenen kleinen
   Stories. Sie gehoeren zu dem Mengentext, den sie ankuendigen: auf derselben
   Seite, bei einem Aufmacher auch eine Seite davor.
-* Kaesten und Zitate liegen ebenfalls einzeln; sie werden hinter dem letzten
-  Absatz ihrer Seite eingefuegt, damit sie im Lesefluss an der richtigen
-  Stelle stehen.
+* Kaesten liegen ebenfalls einzeln; sie werden hinter dem letzten Absatz
+  ihrer Seite eingefuegt, damit sie im Lesefluss an der richtigen Stelle
+  stehen.
+* Schmuckzitate und Seitenrubriken bleiben draussen: die Zunge am Seitenrand
+  ("Zungentext"), der Zitatkasten, die Rubrikmarke ("Seitenrubrik"). Auf der
+  Druckseite helfen sie beim Blaettern, im Fliesstext stuenden sie als loser
+  Halbsatz zwischen zwei Absaetzen. Ein Zitat, das im Mengentext selbst
+  steht, gehoert zu dessen Story und bleibt. Ohne Satzdatei gilt dasselbe
+  fuer Bloecke, die das PDF als Zitat einstuft.
 * Kurze Meldungen (Kalenderblatt, Nachrichtenspalte) tragen ihre Zeile als
   ersten Absatz der eigenen Story. Dann gilt das Format des ersten Absatzes.
 

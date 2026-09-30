@@ -25,8 +25,24 @@ from .model import AssembledArticle, SourceBlock
 ROLLEN_REGELN: tuple[tuple[tuple[str, ...], str], ...] = (
     (("bildquelle", "bildnachweis", "fotonachweis"), "quelle"),
     (("bildunterschrift", "bildtext", "legende"), "bildunterschrift"),
-    (("kolumnentitel", "pagina", "fusszeile", "fußzeile", "kopfzeile"), "beiwerk"),
+    # Die Seitenrubrik ("Deutschland", "Titel") steht als Marke am Seitenrand
+    # und wiederholt sich auf jeder Seite des Artikels.
+    (
+        (
+            "kolumnentitel",
+            "pagina",
+            "fusszeile",
+            "fußzeile",
+            "kopfzeile",
+            "seitenrubrik",
+        ),
+        "beiwerk",
+    ),
     (("inhaltsverzeichnis", "verzeichnis", "inhalt "), "verzeichnis"),
+    # Zunge am Seitenrand, Zitatkasten: ein Blickfang, der dem Blaetternden
+    # sagt, worum es auf der Seite geht. Steht vor "kasten" und "autor", damit
+    # "Zitatkasten" und "Zitat Autor" hier landen.
+    (("zungentext", "zitat", "quote"), "schmuckzitat"),
     (("autorenname", "autor", "verfasser", "byline"), "autor"),
     (("zwischen", "rubrikname", "dachzeile", "kicker"), "zwischentitel"),
     (
@@ -54,7 +70,6 @@ ROLLEN_REGELN: tuple[tuple[tuple[str, ...], str], ...] = (
             "bücherseite text",
             "buecherseite text",
             "katalog",
-            "zungentext",
             "werbeseite text",
         ),
         "mengentext",
@@ -87,7 +102,14 @@ def rolle_fuer(style: str | None, text_laenge: int = 0) -> str:
 UNTERLAGE_ANTEIL = 0.30
 # Nur Beiwerk verraet eine Unterlage. Steht Mengentext oder eine Ueberschrift
 # im Bild, ist es ein Aufmacherfoto mit Text darauf und bleibt.
-UNTERLAGE_ROLLEN = ("kasten", "beiwerk", "zwischentitel", "quelle", "autor")
+UNTERLAGE_ROLLEN = (
+    "kasten",
+    "schmuckzitat",
+    "beiwerk",
+    "zwischentitel",
+    "quelle",
+    "autor",
+)
 # Dasselbe gilt fuer ein Bild im Bild: der Papierrahmen mit Buettenrand um das
 # Foto, das Buchmodell unter dem Umschlag. Als eigenes Artikelbild zeigt die
 # Unterlage das Foto ein zweites Mal — oder, aus der verknuepften Datei, nur
@@ -349,6 +371,12 @@ def artikel_aus_satz(
     Jede Mengentext-Story wird ein Artikel. Ueberschrift, Unterzeile und Autor
     kommen aus den Stories, die auf derselben Seite darueber beginnen; Kaesten
     und Bildunterschriften aus den Seiten, die der Artikel belegt.
+
+    Schmuckzitate und Seitenrubriken bleiben draussen. Auf der Druckseite
+    helfen sie beim Blaettern; im Fliesstext stuenden sie als loser Halbsatz
+    zwischen zwei Absaetzen ("Russische Panzerkorps" / "schwer angeschlagen").
+    Ein Zitat, das der Autor in den Mengentext gesetzt hat, gehoert zu dessen
+    Story und bleibt stehen.
     """
     stories = initialen_einsetzen(stories_bilden(blocks))
     koerper = [

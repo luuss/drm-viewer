@@ -76,7 +76,7 @@ export const articleInput = v.object({
 });
 
 /** Suchtext wird aus den Bloecken abgeleitet, nie getrennt gepflegt. */
-async function rebuildSearchText(ctx: MutationCtx, articleId: Id<"articles">) {
+export async function rebuildSearchText(ctx: MutationCtx, articleId: Id<"articles">) {
   const article = await ctx.db.get(articleId);
   if (!article) return;
   const blocks = await ctx.db
