@@ -5,6 +5,14 @@ alle vier Hefte vom Stick importiert, Import schneller. Einzelheiten in
 Abschnitt 1a und 4. Buchanzeigen im Heft führen jetzt zum Produkt im Shop
 (Abschnitt 4c).
 
+**Heftbezeichnungen (30.09. abends):** Frisch importierte Hefte standen unter
+Ordnernamen im Kiosk („Dmz 170“ in der Reihe „Dmz“), weil der Ordner-Import
+Reihen nach dem Kürzel im Ordnernamen anlegte und die Bezeichnungen aus dem
+Laden erst der nächtliche Abgleich brachte. Jetzt: bekannte Reihen heißen wie
+in `convex/shopCovers.ts` (`SERIES[].name`), `issues.ensureFromFolder` stößt
+`publicationCovers.refreshAll` gleich nach dem Anlegen an, und der Abgleich
+benennt Reihen um, die noch unter ihrem Kürzel stehen (samt Hefttiteln).
+
 Kurzfassung: Die Anwendung läuft vollständig selbst betrieben auf **d.chuk.dev**
 (Dokploy). Der Umzug auf den **Verlagsserver** ist zur Hälfte fertig: der Stapel
 läuft dort, aber Apache reicht die Adressen noch nicht nach innen weiter.

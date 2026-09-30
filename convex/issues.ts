@@ -16,6 +16,8 @@ import { subscriptionIsActive } from "./access";
 import { Id } from "./_generated/dataModel";
 import { assertSkuFree } from "./shopIntegration";
 import { cleanShopUrl, cleanSku, issueShopLink, issueShopSku } from "./shopLinks";
+import { seriesFor } from "./shopCovers";
+import { internal } from "./_generated/api";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -326,19 +328,35 @@ export const ensureFromFolder = mutation({
       .withIndex("by_slug", (q) => q.eq("slug", args.publicationSlug))
       .first();
     let publicationCreated = false;
+    // Eine Reihe des Verlags heisst wie im Laden, nicht wie das Kuerzel im
+    // Ordnernamen: aus "dmz 170" wird die Deutsche Militaerzeitschrift.
+    const gepflegt = seriesFor(args.publicationSlug)?.name;
+    let title = args.title;
     if (!publication) {
       await requireAdmin(ctx);
+      const name = gepflegt ?? args.publicationName;
+      if (title.startsWith(`${args.publicationName} `)) {
+        title = name + title.slice(args.publicationName.length);
+      }
       const pid = await ctx.db.insert("publications", {
-        name: args.publicationName,
+        name,
         slug: args.publicationSlug,
         isActive: true,
         createdAt: Date.now(),
       });
-      await audit(ctx, "publication.create", pid, args.publicationName);
+      await audit(ctx, "publication.create", pid, name);
       publication = await ctx.db.get(pid);
       publicationCreated = true;
     }
     if (!publication) throw new Error("Reihe liess sich nicht anlegen");
+    // Name, Heftbezeichnung, Unter-Ueberschrift und Preis kommen aus dem
+    // Laden. Der Abgleich laeuft gleich nach dem Anlegen, nicht erst nachts —
+    // sonst steht das Heft bis zum Morgen unter seinem Ordnernamen im Kiosk.
+    const abgleichen = async () => {
+      if (gepflegt) {
+        await ctx.scheduler.runAfter(0, internal.publicationCovers.refreshAll, {});
+      }
+    };
 
     if (args.issueNumber) {
       const vorhanden = await ctx.db
@@ -354,6 +372,7 @@ export const ensureFromFolder = mutation({
             updatedAt: Date.now(),
           });
         }
+        if (!treffer.shopUrl) await abgleichen();
         return {
           issueId: treffer._id,
           publicationId: publication._id,
@@ -364,7 +383,7 @@ export const ensureFromFolder = mutation({
     }
 
     const base = slugify(
-      `${args.title}${args.issueNumber ? "-" + args.issueNumber : ""}`,
+      `${title}${args.issueNumber ? "-" + args.issueNumber : ""}`,
     );
     let slug = base;
     let n = 2;
@@ -379,7 +398,7 @@ export const ensureFromFolder = mutation({
     const now = Date.now();
     const issueId = await ctx.db.insert("issues", {
       publicationId: publication._id,
-      title: args.title,
+      title,
       slug,
       issueNumber: args.issueNumber,
       pageCount: 0,
@@ -389,7 +408,8 @@ export const ensureFromFolder = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await audit(ctx, "issue.create", issueId, args.title);
+    await audit(ctx, "issue.create", issueId, title);
+    await abgleichen();
     return {
       issueId,
       publicationId: publication._id,

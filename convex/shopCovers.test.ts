@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  canonicalSeriesName,
   coverCandidates,
   designationMatches,
   parseMagazineStrip,
@@ -125,5 +126,20 @@ describe("Heftbezeichnungen aus dem Verlagsshop", () => {
     expect(designationMatches(zuerst, "März 2025", "3/2026")).toBe(false);
     expect(designationMatches(zuerst, "Juli/August 2026", "7-8/2026")).toBe(true);
     expect(designationMatches(zuerst, "Juli/August 2026", "8/2026")).toBe(true);
+  });
+});
+
+describe("Reihennamen", () => {
+  test("das Ordnerkuerzel weicht dem gepflegten Namen der Reihe", () => {
+    expect(canonicalSeriesName("dmz", "Dmz")).toBe("Deutsche Militärzeitschrift");
+    expect(canonicalSeriesName("zuerst", "Zuerst")).toBe("ZUERST!");
+    expect(canonicalSeriesName("dmz-zeitgeschichte", "DMZ-Zeitgeschichte")).toBe("DMZ Zeitgeschichte");
+  });
+
+  test("gepflegte, frei gewaehlte und fremde Namen bleiben", () => {
+    expect(canonicalSeriesName("dmz", "Deutsche Militärzeitschrift")).toBeNull();
+    expect(canonicalSeriesName("zuerst", "ZUERST!")).toBeNull();
+    expect(canonicalSeriesName("dmz", "DMZ – das Magazin")).toBeNull();
+    expect(canonicalSeriesName("archiv", "Archiv")).toBeNull();
   });
 });

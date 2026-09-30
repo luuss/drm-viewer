@@ -4,6 +4,7 @@ import { requireEditor } from "./roles";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import {
+  canonicalSeriesName,
   SHOP_URL,
   categoryUrl,
   coverCandidates,
@@ -35,6 +36,7 @@ export const listInternal = internalQuery({
       .map((p) => ({
         _id: p._id,
         slug: p.slug,
+        name: p.name,
         coverSource: p.coverSource ?? null,
         coverAssetId: p.coverAssetId ?? null,
         currentIssueUrl: p.currentIssueUrl ?? null,
@@ -101,6 +103,33 @@ export const setCoverInternal = internalMutation({
       }
     }
     return assetId;
+  },
+});
+
+/**
+ * Eine Reihe, die der Ordner-Import unter ihrem Kuerzel angelegt hat, bekommt
+ * ihren gepflegten Namen; Hefttitel, die mit dem Kuerzel beginnen, ziehen mit
+ * ("Dmz 170" wird "Deutsche Militärzeitschrift 170").
+ */
+export const renameSeriesInternal = internalMutation({
+  args: { publicationId: v.id("publications"), name: v.string() },
+  handler: async (ctx, { publicationId, name }) => {
+    const publication = await ctx.db.get(publicationId);
+    if (!publication || publication.name === name) return 0;
+    const old = publication.name;
+    await ctx.db.patch(publicationId, { name });
+    const issues = await ctx.db
+      .query("issues")
+      .withIndex("by_publication", (q) => q.eq("publicationId", publicationId))
+      .collect();
+    let renamed = 0;
+    for (const issue of issues) {
+      if (issue.title === old || issue.title.startsWith(`${old} `)) {
+        await ctx.db.patch(issue._id, { title: name + issue.title.slice(old.length) });
+        renamed++;
+      }
+    }
+    return renamed;
   },
 });
 
@@ -284,6 +313,7 @@ export const refreshAll = internalAction({
     const publications: {
       _id: Id<"publications">;
       slug: string;
+      name: string;
       coverSource: string | null;
       coverAssetId: Id<"assets"> | null;
       currentIssueUrl: string | null;
@@ -300,6 +330,14 @@ export const refreshAll = internalAction({
     const pageCache = new Map<string, ProductCard[]>();
     for (const publication of publications) {
       const series = seriesFor(publication.slug);
+      const gepflegt = canonicalSeriesName(publication.slug, publication.name);
+      if (gepflegt) {
+        await ctx.runMutation(internal.publicationCovers.renameSeriesInternal, {
+          publicationId: publication._id,
+          name: gepflegt,
+        });
+        result.updated.push(`${publication.slug}: Reihe heißt jetzt ${gepflegt}`);
+      }
       const entry = entries.find((e) => e.slug === publication.slug);
       if (!series || !entry) {
         result.missing.push(publication.slug);

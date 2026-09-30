@@ -22,6 +22,8 @@ export const SHOP_URL = "https://lesenundschenken.de";
 export type Series = {
   /** Kennung des Titels hier. */
   slug: string;
+  /** Gepflegter Name der Reihe, wie der Verlag sie nennt. */
+  name: string;
   /** Kennung der Reihe im Shop (Ende des Kategorie-Links). */
   shopSlug: string;
   /** Pfad der Kategorie im Shop. */
@@ -33,11 +35,31 @@ export type Series = {
 };
 
 export const SERIES: Series[] = [
-  { slug: "zuerst", shopSlug: "zuerst", category: "zeitschriften/zuerst", searchPrefix: "ZUERST!", numbered: false },
-  { slug: "dmz", shopSlug: "dmz", category: "zeitschriften/dmz", searchPrefix: "DMZ Nr.", numbered: true },
-  { slug: "dmz-zeitgeschichte", shopSlug: "dmz-zeitgeschichte", category: "zeitschriften/dmz-zeitgeschichte", searchPrefix: "DMZ-ZG Nr.", numbered: true },
-  { slug: "schwertertraeger", shopSlug: "schwertertrager", category: "zeitschriften/schwertertraeger", searchPrefix: "Schwerterträger Heft", numbered: true },
+  { slug: "zuerst", name: "ZUERST!", shopSlug: "zuerst", category: "zeitschriften/zuerst", searchPrefix: "ZUERST!", numbered: false },
+  { slug: "dmz", name: "Deutsche Militärzeitschrift", shopSlug: "dmz", category: "zeitschriften/dmz", searchPrefix: "DMZ Nr.", numbered: true },
+  { slug: "dmz-zeitgeschichte", name: "DMZ Zeitgeschichte", shopSlug: "dmz-zeitgeschichte", category: "zeitschriften/dmz-zeitgeschichte", searchPrefix: "DMZ-ZG Nr.", numbered: true },
+  { slug: "schwertertraeger", name: "Schwerterträger", shopSlug: "schwertertrager", category: "zeitschriften/schwertertraeger", searchPrefix: "Schwerterträger Heft", numbered: true },
 ];
+
+/** Kennung, wie sie aus einem Namen entsteht (wie publications.slugify). */
+function slugOf(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[äöüß]/g, (c) => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" })[c] ?? c)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/**
+ * Der gepflegte Name, wenn eine bekannte Reihe noch unter ihrem Ordnerkuerzel
+ * steht ("Dmz", "Zuerst"); sonst null. Ein von der Redaktion frei gewaehlter
+ * Name, der nicht aus der Kennung entstanden sein kann, bleibt unangetastet.
+ */
+export function canonicalSeriesName(slug: string, currentName: string): string | null {
+  const series = SERIES.find((s) => s.slug === slug);
+  if (!series || currentName === series.name) return null;
+  return slugOf(currentName) === slug ? series.name : null;
+}
 
 export function seriesFor(slug: string): Series | null {
   return SERIES.find((s) => s.slug === slug) ?? null;
