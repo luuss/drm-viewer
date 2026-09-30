@@ -813,6 +813,28 @@ export const removeArticle = mutation({
   },
 });
 
+/** Artikel ohne Anmeldung entfernen — fuer Werkzeuge mit Deploy-Schluessel (`npx convex run`). */
+export const removeInternal = internalMutation({
+  args: { articleId: v.id("articles") },
+  handler: async (ctx, { articleId }) => {
+    const article = await ctx.db.get(articleId);
+    if (!article) return;
+    for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
+        .collect();
+      for (const r of rows) {
+        if (table === "articleBlocks") await deleteLinksForBlock(ctx, r._id as Id<"articleBlocks">);
+        await ctx.db.delete(r._id);
+      }
+    }
+    await ctx.db.delete(articleId);
+    await renumber(ctx, article.issueId);
+    await recountIssue(ctx, article.issueId);
+  },
+});
+
 // --- Import ---
 
 export const replaceForIssueInternal = internalMutation({

@@ -14,12 +14,24 @@ type Region = {
   targetPageIndex: number | null;
 };
 
+/** Eine Flaeche, die nach draussen fuehrt: der Abo-Aufruf zum Laden. */
+type PageLink = {
+  pageIndex: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  url: string;
+  label: string | null;
+};
+
 type Props = {
   issueId: Id<"issues">;
   pageIndexes: number[];
   spread: boolean;
   sessionToken: string;
   regions: Region[];
+  links: PageLink[];
   watermark: string;
   onOpenArticle: (articleId: Id<"articles">, fromPageIndex?: number) => void;
   onNavigatePage: (pageIndex: number) => void;
@@ -53,6 +65,7 @@ export default function PageMode({
   spread,
   sessionToken,
   regions,
+  links,
   watermark,
   onOpenArticle,
   onNavigatePage,
@@ -304,6 +317,7 @@ export default function PageMode({
             <>
               {shown.map((pageIndex, slot) => {
                 const pageRegions = regions.filter((region) => region.pageIndex === pageIndex);
+                const pageLinks = links.filter((link) => link.pageIndex === pageIndex);
                 return (
                   <div
                     key={pageIndex}
@@ -332,6 +346,27 @@ export default function PageMode({
                             ? "Zur Seite springen"
                             : "Artikel öffnen"
                         }
+                      />
+                    ))}
+                    {/* Nach draussen geht es ohne Zwischenfrage, im neuen Tab.
+                        Diese Flaechen kennt nur die Ebene hier; der Klick auf
+                        die Zeichenflaeche oben findet keine Artikelflaeche
+                        darunter und tut nichts — sonst ginge der Tab zweimal auf. */}
+                    {pageLinks.map((link, index) => (
+                      <button
+                        key={`link-${index}`}
+                        className="hotspot hotspot-link"
+                        style={{
+                          left: `${link.x0 * 100}%`,
+                          top: `${link.y0 * 100}%`,
+                          width: `${(link.x1 - link.x0) * 100}%`,
+                          height: `${(link.y1 - link.y0) * 100}%`,
+                        }}
+                        onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                        aria-label={
+                          link.label ? `${link.label} – im Laden öffnen` : "Im Laden öffnen"
+                        }
+                        title="Öffnet den Laden in einem neuen Tab"
                       />
                     ))}
                   </div>

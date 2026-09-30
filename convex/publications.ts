@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireEditor, requireAdmin, audit } from "./roles";
 import { assertSkuFree } from "./shopIntegration";
 import { cleanShopUrl, cleanSku } from "./shopLinks";
@@ -83,6 +83,8 @@ export const updateShop = mutation({
     shopSubscriptionSku: v.string(),
     shopSubscriptionMonths: v.union(v.number(), v.null()),
     shopSubscriptionUrl: v.string(),
+    // Abo-Formular des Druckhefts (Ziel der Abo-Aufrufe im Heft).
+    shopPrintSubscriptionUrl: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -102,6 +104,9 @@ export const updateShop = mutation({
       shopSubscriptionSku: sku,
       shopSubscriptionMonths: months ?? undefined,
       shopSubscriptionUrl: cleanShopUrl(args.shopSubscriptionUrl),
+      ...(args.shopPrintSubscriptionUrl !== undefined
+        ? { shopPrintSubscriptionUrl: cleanShopUrl(args.shopPrintSubscriptionUrl) }
+        : {}),
     });
     await audit(
       ctx,
@@ -114,3 +119,16 @@ export const updateShop = mutation({
 });
 
 export { slugify };
+
+/** Abo-Formular des Druckhefts ohne Anmeldung setzen — fuer Werkzeuge mit Deploy-Schluessel. */
+export const setPrintSubscriptionUrlInternal = internalMutation({
+  args: { slug: v.string(), url: v.string() },
+  handler: async (ctx, { slug, url }) => {
+    const publication = await ctx.db
+      .query("publications")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!publication) throw new Error(`Reihe ${slug} nicht gefunden`);
+    await ctx.db.patch(publication._id, { shopPrintSubscriptionUrl: cleanShopUrl(url) });
+  },
+});

@@ -25,6 +25,7 @@ from dataclasses import asdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import render
+from extractor.abo import abo_aufruf
 from extractor.article_assembler import assemble, assemble_cover_pages, flow_text_blocks
 from extractor.idml_extract import (
     extract_idml_blocks,
@@ -205,6 +206,8 @@ class Job:
         )
         toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
         self._toc_eintraege = len(toc_hints)
+        # Erst nach dem Verzeichnis: das zaehlt die Artikel nach ihrer Stelle.
+        payload_articles, page_links = self._abo_links(payload_articles)
         self.beat(92, "Ergebnis wird uebernommen")
         result = self.convex.post(
             "/service/jobs/result",
@@ -214,6 +217,7 @@ class Job:
                 "issueId": self.issue_id,
                 "articles": payload_articles,
                 **({"tocEntries": toc_entries} if toc_entries else {}),
+                "pageLinks": page_links,
             },
         )
         log(
@@ -224,6 +228,64 @@ class Job:
             seconds=round(time.time() - self.started, 1),
         )
         return "review", "Bereit zur redaktionellen Pruefung" + self._verzeichnis_hinweis()
+
+    def _abo_links(self, payload_articles: list[dict]) -> tuple[list[dict], list[dict]]:
+        """Abo-Aufrufe aus den Artikeln nehmen und als Seitenlinks zurueckgeben.
+
+        Der Aufruf auf U2 oder U3 (und eine Abo-Anzeige im Innenteil) ist kein
+        Lesetext. Im Seitenmodus fuehrt ein Tipp darauf gleich zum
+        Abo-Formular der beworbenen Reihe im Laden. Auf dem Umschlag ist die
+        ganze Tafel die Flaeche, innen die Rahmen der Anzeige.
+        """
+        eigene = self.data.get("publicationSlug")
+        cover = getattr(self, "_cover_pages", set())
+        behalten: list[dict] = []
+        links: list[dict] = []
+        for a in payload_articles:
+            umschlag = a["pageStart"] in cover
+            text = " ".join(b["text"] for b in a["blocks"])
+            reihe = abo_aufruf(
+                text,
+                a.get("title", ""),
+                eigene,
+                min_treffer=3,
+                max_zeichen=None if umschlag else 3000,
+            )
+            if not reihe:
+                behalten.append(a)
+                continue
+            seiten = sorted({r["pageIndex"] for r in a["regions"]} or {a["pageStart"]})
+            for seite in seiten:
+                flaechen = [r for r in a["regions"] if r["pageIndex"] == seite]
+                if umschlag or not flaechen:
+                    box = (0.0, 0.0, 1.0, 1.0)
+                else:
+                    box = (
+                        min(r["x0"] for r in flaechen),
+                        min(r["y0"] for r in flaechen),
+                        max(r["x1"] for r in flaechen),
+                        max(r["y1"] for r in flaechen),
+                    )
+                links.append(
+                    {
+                        "pageIndex": seite,
+                        "x0": round(box[0], 5),
+                        "y0": round(box[1], 5),
+                        "x1": round(box[2], 5),
+                        "y1": round(box[3], 5),
+                        "kind": "subscription",
+                        "publicationSlug": reihe,
+                        "label": (a.get("title") or "")[:120],
+                    }
+                )
+        if links:
+            log(
+                "job.aboLinks",
+                jobId=self.job_id,
+                links=len(links),
+                dropped=len(payload_articles) - len(behalten),
+            )
+        return behalten, links
 
     def _verzeichnis_hinweis(self) -> str:
         """Anhang zur Auftragsmeldung: wie gut das Verzeichnis platziert ist.

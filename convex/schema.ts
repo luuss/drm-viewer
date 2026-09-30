@@ -115,6 +115,9 @@ export default defineSchema(
     shopSubscriptionSku: v.optional(v.string()),
     shopSubscriptionMonths: v.optional(v.number()),
     shopSubscriptionUrl: v.optional(v.string()),
+    // Abo-Formular des Druckhefts im Laden: dorthin fuehrt ein Tipp auf den
+    // Abo-Aufruf im Heft (pageLinks). Ohne Eintrag gilt das bekannte Formular.
+    shopPrintSubscriptionUrl: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_slug", ["slug"])
@@ -342,6 +345,22 @@ export default defineSchema(
   })
     .index("by_article", ["articleId"])
     .index("by_issue", ["issueId"]),
+
+  /**
+   * Klickflaechen einer Seite, die nach draussen fuehren (pageLinks.ts):
+   * der Abo-Aufruf auf U2 oder U3 oeffnet das Abo-Formular der beworbenen
+   * Reihe im Laden. `subscription` nennt die Reihe, `url` eine feste Adresse.
+   */
+  pageLinks: defineTable({
+    issueId: v.id("issues"),
+    pageIndex: v.number(),
+    ...regionBox,
+    kind: v.union(v.literal("subscription"), v.literal("url")),
+    publicationSlug: v.optional(v.string()),
+    url: v.optional(v.string()),
+    label: v.optional(v.string()),
+    source: v.union(v.literal("import"), v.literal("editor")),
+  }).index("by_issue", ["issueId"]),
 
   tocEntries: defineTable({
     issueId: v.id("issues"),

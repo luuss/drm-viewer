@@ -237,6 +237,7 @@ workerRoute("/service/jobs/result", (ctx, body) =>
     issueId: body.issueId,
     articles: body.articles ?? [],
     tocEntries: body.tocEntries,
+    pageLinks: body.pageLinks,
   }),
 );
 

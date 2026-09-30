@@ -87,11 +87,13 @@ export default function AdminPage() {
             <p className="muted small">
               Artikelnummer (Referenz) des Digital-Abos im PrestaShop, Laufzeit
               in Monaten (leer = 12) und Produktseite für den Kaufknopf. Leere
-              Felder entfernen die Angabe.
+              Felder entfernen die Angabe. Das Abo-Formular des Druckhefts ist
+              das Ziel, wenn ein Leser im Heft auf einen Abo-Aufruf tippt; ohne
+              Eintrag gilt das bekannte Formular des Ladens.
             </p>
             {publications.map((p) => (
               <form
-                key={`${p._id}:${p.shopSubscriptionSku ?? ""}:${p.shopSubscriptionMonths ?? ""}:${p.shopSubscriptionUrl ?? ""}`}
+                key={`${p._id}:${p.shopSubscriptionSku ?? ""}:${p.shopSubscriptionMonths ?? ""}:${p.shopSubscriptionUrl ?? ""}:${p.shopPrintSubscriptionUrl ?? ""}`}
                 className="inline-form"
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -106,8 +108,9 @@ export default function AdminPage() {
                         shopSubscriptionSku: value("sku"),
                         shopSubscriptionMonths: months ? Number(months) : null,
                         shopSubscriptionUrl: value("url"),
+                        shopPrintSubscriptionUrl: value("printUrl"),
                       }),
-                    `${p.name}: Digital-Abo gespeichert`,
+                    `${p.name}: Abo-Angaben gespeichert`,
                   );
                 }}
               >
@@ -135,6 +138,13 @@ export default function AdminPage() {
                   defaultValue={p.shopSubscriptionUrl ?? ""}
                   placeholder="https://lesenundschenken.de/…"
                   aria-label={`${p.name}: Produktseite Digital-Abo`}
+                />
+                <input
+                  name="printUrl"
+                  type="url"
+                  defaultValue={p.shopPrintSubscriptionUrl ?? ""}
+                  placeholder="Abo-Formular Druckheft"
+                  aria-label={`${p.name}: Abo-Formular Druckheft (Ziel der Abo-Aufrufe im Heft)`}
                 />
                 <button className="btn secondary small">Speichern</button>
               </form>

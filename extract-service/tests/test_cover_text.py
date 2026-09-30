@@ -113,3 +113,36 @@ def test_je_umschlagtafel_ein_artikel_mit_der_groessten_zeile_als_titel():
     # Beiwerk faellt weg, die Reihenfolge der Bloecke bleibt.
     assert [b.text for b in artikel[0].blocks] == ["Alle 2 Monate in Wort und Bild", "Feuer Frei!"]
     assert artikel[0].source == "pdf"
+
+
+def test_abo_aufruf_wird_seitenlink_statt_artikel():
+    stub = _Stub()
+    stub.data = {"publicationSlug": "zuerst"}
+    stub._cover_pages = {1, 82}
+    abo = {
+        "order": 0, "title": "Feuer Frei! Die DMZ im Abo nach hause holen!",
+        "pageStart": 1, "pageEnd": 1,
+        "blocks": [{"text": "Mit Ihrem Abonnement stärken Sie die DMZ. Abonnieren Sie jetzt. Abo-Bestellung"}],
+        "regions": [{"pageIndex": 1, "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0, "kind": "other"}],
+    }
+    innen = {
+        "order": 12, "title": "Jetzt abonnieren", "pageStart": 40, "pageEnd": 40,
+        "blocks": [{"text": "ZUERST! im Abo: Abonnement, Geschenkabonnement, Probeabo."}],
+        "regions": [
+            {"pageIndex": 40, "x0": 0.5, "y0": 0.6, "x1": 0.9, "y1": 0.8, "kind": "body"},
+            {"pageIndex": 40, "x0": 0.55, "y0": 0.8, "x1": 0.95, "y1": 0.95, "kind": "image"},
+        ],
+    }
+    artikel = {
+        "order": 3, "title": "Vergiftete Nachbarschaft", "pageStart": 6, "pageEnd": 9,
+        "blocks": [{"text": "Polen verleibte sich 1945 " + "Text " * 900}],
+        "regions": [{"pageIndex": 6, "x0": 0.1, "y0": 0.1, "x1": 0.9, "y1": 0.9, "kind": "body"}],
+    }
+    behalten, links = worker.Job._abo_links(stub, [abo, artikel, innen])
+    assert [a["order"] for a in behalten] == [3]
+    assert links == [
+        {"pageIndex": 1, "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0, "kind": "subscription",
+         "publicationSlug": "dmz", "label": "Feuer Frei! Die DMZ im Abo nach hause holen!"},
+        {"pageIndex": 40, "x0": 0.5, "y0": 0.6, "x1": 0.95, "y1": 0.95, "kind": "subscription",
+         "publicationSlug": "zuerst", "label": "Jetzt abonnieren"},
+    ]

@@ -10,6 +10,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, audit } from "./roles";
 import { articleInput } from "./articles";
 import { deleteLinksForIssue } from "./articleProducts";
+import { pageLinkInput, replaceImportedLinks } from "./pageLinks";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
@@ -428,8 +429,10 @@ export const activateResultInternal = internalMutation({
         }),
       ),
     ),
+    // Abo-Aufrufe und andere Flaechen, die nach draussen fuehren (pageLinks.ts).
+    pageLinks: v.optional(v.array(pageLinkInput)),
   },
-  handler: async (ctx, { jobId, workerId, issueId, articles, tocEntries }) => {
+  handler: async (ctx, { jobId, workerId, issueId, articles, tocEntries, pageLinks }) => {
     const job = await ctx.db.get(jobId);
     if (!job) throw new Error("Auftrag unbekannt");
     if (job.issueId !== issueId) throw new Error("Auftrag passt nicht zur Ausgabe");
@@ -558,6 +561,8 @@ export const activateResultInternal = internalMutation({
       });
     }
 
+    const links = await replaceImportedLinks(ctx, issueId, pageLinks ?? []);
+
     await ctx.db.patch(issueId, { articleCount: articles.length, updatedAt: now });
     // Buchanzeigen erkennen und mit dem Laden verbinden (articleProducts.ts).
     await ctx.scheduler.runAfter(0, internal.articleProducts.matchInternal, { issueId });
@@ -567,6 +572,7 @@ export const activateResultInternal = internalMutation({
         issueId,
         articles: articles.length,
         toc: toc.length,
+        links,
       }),
     );
     return { articles: articles.length, toc: toc.length };

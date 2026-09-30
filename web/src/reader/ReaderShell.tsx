@@ -37,6 +37,7 @@ export default function ReaderShell() {
   const pages = useQuery(api.issuePages.listForReader, { issueId });
   const articles = useQuery(api.articles.listForReader, { issueId });
   const regions = useQuery(api.articles.regionsForReader, { issueId });
+  const links = useQuery(api.pageLinks.forReader, { issueId });
   const productLinks = useQuery(api.articleProducts.forReader, { issueId });
   const progress = useQuery(api.progress.get, { issueId });
   const openSession = useMutation(api.readerSessions.issue);
@@ -465,6 +466,7 @@ export default function ReaderShell() {
               spread={pageLayout === "spread"}
               sessionToken={sessionToken}
               regions={regions ?? []}
+              links={links ?? []}
               watermark={watermark}
               onOpenArticle={openFromPage}
               onNavigatePage={goPage}

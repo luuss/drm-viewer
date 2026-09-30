@@ -2036,6 +2036,12 @@ button.small, .btn.small {
   border-color: rgba(240, 220, 180, 0.45);
 }
 
+/* Eine Flaeche nach draussen: derselbe Hinweis, nur kuehler. */
+.hotspots .hotspot-link:hover {
+  background: rgba(150, 200, 240, 0.14);
+  border-color: rgba(150, 200, 240, 0.5);
+}
+
 .watermark {
   position: absolute;
   right: var(--s3);

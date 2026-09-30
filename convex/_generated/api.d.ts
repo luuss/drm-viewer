@@ -35,6 +35,7 @@ import type * as magicLink from "../magicLink.js";
 import type * as magicLinkRules from "../magicLinkRules.js";
 import type * as mail from "../mail.js";
 import type * as migrations from "../migrations.js";
+import type * as pageLinks from "../pageLinks.js";
 import type * as plans from "../plans.js";
 import type * as progress from "../progress.js";
 import type * as publicationCovers from "../publicationCovers.js";
@@ -94,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   magicLinkRules: typeof magicLinkRules;
   mail: typeof mail;
   migrations: typeof migrations;
+  pageLinks: typeof pageLinks;
   plans: typeof plans;
   progress: typeof progress;
   publicationCovers: typeof publicationCovers;
