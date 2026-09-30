@@ -194,6 +194,12 @@ class TocHint:
     # in dem mehrere kurze Artikel stehen. Deren eigene Ueberschriften duerfen
     # nicht vom TOC-Anker zu einem einzigen Artikel zusammengezogen werden.
     split_headings: bool = False
+    # Die Seitenzahl, wie sie im Verzeichnis gedruckt steht. Auf der Textebene
+    # der Seite steht sie neben dem Titel und gehoert mit zur Klickflaeche.
+    printed: int | None = None
+    # Unterzeile(n) des Eintrags, wie der Satz sie kennt. Damit findet sich
+    # die Zeile unter dem Titel auf der Textebene wieder.
+    details: str = ""
 
 
 @dataclass

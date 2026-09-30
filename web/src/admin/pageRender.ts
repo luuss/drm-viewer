@@ -14,6 +14,7 @@
 
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { normiereTextelemente, type TextItem, type TextPage } from "./textLayer";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -23,6 +24,8 @@ export type RenderedPage = {
   blob: Blob;
   width: number;
   height: number;
+  /** Die Textebene der Seite, wenn `mitText` gesetzt war. */
+  text?: TextItem[];
 };
 
 export type RenderOptions = {
@@ -34,6 +37,8 @@ export type RenderOptions = {
   trimHeightPt?: number;
   /** Nur diese Haelfte der Quellseite rendern (Umschlagboegen). */
   half?: "left" | "right";
+  /** Die Textebene der Seite mitlesen (fuer das gedruckte Inhaltsverzeichnis). */
+  mitText?: boolean;
 };
 
 function canvas(width: number, height: number): OffscreenCanvas | HTMLCanvasElement {
@@ -167,10 +172,52 @@ async function renderSeite(
   // Der Anschnitt wird nicht gerendert, sondern weggeschoben.
   ctx.translate(-schnitt.links * scale, -schnitt.oben * scale);
   await page.render({ canvasContext: ctx, viewport, canvas: c as HTMLCanvasElement }).promise;
+  // Die Textebene kommt aus demselben Seitenobjekt, in Punkt und ungedreht
+  // (`roh`), damit derselbe Schnitt gilt wie fuers Bild.
+  const text = options.mitText
+    ? normiereTextelemente((await page.getTextContent()).items as any[], roh, schnitt)
+    : undefined;
   page.cleanup();
 
   const blob = await toJpeg(c, options.quality);
-  return { sourcePageIndex: i, blob, width: breite, height: hoehe };
+  return {
+    sourcePageIndex: i,
+    blob,
+    width: breite,
+    height: hoehe,
+    ...(text ? { text } : {}),
+  };
+}
+
+/**
+ * Nur die Textebene eines Innenteils lesen, ohne die Seiten zu rendern.
+ *
+ * Fuer Hefte, die vor der Textebene importiert wurden: die Druckdatei bleibt
+ * auf dem Rechner, hoch geht nur die Liste der Zeilen mit ihren Rechtecken.
+ * Geschnitten wird auf dasselbe Netzformat wie beim Rendern, sonst laegen
+ * Textebene und Seitenbild gegeneinander verschoben.
+ */
+export async function textebeneAusPdf(
+  quelle: Blob | OffenesPdf,
+  netz?: { pageWidthPt: number; pageHeightPt: number },
+  onPage?: (n: number, total: number) => void,
+): Promise<TextPage[]> {
+  return await mitPdf(quelle, async (doc) => {
+    const out: TextPage[] = [];
+    for (let i = 0; i < doc.numPages; i++) {
+      const page = await doc.getPage(i + 1);
+      const roh = page.getViewport({ scale: 1 });
+      const schnitt = anschnitt(roh.width, roh.height, netz?.pageWidthPt, netz?.pageHeightPt);
+      const inhalt = await page.getTextContent();
+      out.push({
+        sourcePageIndex: i,
+        items: normiereTextelemente(inhalt.items as any[], roh, schnitt),
+      });
+      page.cleanup();
+      onPage?.(i + 1, doc.numPages);
+    }
+    return out;
+  });
 }
 
 /**

@@ -1536,9 +1536,65 @@ def test_inhaltsverzeichnis_aus_dem_satz():
         ("Schicksalsschlacht", 3),
         ("Vergiftete Nachbarschaft", 6),
     ]
-    # Die Unterzeile vergroessert die Klickflaeche des Eintrags.
+    # Die Unterzeile vergroessert die Klickflaeche des Eintrags und bleibt
+    # als Text daran, damit sie auf der Textebene wiederzufinden ist.
     assert hints[0].y1 >= 0.15
     assert hints[0].toc_page_index == 1
+    assert hints[0].details == "Napoleon unterliegt"
+    assert [h.printed for h in hints] == [5, 8]
+
+
+def test_umbrochener_titel_und_rubriken_im_satzverzeichnis():
+    """Titelzeile ohne Zahl gehoert zum Eintrag dahinter; Rubriken ordnen."""
+    from extractor.idml_extract import toc_from_idml
+    from extractor.model import SourceBlock
+
+    def eintrag(text: str, stil: str, y: float, story: str = "v") -> SourceBlock:
+        return SourceBlock(
+            page_index=1,
+            text=text,
+            x0=0.1,
+            y0=y,
+            x1=0.9,
+            y1=y + 0.02,
+            origin="idml",
+            story_id=story,
+            style_name=stil,
+        )
+
+    blocks = [
+        # ZUERST!: Rubrikzeile in der Verzeichnis-Story, Titel ueber zwei Absaetze.
+        eintrag("Editorial 3", "Inhaltsverzeichnis Überschrift", 0.05),
+        eintrag("Deutschland", "Seitenrubrik", 0.1),
+        eintrag("Wahlrechtsentzug", "Inhaltsverzeichnis Überschrift", 0.12),
+        eintrag("statt Strafpsychiatrie 23", "Inhaltsverzeichnis Überschrift", 0.14),
+        eintrag("Die Bundesregierung plant", "Inhaltsverzeichnis Unterzeile", 0.16),
+        eintrag("den Entzug der Wählbarkeit", "Inhaltsverzeichnis Unterzeile", 0.18),
+        # DMZ-Zeitgeschichte: Rubrik ohne Zahl ist Ueberschrift, mit Zahl ein Eintrag.
+        eintrag("Soldatenporträt", "Inhalt Rubrik DMZ-Zeit 2018", 0.3),
+        eintrag("Standartenführer", "Inhalt Hauptzeile DMZ-Zeit 2018", 0.32),
+        eintrag("Alfons Rebane 10", "Inhalt Hauptzeile DMZ-Zeit 2018", 0.34),
+        eintrag("Kalenderblatt Personen 16", "Inhalt Rubrik DMZ-Zeit 2018", 0.36),
+        eintrag("Europäische Freiwillige", "Inhalt Hauptzeile DMZ-Zeit 2018", 0.38),
+        eintrag("Unterscharführer", "Inhalt Hauptzeile DMZ-Zeit 2018", 0.4),
+        eintrag("Caspar Sporck 30", "Inhalt Hauptzeile DMZ-Zeit 2018", 0.42),
+        eintrag("Mengentext", "Mengentext 2023", 0.5, story="m"),
+    ]
+
+    hints = toc_from_idml(blocks, 2)
+
+    assert [(h.label, h.printed, h.section) for h in hints] == [
+        ("Editorial", 3, None),
+        ("Standartenführer Alfons Rebane", 10, "Soldatenporträt"),
+        ("Kalenderblatt Personen", 16, None),
+        ("Wahlrechtsentzug statt Strafpsychiatrie", 23, "Deutschland"),
+        # Nur die Zeile unmittelbar davor gehoert zum Titel.
+        ("Unterscharführer Caspar Sporck", 30, None),
+    ]
+    umbrochen = hints[3]
+    assert umbrochen.y0 == 0.12
+    assert umbrochen.details == "Die Bundesregierung plant den Entzug der Wählbarkeit"
+    assert umbrochen.y1 >= 0.199
 
 
 def test_satz_lesereihenfolge_haelt_stories_zusammen():

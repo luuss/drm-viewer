@@ -8,6 +8,9 @@ Auftrag erneut.
 Ablauf je Auftrag:
   Quellen laden -> Seiten rendern -> Text lesen -> IDML lesen ->
   Artikel bauen -> Bilder schneiden -> Ergebnis aktivieren
+
+Der Auftrag `toc` ist die kleine Ausnahme: er legt nur die Klickflaechen des
+gedruckten Inhaltsverzeichnisses neu (siehe `_nur_verzeichnis`).
 """
 
 from __future__ import annotations
@@ -47,6 +50,7 @@ from extractor.idml_articles import (
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
+from extractor.toc_layout import refine_toc_hints, text_layer_for_pages
 from storage import ConvexClient, Storage, issue_key
 
 CONVEX_SITE_URL = os.environ.get("CONVEX_SITE_URL", "").rstrip("/")
@@ -103,7 +107,8 @@ class Job:
         if not res.get("ok"):
             raise RuntimeError(f"Sperre verloren: {res.get('reason')}")
 
-    def run(self) -> None:
+    def run(self) -> tuple[str, str]:
+        """Den Auftrag ausfuehren; liefert Endzustand und Meldung fuer `finish`."""
         pages = self.data.get("pages") or []
         sources = self.data.get("sources") or []
         if not pages:
@@ -138,6 +143,9 @@ class Job:
             count=len(blobs),
             artwork=len(self._artwork),
         )
+
+        if self.data.get("kind") == "toc":
+            return self._nur_verzeichnis(pages, blobs, sources)
 
         page_images = self._render_pages(pages, blobs)
         self._store_meta(sources, blobs)
@@ -186,6 +194,7 @@ class Job:
             toc=result.get("toc"),
             seconds=round(time.time() - self.started, 1),
         )
+        return "review", "Bereit zur redaktionellen Pruefung"
 
     def _fetch(self, src: dict) -> bytes | None:
         """Eine Quelldatei holen.
@@ -375,6 +384,17 @@ class Job:
 
         idml_source = next((s for s in sources if s["kind"] == "idml"), None)
         idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
+        # Die Textebene der Innenseiten, vom Browser beim Import gelesen. Sie
+        # ist wie der Satz nach Quellseiten geordnet.
+        text_source = next((s for s in sources if s["kind"] == "text"), None)
+        text_bytes = blobs.get(text_source["assetId"]) if text_source else None
+        # Der Satz beschreibt den Innenteil: die Inhaltsseiten in der
+        # Reihenfolge, in der sie aus ihrer Quelle kommen.
+        content_map = sorted(
+            (p["sourcePageIndex"], p["index"])
+            for p in pages
+            if p.get("role") == "content"
+        )
 
         blocks: list[SourceBlock] = []
         images = []
@@ -384,13 +404,7 @@ class Job:
 
         if idml_bytes:
             self.beat(72, "Satzdatei wird ausgewertet")
-            # Der Satz beschreibt den Innenteil. Das sind die Inhaltsseiten, in
-            # der Reihenfolge, in der sie aus ihrer Quelle kommen.
-            page_map = sorted(
-                (p["sourcePageIndex"], p["index"])
-                for p in pages
-                if p.get("role") == "content"
-            )
+            page_map = content_map
             partner = self._idml_partner(idml_source, sources, blobs)
             try:
                 satz_blocks, satz_images = self._from_idml(
@@ -453,6 +467,8 @@ class Job:
         )
         if satz_toc:
             log("job.toc", jobId=self.job_id, entries=len(satz_toc), source="idml")
+            if text_bytes:
+                satz_toc = self._verzeichnis_platzieren(satz_toc, text_bytes, content_map)
             toc_hints = satz_toc
 
         # Beide Herkuenfte werden getrennt aufbereitet: die PDF-Bloecke brauchen
@@ -510,6 +526,87 @@ class Job:
         satz_blocks = frames_to_blocks(rohe_blocks, page_map, trims)
         satz_images = frames_to_images(gefiltert, page_map, trims)
         return satz_blocks, satz_images
+
+    def _verzeichnis_platzieren(self, hints, text_bytes: bytes, page_map):
+        """Die Eintraege des Verzeichnisses auf ihre gedruckten Zeilen legen.
+
+        Der Satz schaetzt die Lage eines Absatzes nur; die Textebene kennt
+        sie. Ist die Textebene unlesbar, bleibt es beim Schaetzwert.
+        """
+        try:
+            seiten = text_layer_for_pages(text_bytes, page_map)
+        except ValueError as exc:
+            log("job.textLayerFailed", jobId=self.job_id, error=str(exc)[:200])
+            return hints
+        platziert, bilanz = refine_toc_hints(hints, seiten)
+        log("job.tocPlaced", jobId=self.job_id, **bilanz)
+        return platziert
+
+    def _nur_verzeichnis(self, pages, blobs, sources) -> tuple[str, str]:
+        """Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses erneuern.
+
+        Artikel, Freigaben und Verknuepfungen bleiben stehen. Gebraucht wird
+        das, wenn die Textebene zu einem schon importierten Heft nachgetragen
+        wurde: die Flaechen wandern auf die gedruckten Zeilen, ohne dass das
+        Heft neu aufbereitet wird.
+        """
+        idml_source = next((s for s in sources if s["kind"] == "idml"), None)
+        idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
+        if not idml_bytes:
+            raise RuntimeError(
+                "Ohne Satzdatei gibt es kein Inhaltsverzeichnis zum Platzieren"
+            )
+        page_map = sorted(
+            (p["sourcePageIndex"], p["index"])
+            for p in pages
+            if p.get("role") == "content"
+        )
+        self.beat(20, "Satzdatei wird gelesen")
+        # Ohne Druck-PDF gilt das Netzformat unveraendert — genau das System,
+        # in dem die Seiten gerendert sind.
+        satz_blocks, _bilder = self._from_idml(idml_bytes, None, page_map, None)
+        hints = toc_from_idml(
+            [b for b in satz_blocks if b.origin == "idml"], _printed_offset(pages)
+        )
+        text_source = next((s for s in sources if s["kind"] == "text"), None)
+        text_bytes = blobs.get(text_source["assetId"]) if text_source else None
+        if hints and text_bytes:
+            self.beat(50, "Eintraege werden auf der Textebene gesucht")
+            hints = self._verzeichnis_platzieren(hints, text_bytes, page_map)
+        regions = [
+            {
+                "pageIndex": h.toc_page_index,
+                "x0": round(h.x0, 5),
+                "y0": round(h.y0, 5),
+                "x1": round(h.x1, 5),
+                "y1": round(h.y1, 5),
+                "targetPageIndex": h.page_index,
+                "label": h.label[:300],
+            }
+            for h in hints
+            if h.toc_page_index is not None
+        ]
+        self.beat(80, "Klickflaechen werden uebernommen")
+        result = self.convex.post(
+            "/service/jobs/toc-regions",
+            {
+                "jobId": self.job_id,
+                "workerId": WORKER_ID,
+                "issueId": self.issue_id,
+                "regions": regions,
+            },
+        )
+        log(
+            "job.tocRegions",
+            jobId=self.job_id,
+            entries=len(hints),
+            regions=result.get("regions"),
+            skipped=result.get("skipped"),
+            textLayer=bool(text_bytes),
+        )
+        n = result.get("regions") or 0
+        zusatz = "" if text_bytes else " (ohne Textebene, nur geschaetzt)"
+        return "done", f"{n} Klickflaechen im Inhaltsverzeichnis erneuert{zusatz}"
 
     @staticmethod
     def _idml_partner(idml_source, sources, blobs):
@@ -802,14 +899,14 @@ def run_once(convex: ConvexClient, storage: Storage) -> bool:
     job = Job(convex, storage, claimed)
     log("job.claimed", jobId=job.job_id, issueId=job.issue_id, kind=claimed.get("kind"))
     try:
-        job.run()
+        status, message = job.run()
         convex.post(
             "/service/jobs/finish",
             {
                 "jobId": job.job_id,
                 "workerId": WORKER_ID,
-                "status": "review",
-                "message": "Bereit zur redaktionellen Pruefung",
+                "status": status,
+                "message": message,
             },
         )
     except Exception as exc:

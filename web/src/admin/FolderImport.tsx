@@ -19,6 +19,7 @@ import { Ladeschlange } from "./ladeschlange";
 import { buildPageOrder } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
 import { readIdmlMeta } from "./idmlMeta";
+import { textebeneAlsBlob, type TextPage } from "./textLayer";
 import {
   oeffnePdf,
   RENDER_SPUREN,
@@ -260,6 +261,11 @@ export default function FolderImport({
       let innerSeiten: number | undefined;
       // Wie lange das Rendern auf freie Upload-Plaetze wartete: steht es
       // lange, ist die Leitung der Engpass, nicht der Rechner.
+      // Die Textebene jeder Innenseite: Zeilen mit ihren Rechtecken im
+      // Netzformat. Der Worker legt damit die Klickflaechen des gedruckten
+      // Inhaltsverzeichnisses auf die Eintraege — der Satz allein weiss nicht,
+      // wo eine Zeile steht.
+      const textebene: TextPage[] = [];
       const innenStart = performance.now();
       let uploadWarten = 0;
       let fertigeSeiten = 0;
@@ -272,9 +278,11 @@ export default function FolderImport({
             trimWidthPt: satzMass?.pageWidthPt,
             trimHeightPt: satzMass?.pageHeightPt,
             spuren: RENDER_SPUREN,
+            mitText: true,
           },
           async (seite: RenderedPage, i: number, total: number) => {
             pruefen();
+            if (seite.text) textebene[i] = { sourcePageIndex: i, items: seite.text };
             fertigeSeiten++;
             melde(
               "innenteil",
@@ -318,6 +326,32 @@ export default function FolderImport({
           `Innenteil ${innenteil.name} liess sich nicht rendern: ` +
             `${cleanError(e) ?? "Fehler"}. Der Lauf ist abgebrochen.`,
         );
+      }
+      // Die Textebene geht als eine kleine Datei hoch, nachdem alle Seiten
+      // durch sind. Scheitert sie, fehlt nur die genaue Lage der
+      // Verzeichniseintraege — der Import selbst laeuft weiter.
+      const textSeiten = textebene.filter(Boolean);
+      if (textSeiten.length) {
+        melde("innenteil", "Textebene geht hoch", 1);
+        try {
+          const textBlob = textebeneAlsBlob(textSeiten);
+          const { assetId } = await uploadAsset(deps, issueId, textBlob, "textebene.json");
+          await addSource({
+            issueId,
+            assetId,
+            kind: "text",
+            role: "inner",
+            filename: "textebene.json",
+            pageCount: textSeiten.length,
+          });
+          hochgeladen += textBlob.size;
+          notiere(`Textebene: ${textSeiten.length} Seiten (${formatBytes(textBlob.size)})`);
+        } catch (e: any) {
+          if (e instanceof Abgebrochen) throw e;
+          offen.push(
+            `Textebene nachtragen (Importdialog) — ${cleanError(e) ?? "nicht hochgeladen"}`,
+          );
+        }
       }
       await innenPdf.schliessen();
       innenPdf = null;

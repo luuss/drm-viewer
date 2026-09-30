@@ -240,6 +240,15 @@ workerRoute("/service/jobs/result", (ctx, body) =>
   }),
 );
 
+workerRoute("/service/jobs/toc-regions", (ctx, body) =>
+  ctx.runMutation(internal.imports.activateTocRegionsInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    issueId: body.issueId,
+    regions: body.regions ?? [],
+  }),
+);
+
 workerRoute("/service/storage/upload-url", async (ctx) => ({
   uploadUrl: await ctx.runMutation(internal.assets.generateUploadUrlInternal, {}),
 }));

@@ -4,6 +4,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, audit } from "./roles";
@@ -21,7 +22,40 @@ export const jobKind = v.union(
   v.literal("pdf"),
   v.literal("idml"),
   v.literal("full"),
+  // Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses neu legen;
+  // Artikel und Freigaben bleiben stehen (activateTocRegionsInternal).
+  v.literal("toc"),
 );
+
+type JobKind = "prepare" | "pdf" | "idml" | "full" | "toc";
+
+async function queueJob(
+  ctx: MutationCtx,
+  issueId: Id<"issues">,
+  kind: JobKind,
+  payload: string | undefined,
+  userId: Id<"users"> | undefined,
+) {
+  const open = await ctx.db
+    .query("importJobs")
+    .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+    .collect();
+  const running = open.find(
+    (j) => j.status === "queued" || j.status === "claimed" || j.status === "running",
+  );
+  if (running) {
+    throw new Error("Für diese Ausgabe läuft bereits ein Auftrag");
+  }
+  return await ctx.db.insert("importJobs", {
+    issueId,
+    kind,
+    status: "queued",
+    payload,
+    attempts: 0,
+    createdByUserId: userId,
+    createdAt: Date.now(),
+  });
+}
 
 /**
  * Auftrag einstellen. Die Verarbeitung laeuft in einem eigenen Worker; die
@@ -32,28 +66,23 @@ export const enqueue = mutation({
   handler: async (ctx, { issueId, kind, payload }) => {
     await requireEditor(ctx);
     const userId = await getAuthUserId(ctx);
-    const open = await ctx.db
-      .query("importJobs")
-      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
-      .collect();
-    const running = open.find(
-      (j) => j.status === "queued" || j.status === "claimed" || j.status === "running",
-    );
-    if (running) {
-      throw new Error("Für diese Ausgabe läuft bereits ein Auftrag");
-    }
-    const id = await ctx.db.insert("importJobs", {
+    const id = await queueJob(
+      ctx,
       issueId,
       kind,
-      status: "queued",
       payload,
-      attempts: 0,
-      createdByUserId: (userId as Id<"users">) ?? undefined,
-      createdAt: Date.now(),
-    });
+      (userId as Id<"users">) ?? undefined,
+    );
     await audit(ctx, "import.enqueue", issueId, kind);
     return id;
   },
+});
+
+/** Auftrag ohne Anmeldung — fuer Werkzeuge mit Deploy-Schluessel (`npx convex run`). */
+export const enqueueInternal = internalMutation({
+  args: { issueId: v.id("issues"), kind: jobKind, payload: v.optional(v.string()) },
+  handler: async (ctx, { issueId, kind, payload }) =>
+    await queueJob(ctx, issueId, kind, payload, undefined),
 });
 
 export const listForIssue = query({
@@ -263,6 +292,104 @@ export const finishInternal = internalMutation({
 export const getInternal = internalQuery({
   args: { jobId: v.id("importJobs") },
   handler: async (ctx, { jobId }) => await ctx.db.get(jobId),
+});
+
+/**
+ * Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses ersetzen.
+ *
+ * Der Auftrag `toc` legt sie neu, etwa nachdem die Textebene zu einem schon
+ * importierten Heft nachgetragen wurde. Artikel, Bloecke, Freigaben und
+ * Verknuepfungen bleiben unberuehrt. Jede Flaeche haengt am Artikel, der auf
+ * der Zielseite beginnt: ueber den Verzeichniseintrag, sonst ueber den
+ * Seitenanfang. Findet sich keiner, faellt die Flaeche weg.
+ */
+export const activateTocRegionsInternal = internalMutation({
+  args: {
+    jobId: v.id("importJobs"),
+    workerId: v.string(),
+    issueId: v.id("issues"),
+    regions: v.array(
+      v.object({
+        pageIndex: v.number(),
+        x0: v.number(),
+        y0: v.number(),
+        x1: v.number(),
+        y1: v.number(),
+        targetPageIndex: v.number(),
+        label: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, { jobId, workerId, issueId, regions }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job) throw new Error("Auftrag unbekannt");
+    if (job.issueId !== issueId) throw new Error("Auftrag passt nicht zur Ausgabe");
+    if (job.workerId && job.workerId !== workerId) {
+      throw new Error("Sperre liegt bei einem anderen Worker");
+    }
+
+    const alt = await ctx.db
+      .query("articleRegions")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    for (const r of alt) {
+      if (r.targetPageIndex !== undefined) await ctx.db.delete(r._id);
+    }
+
+    const articles = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    articles.sort((a, b) => a.order - b.order);
+    const vorhanden = new Set(articles.map((a) => a._id as string));
+    const toc = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    const zielArtikel = (pageIndex: number): Id<"articles"> | undefined => {
+      const eintrag = toc.find(
+        (t) =>
+          t.pageIndex === pageIndex &&
+          t.articleId !== undefined &&
+          vorhanden.has(t.articleId as string),
+      );
+      if (eintrag?.articleId) return eintrag.articleId;
+      return articles.find((a) => a.pageStart === pageIndex)?._id;
+    };
+
+    let eingetragen = 0;
+    let uebergangen = 0;
+    for (const [i, r] of regions.entries()) {
+      const articleId = zielArtikel(r.targetPageIndex);
+      if (!articleId) {
+        uebergangen++;
+        continue;
+      }
+      await ctx.db.insert("articleRegions", {
+        articleId,
+        issueId,
+        pageIndex: r.pageIndex,
+        x0: r.x0,
+        y0: r.y0,
+        x1: r.x1,
+        y1: r.y1,
+        kind: "other",
+        targetPageIndex: r.targetPageIndex,
+        order: i,
+      });
+      eingetragen++;
+    }
+    await ctx.db.patch(issueId, { updatedAt: Date.now() });
+    console.log(
+      JSON.stringify({
+        event: "import.tocRegions",
+        issueId,
+        regions: eingetragen,
+        skipped: uebergangen,
+      }),
+    );
+    return { regions: eingetragen, skipped: uebergangen };
+  },
 });
 
 /**

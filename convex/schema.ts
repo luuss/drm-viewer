@@ -206,12 +206,16 @@ export default defineSchema(
     issueId: v.id("issues"),
     // `image` ist eine Titelseite als Bild statt als PDF, `artwork` ein im
     // Satz platziertes Bild aus `Links/`, im Browser auf Netzgroesse gebracht.
+    // `text` ist die Textebene der Innenseiten (JSON): jede Zeile mit ihrem
+    // Rechteck im Netzformat, vom Browser mit pdf.js gelesen. Damit legt der
+    // Worker die Klickflaechen des gedruckten Inhaltsverzeichnisses genau.
     kind: v.union(
       v.literal("pdf"),
       v.literal("idml"),
       v.literal("indd"),
       v.literal("image"),
       v.literal("artwork"),
+      v.literal("text"),
     ),
     role: v.union(
       v.literal("inner"),
@@ -582,6 +586,8 @@ export default defineSchema(
       v.literal("pdf"),
       v.literal("idml"),
       v.literal("full"),
+      // Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses neu legen.
+      v.literal("toc"),
     ),
     status: v.union(
       v.literal("queued"),

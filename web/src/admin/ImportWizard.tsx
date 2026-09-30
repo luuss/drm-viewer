@@ -3,12 +3,14 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api, type Id , cleanError } from "../lib/api";
 import { buildPageOrder, type CoverLayout, type PageDraft as Draft } from "./pageOrder";
 import { countPdfPages, uploadAsset } from "./uploadAsset";
+import { textebeneAusPdf } from "./pageRender";
+import { textebeneAlsBlob, trimBoxAusPdf } from "./textLayer";
 
 type PageDraft = Draft<Id<"assets">>;
 
 type SourceDraft = {
   assetId: Id<"assets">;
-  kind: "pdf" | "idml" | "indd";
+  kind: "pdf" | "idml" | "indd" | "text";
   role: "inner" | "cover" | "supplemental" | "archive";
   filename: string;
   pageCount: number;
@@ -57,6 +59,54 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
         pageCount
           ? `${file.name} hochgeladen, ${pageCount} Seiten`
           : `${file.name} hochgeladen – Seitenzahl bitte eintragen`,
+      );
+    } catch (e: any) {
+      setErr(cleanError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Die Textebene zu einem schon importierten Heft nachtragen.
+   *
+   * Der Browser liest aus dem Innenteil-PDF nur die Zeilen mit ihren
+   * Rechtecken; die Druckdatei selbst geht nicht hoch. Danach legt der
+   * Auftrag `toc` die Klickflaechen des Inhaltsverzeichnisses neu — Artikel
+   * und Freigaben bleiben, anders als bei einem neuen Import.
+   */
+  async function textebeneNachtragen(file: File) {
+    setErr(null);
+    setMsg(null);
+    setBusy(`Textebene aus ${file.name} wird gelesen`);
+    try {
+      const netz = await trimBoxAusPdf(file);
+      const seiten = await textebeneAusPdf(
+        file,
+        netz ? { pageWidthPt: netz.breitePt, pageHeightPt: netz.hoehePt } : undefined,
+        (n, total) => setBusy(`Textebene: Seite ${n} von ${total}`),
+      );
+      const blob = textebeneAlsBlob(seiten);
+      setBusy("Textebene geht hoch");
+      const { assetId } = await uploadAsset(
+        { presignUpload, registerUpload, generateUploadUrl },
+        issueId,
+        blob,
+        "textebene.json",
+      );
+      await addSource({
+        issueId,
+        assetId,
+        kind: "text",
+        role: "inner",
+        filename: "textebene.json",
+        pageCount: seiten.length,
+      });
+      await enqueue({ issueId, kind: "toc" });
+      setMsg(
+        `Textebene mit ${seiten.length} Seiten hochgeladen` +
+          (netz ? "" : " (Netzformat nicht gefunden, der Anschnitt bleibt)") +
+          ". Die Klickflächen des Inhaltsverzeichnisses werden neu gelegt.",
       );
     } catch (e: any) {
       setErr(cleanError(e));
@@ -148,11 +198,22 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
               }
             />
           </label>
+          <label className="upload">
+            Textebene aus Innenteil (PDF)
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => e.target.files?.[0] && textebeneNachtragen(e.target.files[0])}
+            />
+          </label>
         </div>
         <p className="hint">
           Eine .indd-Datei wird nur archiviert; Innenteil und Umschlag dürfen je
           eine eigene haben. Für die automatische Auswertung in InDesign bitte
           zusätzlich als IDML exportieren (Datei → Exportieren → InDesign Markup).
+          „Textebene aus Innenteil“ liest aus dem Druck-PDF nur die Lage der
+          Zeilen und legt danach die Klickflächen des gedruckten
+          Inhaltsverzeichnisses neu; Artikel und Freigaben bleiben stehen.
         </p>
         <ul className="source-list">
           {sources?.map((s: any) => (
@@ -292,6 +353,27 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
           }}
         >
           Import starten
+        </button>
+        <p className="hint">
+          Nur die Klickflächen des gedruckten Inhaltsverzeichnisses neu legen —
+          ohne die Artikel anzufassen. Genau wird das erst mit einer Textebene
+          (Schritt 1).
+        </p>
+        <button
+          className="btn quiet"
+          disabled={busy !== null || (existingPages?.length ?? 0) === 0}
+          aria-busy={busy !== null}
+          onClick={async () => {
+            setErr(null);
+            try {
+              await enqueue({ issueId, kind: "toc" });
+              setMsg("Auftrag für das Inhaltsverzeichnis eingestellt.");
+            } catch (e: any) {
+              setErr(cleanError(e) ?? "Fehler");
+            }
+          }}
+        >
+          Inhaltsverzeichnis-Flächen neu legen
         </button>
       </section>
 

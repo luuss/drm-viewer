@@ -9,6 +9,8 @@ const ALLOWED = new Map<string, string[]>([
   ["application/octet-stream", [".idml", ".indd"]],
   ["image/jpeg", [".jpg", ".jpeg"]],
   ["image/png", [".png"]],
+  // Die Textebene der Innenseiten, vom Browser beim Import gelesen.
+  ["application/json", [".json"]],
 ]);
 
 export const MAX_UPLOAD_BYTES = Number(

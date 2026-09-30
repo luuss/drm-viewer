@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { requireEditor, audit } from "./roles";
 
 export const sourceKind = v.union(
@@ -8,6 +8,7 @@ export const sourceKind = v.union(
   v.literal("indd"),
   v.literal("image"),
   v.literal("artwork"),
+  v.literal("text"),
 );
 
 export const sourceRole = v.union(
@@ -52,7 +53,7 @@ export const listArtwork = query({
 type SourceArgs = {
   issueId: any;
   assetId: any;
-  kind: "pdf" | "idml" | "indd" | "image" | "artwork";
+  kind: "pdf" | "idml" | "indd" | "image" | "artwork" | "text";
   role: "inner" | "cover" | "supplemental" | "archive" | "artwork";
   filename: string;
   pageCount?: number;
@@ -87,25 +88,37 @@ async function addSource(ctx: any, args: SourceArgs) {
   });
 }
 
+const sourceArgs = {
+  issueId: v.id("issues"),
+  assetId: v.id("assets"),
+  kind: sourceKind,
+  role: sourceRole,
+  filename: v.string(),
+  pageCount: v.optional(v.number()),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  sourceWidth: v.optional(v.number()),
+  sourceHeight: v.optional(v.number()),
+};
+
 export const add = mutation({
-  args: {
-    issueId: v.id("issues"),
-    assetId: v.id("assets"),
-    kind: sourceKind,
-    role: sourceRole,
-    filename: v.string(),
-    pageCount: v.optional(v.number()),
-    width: v.optional(v.number()),
-    height: v.optional(v.number()),
-    sourceWidth: v.optional(v.number()),
-    sourceHeight: v.optional(v.number()),
-  },
+  args: sourceArgs,
   handler: async (ctx, args) => {
     await requireEditor(ctx);
     const id = await addSource(ctx, args);
     await audit(ctx, "issue.source.add", args.issueId, `${args.role}/${args.filename}`);
     return id;
   },
+});
+
+/**
+ * Quelle ohne Anmeldung eintragen — fuer Werkzeuge mit Deploy-Schluessel
+ * (`npx convex run`), etwa um die Textebene eines schon importierten Hefts
+ * nachzutragen.
+ */
+export const addInternal = internalMutation({
+  args: sourceArgs,
+  handler: async (ctx, args) => await addSource(ctx, args),
 });
 
 /**

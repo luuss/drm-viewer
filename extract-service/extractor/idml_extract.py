@@ -1050,6 +1050,10 @@ def _verzeichnis_zeile(text: str) -> list[tuple[int, str]]:
     return out
 
 
+def _rubrikname(text: str) -> str:
+    return " ".join(text.split())[:100]
+
+
 def toc_from_idml(
     blocks: list[SourceBlock], printed_offset: int
 ) -> list[TocHint]:
@@ -1064,51 +1068,99 @@ def toc_from_idml(
     kanonischem Seitenindex: steht auf der ersten Innenseite eine 3 und liegt
     sie an Position 1, ist der Versatz 2.
 
-    Der Rueckgabewert traegt die Klickflaeche des Eintrags, damit der Reader im
-    gedruckten Verzeichnis zur Stelle springen kann.
+    Drei Eigenheiten des Satzes:
+
+    * Ein Titel, den der Setzer mit einem Absatzwechsel umbrochen hat, steht
+      als zwei Absaetze ("Wahlrechtsentzug" / "statt Strafpsychiatrie 23").
+      Die Zeile ohne Zahl gehoert zum Eintrag dahinter.
+    * Rubrikzeilen im Verzeichnisformat ("Inhalt Rubrik") sind Ueberschriften
+      der folgenden Eintraege — oder, mit Seitenzahl, selbst ein Eintrag
+      ("Kalenderblatt Personen 16").
+    * Unterzeilen vergroessern die Flaeche und bleiben als Text am Eintrag,
+      damit die Zeile auf der Textebene wiederzufinden ist (toc_layout.py).
+
+    Der Rueckgabewert traegt die Klickflaeche des Eintrags — geschaetzt aus der
+    Lage des Absatzes im Rahmen; genau wird sie erst mit der Textebene.
     """
     hints: list[TocHint] = []
     offen: TocHint | None = None
+    # Titelzeile ohne Seitenzahl: die erste Zeile eines umbrochenen Titels.
+    vorsatz: SourceBlock | None = None
+    section: str | None = None
+    verzeichnis_story: str | None = None
+
+    def abschliessen() -> None:
+        nonlocal offen
+        if offen is not None:
+            hints.append(offen)
+            offen = None
+
     for block in blocks:
         stil = (block.style_name or "").lower()
-        if not any(h in stil for h in VERZEICHNIS_STILE):
-            if offen is not None:
-                hints.append(offen)
-                offen = None
+        im_verzeichnis = any(h in stil for h in VERZEICHNIS_STILE)
+        ist_rubrik = "rubrik" in stil
+        if not im_verzeichnis:
+            abschliessen()
+            vorsatz = None
+            # Eine Rubrikzeile mitten in der Verzeichnis-Story ("Deutschland",
+            # "International") ueberschreibt die folgenden Eintraege.
+            if ist_rubrik and verzeichnis_story and block.story_id == verzeichnis_story:
+                section = _rubrikname(block.text)
             continue
-        if any(h in stil for h in VERZEICHNIS_UNTERZEILE) or not any(
-            h in stil for h in VERZEICHNIS_TITEL
-        ):
-            # Unterzeile eines Eintrags: sie vergroessert nur die Flaeche.
+        verzeichnis_story = block.story_id or verzeichnis_story
+        ist_unterzeile = any(h in stil for h in VERZEICHNIS_UNTERZEILE)
+        ist_titel = not ist_unterzeile and any(h in stil for h in VERZEICHNIS_TITEL)
+        if not (ist_titel or ist_rubrik):
+            # Unterzeile eines Eintrags: sie vergroessert die Flaeche und nennt
+            # den Text, an dem die Zeile spaeter wiederzufinden ist.
             if offen is not None:
                 offen.y1 = max(offen.y1, block.y1)
                 offen.x0 = min(offen.x0, block.x0)
                 offen.x1 = max(offen.x1, block.x1)
+                offen.details = " ".join(
+                    t for t in (offen.details, " ".join(block.text.split())) if t
+                )
+            vorsatz = None
             continue
         eintraege = _verzeichnis_zeile(block.text)
         if not eintraege:
+            abschliessen()
+            if ist_rubrik:
+                section = _rubrikname(block.text)
+                vorsatz = None
+            else:
+                vorsatz = block
             continue
-        if offen is not None:
-            hints.append(offen)
-            offen = None
-        for gedruckt, label in eintraege:
+        abschliessen()
+        for i, (gedruckt, label) in enumerate(eintraege):
             ziel = gedruckt - printed_offset
             if ziel < 0:
                 continue
+            x0, y0, x1, y1 = block.x0, block.y0, block.x1, block.y1
+            if i == 0 and vorsatz is not None:
+                label = f"{' '.join(vorsatz.text.split())} {label}"
+                x0, y0 = min(x0, vorsatz.x0), min(y0, vorsatz.y0)
+                x1, y1 = max(x1, vorsatz.x1), max(y1, vorsatz.y1)
             eintrag = TocHint(
                 label=label[:200],
                 page_index=ziel,
                 toc_page_index=block.page_index,
-                x0=block.x0,
-                y0=block.y0,
-                x1=block.x1,
-                y1=block.y1,
+                x0=x0,
+                y0=y0,
+                x1=x1,
+                y1=y1,
+                # Eine Rubrik mit Seitenzahl ist ihr eigener Eintrag und
+                # steht unter keiner anderen.
+                section=None if ist_rubrik else section,
+                printed=gedruckt,
             )
             # Nur der letzte bleibt offen: eine folgende Unterzeile gehoert zu ihm.
             if offen is not None:
                 hints.append(offen)
             offen = eintrag
-    if offen is not None:
-        hints.append(offen)
+        if ist_rubrik:
+            section = None
+        vorsatz = None
+    abschliessen()
     hints.sort(key=lambda h: (h.page_index, h.toc_page_index or 0, h.y0))
     return hints
