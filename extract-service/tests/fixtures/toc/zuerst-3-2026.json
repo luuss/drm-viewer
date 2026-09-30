@@ -1,0 +1,3001 @@
+{
+"heft": "ZUERST! 3/2026",
+"toc_page": 2,
+"printed_offset": 2,
+"entries": 46,
+"blocks": [
+{
+"text": "3/2026 · Deutsches Nachrichtenmagazin",
+"style": "$ID/NormalParagraphStyle",
+"story": "u1c746",
+"x0": 0.5119,
+"y0": 0.9663,
+"x1": 0.8714,
+"y1": 0.9865
+},
+{
+"text": "TITEL",
+"style": "Seitenrubrik",
+"story": "u5b738",
+"x0": 0.3571,
+"y0": 0.1616,
+"x1": 0.4119,
+"y1": 0.1751
+},
+{
+"text": "8 Vergiftete Nachbarschaft",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b74f",
+"x0": 0.3571,
+"y0": 0.1814,
+"x1": 0.6429,
+"y1": 0.1879
+},
+{
+"text": "Polen verleibte sich 1945 Ostdeutschland ein und vertrieb von dort Millionen Deutsche. Trotzdem fordert es heute von Deutschland 1,3 Billionen Euro an „Reparationen“ für den Zweiten Weltkrieg.",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b74f",
+"x0": 0.3571,
+"y0": 0.2084,
+"x1": 0.6429,
+"y1": 0.2558
+},
+{
+"text": "Deutschland",
+"style": "Seitenrubrik",
+"story": "u5b76d",
+"x0": 0.3571,
+"y0": 0.3389,
+"x1": 0.4786,
+"y1": 0.3524
+},
+{
+"text": "24 Modernisierung im Schneckentempo",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b784",
+"x0": 0.3571,
+"y0": 0.3599,
+"x1": 0.6429,
+"y1": 0.3681
+},
+{
+"text": "Ein neues Innovationszentrum soll als Knotenpunkt Start-ups, Bundeswehr und Forschung zusammenbringen. Doch die Truppe kommt aus ihren festgefahrenen Beschaffungsroutinen nicht so einfach heraus.",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b784",
+"x0": 0.3571,
+"y0": 0.3868,
+"x1": 0.6429,
+"y1": 0.4325
+},
+{
+"text": "International",
+"style": "Seitenrubrik",
+"story": "u5b7a3",
+"x0": 0.3571,
+"y0": 0.5157,
+"x1": 0.4873,
+"y1": 0.5292
+},
+{
+"text": "46 Gefährliches Umfragetief",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b7ba",
+"x0": 0.3571,
+"y0": 0.5359,
+"x1": 0.6429,
+"y1": 0.5426
+},
+{
+"text": "Auf der Straße haut die US-Linke gegen die Einwanderungspolizei ICE auf den Putz. Aber auch Trumps Grönlandgelüste und die hohen Lebenshaltungskosten werden zum Problem für den Präsidenten.",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b7ba",
+"x0": 0.3571,
+"y0": 0.5629,
+"x1": 0.6429,
+"y1": 0.61
+},
+{
+"text": "Infrastruktur",
+"style": "Seitenrubrik",
+"story": "u5b7da",
+"x0": 0.3571,
+"y0": 0.6923,
+"x1": 0.4952,
+"y1": 0.7057
+},
+{
+"text": "58 Nägel mit Köpfen",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b7f1",
+"x0": 0.3571,
+"y0": 0.7118,
+"x1": 0.6429,
+"y1": 0.7172
+},
+{
+"text": "Eine scheinbar unendliche Geschichte findet ein gutes Ende: 1991 begannen die ersten Vorbereitungen, nun rollen endlich die ersten Züge auf der Bahnstrecke Dresden–Berlin.",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b7f1",
+"x0": 0.3571,
+"y0": 0.7387,
+"x1": 0.6429,
+"y1": 0.7872
+},
+{
+"text": "Gesellschaft",
+"style": "Seitenrubrik",
+"story": "u5b810",
+"x0": 0.3571,
+"y0": 0.8687,
+"x1": 0.481,
+"y1": 0.8821
+},
+{
+"text": "75 Gefängnis für eine Satire?",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b828",
+"x0": 0.3571,
+"y0": 0.8891,
+"x1": 0.6429,
+"y1": 0.8962
+},
+{
+"text": "Der Einschüchterungsstaat wollte wieder einmal ein Exempel setzen. Doch für die verurteilungsfreudige deutsche Justiz wurde der Prozeß um eine satirische Faeser-Bildmontage zum Rohrkrepierer.",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b828",
+"x0": 0.3571,
+"y0": 0.916,
+"x1": 0.6429,
+"y1": 0.9628
+},
+{
+"text": "Editorial 3",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.0635,
+"x1": 0.3329,
+"y1": 0.066
+},
+{
+"text": "Politikmeldungen 5",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.0702,
+"x1": 0.3329,
+"y1": 0.0743
+},
+{
+"text": "Titel",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.0755,
+"x1": 0.3329,
+"y1": 0.0766
+},
+{
+"text": "Vergiftete Nachbarschaft 8",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.0827,
+"x1": 0.3329,
+"y1": 0.0887
+},
+{
+"text": "Im komplexbeladenen Polen nimmt",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.0959,
+"x1": 0.3329,
+"y1": 0.103
+},
+{
+"text": "die Deutschenfeindlichkeit weiter zu",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.1114,
+"x1": 0.3329,
+"y1": 0.1197
+},
+{
+"text": "„Slawischer Landraub“ 18",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.1253,
+"x1": 0.3329,
+"y1": 0.1308
+},
+{
+"text": "Der Völkerrechtler Alfred de Zayas im ZUERST!--Gespräch über die Vertreibung der Deutschen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.1517,
+"x1": 0.3329,
+"y1": 0.1725
+},
+{
+"text": "„Moralische Erpressung“ 21",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.1785,
+"x1": 0.3329,
+"y1": 0.1846
+},
+{
+"text": "Der Stellvertretende Bundessprecher",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.1927,
+"x1": 0.3329,
+"y1": 0.2008
+},
+{
+"text": "der AfD Kay Gottschalk im ZUERST!-Gespräch über die Reparationsdebatte",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.217,
+"x1": 0.3329,
+"y1": 0.2332
+},
+{
+"text": "Deutschland",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.2357,
+"x1": 0.3329,
+"y1": 0.2383
+},
+{
+"text": "Wahlrechtsentzug",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.242,
+"x1": 0.3329,
+"y1": 0.2457
+},
+{
+"text": "statt Strafpsychiatrie 23",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.2515,
+"x1": 0.3329,
+"y1": 0.2573
+},
+{
+"text": "Die Bundesregierung plant den Entzug",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.2656,
+"x1": 0.3329,
+"y1": 0.2739
+},
+{
+"text": "der Wählbarkeit bei einer Verurteilung wegen Volksverhetzung",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.2878,
+"x1": 0.3329,
+"y1": 0.3017
+},
+{
+"text": "Modernisierung",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.305,
+"x1": 0.3329,
+"y1": 0.3082
+},
+{
+"text": "im Schneckentempo 24",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.3128,
+"x1": 0.3329,
+"y1": 0.3175
+},
+{
+"text": "Das neue Innovationszentrum der Bundes-wehr leidet noch unter Startproblemen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.3351,
+"x1": 0.3329,
+"y1": 0.3527
+},
+{
+"text": "Neuer Kulturkampf 26",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.3573,
+"x1": 0.3329,
+"y1": 0.3619
+},
+{
+"text": "Sachsen-Anhalts AfD plant die Streichung",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.3712,
+"x1": 0.3329,
+"y1": 0.3805
+},
+{
+"text": "von Staatsleistungen an Kirchen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.3876,
+"x1": 0.3329,
+"y1": 0.3948
+},
+{
+"text": "Parteiverbot",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.3976,
+"x1": 0.3329,
+"y1": 0.4004
+},
+{
+"text": "durch die Hintertür? 27",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.4057,
+"x1": 0.3329,
+"y1": 0.411
+},
+{
+"text": "Wie Bundestagspräsidentin Julia Klöckner versucht, die AfD auszubremsen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.4275,
+"x1": 0.3329,
+"y1": 0.4439
+},
+{
+"text": "Erzgebirge statt Grönland 28",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.4504,
+"x1": 0.3329,
+"y1": 0.4569
+},
+{
+"text": "Wegen Rohstoffkonkurrenz erlebt Sachsen eine Renaissance des Erzbergbaus",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.4735,
+"x1": 0.3329,
+"y1": 0.4902
+},
+{
+"text": "Staatsversagen statt",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.4948,
+"x1": 0.3329,
+"y1": 0.4995
+},
+{
+"text": "Migrationswende 30",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.5036,
+"x1": 0.3329,
+"y1": 0.5078
+},
+{
+"text": "2025 strömten 370.000 Migranten aus Nicht-EU-Ländern nach Deutschland",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.5238,
+"x1": 0.3329,
+"y1": 0.5398
+},
+{
+"text": "Multikulti-Horror im Osten 32",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.5465,
+"x1": 0.3329,
+"y1": 0.5532
+},
+{
+"text": "Eine Cottbusser Brennpunktschule",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.5606,
+"x1": 0.3329,
+"y1": 0.568
+},
+{
+"text": "treibt Lehrer und Eltern zur Verzweiflung",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.5775,
+"x1": 0.3329,
+"y1": 0.587
+},
+{
+"text": "Innere Sicherheit 33",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.5916,
+"x1": 0.3329,
+"y1": 0.5963
+},
+{
+"text": "Die Heimatfront rüstet auf 34",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.603,
+"x1": 0.3329,
+"y1": 0.6097
+},
+{
+"text": "Deutschlands Wirtschaft bereitet sich auf den hybriden Krieg vor",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.6245,
+"x1": 0.3329,
+"y1": 0.6393
+},
+{
+"text": "Migrantifa gegen Connewitz 35",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.6461,
+"x1": 0.3329,
+"y1": 0.6528
+},
+{
+"text": "Demonstrationen in Leipzig zeigen die tiefe Spaltung der Linksradikalen in der Nahost-Frage",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.6738,
+"x1": 0.3329,
+"y1": 0.6949
+},
+{
+"text": "Claus-M. Wolfschlag:",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.6995,
+"x1": 0.3329,
+"y1": 0.7042
+},
+{
+"text": "Die Kolumne 38",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.7074,
+"x1": 0.3329,
+"y1": 0.7107
+},
+{
+"text": "Österreich",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.713,
+"x1": 0.3329,
+"y1": 0.7153
+},
+{
+"text": "„Soldaten rennen davon“ 39",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.7213,
+"x1": 0.3329,
+"y1": 0.7273
+},
+{
+"text": "Ehemaliger ÖVP-Landeshauptmann zieht die Wehrfähigkeit Österreichs in Zweifel",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.7452,
+"x1": 0.3329,
+"y1": 0.763
+},
+{
+"text": "Ottakringer Menschenhändler 40",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.7699,
+"x1": 0.3329,
+"y1": 0.7769
+},
+{
+"text": "In Wien wurde ein mutmaßlicher Schlepperring gesprengt",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.7894,
+"x1": 0.3329,
+"y1": 0.8019
+},
+{
+"text": "International",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.8049,
+"x1": 0.3329,
+"y1": 0.8079
+},
+{
+"text": "Nach Beneš-Art 41",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.8118,
+"x1": 0.3329,
+"y1": 0.8158
+},
+{
+"text": "Die Slowakei hat Kritik an Enteignungen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.8248,
+"x1": 0.3329,
+"y1": 0.8338
+},
+{
+"text": "unter Strafe gestellt",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.8387,
+"x1": 0.3329,
+"y1": 0.8436
+},
+{
+"text": "Ein Faß ohne Boden 42",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.8484,
+"x1": 0.3329,
+"y1": 0.8533
+},
+{
+"text": "Ein EU-Beitritt der Ukraine könnte",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.8612,
+"x1": 0.3329,
+"y1": 0.869
+},
+{
+"text": "die Staatengemeinschaft ins Chaos stürzen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.8785,
+"x1": 0.3329,
+"y1": 0.888
+},
+{
+"text": "Mehr als ein Achtungserfolg 44",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.895,
+"x1": 0.3329,
+"y1": 0.9019
+},
+{
+"text": "In der Stichwahl der portugiesischen Präsidentschaftswahl holte der Rechtskandidat über 33 Prozent",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.048,
+"y0": 0.9246,
+"x1": 0.3329,
+"y1": 0.9473
+},
+{
+"text": "Plan B für Bardella 45",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.0776,
+"x1": 0.952,
+"y1": 0.0827
+},
+{
+"text": "Marine Le Pens Berufungsprozeß gegen den Entzug des passiven Wahlrechts hat begonnen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.1021,
+"x1": 0.952,
+"y1": 0.1216
+},
+{
+"text": "Gefährliches Umfragetief 46",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.1278,
+"x1": 0.952,
+"y1": 0.1341
+},
+{
+"text": "Das Auftreten der Einwanderungsbehörde ICE läßt Trumps Beliebtheitswerte einbrechen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.1533,
+"x1": 0.952,
+"y1": 0.1725
+},
+{
+"text": "Ein verhängnisvolles Video 49",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.1792,
+"x1": 0.952,
+"y1": 0.1859
+},
+{
+"text": "Ein Korruptionsskandal erschüttert Zypern – ausgerechnet zum Beginn der EU-Ratspräsidentschaft",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.2077,
+"x1": 0.952,
+"y1": 0.2295
+},
+{
+"text": "Entwertung nationalen Rechts 50",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.2367,
+"x1": 0.952,
+"y1": 0.2438
+},
+{
+"text": "Polen muß Homo-Ehen aus anderen Mitgliedstaaten anerkennen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.2573,
+"x1": 0.952,
+"y1": 0.2707
+},
+{
+"text": "Wirtschaft",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.273,
+"x1": 0.952,
+"y1": 0.2753
+},
+{
+"text": "Ein unseliger Pakt 51",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.2802,
+"x1": 0.952,
+"y1": 0.2851
+},
+{
+"text": "Das Mercosur-Abkommen mit Lateinamerika setzt die europäischen Bauern zusätzlich unter Druck",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.3064,
+"x1": 0.952,
+"y1": 0.3277
+},
+{
+"text": "Abschied von",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.3304,
+"x1": 0.952,
+"y1": 0.3332
+},
+{
+"text": "der Welt von gestern 54",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.3385,
+"x1": 0.952,
+"y1": 0.3439
+},
+{
+"text": "Das Weltwirtschaftsforum in Davos stand dieses Jahr ganz im Zeichen Donald Trumps",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.3626,
+"x1": 0.952,
+"y1": 0.3814
+},
+{
+"text": "Sport",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.3825,
+"x1": 0.952,
+"y1": 0.3837
+},
+{
+"text": "Unerschrockenes Leben 56",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.3893,
+"x1": 0.952,
+"y1": 0.3948
+},
+{
+"text": "Zum Tod des letzten „Silberpfeil“-Piloten Hans Herrmann",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4075,
+"x1": 0.952,
+"y1": 0.4203
+},
+{
+"text": "Infrastruktur",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4233,
+"x1": 0.952,
+"y1": 0.4263
+},
+{
+"text": "Nägel mit Köpfen 58",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4307,
+"x1": 0.952,
+"y1": 0.4351
+},
+{
+"text": "Neueröffnung der Bahnstrecke",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4416,
+"x1": 0.952,
+"y1": 0.4481
+},
+{
+"text": "Dresden–Berlin",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4513,
+"x1": 0.952,
+"y1": 0.4546
+},
+{
+"text": "GESCHICHTE",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4569,
+"x1": 0.952,
+"y1": 0.4592
+},
+{
+"text": "Loblied auf",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4617,
+"x1": 0.952,
+"y1": 0.4643
+},
+{
+"text": "die teuerste Gemahlin 60",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4698,
+"x1": 0.952,
+"y1": 0.4754
+},
+{
+"text": "Kaiser Karl V. heiratete vor 500 Jahren Isabella von Portugal",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.4895,
+"x1": 0.952,
+"y1": 0.5036
+},
+{
+"text": "Historischer Kalender 63",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.5092,
+"x1": 0.952,
+"y1": 0.5148
+},
+{
+"text": "Hitlers Papst? 64",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.5187,
+"x1": 0.952,
+"y1": 0.5226
+},
+{
+"text": "Vor 150 Jahren kam Papst Pius XII. zur Welt",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.5326,
+"x1": 0.952,
+"y1": 0.5425
+},
+{
+"text": "Lebensversicherung",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.5467,
+"x1": 0.952,
+"y1": 0.5509
+},
+{
+"text": "für „Uncle Joe“ 66",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.555,
+"x1": 0.952,
+"y1": 0.5592
+},
+{
+"text": "Mit dem Leih- und Pachtgesetz rüsteten die angeblich neutralen USA vor 85 Jahren Deutschlands Kriegsgegner auf",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.5847,
+"x1": 0.952,
+"y1": 0.6102
+},
+{
+"text": "„Gezielte Eskalation",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.6148,
+"x1": 0.952,
+"y1": 0.6194
+},
+{
+"text": "des Krieges“ 68",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.6229,
+"x1": 0.952,
+"y1": 0.6264
+},
+{
+"text": "Der Historiker Stefan Scheil im ZUERST!-Gespräch über sein neues Buch zum „Obersten Kriegsrat“ der Westalliierten in den Jahren 1939/40",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.6576,
+"x1": 0.952,
+"y1": 0.6889
+},
+{
+"text": "gesellschaft",
+"style": "Seitenrubrik",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.6917,
+"x1": 0.952,
+"y1": 0.6944
+},
+{
+"text": "Der Regenbogen steht noch 73",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.7009,
+"x1": 0.952,
+"y1": 0.7074
+},
+{
+"text": "Trotz klammer Kassen geben Kommunen",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.7155,
+"x1": 0.952,
+"y1": 0.7236
+},
+{
+"text": "weiterhin Geld für LGBT-Symbolik aus",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.732,
+"x1": 0.952,
+"y1": 0.7403
+},
+{
+"text": "Hausdurchsuchung",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.744,
+"x1": 0.952,
+"y1": 0.7477
+},
+{
+"text": "ohne Beschluß 74",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.7514,
+"x1": 0.952,
+"y1": 0.7551
+},
+{
+"text": "Mit einem Gesetzentwurf greift die Bundesregierung die Presse- und Meinungsfreiheit an",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.775,
+"x1": 0.952,
+"y1": 0.7949
+},
+{
+"text": "Gefängnis für eine Satire? 75",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.8017,
+"x1": 0.952,
+"y1": 0.8084
+},
+{
+"text": "Der Prozeß gegen den Deutschland-Kurier-Chefredakteur David Bendels war kein Ruhmesblatt für die deutsche Justiz",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.8343,
+"x1": 0.952,
+"y1": 0.8602
+},
+{
+"text": "„Mauerfall verpaßt?“ 76",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.8656,
+"x1": 0.952,
+"y1": 0.8709
+},
+{
+"text": "Die Chefin der Medienanstalt Berlin-Brandenburg sinniert über das Verbot ganzer Medien",
+"style": "Inhaltsverzeichnis Unterzeile",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.8908,
+"x1": 0.952,
+"y1": 0.9107
+},
+{
+"text": "Buchbesprechungen 78",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.9154,
+"x1": 0.952,
+"y1": 0.92
+},
+{
+"text": "Leserbriefe/Impressum 81",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.9255,
+"x1": 0.952,
+"y1": 0.9311
+},
+{
+"text": "Zuletzt 82",
+"style": "Inhaltsverzeichnis Überschrift",
+"story": "u5b840",
+"x0": 0.6671,
+"y0": 0.9334,
+"x1": 0.952,
+"y1": 0.9357
+},
+{
+"text": "Inhalt",
+"style": "Seitenrubrik",
+"story": "u5b85e",
+"x0": 0.0476,
+"y0": 0.0354,
+"x1": 0.1345,
+"y1": 0.0589
+}
+],
+"items": [
+[
+"4",
+0.0476,
+0.9557,
+0.057,
+0.9675,
+10.0
+],
+[
+"TITEL",
+0.3667,
+0.1544,
+0.405,
+0.1663,
+10.0
+],
+[
+"8",
+0.3571,
+0.1713,
+0.3681,
+0.1898,
+15.6
+],
+[
+"Vergiftete Nachbarschaft",
+0.3905,
+0.1767,
+0.572,
+0.1898,
+11.0
+],
+[
+"Polen verleibte sich 1945 Ostdeutschland ein und",
+0.3571,
+0.1898,
+0.6212,
+0.1993,
+8.0
+],
+[
+"vertrieb von dort Millionen Deutsche. Trotzdem",
+0.3571,
+0.1993,
+0.6164,
+0.2088,
+8.0
+],
+[
+"fordert es heute von Deutschland 1,3 Billionen Euro",
+0.3571,
+0.2088,
+0.6356,
+0.2183,
+8.0
+],
+[
+"an „Reparationen“ für den Zweiten Weltkrieg.",
+0.3571,
+0.2183,
+0.6024,
+0.2278,
+8.0
+],
+[
+"DEUTSCHLAND",
+0.3667,
+0.3317,
+0.47,
+0.3436,
+10.0
+],
+[
+"24",
+0.3571,
+0.3488,
+0.379,
+0.3674,
+15.6
+],
+[
+"Modernisierung im Schneckentempo",
+0.3905,
+0.3543,
+0.6418,
+0.3674,
+11.0
+],
+[
+"Ein neues Innovationszentrum soll als Knotenpunkt",
+0.3571,
+0.3674,
+0.6274,
+0.3769,
+8.0
+],
+[
+"Start",
+0.3571,
+0.3769,
+0.3817,
+0.3864,
+8.0
+],
+[
+"ups, Bundeswehr und Forschung zusammen",
+0.3816,
+0.3769,
+0.6122,
+0.3864,
+8.0
+],
+[
+"bringen. Doch die Truppe kommt aus ihren festgefah",
+0.3571,
+0.3864,
+0.6323,
+0.3959,
+8.0
+],
+[
+"renen Beschaffungsroutinen nicht so einfach heraus.",
+0.3571,
+0.3959,
+0.6286,
+0.4054,
+8.0
+],
+[
+"INTERNATIONAL",
+0.3667,
+0.5085,
+0.4787,
+0.5204,
+10.0
+],
+[
+"46",
+0.3571,
+0.5256,
+0.379,
+0.5441,
+15.6
+],
+[
+"Gefährliches Umfragetief",
+0.3905,
+0.5311,
+0.5749,
+0.5441,
+11.0
+],
+[
+"Auf der Straße haut die US",
+0.3571,
+0.5441,
+0.4974,
+0.5536,
+8.0
+],
+[
+"Linke gegen die Einwan",
+0.4972,
+0.5441,
+0.6223,
+0.5536,
+8.0
+],
+[
+"derungspolizei ICE auf den Putz. Aber auch Trumps",
+0.3571,
+0.5536,
+0.6309,
+0.5631,
+8.0
+],
+[
+"Grönlandgelüste und die hohen Lebenshaltungskosten",
+0.3571,
+0.5631,
+0.6426,
+0.5726,
+8.0
+],
+[
+"werden zum Problem für den Präsidenten.",
+0.3571,
+0.5726,
+0.58,
+0.5821,
+8.0
+],
+[
+"INFRASTRUKTUR",
+0.3667,
+0.6851,
+0.4841,
+0.6969,
+10.0
+],
+[
+"58",
+0.3571,
+0.7021,
+0.379,
+0.7207,
+15.6
+],
+[
+"Nägel mit Köpfen",
+0.3905,
+0.7076,
+0.52,
+0.7207,
+11.0
+],
+[
+"Eine scheinbar unendliche Geschichte findet ein",
+0.3571,
+0.7207,
+0.6158,
+0.7302,
+8.0
+],
+[
+"gutes Ende: 1991 begannen die ersten Vorbereitun",
+0.3571,
+0.7302,
+0.6263,
+0.7397,
+8.0
+],
+[
+"gen, nun rollen endlich die ersten Züge auf der",
+0.3571,
+0.7397,
+0.6074,
+0.7492,
+8.0
+],
+[
+"Bahnstrecke Dresden–Berlin.",
+0.3571,
+0.7492,
+0.5149,
+0.7587,
+8.0
+],
+[
+"GESELLSCHAFT",
+0.3667,
+0.8615,
+0.4742,
+0.8734,
+10.0
+],
+[
+"75",
+0.3571,
+0.8786,
+0.379,
+0.8971,
+15.6
+],
+[
+"Gefängnis für eine Satire?",
+0.3905,
+0.884,
+0.5795,
+0.8971,
+11.0
+],
+[
+"Der Einschüchterungsstaat wollte wieder einmal ein",
+0.3571,
+0.8971,
+0.6362,
+0.9066,
+8.0
+],
+[
+"Exempel setzen. Doch für die verurteilungsfreudige",
+0.3571,
+0.9066,
+0.6337,
+0.9161,
+8.0
+],
+[
+"deutsche Justiz wurde der Prozeß um eine satirische",
+0.3571,
+0.9161,
+0.6357,
+0.9256,
+8.0
+],
+[
+"Faeser",
+0.3571,
+0.9256,
+0.3913,
+0.9351,
+8.0
+],
+[
+"Bildmontage zum Rohrkrepierer.",
+0.391,
+0.9256,
+0.5679,
+0.9351,
+8.0
+],
+[
+"Editorial",
+0.0627,
+0.0677,
+0.1292,
+0.0808,
+11.0
+],
+[
+"3",
+0.3051,
+0.0677,
+0.3142,
+0.0808,
+11.0
+],
+[
+"Politikmeldungen",
+0.0627,
+0.0832,
+0.1934,
+0.0962,
+11.0
+],
+[
+"5",
+0.3051,
+0.0832,
+0.3142,
+0.0962,
+11.0
+],
+[
+"TITEL",
+0.1722,
+0.1046,
+0.223,
+0.1212,
+14.0
+],
+[
+"Vergiftete Nachbarschaft",
+0.0627,
+0.1236,
+0.25,
+0.1366,
+11.0
+],
+[
+"8",
+0.3051,
+0.1236,
+0.3142,
+0.1366,
+11.0
+],
+[
+"Im komplexbeladenen Polen nimmt",
+0.0627,
+0.1366,
+0.2559,
+0.1461,
+8.0
+],
+[
+"die Deutschenfeindlichkeit weiter zu",
+0.0627,
+0.1461,
+0.2589,
+0.1556,
+8.0
+],
+[
+"„Slawischer Landraub“",
+0.0627,
+0.158,
+0.2368,
+0.1711,
+11.0
+],
+[
+"18",
+0.2959,
+0.158,
+0.3142,
+0.1711,
+11.0
+],
+[
+"Der Völkerrechtler Alfred de Zayas im",
+0.0627,
+0.1711,
+0.2687,
+0.1806,
+8.0
+],
+[
+"ZUERST!",
+0.0627,
+0.1806,
+0.1133,
+0.1901,
+8.0
+],
+[
+"Gespräch über die Vertreibung",
+0.1181,
+0.1806,
+0.2838,
+0.1901,
+8.0
+],
+[
+"der Deutschen",
+0.0627,
+0.1901,
+0.1412,
+0.1996,
+8.0
+],
+[
+"„Moralische Erpressung“",
+0.0627,
+0.202,
+0.2542,
+0.215,
+11.0
+],
+[
+"21",
+0.2959,
+0.202,
+0.3142,
+0.215,
+11.0
+],
+[
+"Der Stellvertretende Bundessprecher",
+0.0627,
+0.215,
+0.2593,
+0.2245,
+8.0
+],
+[
+"der AfD Kay Gottschalk im",
+0.0627,
+0.2245,
+0.2095,
+0.234,
+8.0
+],
+[
+"ZUERST!",
+0.2126,
+0.2245,
+0.2632,
+0.234,
+8.0
+],
+[
+"Gespräch über die Reparationsdebatte",
+0.0627,
+0.234,
+0.2672,
+0.2435,
+8.0
+],
+[
+"DEUTSCHLAND",
+0.1288,
+0.2518,
+0.2664,
+0.2685,
+14.0
+],
+[
+"Wahlrechtsentzug",
+0.0627,
+0.272,
+0.1997,
+0.2851,
+11.0
+],
+[
+"statt Strafpsychiatrie",
+0.0627,
+0.2839,
+0.2194,
+0.297,
+11.0
+],
+[
+"23",
+0.2959,
+0.2839,
+0.3142,
+0.297,
+11.0
+],
+[
+"Die Bundesregierung plant den Entzug",
+0.0627,
+0.297,
+0.2715,
+0.3065,
+8.0
+],
+[
+"der Wählbarkeit bei einer Verurteilung",
+0.0627,
+0.3065,
+0.2708,
+0.316,
+8.0
+],
+[
+"wegen Volksverhetzung",
+0.0627,
+0.316,
+0.1898,
+0.3255,
+8.0
+],
+[
+"Modernisierung",
+0.0627,
+0.3302,
+0.1863,
+0.3433,
+11.0
+],
+[
+"im Schneckentempo",
+0.0627,
+0.3421,
+0.2169,
+0.3552,
+11.0
+],
+[
+"24",
+0.2959,
+0.3421,
+0.3142,
+0.3552,
+11.0
+],
+[
+"Das neue Innovationszentrum der Bundes",
+0.0627,
+0.3552,
+0.2894,
+0.3647,
+8.0
+],
+[
+"wehr leidet noch unter Startproblemen",
+0.0627,
+0.3647,
+0.271,
+0.3742,
+8.0
+],
+[
+"Neuer Kulturkampf",
+0.0627,
+0.3766,
+0.2122,
+0.3896,
+11.0
+],
+[
+"26",
+0.2959,
+0.3766,
+0.3142,
+0.3896,
+11.0
+],
+[
+"Sachsen",
+0.0627,
+0.3896,
+0.1058,
+0.3991,
+8.0
+],
+[
+"Anhalts AfD plant die Streichung",
+0.1058,
+0.3896,
+0.2846,
+0.3991,
+8.0
+],
+[
+"von Staatsleistungen an Kirchen",
+0.0627,
+0.3991,
+0.2343,
+0.4086,
+8.0
+],
+[
+"Parteiverbot",
+0.0627,
+0.4134,
+0.157,
+0.4265,
+11.0
+],
+[
+"durch die Hintertür?",
+0.0627,
+0.4253,
+0.22,
+0.4383,
+11.0
+],
+[
+"27",
+0.2959,
+0.4253,
+0.3142,
+0.4383,
+11.0
+],
+[
+"Wie Bundestagspräsidentin Julia Klöckner",
+0.0627,
+0.4383,
+0.2901,
+0.4478,
+8.0
+],
+[
+"versucht, die AfD auszubremsen",
+0.0627,
+0.4478,
+0.2364,
+0.4573,
+8.0
+],
+[
+"Erzgebirge statt Grönland",
+0.0627,
+0.4597,
+0.2591,
+0.4728,
+11.0
+],
+[
+"28",
+0.2959,
+0.4597,
+0.3142,
+0.4728,
+11.0
+],
+[
+"Wegen Rohstoffkonkurrenz erlebt Sachsen",
+0.0627,
+0.4728,
+0.2904,
+0.4823,
+8.0
+],
+[
+"eine Renaissance des Erzbergbaus",
+0.0627,
+0.4823,
+0.2437,
+0.4918,
+8.0
+],
+[
+"Staatsversagen statt",
+0.0627,
+0.4965,
+0.2104,
+0.5096,
+11.0
+],
+[
+"Migrationswende",
+0.0627,
+0.5084,
+0.1957,
+0.5215,
+11.0
+],
+[
+"30",
+0.2959,
+0.5084,
+0.3142,
+0.5215,
+11.0
+],
+[
+"2025 strömten 370.000 Migranten aus",
+0.0627,
+0.5215,
+0.2653,
+0.531,
+8.0
+],
+[
+"Nicht",
+0.0627,
+0.531,
+0.0927,
+0.5405,
+8.0
+],
+[
+"EU",
+0.0927,
+0.531,
+0.1102,
+0.5405,
+8.0
+],
+[
+"Ländern nach Deutschland",
+0.1102,
+0.531,
+0.2563,
+0.5405,
+8.0
+],
+[
+"Multikulti-Horror im Osten",
+0.0627,
+0.5429,
+0.2751,
+0.5559,
+11.0
+],
+[
+"32",
+0.2959,
+0.5429,
+0.3142,
+0.5559,
+11.0
+],
+[
+"Eine Cottbusser Brennpunktschule",
+0.0627,
+0.5559,
+0.2501,
+0.5654,
+8.0
+],
+[
+"treibt Lehrer und Eltern zur Verzweiflung",
+0.0627,
+0.5654,
+0.2857,
+0.5749,
+8.0
+],
+[
+"Innere Sicherheit",
+0.0627,
+0.5773,
+0.1883,
+0.5904,
+11.0
+],
+[
+"33",
+0.2961,
+0.5773,
+0.3142,
+0.5904,
+11.0
+],
+[
+"Die Heimatfront rüstet auf",
+0.0627,
+0.5916,
+0.266,
+0.6046,
+11.0
+],
+[
+"34",
+0.2959,
+0.5916,
+0.3142,
+0.6046,
+11.0
+],
+[
+"Deutschlands Wirtschaft bereitet sich auf",
+0.0627,
+0.6046,
+0.2833,
+0.6141,
+8.0
+],
+[
+"den hybriden Krieg vor",
+0.0627,
+0.6141,
+0.1882,
+0.6236,
+8.0
+],
+[
+"Migrantifa gegen Connewitz",
+0.0627,
+0.626,
+0.28,
+0.6391,
+11.0
+],
+[
+"35",
+0.2959,
+0.626,
+0.3142,
+0.6391,
+11.0
+],
+[
+"Demonstrationen in Leipzig zeigen die",
+0.0627,
+0.6391,
+0.2706,
+0.6486,
+8.0
+],
+[
+"tiefe Spaltung der Linksradikalen in der",
+0.0627,
+0.6486,
+0.2754,
+0.6581,
+8.0
+],
+[
+"Nahost",
+0.0627,
+0.6581,
+0.1013,
+0.6676,
+8.0
+],
+[
+"Frage",
+0.1013,
+0.6581,
+0.1309,
+0.6676,
+8.0
+],
+[
+"Claus-M. Wolfschlag:",
+0.0627,
+0.6723,
+0.2212,
+0.6854,
+11.0
+],
+[
+"Die Kolumne",
+0.0627,
+0.6842,
+0.1607,
+0.6973,
+11.0
+],
+[
+"38",
+0.2961,
+0.6842,
+0.3142,
+0.6973,
+11.0
+],
+[
+"ÖSTERREICH",
+0.1391,
+0.7056,
+0.2562,
+0.7222,
+14.0
+],
+[
+"„Soldaten rennen davon“",
+0.0627,
+0.7234,
+0.2524,
+0.7365,
+11.0
+],
+[
+"39",
+0.2959,
+0.7234,
+0.3142,
+0.7365,
+11.0
+],
+[
+"Ehemaliger ÖVP",
+0.0627,
+0.7365,
+0.154,
+0.746,
+8.0
+],
+[
+"Landeshauptmann zieht",
+0.1533,
+0.7365,
+0.2828,
+0.746,
+8.0
+],
+[
+"die Wehrfähigkeit Österreichs in Zweifel",
+0.0627,
+0.746,
+0.2792,
+0.7555,
+8.0
+],
+[
+"Ottakringer Menschenhändler",
+0.0627,
+0.7578,
+0.2893,
+0.7709,
+11.0
+],
+[
+"40",
+0.2959,
+0.7578,
+0.3142,
+0.7709,
+11.0
+],
+[
+"In Wien wurde ein mutmaßlicher",
+0.0627,
+0.7709,
+0.2429,
+0.7804,
+8.0
+],
+[
+"Schlepperring gesprengt",
+0.0627,
+0.7804,
+0.1931,
+0.7899,
+8.0
+],
+[
+"INTERNATIONAL",
+0.1234,
+0.797,
+0.2718,
+0.8137,
+14.0
+],
+[
+"Nach Beneš-Art",
+0.0627,
+0.8149,
+0.184,
+0.8279,
+11.0
+],
+[
+"41",
+0.2959,
+0.8149,
+0.3142,
+0.8279,
+11.0
+],
+[
+"Die Slowakei hat Kritik an Enteignungen",
+0.0627,
+0.8279,
+0.2817,
+0.8374,
+8.0
+],
+[
+"unter Strafe gestellt",
+0.0627,
+0.8374,
+0.1657,
+0.8469,
+8.0
+],
+[
+"Ein Faß ohne Boden",
+0.0627,
+0.8493,
+0.2175,
+0.8624,
+11.0
+],
+[
+"42",
+0.2959,
+0.8493,
+0.3142,
+0.8624,
+11.0
+],
+[
+"Ein EU",
+0.0627,
+0.8624,
+0.1019,
+0.8719,
+8.0
+],
+[
+"Beitritt der Ukraine könnte",
+0.1019,
+0.8624,
+0.2482,
+0.8719,
+8.0
+],
+[
+"die Staatengemeinschaft ins Chaos stürzen",
+0.0627,
+0.8719,
+0.2903,
+0.8814,
+8.0
+],
+[
+"Mehr als ein Achtungserfolg",
+0.0627,
+0.8838,
+0.2766,
+0.8968,
+11.0
+],
+[
+"44",
+0.2959,
+0.8838,
+0.3142,
+0.8968,
+11.0
+],
+[
+"In der Stichwahl der portugiesischen",
+0.0627,
+0.8968,
+0.2596,
+0.9063,
+8.0
+],
+[
+"Präsidentschaftswahl holte der Rechts",
+0.0627,
+0.9063,
+0.2652,
+0.9158,
+8.0
+],
+[
+"kandidat über 33 Prozent",
+0.0627,
+0.9158,
+0.1984,
+0.9253,
+8.0
+],
+[
+"Plan B für Bardella",
+0.6818,
+0.0677,
+0.8266,
+0.0808,
+11.0
+],
+[
+"45",
+0.915,
+0.0677,
+0.9332,
+0.0808,
+11.0
+],
+[
+"Marine Le Pens Berufungsprozeß gegen",
+0.6818,
+0.0808,
+0.8953,
+0.0903,
+8.0
+],
+[
+"den Entzug des passiven Wahlrechts hat",
+0.6818,
+0.0903,
+0.8956,
+0.0998,
+8.0
+],
+[
+"begonnen",
+0.6818,
+0.0998,
+0.735,
+0.1093,
+8.0
+],
+[
+"Gefährliches Umfragetief",
+0.6818,
+0.1105,
+0.8742,
+0.1236,
+11.0
+],
+[
+"46",
+0.915,
+0.1105,
+0.9332,
+0.1236,
+11.0
+],
+[
+"Das Auftreten der Einwanderungsbehörde",
+0.6818,
+0.1236,
+0.909,
+0.1331,
+8.0
+],
+[
+"ICE läßt Trumps Beliebtheitswerte",
+0.6818,
+0.1331,
+0.8671,
+0.1426,
+8.0
+],
+[
+"einbrechen",
+0.6818,
+0.1426,
+0.7414,
+0.1521,
+8.0
+],
+[
+"Ein verhängnis",
+0.6818,
+0.1533,
+0.796,
+0.1663,
+11.0
+],
+[
+"volles Video",
+0.796,
+0.1533,
+0.8888,
+0.1663,
+11.0
+],
+[
+"49",
+0.915,
+0.1533,
+0.9332,
+0.1663,
+11.0
+],
+[
+"Ein Korruptionsskandal erschüttert",
+0.6818,
+0.1663,
+0.8717,
+0.1758,
+8.0
+],
+[
+"Zypern – ausgerechnet zum Beginn der",
+0.6818,
+0.1758,
+0.8933,
+0.1853,
+8.0
+],
+[
+"EU",
+0.6818,
+0.1853,
+0.6993,
+0.1948,
+8.0
+],
+[
+"Ratspräsidentschaft",
+0.6993,
+0.1853,
+0.8042,
+0.1948,
+8.0
+],
+[
+"Entwertung nationalen Rechts",
+0.6818,
+0.196,
+0.9067,
+0.2091,
+11.0
+],
+[
+"50",
+0.915,
+0.196,
+0.9332,
+0.2091,
+11.0
+],
+[
+"Polen muß Homo",
+0.6818,
+0.2091,
+0.7779,
+0.2186,
+8.0
+],
+[
+"Ehen aus anderen",
+0.7779,
+0.2091,
+0.8734,
+0.2186,
+8.0
+],
+[
+"Mitgliedstaaten anerkennen",
+0.6818,
+0.2186,
+0.8319,
+0.2281,
+8.0
+],
+[
+"WIRTSCHAFT",
+0.7561,
+0.234,
+0.8772,
+0.2507,
+14.0
+],
+[
+"Ein unseliger Pakt",
+0.6818,
+0.2507,
+0.8201,
+0.2637,
+11.0
+],
+[
+"51",
+0.915,
+0.2507,
+0.9332,
+0.2637,
+11.0
+],
+[
+"Das Mercosur",
+0.6818,
+0.2637,
+0.7573,
+0.2732,
+8.0
+],
+[
+"Abkommen mit Latein",
+0.7569,
+0.2637,
+0.8792,
+0.2732,
+8.0
+],
+[
+"amerika setzt die europäischen Bauern",
+0.6818,
+0.2732,
+0.8893,
+0.2827,
+8.0
+],
+[
+"zusätzlich unter Druck",
+0.6818,
+0.2827,
+0.8042,
+0.2922,
+8.0
+],
+[
+"Abschied von",
+0.6818,
+0.2946,
+0.7846,
+0.3077,
+11.0
+],
+[
+"der Welt von gestern",
+0.6818,
+0.3065,
+0.8377,
+0.3195,
+11.0
+],
+[
+"54",
+0.915,
+0.3065,
+0.9332,
+0.3195,
+11.0
+],
+[
+"Das Weltwirtschaftsforum in Davos stand",
+0.6818,
+0.3195,
+0.8955,
+0.3291,
+8.0
+],
+[
+"dieses Jahr ganz im Zeichen Donald Trumps",
+0.6818,
+0.3291,
+0.9093,
+0.3386,
+8.0
+],
+[
+"SPORT",
+0.786,
+0.3445,
+0.8474,
+0.3611,
+14.0
+],
+[
+"Unerschrockenes Leben",
+0.6818,
+0.3611,
+0.8628,
+0.3742,
+11.0
+],
+[
+"56",
+0.915,
+0.3611,
+0.9332,
+0.3742,
+11.0
+],
+[
+"Zum Tod des letzten „Silberpfeil“",
+0.6818,
+0.3742,
+0.8603,
+0.3837,
+8.0
+],
+[
+"Piloten",
+0.8603,
+0.3742,
+0.8986,
+0.3837,
+8.0
+],
+[
+"Hans Herrmann",
+0.6818,
+0.3837,
+0.77,
+0.3932,
+8.0
+],
+[
+"INFRASTRUKTUR",
+0.7387,
+0.3991,
+0.8946,
+0.4158,
+14.0
+],
+[
+"Nägel mit Köpfen",
+0.6818,
+0.4158,
+0.8154,
+0.4288,
+11.0
+],
+[
+"58",
+0.915,
+0.4158,
+0.9332,
+0.4288,
+11.0
+],
+[
+"Neueröffnung der Bahnstrecke",
+0.6818,
+0.4288,
+0.8467,
+0.4383,
+8.0
+],
+[
+"Dresden–Berlin",
+0.6818,
+0.4383,
+0.7675,
+0.4478,
+8.0
+],
+[
+"GESCHICHTE",
+0.7583,
+0.4538,
+0.875,
+0.4704,
+14.0
+],
+[
+"Loblied auf",
+0.6818,
+0.474,
+0.768,
+0.487,
+11.0
+],
+[
+"die teuerste Gemahlin",
+0.6818,
+0.4858,
+0.8494,
+0.4989,
+11.0
+],
+[
+"60",
+0.915,
+0.4858,
+0.9332,
+0.4989,
+11.0
+],
+[
+"Kaiser Karl V. heiratete vor 500 Jahren",
+0.6818,
+0.4989,
+0.8864,
+0.5084,
+8.0
+],
+[
+"Isabella von Portugal",
+0.6818,
+0.5084,
+0.7943,
+0.5179,
+8.0
+],
+[
+"Historischer Kalender",
+0.6818,
+0.5203,
+0.8445,
+0.5334,
+11.0
+],
+[
+"63",
+0.9151,
+0.5203,
+0.9332,
+0.5334,
+11.0
+],
+[
+"Hitlers Papst?",
+0.6818,
+0.5345,
+0.787,
+0.5476,
+11.0
+],
+[
+"64",
+0.915,
+0.5345,
+0.9332,
+0.5476,
+11.0
+],
+[
+"Vor 150 Jahren kam Papst Pius XII. zur Welt",
+0.6818,
+0.5476,
+0.9135,
+0.5571,
+8.0
+],
+[
+"Lebensversicherung",
+0.6818,
+0.5607,
+0.8335,
+0.5737,
+11.0
+],
+[
+"für „Uncle Joe“",
+0.6818,
+0.5725,
+0.7959,
+0.5856,
+11.0
+],
+[
+"66",
+0.915,
+0.5725,
+0.9332,
+0.5856,
+11.0
+],
+[
+"Mit dem Leih",
+0.6818,
+0.5856,
+0.755,
+0.5951,
+8.0
+],
+[
+"und Pachtgesetz rüsteten",
+0.7581,
+0.5856,
+0.8918,
+0.5951,
+8.0
+],
+[
+"die angeblich neutralen USA vor 85 Jahren",
+0.6818,
+0.5951,
+0.9108,
+0.6046,
+8.0
+],
+[
+"Deutschlands Kriegsgegner auf",
+0.6818,
+0.6046,
+0.8486,
+0.6141,
+8.0
+],
+[
+"„Gezielte Eskalation",
+0.6818,
+0.6177,
+0.8348,
+0.6308,
+11.0
+],
+[
+"des Krieges“",
+0.6818,
+0.6296,
+0.7754,
+0.6426,
+11.0
+],
+[
+"68",
+0.915,
+0.6296,
+0.9332,
+0.6426,
+11.0
+],
+[
+"Der Historiker Stefan Scheil im",
+0.6818,
+0.6426,
+0.8439,
+0.6521,
+8.0
+],
+[
+"ZUERST!",
+0.8466,
+0.6426,
+0.8959,
+0.6521,
+8.0
+],
+[
+"Gespräch über sein neues Buch zum",
+0.6818,
+0.6521,
+0.8704,
+0.6616,
+8.0
+],
+[
+"„Obersten Kriegsrat“ der Westalliierten",
+0.6818,
+0.6616,
+0.8851,
+0.6711,
+8.0
+],
+[
+"in den Jahren 1939/40",
+0.6818,
+0.6711,
+0.7964,
+0.6806,
+8.0
+],
+[
+"GESELLSCHAFT",
+0.7452,
+0.6878,
+0.8881,
+0.7044,
+14.0
+],
+[
+"Der Regenbogen steht noch",
+0.6818,
+0.7056,
+0.8911,
+0.7187,
+11.0
+],
+[
+"73",
+0.915,
+0.7056,
+0.9332,
+0.7187,
+11.0
+],
+[
+"Trotz klammer Kassen geben Kommunen",
+0.6818,
+0.7187,
+0.9053,
+0.7282,
+8.0
+],
+[
+"weiterhin Geld für LGBT",
+0.6818,
+0.7282,
+0.8168,
+0.7377,
+8.0
+],
+[
+"Symbolik aus",
+0.8161,
+0.7282,
+0.8875,
+0.7377,
+8.0
+],
+[
+"Hausdurchsuchung",
+0.6818,
+0.7412,
+0.8295,
+0.7543,
+11.0
+],
+[
+"ohne Beschluß",
+0.6818,
+0.7531,
+0.7938,
+0.7662,
+11.0
+],
+[
+"74",
+0.915,
+0.7531,
+0.9332,
+0.7662,
+11.0
+],
+[
+"Mit einem Gesetzentwurf greift die",
+0.6818,
+0.7662,
+0.8697,
+0.7757,
+8.0
+],
+[
+"Bundesregierung die Presse",
+0.6818,
+0.7757,
+0.8298,
+0.7852,
+8.0
+],
+[
+"und",
+0.8329,
+0.7757,
+0.8544,
+0.7852,
+8.0
+],
+[
+"Meinungsfreiheit an",
+0.6818,
+0.7852,
+0.7903,
+0.7947,
+8.0
+],
+[
+"Gefängnis für eine Satire?",
+0.6818,
+0.7959,
+0.8773,
+0.8089,
+11.0
+],
+[
+"75",
+0.915,
+0.7959,
+0.9332,
+0.8089,
+11.0
+],
+[
+"Der Prozeß gegen den",
+0.6818,
+0.8089,
+0.8006,
+0.8184,
+8.0
+],
+[
+"Deutschland-Kurier",
+0.8037,
+0.8089,
+0.9084,
+0.8184,
+8.0
+],
+[
+"Chefredakteur David Bendels war kein",
+0.6818,
+0.8184,
+0.89,
+0.8279,
+8.0
+],
+[
+"Ruhmesblatt für die deutsche Justiz",
+0.6818,
+0.8279,
+0.8712,
+0.8374,
+8.0
+],
+[
+"„Mauerfall verpaßt?“",
+0.6818,
+0.8398,
+0.8433,
+0.8529,
+11.0
+],
+[
+"76",
+0.915,
+0.8398,
+0.9332,
+0.8529,
+11.0
+],
+[
+"Die Chefin der Medienanstalt Berlin",
+0.6818,
+0.8529,
+0.877,
+0.8624,
+8.0
+],
+[
+"Brandenburg sinniert über das Verbot",
+0.6818,
+0.8624,
+0.8859,
+0.8719,
+8.0
+],
+[
+"ganzer Medien",
+0.6818,
+0.8719,
+0.7618,
+0.8814,
+8.0
+],
+[
+"Buchbesprechungen",
+0.6818,
+0.8838,
+0.8278,
+0.8968,
+11.0
+],
+[
+"78",
+0.9151,
+0.8838,
+0.9332,
+0.8968,
+11.0
+],
+[
+"Leserbriefe/Impressum",
+0.6818,
+0.898,
+0.8499,
+0.9111,
+11.0
+],
+[
+"81",
+0.9151,
+0.898,
+0.9332,
+0.9111,
+11.0
+],
+[
+"Zuletzt",
+0.6818,
+0.9123,
+0.7345,
+0.9253,
+11.0
+],
+[
+"82",
+0.9151,
+0.9123,
+0.9332,
+0.9253,
+11.0
+],
+[
+"INHALT",
+0.0619,
+0.0262,
+0.1182,
+0.0404,
+12.0
+],
+[
+"3/2026 · Deutsches Nachrichtenmagazin",
+0.5973,
+0.9557,
+0.8714,
+0.9664,
+9.0
+]
+]
+}

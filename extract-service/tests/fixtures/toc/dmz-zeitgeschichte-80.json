@@ -1,0 +1,1951 @@
+{
+"heft": "DMZ-Zeitgeschichte 80",
+"toc_page": 1,
+"printed_offset": 2,
+"entries": 15,
+"blocks": [
+{
+"text": "DMZ ZEITGESCHICHTE Nr. 80",
+"style": "$ID/NormalParagraphStyle",
+"story": "u554e0",
+"x0": 0.3841,
+"y0": 0.9594,
+"x1": 0.6127,
+"y1": 0.977
+},
+{
+"text": "Inhalt",
+"style": "$ID/[No paragraph style]",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6244,
+"x1": 0.9524,
+"y1": 0.626
+},
+{
+"text": "Waffen‑SS im Bild",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6276,
+"x1": 0.9524,
+"y1": 0.6322
+},
+{
+"text": "Neuaufstellung 4",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6321,
+"x1": 0.9524,
+"y1": 0.6365
+},
+{
+"text": "An den Fronten",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6362,
+"x1": 0.9524,
+"y1": 0.6401
+},
+{
+"text": "Russen verteidigen das Elsaß 6",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6423,
+"x1": 0.9524,
+"y1": 0.6506
+},
+{
+"text": "Die 30. Waffen-Grenadier-Division der SS",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6519,
+"x1": 0.9524,
+"y1": 0.663
+},
+{
+"text": "im Kampf um die Burgundische Pforte",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6623,
+"x1": 0.9524,
+"y1": 0.6719
+},
+{
+"text": "Vorstoß über den Mscha 18",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6705,
+"x1": 0.9524,
+"y1": 0.6774
+},
+{
+"text": "Die „Leibstandarte“ beim Angriff",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6784,
+"x1": 0.9524,
+"y1": 0.6872
+},
+{
+"text": "in Richtung Charkow",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6854,
+"x1": 0.9524,
+"y1": 0.6906
+},
+{
+"text": "Warschauer Aufstand 1944 22",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.6917,
+"x1": 0.9524,
+"y1": 0.6992
+},
+{
+"text": "Waffen‑SS im Kampf gegen die Armia Krajowa, Teil II: Panzerschlacht vor Warschau und Aufstandsbeginn",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7092,
+"x1": 0.9524,
+"y1": 0.7368
+},
+{
+"text": "Soldatenporträt",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7251,
+"x1": 0.9524,
+"y1": 0.7292
+},
+{
+"text": "Standartenführer",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7293,
+"x1": 0.9524,
+"y1": 0.7337
+},
+{
+"text": "Alfons Rebane 10",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7337,
+"x1": 0.9524,
+"y1": 0.7381
+},
+{
+"text": "Ein Porträt zum 50. Todestag",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7398,
+"x1": 0.9524,
+"y1": 0.7475
+},
+{
+"text": "Kalenderblatt Personen 16",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7471,
+"x1": 0.9524,
+"y1": 0.754
+},
+{
+"text": "Europäische Freiwillige",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7537,
+"x1": 0.9524,
+"y1": 0.76
+},
+{
+"text": "Unterscharführer",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7591,
+"x1": 0.9524,
+"y1": 0.7635
+},
+{
+"text": "Caspar Sporck 30",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7635,
+"x1": 0.9524,
+"y1": 0.7679
+},
+{
+"text": "Panzerknacker aus den Niederlanden",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7704,
+"x1": 0.9524,
+"y1": 0.7797
+},
+{
+"text": "Orden und Ehrenzeichen",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7781,
+"x1": 0.9524,
+"y1": 0.7841
+},
+{
+"text": "Sturmgeschütz-Soldaten 36",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7845,
+"x1": 0.9524,
+"y1": 0.7914
+},
+{
+"text": "als Ritterkreuzträger der „Leibstandarte“",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.7936,
+"x1": 0.9524,
+"y1": 0.8049
+},
+{
+"text": "Soldatenschicksal",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8016,
+"x1": 0.9524,
+"y1": 0.8063
+},
+{
+"text": "Blutige Sühne 44",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8062,
+"x1": 0.9524,
+"y1": 0.8106
+},
+{
+"text": "SS‑Obersturmführer",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8108,
+"x1": 0.9524,
+"y1": 0.8158
+},
+{
+"text": "Adalbert Trattenschegg",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8164,
+"x1": 0.9524,
+"y1": 0.8224
+},
+{
+"text": "Kalenderblatt Ereignisse 48",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8231,
+"x1": 0.9524,
+"y1": 0.8305
+},
+{
+"text": "Waffen und Munition",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8294,
+"x1": 0.9524,
+"y1": 0.8347
+},
+{
+"text": "Klein-Flugzeugträger 50",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8352,
+"x1": 0.9524,
+"y1": 0.8415
+},
+{
+"text": "Planungen zum Einsatz",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8413,
+"x1": 0.9524,
+"y1": 0.8471
+},
+{
+"text": "gegen alliierte Seestreitkräfte",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8484,
+"x1": 0.9524,
+"y1": 0.857
+},
+{
+"text": "Blick zurück",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8544,
+"x1": 0.9524,
+"y1": 0.8577
+},
+{
+"text": "Waffen‑SS und",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8578,
+"x1": 0.9524,
+"y1": 0.8614
+},
+{
+"text": "Fremdenlegion 56",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8618,
+"x1": 0.9524,
+"y1": 0.8662
+},
+{
+"text": "Teil 3: Einmal Nordafrika und zurück",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.869,
+"x1": 0.9524,
+"y1": 0.8789
+},
+{
+"text": "Buchbesprechungen 64",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8767,
+"x1": 0.9524,
+"y1": 0.8822
+},
+{
+"text": "Nachruf 65",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8808,
+"x1": 0.9524,
+"y1": 0.8835
+},
+{
+"text": "Ehrenmal",
+"style": "Inhalt Rubrik DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8833,
+"x1": 0.9524,
+"y1": 0.8855
+},
+{
+"text": "An den Kriegsfolgen 66",
+"style": "Inhalt Hauptzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8874,
+"x1": 0.9524,
+"y1": 0.8935
+},
+{
+"text": "Tod eines flämischen SS‑Führers",
+"style": "Inhalt Unterzeile DMZ-Zeit 2018",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.8947,
+"x1": 0.9524,
+"y1": 0.9032
+},
+{
+"text": "Titelseite: Panzerkampfwagen IV mit der Turmnummer „225“ der „Leibstandarte“ bei Charkow",
+"style": "$ID/[No paragraph style]",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.9111,
+"x1": 0.9524,
+"y1": 0.9353
+},
+{
+"text": "Foto: DMZ-Archiv",
+"style": "$ID/[No paragraph style]",
+"story": "ude64a",
+"x0": 0.0476,
+"y0": 0.9254,
+"x1": 0.9524,
+"y1": 0.9298
+},
+{
+"text": "Verehrter Leser,",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.0619,
+"y0": 0.0831,
+"x1": 0.619,
+"y1": 0.0862
+},
+{
+"text": "80 Jahre nach Bildung der SS‑Kampfgruppe „Nord“ im Jahre 1941 sind erneut deutsche Soldaten in den hohen Norden aufgebrochen, diesmal jedoch nicht nach Norwegen oder Finnland, sondern nach Grönland. Ja, man liest richtig, 15 Bundeswehrsoldaten von Heer, Luftwaffe und Marine brachen kurzfristig mit einigen anderen NATO-Soldaten auf Einladung Dänemarks nach Grönland auf, einer Insel, die – zu Dänemark gehörend – flächenmäßig das zwölftgrößte Land der Erde ist. Will man also in der Ukraine an der Ostfront schon Stärke gegen Putin zeigen, bereitet man sich jetzt sogar auf einen „Zweifrontenkrieg“ vor. Doch im hohen Norden soll nicht Rußland, sondern Trump in die Schranken gewiesen werden. Und an all dem möchte sich ein Deutschland beteiligen, das seine eigene Infrastruktur nicht schützen kann und dessen -Armee auf mitteleuropäischem Boden kaum einsatzfähig ist.",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.0619,
+"y0": 0.2127,
+"x1": 0.619,
+"y1": 0.378
+},
+{
+"text": "Der Wunsch der Grönländer nach Unabhängigkeit kollidiert mit den machtpolitischen Interessen von USA, Rußland und China. Und während die Welt sich wandelt, sitzen die Europäer – allen voran Deutschland – auf der Zuschauertribüne. Nun rächt sich, daß man machtpolitisch abgemeldet ist und die Wirtschaft ideologiebehaftet mit Vollgas gegen die Wand fährt. Trotz aller Beteuerungen der EU, Dänemark und der Bevölkerung Grönlands „uneingeschränkte Solidarität“ zu zeigen, wie es die deutsche Präsidentin der Europäischen Kommission Ursula von der Leyen in die Welt hinausposaunt, fehlen dafür die Mittel. Da können sich die europäischen Regierungschefs trotzig auf den Kopf stellen, wie sie wollen.",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.0619,
+"y0": 0.4416,
+"x1": 0.619,
+"y1": 0.5738
+},
+{
+"text": "Und weiß man in Berlin eigentlich, womit man es bei Grönland zu tun hat? Welche Ausmaße die Insel wirklich hat, und wie hart die Bedingungen vor Ort tatsächlich sind? Das kleine deutsche -Erkundungskommando wird kaum Erkenntnisse gewonnen haben, denn die Exkursion war schneller beendet als gedacht. Nach nur zwei Tagen saß man bereits wieder im Flieger nach Hause. Dieses Desaster zeigt die Hilflosigkeit der Europäer und dürfte Trump in seiner Sicht eher bestärken, den Schutz Grönlands in die eigene Hand zu nehmen. -Einer deutschen Bundesregierung stünde es jedenfalls gut zu Gesicht, Diplomatie neu zu erlernen und im Sinne deutscher Interessen anzuwenden.",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.6381,
+"y0": 0.2148,
+"x1": 0.9381,
+"y1": 0.3406
+},
+{
+"text": "Für die deutschen Soldaten bleibt zu hoffen, daß sich die Worte des Altbundeskanzlers Helmut Schmidt bewahrheiten, die er bei seiner Rede während eines -Gelöbnisses am 20. Juli 2008 den Soldaten zurief: „Aber Ihr könnt Euch darauf verlassen: Dieser Staat wird Euch nicht mißbrauchen.“",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.6381,
+"y0": 0.4717,
+"x1": 0.9381,
+"y1": 0.5257
+},
+{
+"text": "Mit freundlichem Gruß",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.6381,
+"y0": 0.5546,
+"x1": 0.9381,
+"y1": 0.5586
+},
+{
+"text": "Ihr",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.6381,
+"y0": 0.5611,
+"x1": 0.9381,
+"y1": 0.5617
+},
+{
+"text": "Guido Kraus",
+"style": "Mengentext DMZ-Zeit 2018",
+"story": "ufa0fb",
+"x0": 0.6381,
+"y0": 0.5649,
+"x1": 0.9381,
+"y1": 0.567
+}
+],
+"items": [
+[
+"DMZ",
+0.3993,
+0.9511,
+0.4296,
+0.9668,
+13.2
+],
+[
+"Z",
+0.4342,
+0.9445,
+0.4448,
+0.9668,
+18.7
+],
+[
+"EITGESCHICHTE",
+0.4448,
+0.9511,
+0.5487,
+0.9668,
+13.2
+],
+[
+"Nr. 80",
+0.5534,
+0.9511,
+0.5975,
+0.9668,
+13.2
+],
+[
+"3",
+0.9376,
+0.9478,
+0.9452,
+0.9608,
+10.9
+],
+[
+"Editorial",
+0.4496,
+0.0269,
+0.5504,
+0.0515,
+20.7
+],
+[
+"Inhalt",
+0.0619,
+0.6632,
+0.1461,
+0.6869,
+20.0
+],
+[
+"Waffen‑SS im Bild",
+0.0619,
+0.7119,
+0.2006,
+0.7249,
+11.0
+],
+[
+"Neuaufstellung",
+0.0619,
+0.7249,
+0.1772,
+0.738,
+11.0
+],
+[
+"4",
+0.3042,
+0.7249,
+0.3133,
+0.738,
+11.0
+],
+[
+"An den Fronten",
+0.0619,
+0.7582,
+0.182,
+0.7713,
+11.0
+],
+[
+"Russen verteidigen das Elsaß",
+0.0619,
+0.7713,
+0.2805,
+0.7843,
+11.0
+],
+[
+"6",
+0.3042,
+0.7713,
+0.3133,
+0.7843,
+11.0
+],
+[
+"Die 30. Waffen",
+0.0619,
+0.7843,
+0.1432,
+0.7938,
+8.0
+],
+[
+"‑",
+0.1432,
+0.7843,
+0.1478,
+0.7938,
+8.0
+],
+[
+"Grenadier",
+0.1478,
+0.7843,
+0.2042,
+0.7938,
+8.0
+],
+[
+"‑",
+0.2038,
+0.7843,
+0.2085,
+0.7938,
+8.0
+],
+[
+"Division der SS",
+0.2085,
+0.7843,
+0.2935,
+0.7938,
+8.0
+],
+[
+"im Kampf um die Burgundische Pforte",
+0.0619,
+0.7938,
+0.2762,
+0.8033,
+8.0
+],
+[
+"Vorstoß über den Mscha",
+0.0619,
+0.8235,
+0.2478,
+0.8366,
+11.0
+],
+[
+"18",
+0.2951,
+0.8235,
+0.3133,
+0.8366,
+11.0
+],
+[
+"Die „Leibstandarte“ beim Angriff",
+0.0619,
+0.8366,
+0.2469,
+0.8461,
+8.0
+],
+[
+"in Richtung Charkow",
+0.0619,
+0.8461,
+0.1806,
+0.8556,
+8.0
+],
+[
+"Warschauer Aufstand 1944",
+0.0619,
+0.8758,
+0.2664,
+0.8888,
+11.0
+],
+[
+"22",
+0.2951,
+0.8758,
+0.3133,
+0.8888,
+11.0
+],
+[
+"Waffen‑SS im Kampf gegen die Armia",
+0.0619,
+0.8888,
+0.2711,
+0.8984,
+8.0
+],
+[
+"Krajowa, Teil II: Panzerschlacht vor",
+0.0619,
+0.8984,
+0.2586,
+0.9079,
+8.0
+],
+[
+"Warschau und Aufstandsbeginn",
+0.0619,
+0.9079,
+0.2387,
+0.9174,
+8.0
+],
+[
+"Soldatenporträt",
+0.3635,
+0.6335,
+0.484,
+0.6465,
+11.0
+],
+[
+"Standartenführer",
+0.3635,
+0.6465,
+0.4954,
+0.6596,
+11.0
+],
+[
+"Alfons Rebane",
+0.3635,
+0.6596,
+0.4741,
+0.6727,
+11.0
+],
+[
+"10",
+0.5967,
+0.6596,
+0.6149,
+0.6727,
+11.0
+],
+[
+"Ein Porträt zum 50. Todestag",
+0.3635,
+0.6727,
+0.5245,
+0.6822,
+8.0
+],
+[
+"Kalenderblatt Personen",
+0.3635,
+0.6976,
+0.5423,
+0.7107,
+11.0
+],
+[
+"16",
+0.5967,
+0.6976,
+0.6149,
+0.7107,
+11.0
+],
+[
+"Europäische Freiwillige",
+0.3635,
+0.7273,
+0.5415,
+0.7404,
+11.0
+],
+[
+"Unterscharführer",
+0.3635,
+0.7404,
+0.4964,
+0.7534,
+11.0
+],
+[
+"Caspar Sporck",
+0.3635,
+0.7534,
+0.4737,
+0.7665,
+11.0
+],
+[
+"30",
+0.5967,
+0.7534,
+0.6149,
+0.7665,
+11.0
+],
+[
+"Panzerknacker aus den Niederlanden",
+0.3635,
+0.7665,
+0.5692,
+0.776,
+8.0
+],
+[
+"Orden und Ehrenzeichen",
+0.3635,
+0.7914,
+0.5552,
+0.8045,
+11.0
+],
+[
+"Sturmgeschütz",
+0.3635,
+0.8045,
+0.4763,
+0.8176,
+11.0
+],
+[
+"‑",
+0.4763,
+0.8045,
+0.4827,
+0.8176,
+11.0
+],
+[
+"Soldaten",
+0.4827,
+0.8045,
+0.549,
+0.8176,
+11.0
+],
+[
+"36",
+0.5967,
+0.8045,
+0.6149,
+0.8176,
+11.0
+],
+[
+"als Ritterkreuzträger der „Leibstandarte“",
+0.3635,
+0.8176,
+0.5898,
+0.8271,
+8.0
+],
+[
+"Soldatenschicksal",
+0.3635,
+0.8425,
+0.4975,
+0.8556,
+11.0
+],
+[
+"Blutige Sühne",
+0.3635,
+0.8556,
+0.4693,
+0.8687,
+11.0
+],
+[
+"44",
+0.5967,
+0.8556,
+0.6149,
+0.8687,
+11.0
+],
+[
+"SS‑Obersturmführer",
+0.3635,
+0.8687,
+0.4781,
+0.8782,
+8.0
+],
+[
+"Adalbert Trattenschegg",
+0.3635,
+0.8782,
+0.4926,
+0.8877,
+8.0
+],
+[
+"Kalenderblatt Ereignisse",
+0.3635,
+0.9031,
+0.5495,
+0.9162,
+11.0
+],
+[
+"48",
+0.5967,
+0.9031,
+0.6149,
+0.9162,
+11.0
+],
+[
+"Waffen und Munition",
+0.6651,
+0.6335,
+0.8298,
+0.6465,
+11.0
+],
+[
+"Klein",
+0.6651,
+0.6465,
+0.7067,
+0.6596,
+11.0
+],
+[
+"‑",
+0.7067,
+0.6465,
+0.7131,
+0.6596,
+11.0
+],
+[
+"Flugzeugträger",
+0.7131,
+0.6465,
+0.828,
+0.6596,
+11.0
+],
+[
+"50",
+0.8983,
+0.6465,
+0.9165,
+0.6596,
+11.0
+],
+[
+"Planungen zum Einsatz",
+0.6651,
+0.6596,
+0.7951,
+0.6691,
+8.0
+],
+[
+"gegen alliierte Seestreitkräfte",
+0.6651,
+0.6691,
+0.8248,
+0.6786,
+8.0
+],
+[
+"Blick zurück",
+0.6651,
+0.6917,
+0.7607,
+0.7047,
+11.0
+],
+[
+"Waffen‑SS und",
+0.6651,
+0.7047,
+0.7778,
+0.7178,
+11.0
+],
+[
+"Fremdenlegion",
+0.6651,
+0.7178,
+0.7808,
+0.7309,
+11.0
+],
+[
+"56",
+0.8983,
+0.7178,
+0.9165,
+0.7309,
+11.0
+],
+[
+"Teil 3: Einmal Nordafrika und zurück",
+0.6651,
+0.7309,
+0.8726,
+0.7404,
+8.0
+],
+[
+"Buchbesprechungen",
+0.6651,
+0.7534,
+0.8188,
+0.7665,
+11.0
+],
+[
+"64",
+0.8983,
+0.7534,
+0.9165,
+0.7665,
+11.0
+],
+[
+"Nachruf",
+0.6651,
+0.7796,
+0.728,
+0.7926,
+11.0
+],
+[
+"65",
+0.8983,
+0.7796,
+0.9165,
+0.7926,
+11.0
+],
+[
+"Ehrenmal",
+0.6651,
+0.8057,
+0.7402,
+0.8188,
+11.0
+],
+[
+"An den Kriegsfolgen",
+0.6651,
+0.8188,
+0.8212,
+0.8318,
+11.0
+],
+[
+"66",
+0.8983,
+0.8188,
+0.9165,
+0.8318,
+11.0
+],
+[
+"Tod eines flämischen SS‑Führers",
+0.6651,
+0.8318,
+0.8446,
+0.8413,
+8.0
+],
+[
+"Titelseite: Panzerkampfwagen IV",
+0.6651,
+0.8722,
+0.8935,
+0.8841,
+10.0
+],
+[
+"mit der Turmnummer „225“ der",
+0.6651,
+0.8841,
+0.8886,
+0.896,
+10.0
+],
+[
+"„Leibstandarte“ bei Charkow",
+0.6651,
+0.896,
+0.8665,
+0.9079,
+10.0
+],
+[
+"Foto:",
+0.6651,
+0.9079,
+0.6926,
+0.9174,
+8.0
+],
+[
+"DMZ",
+0.6956,
+0.9079,
+0.7246,
+0.9174,
+8.0
+],
+[
+"-Archiv",
+0.7246,
+0.9079,
+0.766,
+0.9174,
+8.0
+],
+[
+"Verehrter Leser,",
+0.3286,
+0.0759,
+0.4887,
+0.0938,
+15.0
+],
+[
+"80 Jahre nach Bildung der SS",
+0.3286,
+0.1092,
+0.556,
+0.1223,
+11.0
+],
+[
+"-",
+0.556,
+0.1092,
+0.5626,
+0.1223,
+11.0
+],
+[
+"Kampf",
+0.5626,
+0.1092,
+0.6125,
+0.1223,
+11.0
+],
+[
+"-",
+0.6125,
+0.1092,
+0.619,
+0.1223,
+11.0
+],
+[
+"gruppe „Nord“ im Jahre 1941 sind er",
+0.3286,
+0.1235,
+0.6129,
+0.1365,
+11.0
+],
+[
+"-",
+0.6125,
+0.1235,
+0.619,
+0.1365,
+11.0
+],
+[
+"neut deutsche Soldaten in den hohen",
+0.3286,
+0.1377,
+0.619,
+0.1508,
+11.0
+],
+[
+"Norden aufgebrochen, diesmal jedoch",
+0.3286,
+0.152,
+0.619,
+0.165,
+11.0
+],
+[
+"nicht nach Norwegen oder Finnland,",
+0.3286,
+0.1662,
+0.619,
+0.1793,
+11.0
+],
+[
+"sondern nach Grönland. Ja, man liest",
+0.3286,
+0.1805,
+0.6191,
+0.1935,
+11.0
+],
+[
+"richtig,",
+0.3286,
+0.1947,
+0.3813,
+0.2078,
+11.0
+],
+[
+"15",
+0.3941,
+0.1947,
+0.4119,
+0.2078,
+11.0
+],
+[
+"Bundeswehrsoldaten",
+0.4247,
+0.1947,
+0.5785,
+0.2078,
+11.0
+],
+[
+"von",
+0.5913,
+0.1947,
+0.619,
+0.2078,
+11.0
+],
+[
+"Heer, Luftwaffe und Marine brachen",
+0.3286,
+0.209,
+0.6191,
+0.222,
+11.0
+],
+[
+"kurzfristig mit einigen anderen NATO-",
+0.3286,
+0.2232,
+0.619,
+0.2363,
+11.0
+],
+[
+"Soldaten",
+0.3286,
+0.2375,
+0.3926,
+0.2506,
+11.0
+],
+[
+"auf",
+0.4065,
+0.2375,
+0.4295,
+0.2506,
+11.0
+],
+[
+"Einladung",
+0.4434,
+0.2375,
+0.5199,
+0.2506,
+11.0
+],
+[
+"Dänemarks",
+0.5338,
+0.2375,
+0.619,
+0.2506,
+11.0
+],
+[
+"nach Grönland auf, einer Insel, die – zu",
+0.3286,
+0.2517,
+0.619,
+0.2648,
+11.0
+],
+[
+"Dänemark gehörend – flächenmäßig",
+0.3286,
+0.266,
+0.619,
+0.2791,
+11.0
+],
+[
+"das zwölftgrößte Land der Erde ist. Will",
+0.3286,
+0.2802,
+0.619,
+0.2933,
+11.0
+],
+[
+"man also in der Ukraine an der Ost",
+0.3286,
+0.2945,
+0.6125,
+0.3076,
+11.0
+],
+[
+"-",
+0.6125,
+0.2945,
+0.619,
+0.3076,
+11.0
+],
+[
+"front schon Stärke gegen Putin zeigen,",
+0.3286,
+0.3088,
+0.619,
+0.3218,
+11.0
+],
+[
+"bereitet man sich jetzt sogar auf einen",
+0.3286,
+0.323,
+0.619,
+0.3361,
+11.0
+],
+[
+"„Zweifrontenkrieg“ vor. Doch im ho",
+0.3286,
+0.3373,
+0.6125,
+0.3503,
+11.0
+],
+[
+"-",
+0.6125,
+0.3373,
+0.619,
+0.3503,
+11.0
+],
+[
+"hen Norden soll nicht Rußland, son",
+0.3286,
+0.3515,
+0.6124,
+0.3646,
+11.0
+],
+[
+"-",
+0.6125,
+0.3515,
+0.619,
+0.3646,
+11.0
+],
+[
+"dern Trump in die Schranken gewiesen",
+0.3286,
+0.3658,
+0.6191,
+0.3788,
+11.0
+],
+[
+"werden. Und an all dem möchte sich",
+0.3286,
+0.38,
+0.6191,
+0.3931,
+11.0
+],
+[
+"ein Deutschland beteiligen, das seine",
+0.3286,
+0.3943,
+0.6191,
+0.4073,
+11.0
+],
+[
+"eigene",
+0.3286,
+0.4085,
+0.3756,
+0.4216,
+11.0
+],
+[
+"Infrastruktur",
+0.3901,
+0.4085,
+0.4871,
+0.4216,
+11.0
+],
+[
+"nicht",
+0.5016,
+0.4085,
+0.5395,
+0.4216,
+11.0
+],
+[
+"schützen",
+0.554,
+0.4085,
+0.6191,
+0.4216,
+11.0
+],
+[
+"kann und dessen",
+0.3286,
+0.4228,
+0.4516,
+0.4358,
+11.0
+],
+[
+"Armee auf mitteleuro",
+0.455,
+0.4228,
+0.6125,
+0.4358,
+11.0
+],
+[
+"-",
+0.6125,
+0.4228,
+0.619,
+0.4358,
+11.0
+],
+[
+"päischem Boden kaum einsatzfähig ist.",
+0.3286,
+0.437,
+0.6152,
+0.4501,
+11.0
+],
+[
+"Der Wunsch der Grönländer nach Unabhängigkeit kollidiert mit den macht",
+0.0619,
+0.4513,
+0.6125,
+0.4644,
+11.0
+],
+[
+"-",
+0.6125,
+0.4513,
+0.619,
+0.4644,
+11.0
+],
+[
+"politischen Interessen von USA, Rußland und China. Und während die Welt",
+0.0619,
+0.4655,
+0.6191,
+0.4786,
+11.0
+],
+[
+"sich wandelt, sitzen die Europäer – allen voran Deutschland – auf der Zu",
+0.0619,
+0.4798,
+0.6125,
+0.4929,
+11.0
+],
+[
+"-",
+0.6125,
+0.4798,
+0.619,
+0.4929,
+11.0
+],
+[
+"schauertribüne. Nun rächt sich, daß man machtpolitisch abgemeldet ist und",
+0.0619,
+0.4941,
+0.6191,
+0.5071,
+11.0
+],
+[
+"die Wirtschaft ideologiebehaftet mit Vollgas gegen die Wand fährt. Trotz al",
+0.0619,
+0.5083,
+0.6125,
+0.5214,
+11.0
+],
+[
+"-",
+0.6125,
+0.5083,
+0.619,
+0.5214,
+11.0
+],
+[
+"ler Beteuerungen der EU, Dänemark und der Bevölkerung Grönlands „un",
+0.0619,
+0.5226,
+0.6124,
+0.5356,
+11.0
+],
+[
+"-",
+0.6124,
+0.5226,
+0.619,
+0.5356,
+11.0
+],
+[
+"eingeschränkte Solidarität“ zu zeigen, wie es die deutsche Präsidentin der",
+0.0619,
+0.5368,
+0.619,
+0.5499,
+11.0
+],
+[
+"Europäischen Kommission Ursula von der Leyen in die Welt hinausposaunt,",
+0.0619,
+0.5511,
+0.619,
+0.5641,
+11.0
+],
+[
+"fehlen dafür die Mittel. Da können sich",
+0.6381,
+0.0772,
+0.9381,
+0.0903,
+11.0
+],
+[
+"die",
+0.6381,
+0.0915,
+0.6607,
+0.1046,
+11.0
+],
+[
+"europäischen Regierungschefs trot",
+0.6687,
+0.0915,
+0.9315,
+0.1046,
+11.0
+],
+[
+"-",
+0.9315,
+0.0915,
+0.9381,
+0.1046,
+11.0
+],
+[
+"zig auf den Kopf stellen, wie sie wollen.",
+0.6381,
+0.1057,
+0.9259,
+0.1188,
+11.0
+],
+[
+"Und weiß man in Berlin eigentlich, wo",
+0.6381,
+0.12,
+0.9315,
+0.1331,
+11.0
+],
+[
+"-",
+0.9315,
+0.12,
+0.9381,
+0.1331,
+11.0
+],
+[
+"mit man es bei Grönland zu tun hat?",
+0.6381,
+0.1343,
+0.9381,
+0.1473,
+11.0
+],
+[
+"Welche Ausmaße die Insel wirklich hat,",
+0.6381,
+0.1485,
+0.9381,
+0.1616,
+11.0
+],
+[
+"und wie hart die Bedingungen vor Ort",
+0.6381,
+0.1628,
+0.9381,
+0.1758,
+11.0
+],
+[
+"tatsächlich sind? Das kleine deutsche",
+0.6381,
+0.177,
+0.9381,
+0.1901,
+11.0
+],
+[
+"Erkundungskommando wird kaum Er",
+0.6381,
+0.1913,
+0.932,
+0.2043,
+11.0
+],
+[
+"-",
+0.9315,
+0.1913,
+0.9381,
+0.2043,
+11.0
+],
+[
+"kenntnisse gewonnen haben, denn die",
+0.6381,
+0.2055,
+0.9381,
+0.2186,
+11.0
+],
+[
+"Exkursion",
+0.6381,
+0.2198,
+0.7139,
+0.2328,
+11.0
+],
+[
+"war",
+0.7269,
+0.2198,
+0.7544,
+0.2328,
+11.0
+],
+[
+"schneller",
+0.7674,
+0.2198,
+0.8339,
+0.2328,
+11.0
+],
+[
+"beendet",
+0.8469,
+0.2198,
+0.9055,
+0.2328,
+11.0
+],
+[
+"als",
+0.9185,
+0.2198,
+0.9381,
+0.2328,
+11.0
+],
+[
+"gedacht. Nach nur zwei Tagen saß man",
+0.6381,
+0.234,
+0.9381,
+0.2471,
+11.0
+],
+[
+"bereits wieder im Flieger nach Hause.",
+0.6381,
+0.2483,
+0.9381,
+0.2614,
+11.0
+],
+[
+"Dieses Desaster zeigt die Hilflosigkeit",
+0.6381,
+0.2625,
+0.9381,
+0.2756,
+11.0
+],
+[
+"der Europäer und dürfte Trump in seiner",
+0.6381,
+0.2768,
+0.9381,
+0.2899,
+11.0
+],
+[
+"Sicht eher bestärken, den Schutz Grön",
+0.6381,
+0.291,
+0.9315,
+0.3041,
+11.0
+],
+[
+"-",
+0.9315,
+0.291,
+0.9381,
+0.3041,
+11.0
+],
+[
+"lands in die eigene Hand zu nehmen.",
+0.6381,
+0.3053,
+0.9381,
+0.3184,
+11.0
+],
+[
+"Einer deutschen Bundesregierung stün",
+0.6381,
+0.3196,
+0.9315,
+0.3326,
+11.0
+],
+[
+"-",
+0.9315,
+0.3196,
+0.9381,
+0.3326,
+11.0
+],
+[
+"de es jedenfalls gut zu Gesicht, Diploma",
+0.6381,
+0.3338,
+0.9315,
+0.3469,
+11.0
+],
+[
+"-",
+0.9315,
+0.3338,
+0.9381,
+0.3469,
+11.0
+],
+[
+"tie neu zu erlernen und im Sinne deut",
+0.6381,
+0.3481,
+0.9315,
+0.3611,
+11.0
+],
+[
+"-",
+0.9315,
+0.3481,
+0.9381,
+0.3611,
+11.0
+],
+[
+"scher Inter",
+0.6381,
+0.3623,
+0.7174,
+0.3754,
+11.0
+],
+[
+"essen anzuwenden.",
+0.7172,
+0.3623,
+0.8586,
+0.3754,
+11.0
+],
+[
+"Für die deutschen Soldaten bleibt zu hof",
+0.6381,
+0.3766,
+0.9315,
+0.3896,
+11.0
+],
+[
+"-",
+0.9315,
+0.3766,
+0.9381,
+0.3896,
+11.0
+],
+[
+"fen, daß sich die Worte des Altbundes",
+0.6381,
+0.3908,
+0.9315,
+0.4039,
+11.0
+],
+[
+"-",
+0.9315,
+0.3908,
+0.9381,
+0.4039,
+11.0
+],
+[
+"kanzlers Helmut Schmidt bewahrheiten,",
+0.6381,
+0.4051,
+0.9381,
+0.4181,
+11.0
+],
+[
+"die er bei seiner Rede während eines",
+0.6381,
+0.4193,
+0.9381,
+0.4324,
+11.0
+],
+[
+"Gelöbnisses am 20. Juli 2008 den Sol",
+0.6381,
+0.4336,
+0.9315,
+0.4466,
+11.0
+],
+[
+"-",
+0.9315,
+0.4336,
+0.9381,
+0.4466,
+11.0
+],
+[
+"daten zurief: „Aber Ihr könnt Euch dar",
+0.6381,
+0.4478,
+0.9319,
+0.4609,
+11.0
+],
+[
+"-",
+0.9315,
+0.4478,
+0.9381,
+0.4609,
+11.0
+],
+[
+"auf verlassen: Dieser Staat wird Euch",
+0.6381,
+0.4621,
+0.9381,
+0.4752,
+11.0
+],
+[
+"nicht mißbrauchen.“",
+0.6381,
+0.4763,
+0.791,
+0.4894,
+11.0
+],
+[
+"Mit freundlichem Gruß",
+0.6381,
+0.5049,
+0.8131,
+0.5179,
+11.0
+],
+[
+"Ihr",
+0.6381,
+0.5334,
+0.6611,
+0.5464,
+11.0
+],
+[
+"Guido Kraus",
+0.7905,
+0.5476,
+0.885,
+0.5607,
+11.0
+]
+]
+}

@@ -86,6 +86,11 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
         netz ? { pageWidthPt: netz.breitePt, pageHeightPt: netz.hoehePt } : undefined,
         (n, total) => setBusy(`Textebene: Seite ${n} von ${total}`),
       );
+      if (seiten.every((s) => s.items.length === 0)) {
+        throw new Error(
+          "Die Druckdatei hat keine Textebene – vermutlich sind die Schriften in Pfade gewandelt.",
+        );
+      }
       const blob = textebeneAlsBlob(seiten);
       setBusy("Textebene geht hoch");
       const { assetId } = await uploadAsset(

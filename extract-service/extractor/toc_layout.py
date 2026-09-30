@@ -156,6 +156,50 @@ def text_layer_for_pages(
     }
 
 
+def text_items_from_pdf(
+    pdf_bytes: bytes,
+    page_map: list[tuple[int, int]],
+    halves: dict[int, str] | None = None,
+) -> dict[int, list[TextItem]]:
+    """Die Textebene aus dem Druck-PDF lesen, wenn der Browser keine hochgeladen hat.
+
+    Dasselbe System wie die Textebene aus pdf.js: Anteile der TrimBox, y von
+    oben. Die Woerter sind hier kleiner geschnitten (je Wort statt je
+    Schriftlauf); zu Zeilen finden sie ueber `segments_of` genauso zusammen.
+    """
+    import io
+
+    import pdfplumber
+
+    from .pdf_extract import _extract_words, _words_on_visible_page
+
+    out: dict[int, list[TextItem]] = {}
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for source_index, canonical in sorted(page_map):
+            if source_index >= len(pdf.pages):
+                continue
+            page = pdf.pages[source_index]
+            words = [w for w in _extract_words(page) if w.get("upright", True)]
+            words, width, height = _words_on_visible_page(
+                page, words, (halves or {}).get(canonical)
+            )
+            if width <= 0 or height <= 0:
+                continue
+            out[canonical] = [
+                TextItem(
+                    w["text"],
+                    w["x0"] / width,
+                    w["top"] / height,
+                    w["x1"] / width,
+                    w["bottom"] / height,
+                    float(w.get("size") or 0),
+                )
+                for w in words
+                if str(w["text"]).strip()
+            ]
+    return out
+
+
 def segments_of(items: list[TextItem]) -> list[Segment]:
     """Textstuecke zu Zeilen buendeln und an Spaltenluecken teilen.
 
@@ -428,9 +472,11 @@ def refine_toc_hints(
     gefunden, `byNumber` nur ueber die Seitenzahl, `unplaced` nicht gefunden
     (der Eintrag bleibt im Verzeichnis, bekommt aber keine Klickflaeche —
     besser als eine, die auf dem Nachbareintrag liegt), `noText` Seiten ohne
-    Textebene (Schaetzwert bleibt).
+    Textebene (Schaetzwert bleibt), `overlapping` Flaechenpaare, die sich
+    trotz allem deutlich ueberschneiden — ein Zeichen, dass ein Eintrag auf
+    dem falschen Fundort liegt.
     """
-    bilanz = {"placed": 0, "byNumber": 0, "unplaced": 0, "noText": 0}
+    bilanz = {"placed": 0, "byNumber": 0, "unplaced": 0, "noText": 0, "overlapping": 0}
     segs_je_seite: dict[int, list[Segment]] = {}
     belegt: set[int] = set()
     out: list[TocHint] = []
@@ -468,17 +514,42 @@ def refine_toc_hints(
         x0, y0, x1, y1 = _flaeche(zeilen + ([zahl] if zahl else []) + unter)
         out.append(replace(hint, x0=x0, y0=y0, x1=x1, y1=y1))
     _nachbarn_trennen(out)
+    bilanz["overlapping"] = _ueberschneidungen(out)
     out.sort(key=lambda h: (h.page_index, h.toc_page_index or 0, h.y0))
     return out, bilanz
+
+
+def _ueberschneidungen(hints: list[TocHint]) -> int:
+    """Wie viele Flaechenpaare derselben Seite sich deutlich ueberschneiden."""
+    je_seite: dict[int, list[TocHint]] = {}
+    for h in hints:
+        if h.toc_page_index is not None:
+            je_seite.setdefault(h.toc_page_index, []).append(h)
+    paare = 0
+    for gruppe in je_seite.values():
+        for i, a in enumerate(gruppe):
+            for b in gruppe[i + 1 :]:
+                schnitt = max(0.0, min(a.x1, b.x1) - max(a.x0, b.x0)) * max(
+                    0.0, min(a.y1, b.y1) - max(a.y0, b.y0)
+                )
+                kleinste = min(
+                    (a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0)
+                )
+                if kleinste > 0 and schnitt > 0.2 * kleinste:
+                    paare += 1
+    return paare
 
 
 def _nachbarn_trennen(hints: list[TocHint]) -> None:
     """Untereinanderstehende Flaechen teilen sich die Luecke, statt sich zu ueberlappen.
 
     Der Rand um die Zeilen reicht bei eng gesetzten Verzeichnissen in den
-    Nachbareintrag hinein. Ueberlappen sich zwei Flaechen derselben Spalte
-    nur um diesen Rand, endet die obere und beginnt die untere in der Mitte
-    der Luecke. Groessere Ueberschneidungen sind kein Randproblem und bleiben.
+    Nachbareintrag hinein; gross gesetzte Seitenzahlen (DMZ, 18 pt in einer
+    Liste mit engerem Zeilenabstand) ueberlappen sich schon ohne Rand.
+    Ueberlappen sich zwei Flaechen derselben Spalte um weniger als die halbe
+    Hoehe der kleineren, endet die obere und beginnt die untere in der Mitte
+    der Ueberlappung. Mehr waere kein Randproblem, sondern derselbe Fundort —
+    das bleibt stehen und zaehlt als Ueberschneidung.
     """
     je_seite: dict[int, list[TocHint]] = {}
     for h in hints:
@@ -493,7 +564,8 @@ def _nachbarn_trennen(hints: list[TocHint]) -> None:
                 if breite <= 0 or seitlich < 0.5 * breite:
                     continue
                 ueberlappung = oben.y1 - unten.y0
-                if ueberlappung <= 0 or ueberlappung > 2 * RAND_Y + 1e-6:
+                hoehe = min(oben.y1 - oben.y0, unten.y1 - unten.y0)
+                if ueberlappung <= 0 or ueberlappung > 0.5 * hoehe:
                     continue
                 mitte = (oben.y1 + unten.y0) / 2
                 oben.y1 = mitte

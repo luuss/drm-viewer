@@ -331,7 +331,16 @@ export default function FolderImport({
       // durch sind. Scheitert sie, fehlt nur die genaue Lage der
       // Verzeichniseintraege — der Import selbst laeuft weiter.
       const textSeiten = textebene.filter(Boolean);
-      if (textSeiten.length) {
+      // Eine Druckdatei mit Schriften in Pfaden hat keine Textebene. Dann
+      // bleiben die Verzeichnisflaechen geschaetzt, und das soll auffallen.
+      const ohneText = textSeiten.length > 0 && textSeiten.every((s) => s.items.length === 0);
+      if (ohneText) {
+        offen.push(
+          "Die Druckdatei hat keine Textebene (Schriften in Pfade gewandelt?) — " +
+            "die Klickflächen des Inhaltsverzeichnisses bleiben geschätzt",
+        );
+      }
+      if (textSeiten.length && !ohneText) {
         melde("innenteil", "Textebene geht hoch", 1);
         try {
           const textBlob = textebeneAlsBlob(textSeiten);

@@ -50,7 +50,11 @@ from extractor.idml_articles import (
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
-from extractor.toc_layout import refine_toc_hints, text_layer_for_pages
+from extractor.toc_layout import (
+    refine_toc_hints,
+    text_items_from_pdf,
+    text_layer_for_pages,
+)
 from storage import ConvexClient, Storage, issue_key
 
 CONVEX_SITE_URL = os.environ.get("CONVEX_SITE_URL", "").rstrip("/")
@@ -93,6 +97,10 @@ class Job:
         self.issue_id = data["issueId"]
         self.publication_id = data.get("publicationId") or "unbekannt"
         self.started = time.time()
+        # Bilanz der Verzeichnisflaechen (toc_layout.refine_toc_hints), fuer
+        # die Meldung an die Redaktion. None: keine Textebene, nur geschaetzt.
+        self._toc_bilanz: dict[str, int] | None = None
+        self._toc_eintraege = 0
 
     def beat(self, progress: int, message: str) -> None:
         res = self.convex.post(
@@ -176,6 +184,7 @@ class Job:
             duplicatesDropped=getattr(self, "_doppelt", 0),
         )
         toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
+        self._toc_eintraege = len(toc_hints)
         self.beat(92, "Ergebnis wird uebernommen")
         result = self.convex.post(
             "/service/jobs/result",
@@ -194,7 +203,32 @@ class Job:
             toc=result.get("toc"),
             seconds=round(time.time() - self.started, 1),
         )
-        return "review", "Bereit zur redaktionellen Pruefung"
+        return "review", "Bereit zur redaktionellen Pruefung" + self._verzeichnis_hinweis()
+
+    def _verzeichnis_hinweis(self) -> str:
+        """Anhang zur Auftragsmeldung: wie gut das Verzeichnis platziert ist.
+
+        Die Redaktion sieht die Meldung am Heft. Ohne diesen Satz fiele ein
+        Verzeichnis ohne Textebene oder mit verlorenen Eintraegen erst dem
+        Leser auf.
+        """
+        n = self._toc_eintraege
+        if not n:
+            return ""
+        bilanz = self._toc_bilanz
+        if bilanz is None:
+            return f" · Inhaltsverzeichnis: {n} Eintraege, Klickflaechen nur geschaetzt (keine Textebene)"
+        gefunden = bilanz.get("placed", 0) + bilanz.get("byNumber", 0)
+        maengel = []
+        if bilanz.get("unplaced"):
+            maengel.append(f"{bilanz['unplaced']} ohne Klickflaeche")
+        if bilanz.get("noText"):
+            maengel.append(f"{bilanz['noText']} ohne Textebene")
+        if bilanz.get("overlapping"):
+            maengel.append(f"{bilanz['overlapping']} Flaechen ueberschneiden sich")
+        if maengel:
+            return f" · Inhaltsverzeichnis: {gefunden} von {n} Eintraegen gefunden, {', '.join(maengel)}"
+        return f" · Inhaltsverzeichnis: alle {n} Eintraege auf der Seite gefunden"
 
     def _fetch(self, src: dict) -> bytes | None:
         """Eine Quelldatei holen.
@@ -401,6 +435,7 @@ class Job:
         # Seiten, die der Satz selbst beschreibt. Fuer sie wird die PDF-Textebene
         # nicht mehr gebraucht.
         aus_satz: set[int] = set()
+        partner = None
 
         if idml_bytes:
             self.beat(72, "Satzdatei wird ausgewertet")
@@ -467,8 +502,13 @@ class Job:
         )
         if satz_toc:
             log("job.toc", jobId=self.job_id, entries=len(satz_toc), source="idml")
-            if text_bytes:
-                satz_toc = self._verzeichnis_platzieren(satz_toc, text_bytes, content_map)
+            satz_toc = self._verzeichnis_platzieren(
+                satz_toc,
+                content_map,
+                text_bytes=text_bytes,
+                pdf_bytes=blobs.get(partner["assetId"]) if partner else None,
+                halves=halves_by_asset.get(partner["assetId"]) if partner else None,
+            )
             toc_hints = satz_toc
 
         # Beide Herkuenfte werden getrennt aufbereitet: die PDF-Bloecke brauchen
@@ -527,19 +567,36 @@ class Job:
         satz_images = frames_to_images(gefiltert, page_map, trims)
         return satz_blocks, satz_images
 
-    def _verzeichnis_platzieren(self, hints, text_bytes: bytes, page_map):
+    def _verzeichnis_platzieren(
+        self, hints, page_map, *, text_bytes=None, pdf_bytes=None, halves=None
+    ):
         """Die Eintraege des Verzeichnisses auf ihre gedruckten Zeilen legen.
 
         Der Satz schaetzt die Lage eines Absatzes nur; die Textebene kennt
-        sie. Ist die Textebene unlesbar, bleibt es beim Schaetzwert.
+        sie. Sie kommt vom Browser (`text`), ersatzweise aus einem
+        hochgeladenen Druck-PDF. Ist beides nicht da oder unlesbar, bleibt es
+        beim Schaetzwert — und die Auftragsmeldung sagt es.
         """
-        try:
-            seiten = text_layer_for_pages(text_bytes, page_map)
-        except ValueError as exc:
-            log("job.textLayerFailed", jobId=self.job_id, error=str(exc)[:200])
+        seiten = None
+        quelle = None
+        if text_bytes:
+            try:
+                seiten = text_layer_for_pages(text_bytes, page_map)
+                quelle = "text"
+            except ValueError as exc:
+                log("job.textLayerFailed", jobId=self.job_id, error=str(exc)[:200])
+        if seiten is None and pdf_bytes:
+            try:
+                seiten = text_items_from_pdf(pdf_bytes, page_map, halves)
+                quelle = "pdf"
+            except Exception as exc:
+                log("job.textLayerFailed", jobId=self.job_id, error=str(exc)[:200])
+        if seiten is None:
+            self._toc_bilanz = None
             return hints
         platziert, bilanz = refine_toc_hints(hints, seiten)
-        log("job.tocPlaced", jobId=self.job_id, **bilanz)
+        self._toc_bilanz = bilanz
+        log("job.tocPlaced", jobId=self.job_id, source=quelle, **bilanz)
         return platziert
 
     def _nur_verzeichnis(self, pages, blobs, sources) -> tuple[str, str]:
@@ -570,9 +627,16 @@ class Job:
         )
         text_source = next((s for s in sources if s["kind"] == "text"), None)
         text_bytes = blobs.get(text_source["assetId"]) if text_source else None
-        if hints and text_bytes:
+        partner = self._idml_partner(idml_source, sources, blobs)
+        if hints:
             self.beat(50, "Eintraege werden auf der Textebene gesucht")
-            hints = self._verzeichnis_platzieren(hints, text_bytes, page_map)
+            hints = self._verzeichnis_platzieren(
+                hints,
+                page_map,
+                text_bytes=text_bytes,
+                pdf_bytes=blobs.get(partner["assetId"]) if partner else None,
+            )
+        self._toc_eintraege = len(hints)
         regions = [
             {
                 "pageIndex": h.toc_page_index,
@@ -602,11 +666,10 @@ class Job:
             entries=len(hints),
             regions=result.get("regions"),
             skipped=result.get("skipped"),
-            textLayer=bool(text_bytes),
+            textLayer=self._toc_bilanz is not None,
         )
         n = result.get("regions") or 0
-        zusatz = "" if text_bytes else " (ohne Textebene, nur geschaetzt)"
-        return "done", f"{n} Klickflaechen im Inhaltsverzeichnis erneuert{zusatz}"
+        return "done", f"{n} Klickflaechen erneuert" + self._verzeichnis_hinweis()
 
     @staticmethod
     def _idml_partner(idml_source, sources, blobs):

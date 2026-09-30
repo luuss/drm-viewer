@@ -382,6 +382,23 @@ Rahmen war nur nach Zeichenanteil geschätzt (`_verteile_auf_rahmen`).
   Datei) und stellt den Auftrag ein; „Inhaltsverzeichnis-Flächen neu legen“
   stellt ihn allein ein. **Achtung:** ein Worker ohne diesen Stand kennt die
   Auftragsart nicht und würde einen `toc`-Auftrag als vollen Lauf ausführen.
+* **Abgesichert und automatisch.** Ein neuer Heftimport über „Heftordner
+  einlesen“ lädt die Textebene immer mit hoch und legt die Flächen im selben
+  Lauf; fehlt sie (Druckdatei mit Schriften in Pfaden), steht das in den
+  offenen Punkten des Imports. Liegt statt der Textebene ein Innenteil-PDF
+  am Heft (Importdialog), liest der Worker die Textebene selbst daraus
+  (`text_items_from_pdf`). Die Auftragsmeldung am Heft („Bereit zur
+  redaktionellen Prüfung · Inhaltsverzeichnis: alle 46 Einträge auf der Seite
+  gefunden“ oder „… 3 ohne Klickfläche“, „… Flächen nur geschätzt“) zeigt der
+  Redaktion die Bilanz; im Log heißt sie `job.tocPlaced`. Flächen, die sich
+  trotz allem überschneiden, werden gezählt und gemeldet. Bei jedem Push
+  laufen in CI die Regressionstests mit den echten Inhaltsseiten aller drei
+  Reihen (`tests/fixtures/toc/*.json`, `test_toc_real.py`: jeder Eintrag
+  gefunden, jede Fläche enthält Seitenzahl und Titelanfang, keine zwei Flächen
+  übereinander) neben den Einzeltests (`test_toc_layout.py`, Convex
+  `tocRegions.test.ts`, Browser `textLayer.test.ts`). Eine neue Reihe mit
+  anderem Verzeichnislayout: Vorlage mit `_scratch/textebene/fixture.py`
+  erzeugen und als vierten Fall eintragen.
 * Ohne Oberfläche (Deploy-Schlüssel): `issueSources:addInternal`,
   `imports:enqueueInternal`; `_scratch/textebene/nachtragen.py <issueId>
   <textebene.json>` macht alle Schritte, `dump.mjs` erzeugt die Textebene mit

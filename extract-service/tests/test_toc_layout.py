@@ -105,7 +105,7 @@ def test_eintrag_liegt_auf_zahl_titel_und_unterzeile():
     ]
     out, bilanz = refine_toc_hints(hints, {2: _dmz_seite()})
 
-    assert bilanz == {"placed": 3, "byNumber": 0, "unplaced": 0, "noText": 0}
+    assert bilanz == {"placed": 3, "byNumber": 0, "unplaced": 0, "noText": 0, "overlapping": 0}
     erster = next(h for h in out if h.printed == 10)
     # Von der Seitenzahl links bis zum Ende der laengsten Unterzeile.
     assert erster.x0 == round(0.050 - 0.004, 5)
@@ -213,7 +213,7 @@ def test_ohne_treffer_findet_die_seitenzahl_den_eintrag():
         item("Putins Untergangswaffe", 0.093, 0.4985, 0.267, 0.5122, 11.5),
     ]
     out, bilanz = refine_toc_hints([hint("Putins Weltuntergangswaffe", 36, y0=0.43)], {2: seite})
-    assert bilanz == {"placed": 0, "byNumber": 1, "unplaced": 0, "noText": 0}
+    assert bilanz == {"placed": 0, "byNumber": 1, "unplaced": 0, "noText": 0, "overlapping": 0}
     assert abs(out[0].x0 - (0.050 - 0.004)) < 1e-9
     assert abs(out[0].x1 - (0.267 + 0.004)) < 1e-9
 
@@ -323,3 +323,53 @@ def test_unlesbare_textebene_ist_ein_fehler():
         parse_text_layer(b"kein json")
     with pytest.raises(ValueError):
         parse_text_layer(b'{"pages": "nein"}')
+
+
+# --- Textebene aus dem Druck-PDF ------------------------------------------------
+
+
+def _mini_pdf(zeilen: list[tuple[str, float, float, float]]) -> bytes:
+    """Eine Seite 200 x 300 pt mit TrimBox 10 pt innen; Zeilen als (Text, x, y von unten, Groesse)."""
+    inhalt = "BT " + " ".join(
+        f"/F1 {groesse} Tf 1 0 0 1 {x} {y} Tm ({text}) Tj" for text, x, y, groesse in zeilen
+    ) + " ET"
+    objekte = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /TrimBox [10 10 190 290] "
+        "/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Length {len(inhalt)} >>\nstream\n{inhalt}\nendstream",
+    ]
+    out = "%PDF-1.4\n"
+    versaetze = []
+    for i, o in enumerate(objekte, 1):
+        versaetze.append(len(out))
+        out += f"{i} 0 obj\n{o}\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objekte) + 1}\n0000000000 65535 f \n"
+    out += "".join(f"{v:010d} 00000 n \n" for v in versaetze)
+    out += f"trailer\n<< /Size {len(objekte) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF"
+    return out.encode("latin1")
+
+
+def test_textebene_aus_dem_druck_pdf_liegt_im_netzformat():
+    from extractor.toc_layout import text_items_from_pdf
+
+    pdf = _mini_pdf(
+        [
+            ("5", 15, 250, 12),
+            ("Schicksalsschlacht", 30, 250, 12),
+            # Im Anschnitt links vom Netzformat: faellt weg.
+            ("Marke", 0, 5, 4),
+        ]
+    )
+    seiten = text_items_from_pdf(pdf, [(0, 1)])
+    texte = [i.text for i in seiten[1]]
+    assert texte == ["5", "Schicksalsschlacht"]
+    zahl, titel = seiten[1]
+    # x auf die TrimBox (10..190) bezogen; y von oben.
+    assert abs(zahl.x0 - (15 - 10) / 180) < 0.01
+    assert abs(titel.x0 - (30 - 10) / 180) < 0.01
+    assert 0.08 < titel.y0 < 0.16 and titel.y1 > titel.y0
+    assert zahl.numeric and abs(zahl.size - 12) < 0.01
