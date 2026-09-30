@@ -3,7 +3,8 @@
 **Neu am 30.09.:** Heftimport auf dem Verlagsserver repariert (lief dort nie),
 alle vier Hefte vom Stick importiert, Import schneller. Einzelheiten in
 Abschnitt 1a und 4. Buchanzeigen im Heft führen jetzt zum Produkt im Shop
-(Abschnitt 4c).
+(Abschnitt 4c). Randzungen, Zitatkästen und Seitenrubriken stehen nicht mehr
+im Lesetext (Abschnitt 4d).
 
 **Heftbezeichnungen (30.09. abends):** Frisch importierte Hefte standen unter
 Ordnernamen im Kiosk („Dmz 170“ in der Reihe „Dmz“), weil der Ordner-Import
@@ -321,6 +322,30 @@ Abschnitt „Buchanzeigen im Heft".
   Auswahl im Seitenmodus, „Text lesen", Esc; Redaktionskasten und Suche.
 * Offen: In den DMZ-Texten steht „t" statt „€" („Art. 102474 t 29,80"); die
   Preiserkennung kommt damit zurecht, der Lesetext zeigt es aber so.
+
+## 4d. Randzungen und Seitenrubriken nicht im Lesetext (seit 30.09.2026)
+
+Die Zunge am Seitenrand („Zungentext DMZ-Zeit 2018“: „Russische Panzerkorps /
+schwer angeschlagen“), der Zitatkasten und die Rubrikmarke („Seitenrubrik“:
+„Deutschland“, „Titel“) helfen auf der Druckseite beim Blättern. Der Import
+hielt sie für kurzen Mengentext und hängte sie hinter den letzten Absatz ihrer
+Seite — im Lesetext ein loser Halbsatz zwischen zwei Absätzen.
+
+* Regel: `ROLLEN_REGELN` in `extractor/idml_articles.py`. Formate mit
+  „zungentext“, „zitat“, „quote“ bekommen die Rolle `schmuckzitat`,
+  „seitenrubrik“ ist `beiwerk`; beide kommen in keinen Artikel. Ein Zitat, das
+  im Mengentext selbst steht, gehört zu dessen Story und bleibt. Ohne Satzdatei
+  fällt weg, was das PDF als `quote` einstuft (`assemble`).
+* Bestand ohne Neuimport bereinigt: `devtools:removeArticleBlocksInternal`
+  (kennt `probelauf`; Reihenfolge bleibt lückenlos, Bildanker rücken nach,
+  Suchtext neu, Shop-Verweise am Absatz fallen mit). Betroffen waren 74
+  Absätze in 37 Artikeln: DMZ-Zeitgeschichte 80 37 Zungen, ZUERST! 3/2026 36
+  Seitenrubriken, DMZ 170 ein Zitatkasten, Greim keiner. Freigaben, Bilder
+  (539) und Shop-Knöpfe (37) unverändert. Welche Absätze es sind, rechnet
+  `_scratch/randzitate/plan.py` aus der Satzdatei; die Zeilen vor der Änderung
+  liegen in `_scratch/randzitate/live-vorher/`.
+* Convex-Funktionen und `import-worker` sind auf dem Verlagsserver ausgerollt,
+  d.chuk.dev über den Push.
 
 ---
 
