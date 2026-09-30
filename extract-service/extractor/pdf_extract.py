@@ -775,6 +775,10 @@ def extract_pdf_pages(
     return blocks, images
 
 
+def _ohne_symbolzeichen(text: str) -> str:
+    return "".join(ch for ch in text if not ("\ue000" <= ch <= "\uf8ff"))
+
+
 def blocks_from_text_layer(
     items_by_page: dict[int, list],
     aspect_by_page: dict[int, float] | None = None,
@@ -789,7 +793,14 @@ def blocks_from_text_layer(
     """
     blocks: list[SourceBlock] = []
     for page_index, items in sorted(items_by_page.items()):
-        items = [i for i in items if i.text.strip() and i.y1 > i.y0 and i.size > 0]
+        # Zeichen aus Symbolschriften (Ankreuzkaestchen der Bestellkarte) sind
+        # im Lesetext nur Klötzchen und machten sonst den groessten Block aus.
+        items = [
+            i.__class__(_ohne_symbolzeichen(i.text), i.x0, i.y0, i.x1, i.y1, i.size)
+            for i in items
+            if i.y1 > i.y0 and i.size > 0
+        ]
+        items = [i for i in items if i.text.strip()]
         if not items:
             continue
         hoehen = sorted(i.size / (i.y1 - i.y0) for i in items)

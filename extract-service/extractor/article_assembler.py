@@ -67,8 +67,11 @@ def assemble_cover_pages(blocks: list[SourceBlock]) -> list[AssembledArticle]:
     out: list[AssembledArticle] = []
     for page_index in sorted(je_seite):
         seite = je_seite[page_index]
-        groesste = max(seite, key=lambda b: (b.max_size, -b.y0))
-        titel = " ".join(groesste.text.split())
+        # Als Titel taugt nur eine Zeile mit Woertern, keine Zahl und kein
+        # Satzzeichenrest.
+        kandidaten = [b for b in seite if sum(ch.isalpha() for ch in b.text) >= 3] or seite
+        groesste = max(kandidaten, key=lambda b: (b.max_size, -b.y0))
+        titel = " ".join(groesste.text.split()).lstrip(",.;:–- ")
         if len(titel) > 120:
             titel = titel[:117].rstrip() + "…"
         out.append(AssembledArticle(title=titel, blocks=list(seite)))
