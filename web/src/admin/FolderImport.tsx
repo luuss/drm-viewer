@@ -41,7 +41,10 @@ const TITEL_KANTE = 2400;
  * seine Kacheln; das reicht fuer scharfen Zoom auf Magazinseiten.
  */
 const SEITEN_BREITE = 2400;
-const SEITEN_GUETE = 0.86;
+// Mit parallelem Rendern ist die Leitung der Engpass (ZUERST! 3/2026: drei
+// Spuren warteten summiert 283 s auf Upload-Plaetze). 0,82 statt 0,86 spart
+// rund ein Fuenftel der Bytes; beim Zoomen sieht man keinen Unterschied.
+const SEITEN_GUETE = 0.82;
 
 /** `fehler`: der Lauf ist hier stehen geblieben — der Balken zeigt das an. */
 type Fortschritt = { text: string; prozent: number; fehler?: boolean };

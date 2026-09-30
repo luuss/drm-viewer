@@ -141,18 +141,42 @@ async def require_session(token: str | None, issue_id: str | None = None) -> dic
     return session
 
 
-async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
-    key = f"{issue_id}:{index}"
-    async with _lock:
-        if key in _page_cache:
-            _page_cache.move_to_end(key)
-            return _page_cache[key], _page_meta[key]
+# Welche Datei hinter einer Seite steht, wird kurz gemerkt. Das Bild selbst
+# liegt unter seinem Speicherschluessel im Cache, nicht unter Heft und Seite:
+# nach einem erneuten Import zeigt dieselbe Seitennummer auf eine neue Datei,
+# und der alte Schluessel lieferte sonst weiter das alte Bild (DMZ 170 zeigte
+# am 30.09. als Titel noch eine Anzeige aus dem ersten Lauf).
+RESOLVE_TTL = 30
+_resolve_cache: dict[str, tuple[float, dict]] = {}
 
+
+async def resolve_page(issue_id: str, index: int) -> dict:
+    rkey = f"{issue_id}:{index}"
+    now = time.monotonic()
+    hit = _resolve_cache.get(rkey)
+    if hit and hit[0] > now:
+        return hit[1]
     info = await service_call(
         "/service/page/resolve", {"issueId": issue_id, "index": index}
     )
     if not info or not info.get("ready"):
         raise HTTPException(409, "Seite ist noch nicht aufbereitet")
+    _resolve_cache[rkey] = (now + RESOLVE_TTL, info)
+    if len(_resolve_cache) > 4096:
+        for k, (exp, _) in list(_resolve_cache.items()):
+            if exp <= now:
+                _resolve_cache.pop(k, None)
+    return info
+
+
+async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
+    info = await resolve_page(issue_id, index)
+    key = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
+    async with _lock:
+        if key in _page_cache:
+            _page_cache.move_to_end(key)
+            return _page_cache[key], _page_meta[key]
+
     daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
     image = Image.open(io.BytesIO(daten)).convert("RGB")
     meta = {"width": image.width, "height": image.height}

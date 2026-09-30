@@ -1,4 +1,8 @@
-# Übergabe — Stand 26.09.2026 (abends)
+# Übergabe — Stand 30.09.2026
+
+**Neu am 30.09.:** Heftimport auf dem Verlagsserver repariert (lief dort nie),
+alle vier Hefte vom Stick importiert, Import schneller. Einzelheiten in
+Abschnitt 1a und 4.
 
 Kurzfassung: Die Anwendung läuft vollständig selbst betrieben auf **d.chuk.dev**
 (Dokploy). Der Umzug auf den **Verlagsserver** ist zur Hälfte fertig: der Stapel
@@ -14,7 +18,7 @@ läuft dort, aber Apache reicht die Adressen noch nicht nach innen weiter.
 | Server | 65.109.85.231, Dokploy-Compose `Hefte Digital` (`jUPgSBi1BVxQMDHC7DQto`) | 62.108.44.118 = 62.108.44.113 (dieselbe Maschine, Plesk) |
 | Pfad | `/etc/dokploy/compose/lus-sds-yzt7mc/` | `/opt/hefte-digital/` (`code/` = Klon, `files/` = Daten, `.env` = Geheimnisse) |
 | Compose | `docker-compose.dokploy.yml` | `docker-compose.tldhost.yml` |
-| Deploy | `git push` → GitHub Actions → Dokploy | von Hand, siehe unten |
+| Deploy | `git push` → GitHub Actions → Dokploy | von Hand, siehe Abschnitt 1b |
 
 Beide betreiben denselben Stapel: Convex-Backend, Postgres, MinIO, Kachel-Gateway,
 Import-Worker, Weboberfläche. Die Convex-Cloud wird nicht mehr gebraucht; das alte
@@ -26,10 +30,88 @@ der Anwendung. Es gibt noch keine.
 
 ---
 
+## 1a. Heftimport: wie er zusammenhängt (Stand 30.09.2026)
+
+Die Redaktion zieht den Heftordner aus der Druckvorstufe auf „Admin → Heftordner
+einlesen“ (`web/src/admin/FolderImport.tsx`). Die schwere Arbeit macht der
+**Browser**, der Server bekommt nur Fertiges:
+
+1. `folderScan.ts` verteilt die Rollen nach Dateiart: Innenteil-PDF, Umschlag-PDF
+   oder Titelbild (TIF/JPG neben dem PDF), IDML, Bilder aus `Links/`. PDFs im
+   Bilderordner sind platzierte Anzeigen und werden übergangen.
+2. `pageRender.ts` öffnet das Innenteil-PDF einmal (Preis aus dem Impressum,
+   dann Seiten), rendert jede Seite mit pdf.js auf 2400 px, schneidet den
+   Anschnitt nach dem Netzformat aus der IDML ab. Bis zu drei Seiten
+   gleichzeitig (`RENDER_SPUREN`, je Spur ein eigenes pdf.js-Dokument).
+3. Bilder aus `Links/` wandeln Web-Worker um (`convertClient.ts`, 2–3 Fäden,
+   1600 px JPEG). Die Originale bleiben auf dem Rechner.
+4. Jede Datei geht **direkt in MinIO**: `uploads.presignUpload` (Convex-Aktion,
+   **ohne** `"use node"`, Signatur in `convex/s3Presign.ts`) gibt eine
+   vorsignierte PUT-Adresse `https://lesen.lesenundschenken.de/medien/emag-media/…`.
+   Apache nimmt `/medien` ab und reicht an MinIO (127.0.0.1:9002). Danach
+   `assets.registerUpload`.
+5. Seitenreihenfolge speichern, Auftrag `imports.enqueue` → der **Import-Worker**
+   (`extract-service/worker.py`, Container `import-worker`) holt ihn über
+   `http://convex-backend:3211`, liest IDML und Seiten aus MinIO (intern
+   `http://minio:9000`), baut Artikel, Bilder, Inhaltsverzeichnis. Dauer ~15 s.
+6. Artikel stehen danach auf „zur Prüfung“. Freigeben in der Redaktion.
+
+**Warum der Import am 30.09. mit `{"detail":"Not Found"}` abbrach** — zwei Fehler
+hintereinander, beide nur auf dem Verlagsserver:
+
+* `presignUpload` war eine Node-Aktion. Node-Aktionen rufen für `ctx.runQuery`
+  das Backend über `CONVEX_CLOUD_ORIGIN` **ohne** das Präfix `/convex` zurück
+  (`POST https://lesen.lesenundschenken.de/api/actions/query`). Apache gab
+  alles unter `/api` an die Oberfläche, deren nginx ans Kachel-Gateway
+  (FastAPI) → 404 `{"detail":"Not Found"}`. Der erste Seiten-Upload scheiterte.
+  Die zwei Hefte, die schon drin waren, kamen von d.chuk.dev herüber — auf dem
+  Verlagsserver hatte der Import nie funktioniert.
+* Danach scheiterte der Upload selbst: `medien.lesen.lesenundschenken.de` liegt
+  zwei Ebenen tief. Seit Cloudflare davor steht (28.09.), deckt dessen
+  Zertifikat nur `*.lesenundschenken.de` → `ERR_SSL_VERSION_OR_CIPHER_MISMATCH`.
+
+Behoben: Apache reicht jetzt alles unter `/api` außer den vier Pfaden des
+Gateways (`/api/session`, `/api/health`, `/api/issue/`, `/api/asset/`) an Convex
+— damit gehen **alle** Node-Aktionen und die CLI ohne Tunnel. `presignUpload`
+braucht Node gar nicht mehr. Uploads gehen über `/medien/` auf demselben Namen
+(kein CORS, Cloudflare-Zertifikat passt). `medien.lesen.lesenundschenken.de`
+wird nicht mehr gebraucht.
+
+Außerdem gefixt: Balken wird bei Abbruch rot und sagt „Abgebrochen bei …“
+(vorher sah er aus, als liefe er noch); Balken zählt nur Abschnitte, die der
+Ordner hat; Anzeigen-PDF aus `Links/` wurde bei DMZ 170 zum Umschlag; das
+Kachel-Gateway merkte sich Seiten unter Heft+Seitennummer und zeigte nach einem
+erneuten Import das alte Bild (jetzt Schlüssel = Speicherdatei, Auflösung 30 s).
+
+## 1b. Ausrollen auf den Verlagsserver (von Hand)
+
+```
+# Convex-Funktionen — direkt, ohne Tunnel (seit 30.09.)
+npx convex deploy -y --env-file _scratch/verlag-direkt.env
+#   verlag-direkt.env: CONVEX_SELF_HOSTED_URL=https://lesen.lesenundschenken.de
+#                      CONVEX_SELF_HOSTED_ADMIN_KEY=… (aus /opt/hefte-digital/.env)
+
+# Oberfläche / Worker / Gateway: Dateien nach /opt/hefte-digital/code, dann bauen
+rsync -R -a <geaenderte dateien> root@62.108.44.118:/opt/hefte-digital/code/
+ssh root@62.108.44.118 'cd /opt/hefte-digital/code && \
+  docker compose -f docker-compose.tldhost.yml --env-file /opt/hefte-digital/.env up -d --build web'
+
+# Apache: deploy/apache/lesen.vhost_ssl.conf nach
+#   /var/www/vhosts/system/lesen.lesenundschenken.de/conf/vhost_ssl.conf
+#   plesk sbin httpdmng --reconfigure-domain lesen.lesenundschenken.de
+```
+
+Import von der Kommandozeile testen, wie ein Mensch über die Oberfläche:
+`_scratch/import-test/import.mjs "<heftordner>"` (Playwright, Testkonto
+`import-test@lesenundschenken.de`, Anmeldung über `magicLink:requestInternal`;
+danach `account:purgeByEmailInternal`).
+
+---
+
 ## 2. Verlagsserver und Verkauf über den Shop (Stand 26.09.2026 abends)
 
-**Die Anlage läuft auf https://lesen.lesenundschenken.de.** Medien liegen auf
-`medien.lesen.lesenundschenken.de`. `digital.lesenundschenken.de` leitet per 301
+**Die Anlage läuft auf https://lesen.lesenundschenken.de**, vor ihr Cloudflare.
+Medien liegen in MinIO, erreichbar unter `/medien/`. `digital.lesenundschenken.de` leitet per 301
 dorthin. Die Apache-Direktiven stehen in `deploy/apache/`. Die Daten von
 d.chuk.dev sind übernommen (2 Hefte, 130 Seiten, 82 Artikel, 588 Medienobjekte,
 Konten). d.chuk.dev läuft noch als Rückweg.
@@ -38,8 +120,10 @@ Konten). d.chuk.dev läuft noch als Rückweg.
 lesen.lesenundschenken.de/          → Oberfläche        127.0.0.1:8090
 lesen.lesenundschenken.de/convex/…  → Convex-Daten      127.0.0.1:3210  (WebSocket)
 lesen.lesenundschenken.de/hooks/…   → HTTP-Routen       127.0.0.1:3211
-lesen.lesenundschenken.de/api/…     → Kachel-Gateway    (innerhalb von web)
-medien.lesen.lesenundschenken.de/   → MinIO             127.0.0.1:9002
+lesen.lesenundschenken.de/medien/…  → MinIO             127.0.0.1:9002  (Präfix fällt weg)
+lesen.lesenundschenken.de/api/session|health|issue/…|asset/…
+                                    → Kachel-Gateway    (innerhalb von web)
+lesen.lesenundschenken.de/api/…     → Convex            127.0.0.1:3210  (alles andere unter /api)
 ```
 
 **Entscheidung: gebucht wird im PrestaShop.** Seit 29.09.2026 zahlt man im
@@ -58,13 +142,8 @@ alte eigene Stripe-Checkout ist aus (`STRIPE_CHECKOUT_ENABLED`).
 * Vertrag: `docs/shop-integration.md`. Shop-Seite:
   `../docs/digital-verkauf-shop.md`.
 
-**Auslieferung der Convex-Funktionen nur über den SSH-Tunnel.** Die CLI wirft
-das Präfix `/convex` weg:
-
-```
-ssh -N -L 13210:127.0.0.1:3210 root@62.108.44.118 &
-npx convex deploy -y --env-file _scratch/verlag-tunnel.env
-```
+**Auslieferung der Convex-Funktionen direkt** (seit 30.09., Abschnitt 1b). Der
+SSH-Tunnel (`_scratch/verlag-tunnel.env`) geht weiterhin.
 
 Offen:
 
@@ -127,7 +206,8 @@ Schritte für den ersten Livekauf: `docs/shop-integration.md`, Abschnitt
 * Apple Pay / Google Pay: Domain `lesen.lesenundschenken.de` in Stripe
   registriert (test und live aktiv); die Apple-Datei liefert `web/public`,
   Apache reicht sie durch (`deploy/apache/lesen.vhost_ssl.conf`).
-* **Node-Aktionen gehen auf dem Verlagsserver nicht** (Rückruf ohne
+* ~~Node-Aktionen gehen auf dem Verlagsserver nicht~~ — seit 30.09. behoben
+  (Abschnitt 1a). Früher: (Rückruf ohne
   `/convex`-Präfix, Tracker). Neue Aktionen ohne `"use node"` schreiben.
 * Der alte eigene Checkout (`billing.ts`, `STRIPE_CHECKOUT_ENABLED`, Test-
   schlüssel eines anderen Kontos) ist aus; sein Webhook liegt unter
@@ -135,16 +215,27 @@ Schritte für den ersten Livekauf: `docs/shop-integration.md`, Abschnitt
 
 ## 4. Hefte
 
-| Heft | Ordner → hochgeladen | Seiten | Artikel |
-|---|---|---|---|
-| Schwerterträger 36 (Greim) | 1,4 GB → 89 MB | 49 | 7, freigegeben, veröffentlicht (Tabelle S. 33 seit 29.09.) |
-| ZUERST! 3/2026 | 1,5 GB → 169 MB | 81 | 74, zur Prüfung |
-| DMZ 170 | — | — | **nicht importiert** |
-| DMZ-Zeitgeschichte 80 | — | — | **nicht importiert** |
+| Heft | Ordner → hochgeladen | Seiten | Artikel | Import 30.09. |
+|---|---|---|---|---|
+| Schwerterträger 36 (Greim) | 1,4 GB → 89 MB | 49 | 7, freigegeben, veröffentlicht, Tabelle S. 33 | 117 s |
+| ZUERST! 3/2026 | 1,5 GB → 169 MB | 81 | 74, zur Prüfung | 147 s |
+| DMZ 170 | 2,1 GB → 169 MB | 81 | 56, zur Prüfung | 162 s |
+| DMZ-Zeitgeschichte 80 | 2,1 GB → 127 MB | 65 | 37, zur Prüfung | 140 s |
 
-Die Ordner liegen auf dem USB-Stick `/media/user/45AB4BA0663B29E4`. Playwright
-darf nur innerhalb des Projektordners lesen, deshalb vor dem Import kopieren:
-`cp -r "/media/…/<heft>" _scratch/import/` und danach wieder löschen.
+Alle vier am 30.09. vom Stick über die Oberfläche neu importiert (Greim und
+ZUERST ersetzt, Greim danach mit `devtools:releaseIssueInternal` wieder
+freigegeben). Sicherung davor: `_scratch/sicherung/vor-reimport-2026-09-30.zip`
+(`npx convex export`, nur Tabellen). Im Leser geprüft: alle vier öffnen mit
+richtigem Titel, Kacheln ohne Fehler.
+
+Import-Zeiten gemessen mit Uplink ~5–10 Mbit/s: das Rendern ist mit drei
+Spuren nicht mehr der Engpass, die Leitung ist es. Die Bilder aus `Links/`
+wandelt der Browser jetzt wirklich parallel (vorher wartete die Schleife je
+Bild, DMZ 170: 90 s → 53 s).
+
+Die Ordner liegen auf dem USB-Stick `/media/user/45AB4BA0663B29E4`. Das
+Skript `_scratch/import-test/import.mjs` liest direkt vom Stick (eigenes
+Playwright, nicht das MCP, das nur im Projektordner lesen darf).
 
 Ein vollständiger Durchgang Seite für Seite durch alle vier Hefte steht noch aus
 — Artikelgrenzen, Bildzuordnung, Reihenfolge.
