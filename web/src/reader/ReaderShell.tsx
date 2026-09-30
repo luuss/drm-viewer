@@ -130,6 +130,21 @@ export default function ReaderShell() {
     return start + 1 < pageCount ? [start, start + 1] : [start];
   }, [pageLayout, pageIndex, pageCount]);
 
+  /**
+   * Der Artikel, bei dem der Leser gerade steht; das Inhaltsverzeichnis hebt
+   * ihn hervor. Im Seitenmodus ist es der zuletzt gelesene, solange er ueber
+   * die aufgeschlagene Seite laeuft, sonst der erste Artikel dieser Seite —
+   * derselbe, den der Wechsel in den Artikelmodus oeffnet.
+   */
+  const currentArticleId = useMemo(() => {
+    if (mode === "article") return articleId ?? articleList[0]?._id ?? null;
+    const visible = (a: { pageStart: number; pageEnd: number }) =>
+      visiblePageIndexes.some((p) => p >= a.pageStart && p <= a.pageEnd);
+    const opened = articleList.find((a) => a._id === articleId);
+    if (opened && visible(opened)) return opened._id;
+    return articleList.find(visible)?._id ?? null;
+  }, [mode, articleId, articleList, visiblePageIndexes]);
+
   useEffect(() => {
     window.localStorage.setItem("reader-page-layout", pageLayout);
   }, [pageLayout]);
@@ -450,8 +465,11 @@ export default function ReaderShell() {
 
       <TocDrawer
         issueId={issueId}
+        issueTitle={issue?.title}
         open={tocOpen}
         mode={mode}
+        currentArticleId={currentArticleId}
+        currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
         pageLabel={pageLabel}
         onClose={() => setTocOpen(false)}
         onPage={(p) => {
