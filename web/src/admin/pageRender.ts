@@ -82,6 +82,53 @@ export function anschnitt(
   };
 }
 
+/**
+ * Ein geoeffnetes PDF. Der Import liest aus dem Innenteil erst den Preis und
+ * rendert dann die Seiten; frueher wurde die Druckdatei dafuer zweimal
+ * eingelesen und zweimal zerlegt — bei hundertvierzig Megabyte vom Stick
+ * spuerbar.
+ */
+export type OffenesPdf = {
+  doc: pdfjs.PDFDocumentProxy;
+  /** Die Datei dahinter: weitere Spuren oeffnen sie noch einmal. */
+  datei: Blob;
+  schliessen: () => Promise<void>;
+};
+
+export async function oeffnePdf(file: Blob): Promise<OffenesPdf> {
+  const daten = new Uint8Array(await file.arrayBuffer());
+  const auftrag = pdfjs.getDocument({ data: daten });
+  const doc = await auftrag.promise;
+  return { doc, datei: file, schliessen: () => auftrag.destroy() };
+}
+
+/**
+ * Wie viele Seiten gleichzeitig gerendert werden. Jede Spur hat ihr eigenes
+ * Dokument und damit ihren eigenen pdf.js-Faden: der zerlegt die Seite,
+ * waehrend der Hauptfaden die vorige malt. Gemessen an DMZ-Zeitgeschichte 80
+ * wartete eine einzelne Spur nur 6 von 93 Sekunden auf die Leitung — der
+ * Rechner war der Engpass. Jede Spur haelt die Druckdatei einmal im Speicher.
+ */
+export const RENDER_SPUREN = (() => {
+  if (typeof navigator === "undefined") return 1;
+  const kerne = navigator.hardwareConcurrency ?? 0;
+  return kerne >= 8 ? 3 : kerne >= 4 ? 2 : 1;
+})();
+
+/** Eine Datei oeffnen oder ein schon offenes PDF benutzen; nur Eigenes wird geschlossen. */
+async function mitPdf<T>(
+  quelle: Blob | OffenesPdf,
+  arbeit: (doc: pdfjs.PDFDocumentProxy) => Promise<T>,
+): Promise<T> {
+  if ("doc" in quelle) return await arbeit(quelle.doc);
+  const offen = await oeffnePdf(quelle);
+  try {
+    return await arbeit(offen.doc);
+  } finally {
+    await offen.schliessen();
+  }
+}
+
 /** Seitenzahl eines PDF, ohne es zu rendern. */
 export async function pdfPageCount(file: Blob): Promise<number> {
   const daten = new Uint8Array(await file.arrayBuffer());
@@ -98,54 +145,89 @@ export async function pdfPageCount(file: Blob): Promise<number> {
  * Die Seiten kommen nacheinander durch `onPage`, damit der Aufrufer jede
  * gleich hochladen kann und nie ein ganzes Heft im Speicher liegt.
  */
-export async function renderPdfPages(
-  file: Blob,
+async function renderSeite(
+  doc: pdfjs.PDFDocumentProxy,
+  i: number,
   options: RenderOptions,
+): Promise<RenderedPage> {
+  const page = await doc.getPage(i + 1);
+  const roh = page.getViewport({ scale: 1 });
+  const schnitt = anschnitt(roh.width, roh.height, options.trimWidthPt, options.trimHeightPt);
+  const scale = options.targetWidth / schnitt.breite;
+  const viewport = page.getViewport({ scale });
+  const breite = Math.round(schnitt.breite * scale);
+  const hoehe = Math.round(schnitt.hoehe * scale);
+
+  const c = canvas(breite, hoehe);
+  const ctx = (c as HTMLCanvasElement).getContext("2d", {
+    alpha: false,
+  }) as CanvasRenderingContext2D;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, breite, hoehe);
+  // Der Anschnitt wird nicht gerendert, sondern weggeschoben.
+  ctx.translate(-schnitt.links * scale, -schnitt.oben * scale);
+  await page.render({ canvasContext: ctx, viewport, canvas: c as HTMLCanvasElement }).promise;
+  page.cleanup();
+
+  const blob = await toJpeg(c, options.quality);
+  return { sourcePageIndex: i, blob, width: breite, height: hoehe };
+}
+
+/**
+ * Alle Seiten eines PDF rendern und einzeln herausgeben.
+ *
+ * Die Seiten kommen durch `onPage`, damit der Aufrufer jede gleich hochladen
+ * kann und nie ein ganzes Heft im Speicher liegt. Mit mehreren Spuren kommen
+ * sie nicht streng der Reihe nach — der Index sagt, wohin sie gehoeren.
+ */
+export async function renderPdfPages(
+  quelle: Blob | OffenesPdf,
+  options: RenderOptions & { spuren?: number },
   onPage: (page: RenderedPage, index: number, total: number) => Promise<void>,
   abgebrochen?: () => boolean,
 ): Promise<number> {
-  const daten = new Uint8Array(await file.arrayBuffer());
-  const auftrag = pdfjs.getDocument({ data: daten });
-  const doc = await auftrag.promise;
-  try {
-    for (let i = 0; i < doc.numPages; i++) {
-      if (abgebrochen?.()) break;
-      const page = await doc.getPage(i + 1);
-      const roh = page.getViewport({ scale: 1 });
-      const schnitt = anschnitt(
-        roh.width,
-        roh.height,
-        options.trimWidthPt,
-        options.trimHeightPt,
-      );
-      const scale = options.targetWidth / schnitt.breite;
-      const viewport = page.getViewport({ scale });
-      const breite = Math.round(schnitt.breite * scale);
-      const hoehe = Math.round(schnitt.hoehe * scale);
+  return await mitPdf(quelle, async (doc) => {
+    const total = doc.numPages;
+    const datei = "doc" in quelle ? quelle.datei : quelle;
+    const spuren = Math.max(1, Math.min(options.spuren ?? 1, total));
+    let naechste = 0;
+    let fehler = false;
 
-      const c = canvas(breite, hoehe);
-      const ctx = (c as HTMLCanvasElement).getContext("2d", {
-        alpha: false,
-      }) as CanvasRenderingContext2D;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, breite, hoehe);
-      // Der Anschnitt wird nicht gerendert, sondern weggeschoben.
-      ctx.translate(-schnitt.links * scale, -schnitt.oben * scale);
-      await page.render({ canvasContext: ctx, viewport, canvas: c as HTMLCanvasElement })
-        .promise;
-      page.cleanup();
-
-      const blob = await toJpeg(c, options.quality);
-      await onPage(
-        { sourcePageIndex: i, blob, width: breite, height: hoehe },
-        i,
-        doc.numPages,
-      );
+    async function spur(eigenes: pdfjs.PDFDocumentProxy) {
+      while (!fehler && !abgebrochen?.()) {
+        const i = naechste++;
+        if (i >= total) return;
+        try {
+          const seite = await renderSeite(eigenes, i, options);
+          await onPage(seite, i, total);
+        } catch (e) {
+          fehler = true;
+          throw e;
+        }
+      }
     }
-    return doc.numPages;
-  } finally {
-    await auftrag.destroy();
-  }
+
+    // Die erste Spur nimmt das schon offene Dokument, jede weitere oeffnet
+    // die Datei selbst.
+    const weitere: OffenesPdf[] = [];
+    try {
+      const laeufe = [spur(doc)];
+      for (let k = 1; k < spuren; k++) {
+        laeufe.push(
+          oeffnePdf(datei).then((offen) => {
+            weitere.push(offen);
+            return spur(offen.doc);
+          }),
+        );
+      }
+      const ergebnisse = await Promise.allSettled(laeufe);
+      const kaputt = ergebnisse.find((r) => r.status === "rejected");
+      if (kaputt) throw (kaputt as PromiseRejectedResult).reason;
+    } finally {
+      await Promise.all(weitere.map((w) => w.schliessen().catch(() => {})));
+    }
+    return total;
+  });
 }
 
 /**
@@ -164,11 +246,10 @@ const PREIS = /Einzel(?:heft|preis|verkaufspreis)\s*:?\s*(?:[€teE]\s*)?(\d{1,3
 /** So viele Seiten vom Ende her werden durchsucht. */
 const IMPRESSUM_SEITEN = 6;
 
-export async function readPriceFromImprint(file: Blob): Promise<number | undefined> {
-  const daten = new Uint8Array(await file.arrayBuffer());
-  const auftrag = pdfjs.getDocument({ data: daten });
-  const doc = await auftrag.promise;
-  try {
+export async function readPriceFromImprint(
+  quelle: Blob | OffenesPdf,
+): Promise<number | undefined> {
+  return await mitPdf(quelle, async (doc) => {
     const ab = Math.max(1, doc.numPages - IMPRESSUM_SEITEN + 1);
     for (let n = doc.numPages; n >= ab; n--) {
       const page = await doc.getPage(n);
@@ -188,7 +269,5 @@ export async function readPriceFromImprint(file: Blob): Promise<number | undefin
       }
     }
     return undefined;
-  } finally {
-    await auftrag.destroy();
-  }
+  });
 }

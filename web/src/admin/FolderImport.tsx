@@ -13,15 +13,18 @@ import {
   type ScannedFile,
 } from "./folderScan";
 import { readDirectoryInput, readDroppedFolder } from "./folderDrop";
-import { ImageConverter } from "./convertClient";
+import { FAEDEN, ImageConverter } from "./convertClient";
 import { jpegName } from "./imageConvert";
 import { Ladeschlange } from "./ladeschlange";
 import { buildPageOrder } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
 import { readIdmlMeta } from "./idmlMeta";
 import {
+  oeffnePdf,
+  RENDER_SPUREN,
   readPriceFromImprint,
   renderPdfPages,
+  type OffenesPdf,
   type RenderedPage,
 } from "./pageRender";
 
@@ -40,7 +43,8 @@ const TITEL_KANTE = 2400;
 const SEITEN_BREITE = 2400;
 const SEITEN_GUETE = 0.86;
 
-type Fortschritt = { text: string; prozent: number };
+/** `fehler`: der Lauf ist hier stehen geblieben — der Balken zeigt das an. */
+type Fortschritt = { text: string; prozent: number; fehler?: boolean };
 
 /** Was der Lauf offen laesst und von Hand nachgetragen werden muss. */
 type Ergebnis = {
@@ -159,15 +163,21 @@ export default function FolderImport({
     setAktiv(true);
     abbrechen.current = false;
 
-    // Erledigte Abschnitte. Was dieser Ordner nicht hat, gilt sofort als
-    // erledigt — sonst bliebe der Balken am Ende stehen.
+    // Erledigte Abschnitte. Was dieser Ordner nicht hat, zaehlt im Balken gar
+    // nicht mit — sonst spraenge er ueber die fehlenden Abschnitte hinweg.
     const erledigt: ImportPhase[] = [];
+    const entfallen: ImportPhase[] = [];
+    if (!plan.cover) entfallen.push("umschlag");
+    if (!plan.idml) entfallen.push("satzdatei");
+    if (plan.cover || !plan.coverImage) entfallen.push("titelseite");
+    if (!mitBildern || !plan.artwork.length) entfallen.push("bilder");
+    if (!sofortImport) entfallen.push("aufbereitung");
     const offen: string[] = [];
     let hochgeladen = 0;
     let bilder = 0;
 
     function melde(phase: ImportPhase, text: string, anteil = 0) {
-      setLauf({ text, prozent: fortschrittProzent(erledigt, phase, anteil) });
+      setLauf({ text, prozent: fortschrittProzent(erledigt, phase, anteil, entfallen) });
     }
     function abhaken(phase: ImportPhase) {
       erledigt.push(phase);
@@ -177,12 +187,23 @@ export default function FolderImport({
     }
 
     const wandler = new ImageConverter();
+    let innenPdf: OffenesPdf | null = null;
     try {
       // 1. Heft anlegen oder wiederfinden. Der Einzelpreis steht im Impressum
       //    des Innenteils; er wird hier gelesen, weil die Druckdatei den
-      //    Rechner nicht verlaesst.
+      //    Rechner nicht verlaesst. Geoeffnet wird sie dafuer einmal, fuer
+      //    Preis und Seiten zusammen.
+      melde("heft", `Innenteil ${innenteil.name} wird gelesen`);
+      try {
+        innenPdf = await oeffnePdf(innenteil.file);
+      } catch (e: any) {
+        throw new Error(
+          `Innenteil ${innenteil.name} laesst sich nicht oeffnen: ` +
+            `${cleanError(e) ?? "kein lesbares PDF"}. Der Lauf ist abgebrochen.`,
+        );
+      }
       melde("heft", "Heft anlegen");
-      const preis = await readPriceFromImprint(innenteil.file).catch(() => undefined);
+      const preis = await readPriceFromImprint(innenPdf).catch(() => undefined);
       const heft = await ensureIssue({
         publicationSlug: name.publicationSlug,
         publicationName: name.publicationName,
@@ -234,25 +255,33 @@ export default function FolderImport({
         height: number;
       }[] = [];
       let innerSeiten: number | undefined;
+      // Wie lange das Rendern auf freie Upload-Plaetze wartete: steht es
+      // lange, ist die Leitung der Engpass, nicht der Rechner.
+      const innenStart = performance.now();
+      let uploadWarten = 0;
+      let fertigeSeiten = 0;
       try {
         await renderPdfPages(
-          innenteil.file,
+          innenPdf,
           {
             targetWidth: SEITEN_BREITE,
             quality: SEITEN_GUETE,
             trimWidthPt: satzMass?.pageWidthPt,
             trimHeightPt: satzMass?.pageHeightPt,
+            spuren: RENDER_SPUREN,
           },
           async (seite: RenderedPage, i: number, total: number) => {
             pruefen();
+            fertigeSeiten++;
             melde(
               "innenteil",
-              `Seite ${i + 1} von ${total}: ${innenteil.name}`,
-              (i + 1) / total,
+              `Seite ${fertigeSeiten} von ${total}: ${innenteil.name}`,
+              fertigeSeiten / total,
             );
             const dateiname = `seite-${String(i + 1).padStart(3, "0")}.jpg`;
             // Nicht auf den Upload warten: die naechste Seite kann schon
             // gerendert werden, waehrend diese hochgeht.
+            const wartenAb = performance.now();
             await schlange.einreihen(async () => {
               const { assetId, key } = await uploadAsset(
                 deps,
@@ -269,24 +298,35 @@ export default function FolderImport({
               };
               hochgeladen += seite.blob.size;
             });
+            uploadWarten += performance.now() - wartenAb;
           },
           () => abbrechen.current,
         );
+        const wartenAb = performance.now();
         await schlange.fertig();
+        uploadWarten += performance.now() - wartenAb;
         innerSeiten = innenSeiten.length;
       } catch (e: any) {
+        // Was noch hochgeht, zu Ende laufen lassen: sonst meldet die Seite
+        // das Ende, waehrend im Hintergrund weiter Uploads laufen.
+        await schlange.fertig().catch(() => {});
         if (e instanceof Abgebrochen) throw e;
         throw new Error(
           `Innenteil ${innenteil.name} liess sich nicht rendern: ` +
             `${cleanError(e) ?? "Fehler"}. Der Lauf ist abgebrochen.`,
         );
       }
+      await innenPdf.schliessen();
+      innenPdf = null;
       // Die Seiten zeigen auf sich selbst; ein Innenteil-Asset gibt es nicht
       // mehr. Fuer die Reihenfolge zaehlt nur noch die Liste.
       const innerAsset = innenSeiten[0]?.assetId as Id<"assets">;
+      const innenSekunden = (performance.now() - innenStart) / 1000;
       notiere(
         `Innenteil ${innenteil.name}: ${innerSeiten} Seiten gerendert, ` +
-          `${formatBytes(innenteil.size)} Druckdatei bleibt hier`,
+          `${formatBytes(innenteil.size)} Druckdatei bleibt hier ` +
+          `(${innenSekunden.toFixed(0)} s mit ${RENDER_SPUREN} Spuren, ` +
+          `${(uploadWarten / 1000).toFixed(0)} s davon Warten auf die Leitung, summiert)`,
       );
       if (!innerSeiten) {
         offen.push("Der Innenteil ergab keine Seiten — bitte die Datei prüfen");
@@ -468,47 +508,62 @@ export default function FolderImport({
           sourceHeight: number;
         }[] = [];
         const bilderschlange = new Ladeschlange(GLEICHZEITIGE_UPLOADS);
+        // So viele Bilder werden gleichzeitig umgewandelt, wie es Faeden gibt.
+        // Frueher wartete die Schleife auf jedes Bild einzeln, und der zweite
+        // Faden stand still.
+        const umwandlung = new Ladeschlange(FAEDEN);
+        let fertigeBilder = 0;
         for (let i = 0; i < gesamt; i++) {
           pruefen();
           const datei = plan.artwork[i];
-          melde("bilder", `Bild ${i + 1} von ${gesamt}: ${datei.name}`, i / gesamt);
-          try {
-            const bild = await wandler.convert(
-              datei.file,
-              datei.name,
-              ARTWORK_KANTE,
-              ARTWORK_GUETE,
-            );
-            // Das naechste Bild wird schon umgewandelt, waehrend dieses hochgeht.
-            await bilderschlange.einreihen(async () => {
-              const { assetId } = await uploadAsset(
-                deps,
-                issueId,
-                bild.blob,
-                jpegName(datei.name),
-                "image",
+          await umwandlung.einreihen(async () => {
+            try {
+              const bild = await wandler.convert(
+                datei.file,
+                datei.name,
+                ARTWORK_KANTE,
+                ARTWORK_GUETE,
               );
-              eintraege.push({
-                assetId,
-                // Der Name aus `Links/` bleibt stehen: unter ihm nennt die
-                // Satzdatei das Bild, darueber findet der Worker es wieder.
-                filename: datei.name,
-                width: bild.width,
-                height: bild.height,
-                sourceWidth: bild.sourceWidth,
-                sourceHeight: bild.sourceHeight,
+              vorher += datei.size;
+              // Das naechste Bild wird schon umgewandelt, waehrend dieses hochgeht.
+              await bilderschlange.einreihen(async () => {
+                const { assetId } = await uploadAsset(
+                  deps,
+                  issueId,
+                  bild.blob,
+                  jpegName(datei.name),
+                  "image",
+                );
+                eintraege.push({
+                  assetId,
+                  // Der Name aus `Links/` bleibt stehen: unter ihm nennt die
+                  // Satzdatei das Bild, darueber findet der Worker es wieder.
+                  filename: datei.name,
+                  width: bild.width,
+                  height: bild.height,
+                  sourceWidth: bild.sourceWidth,
+                  sourceHeight: bild.sourceHeight,
+                });
+                nachher += bild.blob.size;
               });
-              nachher += bild.blob.size;
-            });
-            vorher += datei.size;
-          } catch (e: any) {
-            if (e instanceof Abgebrochen) throw e;
-            uebergangen++;
-            const grund = cleanError(e) ?? "nicht lesbar";
-            notiere(`Bild übergangen: ${datei.name} (${grund})`);
-            offen.push(`Bild ${datei.name} nachtragen — ${grund}`);
-          }
+            } catch (e: any) {
+              // Ein einzelnes Bild haelt den Lauf nie an. Ein Upload-Fehler
+              // kommt ueber die Bilderschlange und bricht dort ab.
+              uebergangen++;
+              const grund = cleanError(e) ?? "nicht lesbar";
+              notiere(`Bild übergangen: ${datei.name} (${grund})`);
+              offen.push(`Bild ${datei.name} nachtragen — ${grund}`);
+            } finally {
+              fertigeBilder++;
+              melde(
+                "bilder",
+                `Bild ${fertigeBilder} von ${gesamt}: ${datei.name}`,
+                fertigeBilder / gesamt,
+              );
+            }
+          });
         }
+        await umwandlung.fertig();
         await bilderschlange.fertig();
         melde("bilder", `${eintraege.length} Bilder eintragen`, 1);
         for (let i = 0; i < eintraege.length; i += 40) {
@@ -578,14 +633,20 @@ export default function FolderImport({
         offen,
       });
     } catch (e: any) {
+      // Der Balken bleibt stehen, wo der Lauf endete, und sagt es: ohne das
+      // sah ein abgebrochener Lauf aus, als liefe er noch.
+      setLauf((alt) => ({
+        text: `Abgebrochen bei: ${alt?.text ?? "Start"}`,
+        prozent: alt?.prozent ?? 0,
+        fehler: true,
+      }));
       if (e instanceof Abgebrochen) {
         setErr("Abgebrochen. Was bis dahin hochging, steht schon am Heft.");
       } else {
         setErr(cleanError(e) ?? "Fehler");
       }
     } finally {
-      // Der Balken bleibt stehen, wo der Lauf endete: bei hundert Prozent
-      // oder an der Stelle, an der abgebrochen wurde.
+      await innenPdf?.schliessen().catch(() => {});
       wandler.dispose();
       setAktiv(false);
       abbrechen.current = false;
@@ -671,7 +732,11 @@ export default function FolderImport({
       </div>
 
       {lauf && (
-        <div className="lauf" role="status" aria-live="polite">
+        <div
+          className={`lauf${lauf.fehler ? " fehler" : ""}`}
+          role="status"
+          aria-live="polite"
+        >
           <div className="lauf-kopf">
             <span>{lauf.text}</span>
             <span className="lauf-wert">{lauf.prozent} %</span>

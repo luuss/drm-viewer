@@ -40,6 +40,7 @@ import type * as publications from "../publications.js";
 import type * as purchases from "../purchases.js";
 import type * as readerSessions from "../readerSessions.js";
 import type * as roles from "../roles.js";
+import type * as s3Presign from "../s3Presign.js";
 import type * as serviceAuth from "../serviceAuth.js";
 import type * as sessions from "../sessions.js";
 import type * as shopApi from "../shopApi.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   purchases: typeof purchases;
   readerSessions: typeof readerSessions;
   roles: typeof roles;
+  s3Presign: typeof s3Presign;
   serviceAuth: typeof serviceAuth;
   sessions: typeof sessions;
   shopApi: typeof shopApi;

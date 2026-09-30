@@ -2448,6 +2448,12 @@ button.small, .btn.small {
   border-radius: 999px;
 }
 .lauf > .btn { justify-self: start; }
+/* Abgebrochener Lauf: der Balken bleibt stehen und wird rot. */
+.lauf.fehler { border-color: var(--danger, #b3261e); }
+.lauf.fehler .lauf-kopf > span:first-child { color: var(--danger, #b3261e); }
+.lauf.fehler .lauf-balken { color: var(--danger, #b3261e); }
+.lauf.fehler .lauf-balken::-webkit-progress-value { background: var(--danger, #b3261e); }
+.lauf.fehler .lauf-balken::-moz-progress-bar { background: var(--danger, #b3261e); }
 
 .lauf-ergebnis { display: grid; gap: var(--s2); }
 .lauf-ergebnis h5 {

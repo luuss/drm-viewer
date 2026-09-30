@@ -74,6 +74,30 @@ describe("classifyFolder", () => {
     expect(plan.cover?.name).toBe("zuerst 3-2026 umschlag.pdf");
   });
 
+  it("nimmt kein platziertes PDF aus Links/ als Umschlag", () => {
+    // So kam DMZ 170: die Anzeige war das zweitgroesste PDF im Ordner.
+    const plan = classifyFolder("dmz 170, innenteil + titelseite", [
+      ...musterordner(),
+      f("Links/SMS Anzeige_A4.pdf", 4_000_000),
+      f("Links/210x297 Militär diverse modern DMZ 4 mm.pdf", 2_000_000),
+    ]);
+    expect(plan.inner?.name).toBe("DMZ 170 innen.pdf");
+    expect(plan.cover).toBeUndefined();
+    expect(plan.coverImage?.name).toBe("dmz 170 titel.tif");
+    const gruende = plan.ignored.map((e) => `${e.file.name}: ${e.reason}`);
+    expect(gruende).toContain("SMS Anzeige_A4.pdf: Im Satz platziertes PDF");
+  });
+
+  it("erkennt den Bilderordner auch unter anderem Namen", () => {
+    const plan = classifyFolder("x", [
+      f("heft innen.pdf", 90_000_000),
+      f("Satzbilder/foto.tif", 5_000_000),
+      f("Satzbilder/inserat.pdf", 8_000_000),
+    ]);
+    expect(plan.inner?.name).toBe("heft innen.pdf");
+    expect(plan.cover).toBeUndefined();
+  });
+
   it("nimmt das einzige PDF als Innenteil, auch wenn es Titel heisst", () => {
     const plan = classifyFolder("x", [f("titelheft.pdf", 5)]);
     expect(plan.inner?.name).toBe("titelheft.pdf");
@@ -165,16 +189,27 @@ describe("fortschrittProzent", () => {
   });
 
   it("rechnet den laufenden Abschnitt anteilig dazu", () => {
-    // Heft (2) erledigt, Innenteil (25) zur Haelfte.
-    expect(fortschrittProzent(["heft"], "innenteil", 0.5)).toBe(15);
-    // Bild 25 von 50 in der Bilderphase (50), davor 2+25+5+5+5 = 42.
+    // Heft (2) erledigt, Innenteil (45) zur Haelfte: 24,5.
+    expect(fortschrittProzent(["heft"], "innenteil", 0.5)).toBe(25);
+    // Bild 25 von 50 in der Bilderphase (35), davor 2+45+5+3+3 = 58: 75,5.
     expect(
       fortschrittProzent(
         ["heft", "innenteil", "umschlag", "satzdatei", "titelseite"],
         "bilder",
         25 / 50,
       ),
-    ).toBe(67);
+    ).toBe(76);
+  });
+
+  it("verteilt entfallene Abschnitte auf die uebrigen", () => {
+    // Ohne Umschlag-PDF und ohne Links/: 2+45+3+3+2+5 = 60 zaehlen.
+    const weg: ImportPhase[] = ["umschlag", "bilder"];
+    expect(fortschrittProzent(["heft"], "innenteil", 1, weg)).toBe(78);
+    // Nach dem Innenteil springt der Balken nicht mehr um die Bilder vor.
+    expect(
+      fortschrittProzent(["heft", "innenteil", "umschlag", "satzdatei"], "titelseite", 0, weg),
+    ).toBe(83);
+    expect(fortschrittProzent(IMPORT_PHASEN.map((p) => p.id), undefined, 0, weg)).toBe(100);
   });
 
   it("zaehlt uebersprungene Abschnitte als erledigt", () => {
@@ -194,7 +229,7 @@ describe("fortschrittProzent", () => {
 
   it("bleibt bei doppelten Eintraegen und krummen Anteilen im Rahmen", () => {
     expect(fortschrittProzent(["heft", "heft"], "heft", 1)).toBe(2);
-    expect(fortschrittProzent([], "bilder", 5)).toBe(50);
+    expect(fortschrittProzent([], "bilder", 5)).toBe(35);
     expect(fortschrittProzent([], "bilder", -1)).toBe(0);
   });
 });

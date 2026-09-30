@@ -11,8 +11,18 @@
 import { convertImage, type ConvertedImage } from "./imageConvert";
 import type { ConvertResponse } from "./convertWorker";
 
-/** Zwei Faeden sind der Kompromiss aus Tempo und Speicher. */
-export const FAEDEN = 2;
+/**
+ * Zwei Faeden sind der Kompromiss aus Tempo und Speicher. Ein Rechner mit
+ * acht Kernen und genug Speicher bekommt drei; mehr lohnt nicht, weil ein
+ * Druck-TIF entpackt schnell zweihundert Megabyte belegt.
+ */
+export const FAEDEN = (() => {
+  if (typeof navigator === "undefined") return 2;
+  const kerne = navigator.hardwareConcurrency ?? 0;
+  // `deviceMemory` kennt nur Chromium; es endet bei 8 (Gigabyte).
+  const speicher = (navigator as { deviceMemory?: number }).deviceMemory ?? 8;
+  return kerne >= 8 && speicher >= 8 ? 3 : 2;
+})();
 
 type Auftrag = {
   file: File | Blob;

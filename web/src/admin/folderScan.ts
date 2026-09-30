@@ -140,11 +140,32 @@ export function classifyFolder(folderName: string, files: ScannedFile[]): Folder
     entries.push({ role: "ignored", file: f, reason: "Nicht gebraucht" });
   }
 
+  // Ein PDF im Bilderordner ist im Satz platziert — eine Anzeige, eine
+  // Grafik —, nie Innenteil oder Umschlag. Bilderordner ist, wo die
+  // platzierten Bilder liegen, egal wie er heisst. Ohne das wurde bei DMZ 170
+  // "Links/SMS Anzeige_A4.pdf" zum Umschlag, weil es das zweitgroesste PDF war.
+  const bilderordner = new Set(artwork.map((f) => ordner(f.path).join("/").toLowerCase()));
+  const istPlatziert = (f: ScannedFile) => {
+    const teile = ordner(f.path);
+    if (!teile.length) return false;
+    return (
+      bilderordner.has(teile.join("/").toLowerCase()) ||
+      /^(links|bilder|images|grafiken|anzeigen)$/i.test(teile[teile.length - 1])
+    );
+  };
+  const platziert = pdfs.filter(istPlatziert);
+  const heftPdfs = pdfs.filter((f) => !istPlatziert(f));
+
+  // Titelseite: die TIF ist die bessere Vorlage, die JPG liegt meist nur in
+  // Bildschirmgroesse daneben. Umgewandelt wird ohnehin im Browser.
+  const tif = bilderOben.find((f) => endetAuf(f.name, [".tif", ".tiff"]));
+  const coverImage: ScannedFile | undefined = tif ?? bilderOben[0];
+
   let inner: ScannedFile | undefined;
   let cover: ScannedFile | undefined;
   // Der Name entscheidet, solange er etwas sagt. Sagt er nichts, entscheidet
   // die Groesse: der Innenteil ist ein Vielfaches des Umschlags.
-  const nachGroesse = [...pdfs].sort((a, b) => b.size - a.size);
+  const nachGroesse = [...heftPdfs].sort((a, b) => b.size - a.size);
   for (const f of nachGroesse) {
     const n = f.name.toLowerCase();
     if (/innen|inhalt|kern/.test(n)) inner = inner ?? f;
@@ -160,18 +181,16 @@ export function classifyFolder(folderName: string, files: ScannedFile[]): Folder
   if (!cover && nachGroesse.length > 1) {
     cover = nachGroesse.find((f) => f !== inner);
   }
-  for (const f of pdfs) {
+  for (const f of heftPdfs) {
     if (f === inner) entries.push({ role: "inner", file: f });
     else if (f === cover) entries.push({ role: "cover", file: f });
     else entries.push({ role: "ignored", file: f, reason: "Drittes PDF" });
   }
+  for (const f of platziert) {
+    entries.push({ role: "ignored", file: f, reason: "Im Satz platziertes PDF" });
+  }
   if (idml) entries.push({ role: "idml", file: idml });
 
-  // Titelseite: die TIF ist die bessere Vorlage, die JPG liegt meist nur in
-  // Bildschirmgroesse daneben. Umgewandelt wird ohnehin im Browser.
-  let coverImage: ScannedFile | undefined;
-  const tif = bilderOben.find((f) => endetAuf(f.name, [".tif", ".tiff"]));
-  coverImage = tif ?? bilderOben[0];
   for (const f of bilderOben) {
     if (f === coverImage) entries.push({ role: "coverImage", file: f });
     else
@@ -310,19 +329,19 @@ export function formatBytes(n: number): string {
 /**
  * Die Abschnitte eines Imports und ihr Anteil am Ganzen.
  *
- * Die Gewichte sind nach dem geschaetzt, was Zeit kostet: die Bilder aus
- * `Links/` muss der Browser einzeln umwandeln und hochladen, sie machen die
- * Haelfte aus; das Innenteil-PDF geht als ein grosses Stueck hoch und macht
- * ein Viertel aus. Der Rest ist Beiwerk.
+ * Die Gewichte sind nach dem geschaetzt, was Zeit kostet: der Browser rendert
+ * jede Innenteilseite und laedt sie einzeln hoch, das ist fast die Haelfte;
+ * die Bilder aus `Links/` wandelt er einzeln um, gut ein Drittel. Der Rest ist
+ * Beiwerk.
  */
 export const IMPORT_PHASEN = [
   { id: "heft", gewicht: 2 },
-  { id: "innenteil", gewicht: 25 },
+  { id: "innenteil", gewicht: 45 },
   { id: "umschlag", gewicht: 5 },
-  { id: "satzdatei", gewicht: 5 },
-  { id: "titelseite", gewicht: 5 },
-  { id: "bilder", gewicht: 50 },
-  { id: "reihenfolge", gewicht: 3 },
+  { id: "satzdatei", gewicht: 3 },
+  { id: "titelseite", gewicht: 3 },
+  { id: "bilder", gewicht: 35 },
+  { id: "reihenfolge", gewicht: 2 },
   { id: "aufbereitung", gewicht: 5 },
 ] as const;
 
@@ -335,20 +354,29 @@ const PHASEN_GEWICHT = new Map<ImportPhase, number>(
 /**
  * Prozentwert ueber den ganzen Lauf.
  *
- * Abschnitte, die dieser Ordner nicht braucht — kein Umschlag, keine
- * Satzdatei —, gelten sofort als erledigt. Sonst bliebe der Balken am Ende
- * unter hundert stehen, obwohl nichts mehr aussteht.
+ * Abschnitte, die dieser Ordner nicht braucht — kein Umschlag, keine Bilder —,
+ * stehen in `entfallen` und zaehlen gar nicht mit: die uebrigen teilen sich
+ * die hundert Prozent. Sonst sprang der Balken bei einem Ordner ohne `Links/`
+ * nach dem Innenteil um die Haelfte nach vorn. Wer einen Abschnitt nur
+ * abhakt, ohne ihn anzukuendigen, bekommt ihn trotzdem als erledigt gezaehlt.
  */
 export function fortschrittProzent(
   erledigt: readonly ImportPhase[],
   laufend?: ImportPhase,
   anteil = 0,
+  entfallen: readonly ImportPhase[] = [],
 ): number {
+  const weg = new Set(entfallen);
+  let gesamt = 0;
+  for (const p of IMPORT_PHASEN) if (!weg.has(p.id)) gesamt += p.gewicht;
+  if (gesamt <= 0) return 100;
   let summe = 0;
-  for (const phase of new Set(erledigt)) summe += PHASEN_GEWICHT.get(phase) ?? 0;
-  if (laufend && !erledigt.includes(laufend)) {
+  for (const phase of new Set(erledigt)) {
+    if (!weg.has(phase)) summe += PHASEN_GEWICHT.get(phase) ?? 0;
+  }
+  if (laufend && !erledigt.includes(laufend) && !weg.has(laufend)) {
     const teil = Math.min(1, Math.max(0, anteil));
     summe += (PHASEN_GEWICHT.get(laufend) ?? 0) * teil;
   }
-  return Math.max(0, Math.min(100, Math.round(summe)));
+  return Math.max(0, Math.min(100, Math.round((summe / gesamt) * 100)));
 }

@@ -1,11 +1,8 @@
-"use node";
-
 import { v } from "convex/values";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
 import { assertUploadAllowed } from "./uploadRules";
+import { presignPut } from "./s3Presign";
 
 /**
  * Zweiter Uploadweg: der Browser laedt grosse Dateien direkt in den
@@ -16,6 +13,10 @@ import { assertUploadAllowed } from "./uploadRules";
  * Groesse werden hier geprueft, die Ablage wird danach ueber
  * `assets.registerUpload` eingetragen. Ohne eingerichtetes S3 gibt es keine
  * Adresse — dann laeuft der vermittelte Weg.
+ *
+ * Bewusst ohne `"use node"`: eine Node-Aktion ruft fuer `ctx.runQuery` das
+ * Backend ueber die oeffentliche Adresse zurueck, und das hing am Apache-
+ * Routing des Verlagsservers (drm-viewer-s5j). Signiert wird in `s3Presign`.
  */
 export const presignUpload = action({
   args: {
@@ -32,28 +33,17 @@ export const presignUpload = action({
     const bucket = process.env.MEDIA_BUCKET ?? "emag-media";
     if (!endpoint) return null;
 
-    const client = new S3Client({
-      endpoint,
-      region: process.env.AWS_REGION ?? "us-east-1",
-      forcePathStyle: true,
-      // Das SDK rechnet seit Version 3.729 zu jedem PutObject eine Pruefsumme
-      // aus und nimmt sie in die Signatur auf. Der Browser sendet den Kopf
-      // beim direkten Upload aber nicht mit, also passt die Signatur nicht
-      // mehr und der Medienspeicher antwortet mit 403.
-      requestChecksumCalculation: "WHEN_REQUIRED",
-      responseChecksumValidation: "WHEN_REQUIRED",
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
-      },
-    });
     const safeName = args.filename.replace(/[^\w.\-]+/g, "_").slice(-120);
     const key = `uploads/${args.issueId}/${Date.now()}-${safeName}`;
-    const url = await getSignedUrl(
-      client,
-      new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: args.contentType }),
-      { expiresIn: 900 },
-    );
+    const url = await presignPut({
+      endpoint,
+      region: process.env.AWS_REGION ?? "us-east-1",
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
+      bucket,
+      key,
+      expiresIn: 900,
+    });
     return { url, key };
   },
 });
