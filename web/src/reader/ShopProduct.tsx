@@ -32,7 +32,21 @@ export function ShopProductLink({
   product: ReaderProduct;
   onFollow?: () => void;
 }) {
-  const inShop = product.productId !== null;
+  if (product.productId === null) {
+    // Der Laden fuehrt das Buch nicht: nur der Knopf zur Startseite.
+    return (
+      <a
+        className="btn shop-zum-shop"
+        href={product.url}
+        target="_blank"
+        rel="noopener"
+        onClick={onFollow}
+      >
+        <Icon name="cart" />
+        Zum Shop
+      </a>
+    );
+  }
   return (
     <a
       className="shop-produkt"
@@ -42,18 +56,14 @@ export function ShopProductLink({
       onClick={onFollow}
     >
       <span className="shop-produkt-text">
-        <span className="shop-produkt-name">{inShop ? product.name : "Lesen & Schenken"}</span>
-        <span className="shop-produkt-preis">
-          {!inShop
-            ? "lesenundschenken.de"
-            : product.priceCents !== null
-              ? formatEuro(product.priceCents)
-              : ""}
-        </span>
+        <span className="shop-produkt-name">{product.name}</span>
+        {product.priceCents !== null && (
+          <span className="shop-produkt-preis">{formatEuro(product.priceCents)}</span>
+        )}
       </span>
       <span className="btn shop-produkt-knopf">
         <Icon name="cart" />
-        {inShop ? "Im Shop bestellen" : "Zum Shop"}
+        Im Shop bestellen
       </span>
     </a>
   );
@@ -84,7 +94,7 @@ export function ProductChoice({
 
   useEffect(() => {
     const timer = window.setTimeout(() => setArmed(true), ARM_MS);
-    box.current?.querySelector<HTMLAnchorElement>("a.shop-produkt")?.focus();
+    box.current?.querySelector<HTMLAnchorElement>(".produkt-wahl-liste a")?.focus();
     return () => window.clearTimeout(timer);
   }, []);
 

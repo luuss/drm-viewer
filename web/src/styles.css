@@ -2633,6 +2633,8 @@ button.small, .btn.small {
 .shop-produkt-knopf { flex: 0 0 auto; }
 .article-body .shop-produkt { margin-top: var(--s5); margin-bottom: var(--s5); }
 .article-body .shop-produkt + .shop-produkt { margin-top: calc(-1 * var(--s3)); }
+/* Ohne Produkt im Laden: nur der Knopf zur Startseite. */
+.article-body .shop-zum-shop { display: flex; width: fit-content; margin-top: var(--s5); margin-bottom: var(--s5); }
 
 .produkt-wahl { display: flex; flex-direction: column; gap: var(--s4); }
 .produkt-wahl-kopf { display: flex; align-items: center; justify-content: flex-end; }
