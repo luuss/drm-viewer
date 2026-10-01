@@ -497,25 +497,41 @@ Editorial, Impressum, Historischer Kalender, Leserbriefe, Buchbesprechungen
 und die Kolumne haben im Satz meist keine Überschrift; als Artikel hießen sie
 nach ihrer ersten Zeile („Verehrter Leser, 80 Jahre nach …“).
 
-* `extractor/rubriken.py`: `stehende_rubrik` erkennt Anrede („Verehrter
-  Leser“ → Editorial), Leserbrief-Bezug („Zu „…“ in DMZ 169“ → Leserbriefe)
-  und Rubriknamen am Textanfang („Impressum Deutsche …“ → Impressum).
-  `titel_bereinigen` ersetzt einen Titel, der aus dem Text stammt
-  (`AssembledArticle.title_from_body`, gesetzt in `artikel_aus_satz`), durch
-  den Eintrag des gedruckten Verzeichnisses für die Seite („Claus-M.
-  Wolfschlag: Die Kolumne“) oder — nur für das Hauptstück der Seite — durch
-  die Seitenrubrik des Satzes („EDITORIAL“). Je Seite bekommt eine Rubrik nur
-  einen Artikel; drei Buchbesprechungen hießen sonst alle gleich.
+* `extractor/rubriken.py`: Das verlässliche Merkmal ist die **Kopfzeile der
+  Seite** („Editorial“ oben auf der Seite): `kopfzeilen` liest sie aus der
+  Textebene (oberste kurze Zeile im obersten Sechzehntel; die Satzdatei führt
+  Kopfzeilen oft nur auf der Musterseite), `seitenrubriken` aus dem Satz, wo er
+  sie hat. `titel_bereinigen`: erst ein Rubrikname oder Leserbrief-Bezug am
+  Titelanfang („Impressum Deutsche …“ → Impressum, „Zu „…“ in DMZ 169“ →
+  Leserbriefe), dann die Kopfzeile für das Hauptstück der Seite (den ersten
+  Artikel darauf) ohne eigene Überschrift (`AssembledArticle.title_from_body`,
+  gesetzt in `artikel_aus_satz`), dann der Eintrag des gedruckten
+  Verzeichnisses („Claus-M. Wolfschlag: Die Kolumne“), zuletzt die Anrede
+  („Verehrter Leser“) — auf die allein verlässt sich nichts. Je Seite bekommt
+  eine Rubrik nur einen Artikel; drei Buchbesprechungen hießen sonst alle
+  gleich. Rubriken: Editorial, Impressum, Historischer Kalender, Kalenderblatt,
+  Leserbriefe, Buchbesprechungen, Nachruf, Politikmeldungen, Nachrichten,
+  Meldungen, Kolumne, Vorschau, Zuletzt (`STEHENDE_RUBRIKEN`).
 * `_build_toc_entries` legt für eine stehende Rubrik ohne Eintrag im
   gedruckten Verzeichnis einen Eintrag an (ohne Klickfläche, an ihrer Stelle
   in der Seitenfolge), außer die Seite oder die Folgeseite hat schon einen mit
   dem Namen („Leserbriefe/Impressum 81“).
-* Bestand: `_scratch/umschlag/titel.py` (Probelauf ohne `--echt`) hat 13 Titel
-  berichtigt und vier Einträge ergänzt (Editorial in DMZ 170 und
-  DMZ-Zeitgeschichte 80, Historischer Kalender in DMZ 170, Leserbriefe in
-  ZUERST!); Greims Verzeichnis, das aus den Titeln entstand, folgt mit.
-  Werkzeuge: `articles:setTitleInternal`, `toc:insertInternal`,
-  `toc:setLabelInternal`.
+* **Der Auftrag `toc` trägt jetzt auch Einträge nach**, die das gedruckte
+  Verzeichnis nennt und das Heft noch nicht hat (Rubrikzeilen mit Seitenzahl,
+  zweizeilige Titel). Ein kürzerer Eintrag derselben Seite wächst zum
+  vollständigen Text („statt Strafpsychiatrie“ → „Wahlrechtsentzug statt
+  Strafpsychiatrie“), statt sich zu verdoppeln; von der Redaktion bearbeitete
+  Einträge bleiben, Löschungen auch (nur Fehlendes kommt dazu).
+* Bestand: `_scratch/umschlag/titel.py` (Probelauf ohne `--echt`) hat 15 Titel
+  berichtigt (Editorial ×3, Historischer Kalender, Die Kolumne, Buchbesprechungen
+  ×3, Leserbriefe ×2, Nachruf, Impressum ×2 …) und Einträge ergänzt (Editorial in
+  DMZ 170 und DMZ-Zeitgeschichte 80, Historischer Kalender, Buchbesprechungen).
+  Der `toc`-Auftrag ergänzte 16 gedruckte Einträge (Kalenderblätter, Nachruf,
+  Buchbesprechungen, volle zweizeilige Titel); ein Aufräumlauf verschmolz die
+  dabei entstandenen Dubletten der alten Kurzfassungen. Stand: DMZ 170 27,
+  DMZ-Zeitgeschichte 80 16, ZUERST! 41, Greim 7 Einträge. Werkzeuge:
+  `articles:setTitleInternal`, `toc:insertInternal`, `toc:setLabelInternal`,
+  `toc:removeInternal`.
 * Offen: Buchbesprechungen und Leserbriefe nach dem ersten je Seite behalten
   ihre erste Zeile als Titel; bei der DMZ fehlt ihr dazu die Initiale
   („eltgeschichte ist Kriegsgeschichte“), siehe 5.
