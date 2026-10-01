@@ -484,15 +484,24 @@ export const recentJobsInternal = internalQuery({
   },
 });
 
-/** Rolle setzen, ohne den Umweg ueber die Oberflaeche. */
+/**
+ * Rolle setzen, ohne den Umweg ueber die Oberflaeche. Mit `create` wird ein
+ * fehlendes Konto angelegt; die erste Anmeldung per E-Mail-Link findet es
+ * ueber die Adresse (magicLink.userForEmail) und uebernimmt es.
+ */
 export const setRolesByEmail = internalMutation({
-  args: { email: v.string(), roles: v.array(v.string()) },
-  handler: async (ctx, { email, roles }) => {
+  args: { email: v.string(), roles: v.array(v.string()), create: v.optional(v.boolean()) },
+  handler: async (ctx, { email, roles, create }) => {
+    const adresse = email.trim().toLowerCase();
     const user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", email.toLowerCase()))
+      .withIndex("email", (q) => q.eq("email", adresse))
       .first();
-    if (!user) return { ok: false };
+    if (!user) {
+      if (!create) return { ok: false };
+      const userId = await ctx.db.insert("users", { email: adresse, roles });
+      return { ok: true, userId, created: true };
+    }
     await ctx.db.patch(user._id, { roles } as any);
     return { ok: true, userId: user._id };
   },
