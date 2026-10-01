@@ -3359,3 +3359,24 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   .pruefliste li { grid-template-columns: 1.6rem minmax(0, 1fr); }
   .pruefliste .aktion { grid-column: 2; justify-content: flex-start; }
 }
+
+/* Gewaehlte Flaeche: in der Mitte verschieben, an acht Griffen verziehen. */
+.flaeche.verziehbar { cursor: move; touch-action: none; z-index: 2; }
+.griff-punkt {
+  position: absolute;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin: -0.375rem 0 0 -0.375rem;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  touch-action: none;
+}
+.griff-punkt.nw { left: 0; top: 0; cursor: nwse-resize; }
+.griff-punkt.n { left: 50%; top: 0; cursor: ns-resize; }
+.griff-punkt.ne { left: 100%; top: 0; cursor: nesw-resize; }
+.griff-punkt.e { left: 100%; top: 50%; cursor: ew-resize; }
+.griff-punkt.se { left: 100%; top: 100%; cursor: nwse-resize; }
+.griff-punkt.s { left: 50%; top: 100%; cursor: ns-resize; }
+.griff-punkt.sw { left: 0; top: 100%; cursor: nesw-resize; }
+.griff-punkt.w { left: 0; top: 50%; cursor: ew-resize; }

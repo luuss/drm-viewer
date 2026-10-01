@@ -53,6 +53,8 @@ export default function PageLinksEditor({ issueId }: { issueId: Id<"issues"> }) 
   const links = useQuery(api.pageLinks.listForEditors, { issueId });
   const [seite, setSeite] = useState(0);
   const [entwurf, setEntwurf] = useState<Entwurf | null>(null);
+  /** Zaehlt neu aufgezogene Flaechen, damit jede ein frisches Formular bekommt. */
+  const [neu, setNeu] = useState(0);
 
   const jeSeite = useMemo(() => {
     const m = new Map<number, number>();
@@ -133,11 +135,14 @@ export default function PageLinksEditor({ issueId }: { issueId: Id<"issues"> }) 
                   titel: l.label ?? ART[l.kind],
                   onClick: () => setEntwurf(entwurfAus(l)),
                 })),
-              ...(entwurf
-                ? [{ ...entwurf, key: "entwurf", klasse: "link gewaehlt", titel: "Gewählt" }]
-                : []),
             ]}
-            onZiehen={(box) =>
+            bearbeiten={
+              entwurf
+                ? { box: entwurf, onChange: (box) => setEntwurf((alt) => (alt ? { ...alt, ...box } : alt)) }
+                : undefined
+            }
+            onZiehen={(box) => {
+              setNeu((n) => n + 1);
               setEntwurf({
                 linkId: null,
                 ...box,
@@ -147,19 +152,23 @@ export default function PageLinksEditor({ issueId }: { issueId: Id<"issues"> }) 
                 queries: "",
                 url: "",
                 label: "",
-              })
-            }
+              });
+            }}
           />
-          <p className="hint small">Neue Fläche: auf der Seite ein Rechteck aufziehen.</p>
+          <p className="hint small">
+            Neue Fläche: auf der Seite ein Rechteck aufziehen. Eine gewählte Fläche lässt sich
+            verschieben und an Ecken und Kanten verziehen.
+          </p>
         </div>
 
         <aside className="links-formular">
           {entwurf ? (
             <LinkFormular
-              key={`${entwurf.linkId ?? "neu"}:${entwurf.x0}:${entwurf.y0}`}
+              key={entwurf.linkId ?? `neu:${neu}`}
               issueId={issueId}
               seite={seite}
               entwurf={entwurf}
+              box={entwurf}
               link={links.find((l) => l._id === entwurf.linkId) ?? null}
               fertig={() => setEntwurf(null)}
             />
@@ -192,12 +201,15 @@ function LinkFormular({
   issueId,
   seite,
   entwurf,
+  box,
   link,
   fertig,
 }: {
   issueId: Id<"issues">;
   seite: number;
   entwurf: Entwurf;
+  /** Die Lage kommt von aussen: sie aendert sich beim Verziehen auf der Seite. */
+  box: Box;
   link: Link | null;
   fertig: () => void;
 }) {
@@ -219,10 +231,10 @@ function LinkFormular({
             linkId: e.linkId ?? undefined,
             link: {
               pageIndex: seite,
-              x0: e.x0,
-              y0: e.y0,
-              x1: e.x1,
-              y1: e.y1,
+              x0: box.x0,
+              y0: box.y0,
+              x1: box.x1,
+              y1: box.y1,
               kind: e.kind,
               publicationSlug: e.publicationSlug || undefined,
               url: e.url.trim() || undefined,
