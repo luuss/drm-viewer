@@ -1394,7 +1394,7 @@ button.small, .btn.small {
   flex-direction: column;
   gap: var(--s3);
 }
-.search-results li {
+.search-results > li {
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
@@ -1403,7 +1403,7 @@ button.small, .btn.small {
   flex-direction: column;
   gap: var(--s1);
 }
-.search-results li.hint { background: none; border-style: dashed; }
+.search-results > li.hint { background: none; border-style: dashed; }
 .search-results .title {
   display: inline-flex;
   align-items: center;
