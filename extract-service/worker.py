@@ -59,7 +59,7 @@ from extractor.idml_articles import (
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
-from extractor.rubriken import seitenrubriken, stehende_rubrik, titel_bereinigen
+from extractor.rubriken import kopfzeilen, seitenrubriken, stehende_rubrik, titel_bereinigen
 from extractor.toc_layout import (
     refine_toc_hints,
     text_items_from_pdf,
@@ -117,6 +117,9 @@ class Job:
         # Leserseiten der Umschlaganzeigen: ihre Artikel sind ganzseitig
         # anklickbar.
         self._cover_pages: set[int] = set()
+        # Textebene der Innenseiten je Leserseite, fuer Kopfzeilen und
+        # Verzeichnis (toc_layout.TextItem).
+        self._text_pages: dict[int, list] = {}
 
     def beat(self, progress: int, message: str) -> None:
         res = self.convex.post(
@@ -201,7 +204,9 @@ class Job:
         # haben im Satz oft keine Ueberschrift und hiessen nach ihrer ersten
         # Zeile. Sie heissen nach ihrer Rubrik — aus dem Verzeichnis oder der
         # Seitenrubrik.
-        rubriken = seitenrubriken(blocks)
+        # Kopfzeilen: aus der Textebene der gedruckten Seite, und wo der Satz
+        # sie selbst fuehrt, aus dem Satz.
+        rubriken = {**kopfzeilen(self._text_pages), **seitenrubriken(blocks)}
         verzeichnis = {}
         for h in toc_hints:
             verzeichnis.setdefault(h.page_index, h.label)
@@ -567,6 +572,11 @@ class Job:
             for p in pages
             if p.get("role") == "content"
         )
+        if text_bytes:
+            try:
+                self._text_pages = text_layer_for_pages(text_bytes, content_map)
+            except ValueError as exc:
+                log("job.textLayerFailed", jobId=self.job_id, error=str(exc)[:200])
 
         blocks: list[SourceBlock] = []
         images = []
@@ -815,6 +825,16 @@ class Job:
             for h in hints
             if h.toc_page_index is not None
         ]
+        # Eintraege, die das Verzeichnis im Heft noch nicht kennt, kommen
+        # dazu; vorhandene bleiben, wie die Redaktion sie gelassen hat.
+        entries = [
+            {
+                "label": h.label[:300],
+                "pageIndex": h.page_index,
+                **({"section": h.section} if h.section else {}),
+            }
+            for h in hints
+        ]
         self.beat(80, "Klickflaechen werden uebernommen")
         result = self.convex.post(
             "/service/jobs/toc-regions",
@@ -823,6 +843,7 @@ class Job:
                 "workerId": WORKER_ID,
                 "issueId": self.issue_id,
                 "regions": regions,
+                "entries": entries,
             },
         )
         log(
@@ -831,10 +852,13 @@ class Job:
             entries=len(hints),
             regions=result.get("regions"),
             skipped=result.get("skipped"),
+            newEntries=result.get("entries"),
             textLayer=self._toc_bilanz is not None,
         )
         n = result.get("regions") or 0
-        return "done", f"{n} Klickflaechen erneuert" + self._verzeichnis_hinweis()
+        neu = result.get("entries") or 0
+        zusatz = f", {neu} Eintraege nachgetragen" if neu else ""
+        return "done", f"{n} Klickflaechen erneuert{zusatz}" + self._verzeichnis_hinweis()
 
     @staticmethod
     def _idml_partner(idml_source, sources, blobs):

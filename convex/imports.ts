@@ -320,8 +320,20 @@ export const activateTocRegionsInternal = internalMutation({
         label: v.optional(v.string()),
       }),
     ),
+    // Eintraege des gedruckten Verzeichnisses, die im Heft noch fehlen
+    // (etwa Rubrikzeilen mit Seitenzahl, die ein aelterer Import nicht
+    // kannte). Vorhandene und von der Redaktion bearbeitete bleiben.
+    entries: v.optional(
+      v.array(
+        v.object({
+          label: v.string(),
+          pageIndex: v.number(),
+          section: v.optional(v.string()),
+        }),
+      ),
+    ),
   },
-  handler: async (ctx, { jobId, workerId, issueId, regions }) => {
+  handler: async (ctx, { jobId, workerId, issueId, regions, entries }) => {
     const job = await ctx.db.get(jobId);
     if (!job) throw new Error("Auftrag unbekannt");
     if (job.issueId !== issueId) throw new Error("Auftrag passt nicht zur Ausgabe");
@@ -389,6 +401,59 @@ export const activateTocRegionsInternal = internalMutation({
       });
       eingetragen++;
     }
+    let neueEintraege = 0;
+    if (entries?.length) {
+      const vorhandene = toc.map((t) => ({
+        id: t._id,
+        pageIndex: t.pageIndex,
+        label: t.label.trim().toLowerCase(),
+      }));
+      for (const e of entries) {
+        const label = e.label.trim();
+        const klein = label.toLowerCase();
+        // Derselbe Eintrag, wenn ein Text den anderen enthaelt: ein frueherer
+        // Import kannte nur die zweite Zeile ("statt Strafpsychiatrie"), der
+        // Satz nennt jetzt beide. Dann waechst der Eintrag, statt sich zu verdoppeln.
+        const gleich = vorhandene.find(
+          (v) =>
+            v.pageIndex === e.pageIndex &&
+            (v.label === klein || klein.includes(v.label) || v.label.includes(klein)),
+        );
+        if (gleich) {
+          if (klein.length > gleich.label.length) {
+            await ctx.db.patch(gleich.id, { label: label.slice(0, 300) });
+            gleich.label = klein;
+          }
+          continue;
+        }
+        await ctx.db.insert("tocEntries", {
+          issueId,
+          order: 0,
+          label: label.slice(0, 300),
+          section: e.section,
+          pageIndex: e.pageIndex,
+          articleId: zielArtikel(e.pageIndex),
+          level: 1,
+        });
+        vorhandene.push({ id: undefined as any, pageIndex: e.pageIndex, label: klein });
+        neueEintraege++;
+      }
+      if (neueEintraege) {
+        // Alle Eintraege nach Seite reihen; Reihenfolge innerhalb einer Seite bleibt.
+        const alle = await ctx.db
+          .query("tocEntries")
+          .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+          .collect();
+        alle.sort(
+          (a, b) =>
+            (a.pageIndex ?? 0) - (b.pageIndex ?? 0) ||
+            (a.order || Infinity) - (b.order || Infinity),
+        );
+        for (const [i, t] of alle.entries()) {
+          if (t.order !== i + 1) await ctx.db.patch(t._id, { order: i + 1 });
+        }
+      }
+    }
     await ctx.db.patch(issueId, { updatedAt: Date.now() });
     console.log(
       JSON.stringify({
@@ -396,9 +461,10 @@ export const activateTocRegionsInternal = internalMutation({
         issueId,
         regions: eingetragen,
         skipped: uebergangen,
+        entries: neueEintraege,
       }),
     );
-    return { regions: eingetragen, skipped: uebergangen };
+    return { regions: eingetragen, skipped: uebergangen, entries: neueEintraege };
   },
 });
 

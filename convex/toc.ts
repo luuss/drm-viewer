@@ -176,3 +176,20 @@ export const setLabelInternal = internalMutation({
     await ctx.db.patch(entryId, { label: label.trim().slice(0, 300) });
   },
 });
+
+/** Einen Eintrag ohne Anmeldung entfernen und die Folge neu durchnummerieren. */
+export const removeInternal = internalMutation({
+  args: { entryId: v.id("tocEntries") },
+  handler: async (ctx, { entryId }) => {
+    const entry = await ctx.db.get(entryId);
+    if (!entry) return;
+    await ctx.db.delete(entryId);
+    const rows = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue_order", (q) => q.eq("issueId", entry.issueId))
+      .collect();
+    for (const [i, e] of rows.entries()) {
+      if (e.order !== i + 1) await ctx.db.patch(e._id, { order: i + 1 });
+    }
+  },
+});

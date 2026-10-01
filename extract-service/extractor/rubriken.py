@@ -20,6 +20,8 @@ STEHENDE_RUBRIKEN = (
     "Kalenderblatt",
     "Leserbriefe",
     "Buchbesprechungen",
+    "Nachruf",
+    "Nachrufe",
     "Politikmeldungen",
     "Nachrichten",
     "Meldungen",
@@ -37,17 +39,18 @@ ANREDE = re.compile(
 LESERBRIEF = re.compile(r"^\s*zu\s+[„\"»][^“\"«]{3,120}[“\"«]\s+in\s+", re.I)
 
 
-def stehende_rubrik(text: str | None) -> str | None:
+def stehende_rubrik(text: str | None, *, mit_anrede: bool = True) -> str | None:
     """Die stehende Rubrik, mit der ein Text beginnt — in ihrer Schreibweise.
 
-    "Verehrter Leser, kaum ist …" ist das Editorial, "Impressum Deutsche
-    Militaerzeitschrift" das Impressum, "EDITORIAL" (Seitenrubrik) das
-    Editorial.
+    "Impressum Deutsche Militaerzeitschrift" ist das Impressum, "EDITORIAL"
+    (Kopfzeile) das Editorial, "Zu „…“ in DMZ 169" ein Leserbrief. Die Anrede
+    ("Verehrter Leser") zaehlt nur, wenn `mit_anrede` gesetzt ist — sie ist
+    ein schwaches Zeichen, auf das man sich nicht verlassen soll.
     """
     if not text:
         return None
     t = " ".join(text.split())
-    if ANREDE.match(t):
+    if mit_anrede and ANREDE.match(t):
         return "Editorial"
     if LESERBRIEF.match(t):
         return "Leserbriefe"
@@ -57,6 +60,32 @@ def stehende_rubrik(text: str | None) -> str | None:
         if low == n or re.match(rf"^{re.escape(n)}(?=[\s:,.;!?/–-])", low):
             return name
     return None
+
+
+def kopfzeilen(text_by_page, max_y: float = 0.06) -> dict[int, str]:
+    """Je Seite die Kopfzeile aus der Textebene: die oberste kurze Zeile.
+
+    Der Satz legt Kopfzeilen oft auf die Musterseite, dann fehlen sie in der
+    IDML; die Textebene der gedruckten Seite hat sie ("Editorial" oben auf
+    Seite 3 der DMZ-Zeitgeschichte). Genommen wird die oberste Zeile im
+    obersten Sechzehntel, ohne Seitenzahlen — eine Schlagzeile steht tiefer
+    und ist groesser, aber nicht die Kopfzeile.
+    """
+    out: dict[int, str] = {}
+    for page, items in text_by_page.items():
+        oben = [
+            i
+            for i in items
+            if i.y0 < max_y and 2 <= len(i.text.strip()) <= 40 and not i.text.strip().isdigit()
+        ]
+        if not oben:
+            continue
+        beste = min(oben, key=lambda i: (round(i.y0, 3), -i.size))
+        zeile = sorted((i for i in oben if abs(i.y0 - beste.y0) < 0.004), key=lambda i: i.x0)
+        text = " ".join(i.text.strip() for i in zeile)
+        if 2 <= len(text) <= 40:
+            out[page] = text
+    return out
 
 
 def seitenrubriken(blocks) -> dict[int, str]:
@@ -86,27 +115,36 @@ def titel_bereinigen(
 ) -> str:
     """Der Titel eines Artikels; eine stehende Rubrik heisst nach ihrer Rubrik.
 
-    1. Beginnt der Titel mit einer Anrede, einem Leserbrief-Bezug oder einem
-       Rubriknamen, ist das der Titel ("Impressum Deutsche Militaerzeitschrift
-       …" → "Impressum").
-    2. Stammt der Titel aus dem Text (keine Ueberschrift im Satz): nennt das
-       gedruckte Verzeichnis fuer die Seite eine stehende Rubrik, gilt dessen
-       Eintrag ("Claus-M. Wolfschlag: Die Kolumne"); sonst, fuer den ersten
-       Text der Seite, die Seitenrubrik, wenn sie eine stehende ist
-       ("EDITORIAL" → "Editorial") — die Seitenrubrik nennt das Hauptstueck
-       der Seite, nicht jeden Kasten darauf.
-    3. Sonst bleibt der Titel.
+    1. Beginnt der Titel mit einem Rubriknamen oder einem Leserbrief-Bezug,
+       ist das der Titel ("Impressum Deutsche Militaerzeitschrift …" →
+       "Impressum").
+    2. Die Kopfzeile der Seite ("Editorial", "EDITORIAL"), wenn sie eine
+       stehende Rubrik nennt und der Artikel das Hauptstueck der Seite ist
+       (der erste darauf) und keine eigene Ueberschrift hat.
+    3. Stammt der Titel aus dem Text: nennt das gedruckte Verzeichnis fuer
+       die Seite eine stehende Rubrik, gilt dessen Eintrag ("Claus-M.
+       Wolfschlag: Die Kolumne").
+    4. Zuletzt die Anrede ("Verehrter Leser" → "Editorial"); sonst bleibt der
+       Titel.
     """
-    eigene = stehende_rubrik(titel)
+    eigene = stehende_rubrik(titel, mit_anrede=False)
+    # Die Kopfzeile der Seite ist das verlaessliche Zeichen: steht oben
+    # "Editorial", ist das Hauptstueck der Seite das Editorial — sofern es
+    # keine eigene Ueberschrift hat oder selbst mit der Rubrik beginnt.
+    aus_seite = (
+        stehende_rubrik(seitenrubrik, mit_anrede=False) if erster_auf_seite else None
+    )
     if eigene:
+        # Der Titel nennt seine Rubrik selbst ("Leserbriefe" unter der
+        # Kopfzeile "Buchbesprechungen" der Nachbarseite).
         return eigene
+    if aus_seite and aus_text:
+        return aus_seite
     if not aus_text:
         return titel
     if verzeichnis and any(
         name.lower() in verzeichnis.lower() for name in STEHENDE_RUBRIKEN
     ):
         return " ".join(verzeichnis.split())
-    aus_seite = stehende_rubrik(seitenrubrik) if erster_auf_seite else None
-    if aus_seite:
-        return aus_seite
-    return titel
+    # Zuletzt die Anrede — nur, wenn nichts anderes die Seite benennt.
+    return stehende_rubrik(titel) or titel

@@ -247,6 +247,7 @@ workerRoute("/service/jobs/toc-regions", (ctx, body) =>
     workerId: String(body.workerId ?? ""),
     issueId: body.issueId,
     regions: body.regions ?? [],
+    entries: body.entries,
   }),
 );
 

@@ -112,7 +112,7 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
         { pageIndex: 2, x0: 0.06, y0: 0.4, x1: 0.35, y1: 0.43, targetPageIndex: 12 },
       ],
     });
-    expect(result).toEqual({ regions: 3, skipped: 1 });
+    expect(result).toEqual({ regions: 3, skipped: 1, entries: 0 });
 
     const regions = await t.run(async (ctx: any) =>
       await ctx.db
@@ -146,7 +146,7 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
         { pageIndex: 2, x0: 0.06, y0: 0.4, x1: 0.35, y1: 0.43, targetPageIndex: 10 },
       ],
     });
-    expect(result).toEqual({ regions: 1, skipped: 1 });
+    expect(result).toEqual({ regions: 1, skipped: 1, entries: 0 });
     const regions = await t.run(async (ctx: any) =>
       await ctx.db
         .query("articleRegions")
@@ -155,6 +155,37 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
     );
     const neu = regions.filter((r: any) => r.targetPageIndex !== undefined);
     expect(neu.map((r: any) => [r.articleId, r.targetPageIndex])).toEqual([[dritter, 10]]);
+  });
+
+  test("traegt fehlende Eintraege des gedruckten Verzeichnisses nach", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, jobId, erster, zweiter } = await heft(t);
+    const result = await t.mutation(internal.imports.activateTocRegionsInternal, {
+      jobId,
+      workerId: "w1",
+      issueId,
+      regions: [],
+      entries: [
+        // Gibt es schon, nur vollstaendiger: der Eintrag waechst.
+        { label: "Wahlrechtsentzug statt Erster", pageIndex: 5 },
+        // Neu, mit Artikel auf der Zielseite.
+        { label: "Nachruf", pageIndex: 8, section: "Rubriken" },
+        // Neu, ohne Artikel.
+        { label: "Kalenderblatt", pageIndex: 3 },
+      ],
+    });
+    expect(result).toEqual({ regions: 0, skipped: 0, entries: 2 });
+    const toc = await t.run(async (ctx: any) =>
+      (await ctx.db
+        .query("tocEntries")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect()).sort((a: any, b: any) => a.order - b.order),
+    );
+    expect(toc.map((e: any) => [e.order, e.label, e.pageIndex, e.articleId ?? null])).toEqual([
+      [1, "Kalenderblatt", 3, null],
+      [2, "Wahlrechtsentzug statt Erster", 5, erster],
+      [3, "Nachruf", 8, zweiter],
+    ]);
   });
 
   test("weist einen fremden Worker ab", async () => {
