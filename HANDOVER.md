@@ -544,10 +544,12 @@ einmal im Lesetext — in 41 Artikeln. Dazu Unterzeilen und Vorspänne, deren
 Wortlaut leicht vom Kopf abwich, und Kästen (Zitatkasten, „Klebezettel“), die
 einen Satz des Artikels wiederholen.
 
-* Worker `_ohne_kopfzeilen` (in `_build_payload`): Blöcke der Art
-  Überschrift/Vorspann, deren Text in Titel, Unterzeile oder Vorspann
-  enthalten ist, und Kästen, deren Text im Fließtext steht, kommen nicht in
-  den Lesetext. Die Rohblöcke bleiben in der Debugansicht.
+* Worker `_ohne_kopfzeilen` (in `_build_payload`), streng: eine
+  Überschrift- oder Vorspannzeile fällt nur weg, wenn Titel, Unterzeile oder
+  Vorspann **genau so beginnen** und jede folgende Zeile genau dort
+  weitermacht; eine Zeile, deren Wörter nur zufällig im Titel vorkommen,
+  bleibt. Ein Kasten fällt nur weg, wenn sein ganzer Text in einem Absatz des
+  Artikels steht. Die Rohblöcke bleiben in der Debugansicht.
 * Bestand bereinigt mit `devtools:removeArticleBlocksInternal` (Probelauf,
   dann echt): 171 Blöcke in 60 Artikeln (ZUERST! 120, DMZ-Zeitgeschichte 22,
   DMZ 170 17, Greim 12); Reihenfolge lückenlos, kein Bildanker verschoben.
