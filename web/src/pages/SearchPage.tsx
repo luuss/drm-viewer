@@ -111,6 +111,11 @@ export default function SearchPage() {
                           <span>
                             {e.section && <span className="section">{e.section}: </span>}
                             <Markiert text={e.label} begriff={trimmed} />
+                            {e.subtitle && (
+                              <span className="sub">
+                                <Markiert text={e.subtitle} begriff={trimmed} />
+                              </span>
+                            )}
                           </span>
                           {e.page && <span className="page">S. {e.page}</span>}
                         </li>

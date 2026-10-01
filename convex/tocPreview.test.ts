@@ -68,6 +68,7 @@ async function heft(t: any, { published = true } = {}) {
       issueId,
       order: 1,
       title: "Die Schlacht von Carpiquet",
+      subtitle: "Kanadier gegen die Hitlerjugend im Juli 1944",
       source: "idml",
       reviewStatus: "approved",
       primaryPageIndex: 7,
@@ -158,5 +159,13 @@ describe("Inhaltsverzeichnis in der Heftvorschau", () => {
       ["Die Schlacht von Carpiquet", "7"],
     ]);
     expect(await t.query(api.tocPreview.searchCatalog, { term: "Ca" })).toEqual([]);
+    // Die Unterzeile aus dem gedruckten Verzeichnis zaehlt mit.
+    const unterzeile = await t.query(api.tocPreview.searchCatalog, { term: "Hitlerjugend" });
+    expect(unterzeile.map((h: any) => h.entries[0].label)).toEqual([
+      "Die Schlacht von Carpiquet",
+    ]);
+    expect(unterzeile[0].entries[0].subtitle).toBe(
+      "Kanadier gegen die Hitlerjugend im Juli 1944",
+    );
   });
 });

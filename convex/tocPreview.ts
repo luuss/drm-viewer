@@ -93,22 +93,55 @@ export const searchCatalog = query({
       ? await accessibleIssueIds(ctx, userId as Id<"users">)
       : new Set<string>();
 
-    const hits = await ctx.db
+    // Treffer im Titel eines Eintrags und in der Unterzeile darunter. Die
+    // Unterzeile ist die des verknuepften Artikels; sie zaehlt nur, wenn der
+    // Artikel im Verzeichnis steht.
+    const imTitel = await ctx.db
       .query("tocEntries")
       .withSearchIndex("search_label", (q) => q.search("label", begriff))
       .take(80);
+    const inUnterzeile = await ctx.db
+      .query("articles")
+      .withSearchIndex("search_subtitle", (q) => q.search("subtitle", begriff))
+      .take(80);
+
+    const verzeichnisse = new Map<string, Doc<"tocEntries">[]>();
+    const verzeichnis = async (issueId: Id<"issues">) => {
+      let rows = verzeichnisse.get(issueId as string);
+      if (!rows) {
+        rows = await ctx.db
+          .query("tocEntries")
+          .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
+          .collect();
+        verzeichnisse.set(issueId as string, rows);
+      }
+      return rows;
+    };
+    const kandidaten: Doc<"tocEntries">[] = [...imTitel];
+    for (const a of inUnterzeile) {
+      const eintrag = (await verzeichnis(a.issueId)).find((t) => t.articleId === a._id);
+      if (eintrag) kandidaten.push(eintrag);
+    }
 
     const hefte = new Map<
       string,
       {
         issue: Doc<"issues">;
-        entries: { _id: Id<"tocEntries">; label: string; section: string | null; page: string | null }[];
+        entries: {
+          _id: Id<"tocEntries">;
+          label: string;
+          subtitle: string | null;
+          section: string | null;
+          page: string | null;
+        }[];
       }
     >();
     const ausgelassen = new Set<string>();
-    for (const e of hits) {
+    const gesehen = new Set<string>();
+    for (const e of kandidaten) {
       const key = e.issueId as string;
-      if (ausgelassen.has(key)) continue;
+      if (ausgelassen.has(key) || gesehen.has(e._id as string)) continue;
+      gesehen.add(e._id as string);
       let heft = hefte.get(key);
       if (!heft) {
         const issue = await ctx.db.get(e.issueId);
@@ -129,9 +162,11 @@ export const searchCatalog = query({
               )
               .unique()
           : null;
+      const artikel = e.articleId ? await ctx.db.get(e.articleId) : null;
       heft.entries.push({
         _id: e._id,
         label: e.label,
+        subtitle: artikel?.subtitle?.trim() || null,
         section: e.section ?? null,
         page: seite?.printedLabel ?? null,
       });

@@ -1467,6 +1467,7 @@ button.small, .btn.small {
 }
 .kiosk-hit-entries li > span:first-child { flex: 1; min-width: 0; }
 .kiosk-hit-entries .section { color: var(--muted); }
+.kiosk-hit-entries .sub { display: block; color: var(--muted); font-size: var(--fs-mini); }
 .kiosk-hit-entries .page {
   flex: none;
   color: var(--muted);

@@ -292,6 +292,12 @@ export default defineSchema(
     .searchIndex("search_text", {
       searchField: "searchText",
       filterFields: ["issueId", "reviewStatus"],
+    })
+    // Kiosk-Suche: die Unterzeile steht im gedruckten Inhaltsverzeichnis
+    // unter dem Titel und ist damit so frei wie dieses.
+    .searchIndex("search_subtitle", {
+      searchField: "subtitle",
+      filterFields: ["issueId"],
     }),
 
   articleBlocks: defineTable({
