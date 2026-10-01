@@ -1,473 +1,266 @@
-import { useState } from "react";
-import { useFrage } from "../components/Frage";
-import { useAction, useMutation, useQuery } from "convex/react";
-import { api, formatEuro, type Id , cleanError } from "../lib/api";
-import ImportWizard from "./ImportWizard";
-import FolderImport from "./FolderImport";
-import ArticleReview from "./ArticleReview";
-import TocEditor from "./TocEditor";
-import ExtractionDebug from "./ExtractionDebug";
-import ShopDruckheft from "./ShopDruckheft";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { api, formatEuro, type Id } from "../lib/api";
+import { heftStatus, MeldungZeile, useMeldung } from "./adminUi";
 
-type Tab = "import" | "debug" | "articles" | "toc";
+type Heft = FunctionReturnType<typeof api.issues.overviewForEditors>[number];
+type Filter = "alle" | "entwurf" | "live" | "probleme";
 
+/**
+ * Startseite der Redaktion: alle Hefte mit ihrem Stand. Je Zeile genau ein
+ * Knopf fuer den naechsten Schritt; alles Weitere steht im Heft selbst.
+ * Der Ordnerimport steht darueber (AdminLayout).
+ */
 export default function AdminPage() {
-  const frage = useFrage();
   const me = useQuery(api.users.me, {});
+  const issues = useQuery(api.issues.overviewForEditors, {});
   const publications = useQuery(api.publications.listAll, {});
-  const issues = useQuery(api.issues.listForEditors, {});
-  const createPublication = useMutation(api.publications.create);
-  const createIssue = useMutation(api.issues.create);
-  const updateIssue = useMutation(api.issues.update);
-  const updatePublicationShop = useMutation(api.publications.updateShop);
-  const storefront = useQuery(api.shopIntegration.storefront, {});
+  const [reihe, setReihe] = useState("");
+  const [filter, setFilter] = useState<Filter>("alle");
+
+  const gezeigt = useMemo(() => {
+    return (issues ?? []).filter((i) => {
+      if (reihe && i.publicationId !== reihe) return false;
+      const s = heftStatus(i);
+      if (filter === "entwurf") return !i.isPublished;
+      if (filter === "live") return i.isPublished;
+      if (filter === "probleme") return s.schritt === "fehler" || s.schritt === "seiten";
+      return true;
+    });
+  }, [issues, reihe, filter]);
+
+  const probleme = (issues ?? []).filter((i) => {
+    const s = heftStatus(i).schritt;
+    return s === "fehler" || s === "seiten";
+  }).length;
+
+  return (
+    <>
+      <section className="admin-hefte">
+        <div className="admin-hefte-kopf">
+          <h2>Hefte</h2>
+          <div className="admin-filter">
+            <div className="segment" role="group" aria-label="Stand">
+              {(
+                [
+                  ["alle", "Alle"],
+                  ["entwurf", "Entwürfe"],
+                  ["live", "Veröffentlicht"],
+                  ["probleme", `Probleme${probleme ? ` (${probleme})` : ""}`],
+                ] as [Filter, string][]
+              ).map(([wert, text]) => (
+                <button
+                  key={wert}
+                  type="button"
+                  aria-pressed={filter === wert}
+                  onClick={() => setFilter(wert)}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+            {publications && publications.length > 1 && (
+              <select
+                value={reihe}
+                onChange={(e) => setReihe(e.target.value)}
+                aria-label="Reihe"
+              >
+                <option value="">Alle Reihen</option>
+                {publications.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+
+        {issues === undefined ? (
+          <p className="hint">Laden...</p>
+        ) : gezeigt.length === 0 ? (
+          <div className="empty">
+            <p>
+              {issues.length === 0
+                ? "Noch kein Heft. Den ersten Heftordner oben ablegen."
+                : "Kein Heft in dieser Auswahl."}
+            </p>
+          </div>
+        ) : (
+          <ul className="heft-liste">
+            {gezeigt.map((i) => (
+              <HeftZeile key={i._id} heft={i} darfVeroeffentlichen={!!me?.isPublisher} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <NeueAusgabe />
+    </>
+  );
+}
+
+function HeftZeile({ heft: i, darfVeroeffentlichen }: { heft: Heft; darfVeroeffentlichen: boolean }) {
+  const navigate = useNavigate();
   const setPublished = useMutation(api.issues.setPublished);
-  const removeIssue = useMutation(api.issues.remove);
-  const grantSelf = useMutation(api.entitlements.grantMyself);
-  const ensurePrice = useAction(api.billing.ensureIssuePrice);
-  const ladenAbgleich = useAction(api.publicationCovers.refreshNow);
-  const [ladenLaeuft, setLadenLaeuft] = useState(false);
   const retryJob = useMutation(api.imports.retry);
+  const [meldung, tue, busy] = useMeldung();
+  const status = heftStatus(i);
+  const ziel = `/admin/heft/${i._id}`;
 
-  const [openIssue, setOpenIssue] = useState<Id<"issues"> | null>(null);
-  const [tab, setTab] = useState<Tab>("import");
-  const [title, setTitle] = useState("");
-  const [issueNumber, setIssueNumber] = useState("");
-  const [price, setPrice] = useState("9.99");
-  const [publicationId, setPublicationId] = useState<string>("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  if (me === undefined) return <div className="centered">Laden...</div>;
-  if (!me?.isEditor) {
-    return (
-      <div className="centered">
-        <h2>Kein Zugriff</h2>
-        <p>Dieser Bereich ist der Redaktion vorbehalten.</p>
-      </div>
+  let knopf: React.ReactNode;
+  if (status.schritt === "fehler" && i.lastJob) {
+    knopf = (
+      <button
+        className="btn small"
+        disabled={busy !== null}
+        aria-busy={busy !== null}
+        onClick={() => tue(() => retryJob({ jobId: i.lastJob!._id }), "Erneut eingestellt")}
+      >
+        Erneut versuchen
+      </button>
+    );
+  } else if (status.schritt === "pruefen") {
+    knopf = (
+      <Link className="btn small" to={`${ziel}/artikel`}>
+        Prüfen
+      </Link>
+    );
+  } else if (status.schritt === "bereit" && darfVeroeffentlichen) {
+    knopf = (
+      <button
+        className="btn small"
+        disabled={busy !== null}
+        aria-busy={busy !== null}
+        onClick={() =>
+          tue(() => setPublished({ issueId: i._id, isPublished: true }), "Veröffentlicht")
+        }
+      >
+        Veröffentlichen
+      </button>
+    );
+  } else {
+    knopf = (
+      <Link className="btn secondary small" to={ziel}>
+        Öffnen
+      </Link>
     );
   }
 
-  async function guard(fn: () => Promise<unknown>, okMessage?: string) {
-    setErr(null);
-    setMsg(null);
-    try {
-      await fn();
-      if (okMessage) setMsg(okMessage);
-    } catch (e: any) {
-      setErr(cleanError(e) ?? "Fehler");
-    }
-  }
+  return (
+    <li className="heft-zeile">
+      <button
+        type="button"
+        className="heft-zeile-inhalt"
+        onClick={() => navigate(ziel)}
+        aria-label={`${i.displayTitle} öffnen`}
+      >
+        <span className="heft-miniatur">
+          {i.coverUrl ? <img src={i.coverUrl} alt="" loading="lazy" /> : null}
+        </span>
+        <span className="heft-name">
+          <span className="titel">{i.displayTitle}</span>
+          <span className="meta">
+            {[
+              i.publicationName,
+              i.issueNumber && `Nr. ${i.issueNumber}`,
+              i.pageCount ? `${i.pageCount} Seiten` : null,
+              formatEuro(i.priceAmountCents),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </span>
+        <span className="heft-stand">
+          <span className={`badge ${status.ton}`}>{status.text}</span>
+          {i.isPublished && !i.shopOffered && (
+            <span className="hint small">nicht im Netzladen angeboten</span>
+          )}
+          {status.schritt === "fehler" && i.lastJob?.message && (
+            <span className="hint small">{i.lastJob.message}</span>
+          )}
+        </span>
+      </button>
+      <span className="heft-aktion">{knopf}</span>
+      {meldung && (
+        <div className="heft-meldung">
+          <MeldungZeile meldung={meldung} klein />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * Ausgabe ohne Heftordner anlegen — selten gebraucht, deshalb zugeklappt.
+ * Der Normalfall ist der Ordner oben.
+ */
+function NeueAusgabe() {
+  const navigate = useNavigate();
+  const publications = useQuery(api.publications.listAll, {});
+  const createIssue = useMutation(api.issues.create);
+  const [meldung, tue, busy] = useMeldung();
+  const [publicationId, setPublicationId] = useState("");
+  const [title, setTitle] = useState("");
+  const [issueNumber, setIssueNumber] = useState("");
+  const [price, setPrice] = useState("9.99");
 
   return (
-    <div className="page admin">
-      <div className="page-head">
-        <h2>Redaktion</h2>
-        <p className="hint">
-          Angemeldet als <strong>{me.email}</strong> · {me.roles.join(", ")}
-        </p>
-      </div>
-
-      {msg && <div className="ok">{msg}</div>}
-      {err && <div className="err">{err}</div>}
-
-      <section>
-        <h3>Titel</h3>
-        <ul className="chip-list">
-          {publications?.map((p) => (
-            <li key={p._id}>
-              {p.name} <span className="muted">/{p.slug}</span>
-              {p.isActive ? "" : " · inaktiv"}
-            </li>
-          ))}
-        </ul>
-        {me.isAdmin && publications && publications.length > 0 && (
-          <div className="shop-settings">
-            <h4>Digital-Abo im Netzladen</h4>
-            <p className="muted small">
-              Artikelnummer (Referenz) des Digital-Abos im PrestaShop, Laufzeit
-              in Monaten (leer = 12) und Produktseite für den Kaufknopf. Leere
-              Felder entfernen die Angabe. Das Abo-Formular des Druckhefts ist
-              das Ziel, wenn ein Leser im Heft auf einen Abo-Aufruf tippt; ohne
-              Eintrag gilt das bekannte Formular des Ladens.
-            </p>
-            {publications.map((p) => (
-              <form
-                key={`${p._id}:${p.shopSubscriptionSku ?? ""}:${p.shopSubscriptionMonths ?? ""}:${p.shopSubscriptionUrl ?? ""}:${p.shopPrintSubscriptionUrl ?? ""}`}
-                className="inline-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const f = e.currentTarget.elements;
-                  const value = (name: string) =>
-                    (f.namedItem(name) as HTMLInputElement).value;
-                  const months = value("months").trim();
-                  guard(
-                    () =>
-                      updatePublicationShop({
-                        publicationId: p._id,
-                        shopSubscriptionSku: value("sku"),
-                        shopSubscriptionMonths: months ? Number(months) : null,
-                        shopSubscriptionUrl: value("url"),
-                        shopPrintSubscriptionUrl: value("printUrl"),
-                      }),
-                    `${p.name}: Abo-Angaben gespeichert`,
-                  );
-                }}
-              >
-                <span className="narrow">{p.name}</span>
-                <input
-                  name="sku"
-                  defaultValue={p.shopSubscriptionSku ?? ""}
-                  placeholder="Artikelnummer Digital-Abo"
-                  aria-label={`${p.name}: Artikelnummer Digital-Abo`}
-                />
-                <input
-                  name="months"
-                  type="number"
-                  min="1"
-                  max="120"
-                  step="1"
-                  defaultValue={p.shopSubscriptionMonths ?? ""}
-                  placeholder="12"
-                  className="narrow"
-                  aria-label={`${p.name}: Laufzeit in Monaten`}
-                />
-                <input
-                  name="url"
-                  type="url"
-                  defaultValue={p.shopSubscriptionUrl ?? ""}
-                  placeholder="https://lesenundschenken.de/…"
-                  aria-label={`${p.name}: Produktseite Digital-Abo`}
-                />
-                <input
-                  name="printUrl"
-                  type="url"
-                  defaultValue={p.shopPrintSubscriptionUrl ?? ""}
-                  placeholder="Abo-Formular Druckheft"
-                  aria-label={`${p.name}: Abo-Formular Druckheft (Ziel der Abo-Aufrufe im Heft)`}
-                />
-                <button className="btn secondary small">Speichern</button>
-              </form>
-            ))}
-          </div>
-        )}
-        {me.isAdmin && (
-          <form
-            className="inline-form short"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const name = (e.currentTarget.elements.namedItem("name") as HTMLInputElement)
-                .value;
-              guard(() => createPublication({ name }), "Titel angelegt");
-            }}
-          >
-            <input name="name" placeholder="Neuer Titel, z.B. ZUERST!" required />
-            <button className="btn">Anlegen</button>
-          </form>
-        )}
-        {/* Den Verkaufspreis fuehrt der Netzladen. Nachts laeuft der Abgleich
-            von selbst; hier laesst er sich nach einer Preisaenderung sofort
-            anstossen. */}
-        <p className="muted small">
-          Preise, Titelbilder und Heftbezeichnungen kommen aus dem Netzladen.
-        </p>
-        <button
-          className="btn secondary"
-          disabled={ladenLaeuft}
-          onClick={async () => {
-            setLadenLaeuft(true);
-            await guard(async () => {
-              const ergebnis = await ladenAbgleich({});
-              const teile = [`${ergebnis.issues.length} Hefte abgeglichen`];
-              if (ergebnis.missing.length) {
-                teile.push(`${ergebnis.missing.length} nicht gefunden`);
-              }
-              if (ergebnis.failed.length) {
-                teile.push(`${ergebnis.failed.length} fehlgeschlagen`);
-              }
-              setMsg(teile.join(" · "));
+    <details className="aufklapp neue-ausgabe">
+      <summary>Ausgabe ohne Heftordner anlegen</summary>
+      <form
+        className="inline-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void tue(async () => {
+            if (!publicationId) throw new Error("Bitte eine Reihe wählen");
+            const id = await createIssue({
+              publicationId: publicationId as Id<"publications">,
+              title,
+              issueNumber: issueNumber || undefined,
+              priceAmountCents: Math.round(parseFloat(price) * 100),
             });
-            setLadenLaeuft(false);
-          }}
-        >
-          {ladenLaeuft ? "Wird abgeglichen…" : "Aus dem Netzladen aktualisieren"}
-        </button>
-      </section>
-
-      <section>
-        <h3>Heftordner einlesen</h3>
-        <p className="hint">
-          Der Ordner aus der Druckvorstufe, wie er kommt. Reihe und Heftnummer
-          stehen im Namen, die Rollen der Dateien im Aufbau. Die Bilder werden
-          im Browser umgerechnet; hochgeladen wird nur, was zum Lesen gebraucht
-          wird.
-        </p>
-        <FolderImport
-          onIssue={(id) => {
-            setOpenIssue(id);
-            setTab("import");
-          }}
-        />
-      </section>
-
-      <section>
-        <h3>Neue Ausgabe</h3>
-        <form
-          className="inline-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!publicationId) {
-              setErr("Bitte einen Titel wählen");
-              return;
-            }
-            guard(async () => {
-              const id = await createIssue({
-                publicationId: publicationId as Id<"publications">,
-                title,
-                issueNumber: issueNumber || undefined,
-                priceAmountCents: Math.round(parseFloat(price) * 100),
-              });
-              setOpenIssue(id);
-              setTitle("");
-              setIssueNumber("");
-            }, "Ausgabe angelegt");
-          }}
-        >
-          <select
-            value={publicationId}
-            onChange={(e) => setPublicationId(e.target.value)}
-            required
-          >
-            <option value="">Titel wählen</option>
+            navigate(`/admin/heft/${id}/erweitert`);
+          });
+        }}
+      >
+        <label>
+          Reihe
+          <select value={publicationId} onChange={(e) => setPublicationId(e.target.value)} required>
+            <option value="">wählen</option>
             {publications?.map((p) => (
               <option key={p._id} value={p._id}>
                 {p.name}
               </option>
             ))}
           </select>
+        </label>
+        <label>
+          Titel der Ausgabe
+          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </label>
+        <label className="schmal">
+          Heftnummer
+          <input value={issueNumber} onChange={(e) => setIssueNumber(e.target.value)} />
+        </label>
+        <label className="schmal">
+          Preis in €
           <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Titel der Ausgabe"
+            type="number"
+            step="0.01"
+            min="0"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
             required
           />
-          <input
-            value={issueNumber}
-            onChange={(e) => setIssueNumber(e.target.value)}
-            placeholder="Heftnummer"
-            className="narrow"
-          />
-          <div className="money">
-            <span>€</span>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
-              aria-label="Preis in Euro"
-            />
-          </div>
-          <button className="btn">Anlegen</button>
-        </form>
-      </section>
-
-      <section>
-        <h3>Ausgaben</h3>
-        <ul className="admin-issues">
-          {issues?.map((i) => (
-            <li key={i._id}>
-              <div className="issue-line">
-                <div className="name">
-                  {i.title}
-                  {i.issueNumber ? <span className="number"> {i.issueNumber}</span> : null}
-                </div>
-                <div className="facts">
-                  <span className={`badge ${i.isPublished ? "live" : ""}`}>
-                    {i.isPublished ? "veröffentlicht" : "Entwurf"}
-                  </span>
-                  <span>{i.pageCount} Seiten</span>
-                  <span className="sep">·</span>
-                  <span>{formatEuro(i.priceAmountCents)}</span>
-                  <span className="sep">·</span>
-                  <span>
-                    {i.approvedArticles}/{i.articleCount} freigegeben
-                  </span>
-                  {i.pendingArticles > 0 && (
-                    <span className="badge pending">{i.pendingArticles} offen</span>
-                  )}
-                  {i.externalSku ? (
-                    <span className="badge">Netzladen {i.externalSku}</span>
-                  ) : (
-                    <span className="badge pending">ohne Artikelnummer</span>
-                  )}
-                  {i.isPublished && !i.shopDigital?.offered && (
-                    <span className="badge pending">nicht im Netzladen angeboten</span>
-                  )}
-                  {i.stripePriceId && <span className="badge">Stripe</span>}
-                  {i.lastJob && (
-                    <span className={`badge ${i.lastJob.status === "error" ? "excluded" : ""}`}>
-                      Import: {i.lastJob.status}
-                    </span>
-                  )}
-                </div>
-                {i.lastJob?.message && <div className="job-note">{i.lastJob.message}</div>}
-              </div>
-              <div className="row actions">
-                <button
-                  className={openIssue === i._id ? "btn secondary small" : "btn small"}
-                  onClick={() => setOpenIssue(openIssue === i._id ? null : i._id)}
-                >
-                  {openIssue === i._id ? "Schliessen" : "Bearbeiten"}
-                </button>
-                {me.isPublisher && (
-                  <button
-                    className="btn secondary small"
-                    onClick={() =>
-                      guard(
-                        () => setPublished({ issueId: i._id, isPublished: !i.isPublished }),
-                        i.isPublished ? "Zurückgezogen" : "Veröffentlicht",
-                      )
-                    }
-                  >
-                    {i.isPublished ? "Zurückziehen" : "Veröffentlichen"}
-                  </button>
-                )}
-                <button
-                  className="btn secondary small"
-                  onClick={() =>
-                    guard(
-                      () =>
-                        updateIssue({
-                          issueId: i._id,
-                          includedInSubscription: !i.includedInSubscription,
-                        }),
-                      "Gespeichert",
-                    )
-                  }
-                >
-                  {i.includedInSubscription ? "Aus Abo nehmen" : "Ins Abo geben"}
-                </button>
-                {me.isPublisher && storefront?.stripeCheckout && (
-                  <button
-                    className="btn secondary small"
-                    onClick={() => guard(() => ensurePrice({ issueId: i._id }), "Preis angelegt")}
-                  >
-                    Stripe-Preis
-                  </button>
-                )}
-                <button
-                  className="btn secondary small"
-                  onClick={() => guard(() => grantSelf({ issueId: i._id }), "Freigeschaltet")}
-                >
-                  Mir freischalten
-                </button>
-                {i.lastJob?.status === "error" && (
-                  <button
-                    className="btn secondary small"
-                    onClick={() => guard(() => retryJob({ jobId: i.lastJob!._id }), "Erneut eingestellt")}
-                  >
-                    Auftrag wiederholen
-                  </button>
-                )}
-                {me.isPublisher && (
-                  <button
-                    className="btn secondary small danger"
-                    onClick={async () => {
-                      const weiter = await frage({
-                        titel: "Ausgabe endgültig löschen?",
-                        text: `„${i.title}“ verschwindet mit allen Seiten, Artikeln und Dateien. Käufe bleiben bestehen, zeigen aber ins Leere.`,
-                        ja: "Löschen",
-                        gefahr: true,
-                      });
-                      if (weiter) guard(() => removeIssue({ issueId: i._id }), "Gelöscht");
-                    }}
-                  >
-                    Löschen
-                  </button>
-                )}
-              </div>
-
-              {openIssue === i._id && (
-                <div className="issue-workspace">
-                  {me.isAdmin && <ShopDruckheft issue={i} />}
-                  <form
-                    key={`${i.externalSku ?? ""}:${i.shopUrl ?? ""}`}
-                    className="inline-form"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const f = e.currentTarget.elements;
-                      const value = (name: string) =>
-                        (f.namedItem(name) as HTMLInputElement).value;
-                      guard(
-                        () =>
-                          updateIssue({
-                            issueId: i._id,
-                            externalSku: value("sku"),
-                            shopUrl: value("url"),
-                          }),
-                        "Netzladen-Angaben gespeichert",
-                      );
-                    }}
-                  >
-                    <input
-                      name="sku"
-                      defaultValue={i.externalSku ?? ""}
-                      placeholder="Artikelnummer im Netzladen"
-                      aria-label="Artikelnummer im Netzladen"
-                      className="narrow"
-                    />
-                    <input
-                      name="url"
-                      type="url"
-                      defaultValue={i.shopUrl ?? ""}
-                      placeholder="Produktseite im Netzladen (leer = Suche)"
-                      aria-label="Produktseite im Netzladen"
-                    />
-                    <button className="btn secondary small">Speichern</button>
-                  </form>
-                  <nav className="tabs">
-                    <button
-                      className={tab === "import" ? "active" : ""}
-                      onClick={() => setTab("import")}
-                    >
-                      Import
-                    </button>
-                    <button
-                      className={tab === "debug" ? "active" : ""}
-                      onClick={() => setTab("debug")}
-                    >
-                      Extraktion
-                    </button>
-                    <button
-                      className={tab === "articles" ? "active" : ""}
-                      onClick={() => setTab("articles")}
-                    >
-                      Artikel
-                    </button>
-                    <button
-                      className={tab === "toc" ? "active" : ""}
-                      onClick={() => setTab("toc")}
-                    >
-                      Inhalt
-                    </button>
-                  </nav>
-                  {tab === "import" && <ImportWizard issueId={i._id} />}
-                  {tab === "debug" && <ExtractionDebug issueId={i._id} />}
-                  {tab === "articles" && <ArticleReview issueId={i._id} />}
-                  {tab === "toc" && <TocEditor issueId={i._id} />}
-                </div>
-              )}
-            </li>
-          ))}
-          {issues?.length === 0 && (
-            <li className="empty">
-              <p>Noch keine Ausgabe angelegt.</p>
-            </li>
-          )}
-        </ul>
-      </section>
-    </div>
+        </label>
+        <button className="btn" disabled={busy !== null} aria-busy={busy !== null}>
+          Anlegen
+        </button>
+      </form>
+      <MeldungZeile meldung={meldung} />
+    </details>
   );
 }

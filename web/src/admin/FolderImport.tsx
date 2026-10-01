@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { Link } from "react-router-dom";
 import { api, cleanError, type Id } from "../lib/api";
 import {
   classifyFolder,
@@ -53,6 +54,8 @@ type Fortschritt = { text: string; prozent: number; fehler?: boolean };
 
 /** Was der Lauf offen laesst und von Hand nachgetragen werden muss. */
 type Ergebnis = {
+  issueId: Id<"issues">;
+  titel: string;
   ordnerBytes: number;
   hochgeladenBytes: number;
   bilder: number;
@@ -69,8 +72,11 @@ class Abgebrochen extends Error {}
 
 export default function FolderImport({
   onIssue,
+  kompakt,
 }: {
   onIssue?: (issueId: Id<"issues">) => void;
+  /** Ausserhalb der Heftliste: nur der Balken eines laufenden Imports. */
+  kompakt?: boolean;
 }) {
   const publications = useQuery(api.publications.listAll, {});
   const ensureIssue = useMutation(api.issues.ensureFromFolder);
@@ -91,6 +97,8 @@ export default function FolderImport({
   const [protokoll, setProtokoll] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [ergebnis, setErgebnis] = useState<Ergebnis | null>(null);
+  /** Das Heft des laufenden oder letzten Laufs, sobald es angelegt ist. */
+  const [heft, setHeft] = useState<{ id: Id<"issues">; titel: string } | null>(null);
   const feld = useRef<HTMLInputElement>(null);
   /** Der Ordner, fuer den schon ein Lauf angestossen wurde. */
   const gestartet = useRef(0);
@@ -98,6 +106,16 @@ export default function FolderImport({
   const abbrechen = useRef(false);
 
   const laeuft = aktiv;
+
+  // Ein Neuladen bricht den Lauf mitten im Hochladen ab.
+  useEffect(() => {
+    if (!aktiv) return;
+    const warnen = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warnen);
+    return () => window.removeEventListener("beforeunload", warnen);
+  }, [aktiv]);
 
   const plan: FolderPlan | null = useMemo(
     () => (ordner ? classifyFolder(ordner.folderName, ordner.files) : null),
@@ -153,6 +171,7 @@ export default function FolderImport({
     }
     setErr(null);
     setErgebnis(null);
+    setHeft(null);
     setProtokoll([]);
     setLauf(null);
     abbrechen.current = false;
@@ -217,6 +236,7 @@ export default function FolderImport({
         priceAmountCents: preis,
       });
       const issueId = heft.issueId;
+      setHeft({ id: issueId, titel: name.issueTitle });
       notiere(
         heft.created
           ? `Heft „${name.issueTitle}" angelegt`
@@ -359,7 +379,7 @@ export default function FolderImport({
         } catch (e: any) {
           if (e instanceof Abgebrochen) throw e;
           offen.push(
-            `Textebene nachtragen (Importdialog) — ${cleanError(e) ?? "nicht hochgeladen"}`,
+            `Textebene nachtragen (im Heft unter Erweitert) — ${cleanError(e) ?? "nicht hochgeladen"}`,
           );
         }
       }
@@ -664,7 +684,7 @@ export default function FolderImport({
         } catch (e: any) {
           if (e instanceof Abgebrochen) throw e;
           offen.push(
-            `Seitenreihenfolge im Importdialog erzeugen — ${cleanError(e) ?? "Fehler"}`,
+            `Seitenreihenfolge im Heft unter Erweitert erzeugen — ${cleanError(e) ?? "Fehler"}`,
           );
         }
       }
@@ -682,12 +702,14 @@ export default function FolderImport({
           offen.push(`Aufbereitung von Hand starten — ${cleanError(e) ?? "Fehler"}`);
         }
       } else {
-        offen.push("Aufbereitung ist noch nicht eingestellt — im Importdialog starten");
+        offen.push("Aufbereitung ist noch nicht eingestellt — im Heft unter Übersicht starten");
       }
       abhaken("aufbereitung");
 
       setLauf({ text: "Fertig", prozent: 100 });
       setErgebnis({
+        issueId,
+        titel: name.issueTitle,
         ordnerBytes: plan.totalBytes,
         hochgeladenBytes: hochgeladen,
         bilder,
@@ -715,6 +737,46 @@ export default function FolderImport({
   }
 
   const uebergangen = plan ? plan.totalBytes - plan.uploadBytes : 0;
+
+  const balken = lauf && (
+    <div
+      className={`lauf${lauf.fehler ? " fehler" : ""}`}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="lauf-kopf">
+        <span>
+          {heft && kompakt ? <strong>{heft.titel}: </strong> : null}
+          {lauf.text}
+        </span>
+        <span className="lauf-wert">{lauf.prozent} %</span>
+      </div>
+      <progress className="lauf-balken" max={100} value={lauf.prozent}>
+        {lauf.prozent} %
+      </progress>
+      {aktiv && (
+        <div className="row">
+          <button
+            type="button"
+            className="btn secondary small"
+            onClick={() => {
+              abbrechen.current = true;
+            }}
+          >
+            Abbrechen
+          </button>
+          {kompakt && (
+            <Link className="btn secondary small" to="/admin">
+              Zum Import
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // Ausserhalb der Liste: nur ein laufender Import, sonst nichts.
+  if (kompakt) return aktiv ? <div className="folder-import kompakt">{balken}</div> : null;
 
   return (
     <div className="folder-import">
@@ -752,7 +814,7 @@ export default function FolderImport({
         <span className="hint">
           {laeuft
             ? "Der nächste Ordner kann gleich danach fallen gelassen werden."
-            : "Der Ordner wird gelesen und sofort importiert: Innenteil, Titelseite, Satzdatei und die Bilder aus Links/. Bilder wandelt der Browser um; die Originale bleiben hier."}
+            : "oder klicken, um ihn auszuwählen. Reihe und Heftnummer stehen im Ordnernamen; der Import beginnt sofort."}
         </span>
         <input
           ref={feld}
@@ -769,62 +831,38 @@ export default function FolderImport({
       </div>
 
       {/* Die Einstellungen gelten fuer den naechsten Ordner: gelesen werden sie
-          in dem Augenblick, in dem der Lauf anfaengt. Die gedruckte Seitenzahl
-          steht nicht dabei — sie kommt aus dem Satz. */}
-      <div className="import-optionen">
-        <label className="muted">
-          <input
-            type="checkbox"
-            checked={mitBildern}
-            disabled={laeuft}
-            onChange={(e) => setMitBildern(e.target.checked)}
-          />{" "}
-          Bilder aus Links/ umwandeln
-        </label>
-        <label className="muted">
-          <input
-            type="checkbox"
-            checked={sofortImport}
-            disabled={laeuft}
-            onChange={(e) => setSofortImport(e.target.checked)}
-          />{" "}
-          Aufbereitung gleich starten
-        </label>
-      </div>
-
-      {lauf && (
-        <div
-          className={`lauf${lauf.fehler ? " fehler" : ""}`}
-          role="status"
-          aria-live="polite"
-        >
-          <div className="lauf-kopf">
-            <span>{lauf.text}</span>
-            <span className="lauf-wert">{lauf.prozent} %</span>
-          </div>
-          <progress className="lauf-balken" max={100} value={lauf.prozent}>
-            {lauf.prozent} %
-          </progress>
-          {aktiv && (
-            <button
-              type="button"
-              className="btn secondary small"
-              onClick={() => {
-                abbrechen.current = true;
-              }}
-            >
-              Abbrechen
-            </button>
-          )}
+          in dem Augenblick, in dem der Lauf anfaengt. Beide sind fast immer an
+          und stehen deshalb zugeklappt. */}
+      <details className="aufklapp">
+        <summary>Optionen</summary>
+        <div className="import-optionen">
+          <label className="muted">
+            <input
+              type="checkbox"
+              checked={mitBildern}
+              disabled={laeuft}
+              onChange={(e) => setMitBildern(e.target.checked)}
+            />{" "}
+            Bilder aus Links/ umwandeln
+          </label>
+          <label className="muted">
+            <input
+              type="checkbox"
+              checked={sofortImport}
+              disabled={laeuft}
+              onChange={(e) => setSofortImport(e.target.checked)}
+            />{" "}
+            Aufbereitung gleich starten
+          </label>
         </div>
-      )}
+      </details>
+
+      {balken}
 
       {plan && name && (
         <div className="plan">
-          <h4>{plan.folderName}</h4>
           <p className="hint">
-            Reihe <strong>{name.publicationName}</strong>{" "}
-            <span className="muted">/{name.publicationSlug}</span>
+            <strong>{plan.folderName}</strong> · Reihe <strong>{name.publicationName}</strong>
             {name.issueNumber ? (
               <>
                 {" "}· Heft <strong>{name.issueNumber}</strong>
@@ -833,102 +871,125 @@ export default function FolderImport({
             · Titel <strong>{name.issueTitle}</strong>
           </p>
 
-          <table className="plan-table">
-            <tbody>
-              <tr>
-                <th>Innenteil</th>
-                <td>{plan.inner?.name ?? "—"}</td>
-                <td className="muted">
-                  {plan.inner ? formatBytes(plan.inner.size) : ""}
-                </td>
-                <td>geht hoch</td>
-              </tr>
-              <tr>
-                <th>Umschlag</th>
-                <td>{plan.cover?.name ?? plan.coverImage?.name ?? "—"}</td>
-                <td className="muted">
-                  {formatBytes(plan.cover?.size ?? plan.coverImage?.size ?? 0)}
-                </td>
-                <td>{plan.cover ? "geht hoch" : "wird umgewandelt"}</td>
-              </tr>
-              <tr>
-                <th>Satzdatei</th>
-                <td>{plan.idml?.name ?? "—"}</td>
-                <td className="muted">{formatBytes(plan.idml?.size ?? 0)}</td>
-                <td>geht hoch</td>
-              </tr>
-              <tr>
-                <th>Bilder</th>
-                <td>{plan.artwork.length} aus Links/</td>
-                <td className="muted">
-                  {formatBytes(plan.artwork.reduce((n, f) => n + f.size, 0))}
-                </td>
-                <td>{mitBildern ? "werden umgewandelt" : "bleiben hier"}</td>
-              </tr>
-              <tr>
-                <th>Archiv</th>
-                <td>{plan.indd.map((f) => f.name).join(", ") || "—"}</td>
-                <td className="muted">
-                  {formatBytes(plan.indd.reduce((n, f) => n + f.size, 0))}
-                </td>
-                <td>bleibt hier</td>
-              </tr>
-              <tr>
-                <th>Übriges</th>
-                <td>{plan.ignored.length} Dateien</td>
-                <td className="muted">
-                  {formatBytes(
-                    plan.ignored.reduce((n, e) => n + e.file.size, 0),
-                  )}
-                </td>
-                <td>bleibt hier</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <p className="hint">
-            Ordner {formatBytes(plan.totalBytes)} · unverändert hoch{" "}
-            {formatBytes(plan.uploadBytes)} · nicht hochgeladen{" "}
-            {formatBytes(uebergangen)}
-          </p>
-
           {plan.problems.map((p) => (
             <div className="warn" key={p}>
               {p}
             </div>
           ))}
-        </div>
-      )}
 
-      {protokoll.length > 0 && (
-        <ul className="source-list">
-          {protokoll.map((z, i) => (
-            <li key={i}>{z}</li>
-          ))}
-        </ul>
+          <details className="aufklapp">
+            <summary>Ordnerinhalt</summary>
+            <table className="plan-table">
+              <tbody>
+                <tr>
+                  <th>Innenteil</th>
+                  <td>{plan.inner?.name ?? "—"}</td>
+                  <td className="muted">
+                    {plan.inner ? formatBytes(plan.inner.size) : ""}
+                  </td>
+                  <td>wird gerendert</td>
+                </tr>
+                <tr>
+                  <th>Umschlag</th>
+                  <td>{plan.cover?.name ?? plan.coverImage?.name ?? "—"}</td>
+                  <td className="muted">
+                    {formatBytes(plan.cover?.size ?? plan.coverImage?.size ?? 0)}
+                  </td>
+                  <td>{plan.cover ? "wird gerendert" : "wird umgewandelt"}</td>
+                </tr>
+                <tr>
+                  <th>Satzdatei</th>
+                  <td>{plan.idml?.name ?? "—"}</td>
+                  <td className="muted">{formatBytes(plan.idml?.size ?? 0)}</td>
+                  <td>geht hoch</td>
+                </tr>
+                <tr>
+                  <th>Bilder</th>
+                  <td>{plan.artwork.length} aus Links/</td>
+                  <td className="muted">
+                    {formatBytes(plan.artwork.reduce((n, f) => n + f.size, 0))}
+                  </td>
+                  <td>{mitBildern ? "werden umgewandelt" : "bleiben hier"}</td>
+                </tr>
+                <tr>
+                  <th>Archiv</th>
+                  <td>{plan.indd.map((f) => f.name).join(", ") || "—"}</td>
+                  <td className="muted">
+                    {formatBytes(plan.indd.reduce((n, f) => n + f.size, 0))}
+                  </td>
+                  <td>bleibt hier</td>
+                </tr>
+                <tr>
+                  <th>Übriges</th>
+                  <td>{plan.ignored.length} Dateien</td>
+                  <td className="muted">
+                    {formatBytes(
+                      plan.ignored.reduce((n, e) => n + e.file.size, 0),
+                    )}
+                  </td>
+                  <td>bleibt hier</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="hint">
+              Ordner {formatBytes(plan.totalBytes)} · unverändert hoch{" "}
+              {formatBytes(plan.uploadBytes)} · nicht hochgeladen{" "}
+              {formatBytes(uebergangen)}
+            </p>
+          </details>
+        </div>
       )}
 
       {ergebnis && (
         <div className="lauf-ergebnis">
-          <div className="ok">Fertig. Das Heft ist hochgeladen und importiert.</div>
-          <p className="hint">
-            Ordner {formatBytes(ergebnis.ordnerBytes)} · hochgeladen{" "}
-            {formatBytes(ergebnis.hochgeladenBytes)} · {ergebnis.bilder} Bilder
-          </p>
-          <h5>Nachzutragen</h5>
-          {ergebnis.offen.length > 0 ? (
-            <ul className="nachtrag">
-              {ergebnis.offen.map((z, i) => (
-                <li key={i}>{z}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="hint">Nichts offen — es hat alles geklappt.</p>
+          <div className="ok">
+            „{ergebnis.titel}“ ist hochgeladen
+            {sofortImport ? " und wird jetzt aufbereitet" : ""}.
+          </div>
+          {ergebnis.offen.length > 0 && (
+            <>
+              <h5>Nachzutragen</h5>
+              <ul className="nachtrag">
+                {ergebnis.offen.map((z, i) => (
+                  <li key={i}>{z}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          <Link className="btn small" to={`/admin/heft/${ergebnis.issueId}`}>
+            Heft öffnen
+          </Link>
+        </div>
+      )}
+
+      {err && (
+        <div className="err">
+          {err}
+          {heft && !ergebnis && (
+            <>
+              {" "}
+              <Link to={`/admin/heft/${heft.id}`}>Zum Heft</Link>
+            </>
           )}
         </div>
       )}
 
-      {err && <div className="err">{err}</div>}
+      {protokoll.length > 0 && (
+        <details className="aufklapp">
+          <summary>Protokoll</summary>
+          <ul className="source-list">
+            {protokoll.map((z, i) => (
+              <li key={i}>{z}</li>
+            ))}
+          </ul>
+          {ergebnis && (
+            <p className="hint">
+              Ordner {formatBytes(ergebnis.ordnerBytes)} · hochgeladen{" "}
+              {formatBytes(ergebnis.hochgeladenBytes)} · {ergebnis.bilder} Bilder
+            </p>
+          )}
+        </details>
+      )}
     </div>
   );
 }

@@ -12,6 +12,9 @@ import { api } from "./lib/api";
 import { ABGEMELDET_KEY, geraetName, safeNext } from "./lib/anmeldung";
 import ReaderShell from "./reader/ReaderShell";
 import AdminPage from "./admin/AdminPage";
+import AdminLayout from "./admin/AdminLayout";
+import IssueWorkspace from "./admin/IssueWorkspace";
+import Settings from "./admin/Settings";
 import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
 import LegalPage from "./pages/LegalPage";
@@ -63,7 +66,12 @@ export default function App() {
           <Route path="/warenkorb" element={<Shell><WarenkorbPage /></Shell>} />
           <Route path="/suche" element={<Shell><SearchPage /></Shell>} />
           <Route path="/account" element={<Shell><ProfilePage /></Shell>} />
-          <Route path="/admin" element={<Shell><AdminPage /></Shell>} />
+          <Route path="/admin" element={<Shell><AdminLayout /></Shell>}>
+            <Route index element={<AdminPage />} />
+            <Route path="heft/:issueId" element={<IssueWorkspace />} />
+            <Route path="heft/:issueId/:reiter" element={<IssueWorkspace />} />
+            <Route path="einstellungen" element={<Settings />} />
+          </Route>
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />

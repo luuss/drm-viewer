@@ -8,6 +8,22 @@ import { textebeneAlsBlob, trimBoxAusPdf } from "./textLayer";
 
 type PageDraft = Draft<Id<"assets">>;
 
+const QUELLE: Record<string, string> = {
+  inner: "Innenteil",
+  cover: "Umschlag",
+  supplemental: "Satz",
+  archive: "Archiv",
+};
+
+const ROLLE: Record<string, string> = {
+  front_cover: "Titelseite",
+  inside_front: "Umschlag innen vorn",
+  content: "Innenseite",
+  inside_back: "Umschlag innen hinten",
+  back_cover: "Rückseite",
+  other: "Sonstige",
+};
+
 type SourceDraft = {
   assetId: Id<"assets">;
   kind: "pdf" | "idml" | "indd" | "text";
@@ -223,7 +239,7 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
         <ul className="source-list">
           {sources?.map((s: any) => (
             <li key={s._id}>
-              <span className="badge">{s.role}</span>
+              <span className="badge">{QUELLE[s.role] ?? s.role}</span>
               <span className="grow">{s.filename}</span>
               <span className="muted">{s.kind}</span>
               {s.kind === "pdf" && (
@@ -289,9 +305,9 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
               speichern.
             </p>
             <ol className="page-order">
-              {pages.slice(0, 8).map((p, i) => (
+              {pages.map((p, i) => (
                 <li key={i}>
-                  {i + 1}. {p.role} · Quelle S.{p.sourcePageIndex + 1}
+                  {i + 1}. {ROLLE[p.role] ?? p.role} · Quelle S.{p.sourcePageIndex + 1}
                   {p.sourceHalf ? (p.sourceHalf === "left" ? " links" : " rechts") : ""} ·{" "}
                   {p.printedLabel ?? "—"}
                   <span className="row">
@@ -304,12 +320,6 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
                   </span>
                 </li>
               ))}
-              {pages.length > 8 && (
-                <li className="hint">
-                  … {pages.length - 8} weitere Seiten (Innenteil in Dateireihenfolge),
-                  zuletzt {pages[pages.length - 1].role}
-                </li>
-              )}
             </ol>
             <button
               className="btn"

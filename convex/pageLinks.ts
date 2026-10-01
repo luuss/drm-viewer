@@ -22,9 +22,11 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { requireEditor, audit } from "./roles";
 import { internal } from "./_generated/api";
 import { hasIssueAccess } from "./access";
 import { Doc, Id } from "./_generated/dataModel";
@@ -182,6 +184,113 @@ export const forReader = query({
       });
     }
     return out;
+  },
+});
+
+/**
+ * Alle Flaechen eines Hefts fuer die Redaktion, mit dem Ziel, das der Leser
+ * bekaeme. Sie sieht auch, was der Import angelegt hat.
+ */
+export const listForEditors = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requireEditor(ctx);
+    const rows = await ctx.db
+      .query("pageLinks")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .take(2000);
+    const adressen = new Map<string, string>();
+    return Promise.all(
+      rows.map(async (row) => ({
+        _id: row._id,
+        pageIndex: row.pageIndex,
+        x0: row.x0,
+        y0: row.y0,
+        x1: row.x1,
+        y1: row.y1,
+        kind: row.kind,
+        publicationSlug: row.publicationSlug ?? null,
+        url: row.url ?? null,
+        reference: row.reference ?? null,
+        queries: row.queries ?? [],
+        label: row.label ?? null,
+        source: row.source,
+        target: await zielAdresse(ctx, row, adressen),
+      })),
+    );
+  },
+});
+
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+/**
+ * Eine Flaeche anlegen oder aendern. Was die Redaktion anfasst, gehoert ihr
+ * (`source: "editor"`) und uebersteht damit einen neuen Import.
+ */
+export const save = mutation({
+  args: {
+    issueId: v.id("issues"),
+    linkId: v.optional(v.id("pageLinks")),
+    link: pageLinkInput,
+  },
+  handler: async (ctx, { issueId, linkId, link }) => {
+    await requireEditor(ctx);
+    const box = {
+      x0: clamp01(Math.min(link.x0, link.x1)),
+      x1: clamp01(Math.max(link.x0, link.x1)),
+      y0: clamp01(Math.min(link.y0, link.y1)),
+      y1: clamp01(Math.max(link.y0, link.y1)),
+    };
+    if (box.x1 - box.x0 < 0.005 || box.y1 - box.y0 < 0.005) {
+      throw new Error("Die Fläche ist zu klein");
+    }
+    if (link.kind === "url" && !/^https?:\/\//.test(link.url ?? "")) {
+      throw new Error("Bitte eine vollständige Adresse mit https:// angeben");
+    }
+    if ((link.kind === "subscription" || link.kind === "series") && !link.publicationSlug) {
+      throw new Error("Bitte eine Reihe wählen");
+    }
+    if (link.kind === "shop" && !link.reference && !(link.queries ?? []).some((q) => q.trim())) {
+      throw new Error("Bitte einen Suchbegriff oder eine Artikelnummer angeben");
+    }
+    const roh: Record<string, unknown> = {
+      ...link,
+      ...box,
+      // Fuer `shop` gilt die Aufloesung neu; eine feste Adresse bleibt.
+      url: link.kind === "url" ? link.url : undefined,
+      queries: link.kind === "shop" ? (link.queries ?? []).filter((q) => q.trim()) : undefined,
+      reference: link.kind === "shop" ? link.reference || undefined : undefined,
+      publicationSlug:
+        link.kind === "subscription" || link.kind === "series" ? link.publicationSlug : undefined,
+      source: "editor",
+    };
+    for (const k of Object.keys(roh)) if (roh[k] === undefined) delete roh[k];
+    const row = roh as Omit<Doc<"pageLinks">, "_id" | "_creationTime" | "issueId">;
+    let id: Id<"pageLinks">;
+    if (linkId) {
+      const old = await ctx.db.get(linkId);
+      if (!old || old.issueId !== issueId) throw new Error("Fläche nicht gefunden");
+      await ctx.db.replace(linkId, { issueId, ...row });
+      id = linkId;
+    } else {
+      id = await ctx.db.insert("pageLinks", { issueId, ...row });
+    }
+    if (link.kind === "shop") {
+      await ctx.scheduler.runAfter(0, internal.pageLinks.resolveInternal, { issueId });
+    }
+    await audit(ctx, "pageLink.save", issueId, link.kind);
+    return id;
+  },
+});
+
+export const remove = mutation({
+  args: { linkId: v.id("pageLinks") },
+  handler: async (ctx, { linkId }) => {
+    await requireEditor(ctx);
+    const row = await ctx.db.get(linkId);
+    if (!row) return;
+    await ctx.db.delete(linkId);
+    await audit(ctx, "pageLink.remove", row.issueId, row.kind);
   },
 });
 

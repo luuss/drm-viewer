@@ -11,7 +11,9 @@ import { rolesOf } from "./roles";
  *    lesbar, was waehrend der Laufzeit dazugehoerte — auch nach einer
  *    Kuendigung — und eine Abo-Luecke schaltet nichts rueckwirkend frei.
  * 2. Kaeufe im Laden (`shopAccess`), ueber die E-Mail-Adresse des Kontos.
- * 3. Admins lesen jedes Heft, auch unveroeffentlichte, ohne Kauf.
+ * 3. Admins lesen jedes Heft, auch unveroeffentlichte, ohne Kauf. Die
+ *    Redaktion ebenso — das ist ihre Vorschau; in ihrer Bibliothek stehen
+ *    die Hefte deshalb nicht.
  *    Ein Heft gilt unbefristet, ein Digital-Abo alle veroeffentlichten
  *    Abo-Ausgaben der Reihe bis zum Ablaufdatum. Nach Ablauf ist die Reihe
  *    wieder zu — anders als beim Stripe-Abo bleibt nichts dauerhaft.
@@ -21,7 +23,7 @@ export async function hasIssueAccess(
   userId: Id<"users">,
   issueId: Id<"issues">,
 ): Promise<boolean> {
-  if (await isAdmin(ctx, userId)) return true;
+  if (await isEditor(ctx, userId)) return true;
   const now = Date.now();
   // Alle Zeilen pruefen: neben einer abgelaufenen Freischaltung kann eine
   // gueltige liegen.
@@ -83,6 +85,12 @@ export async function accessibleIssueIds(
     }
   }
   return ids;
+}
+
+/** Die Redaktion liest jedes Heft, auch ein unveroeffentlichtes (Vorschau). */
+async function isEditor(ctx: QueryCtx | MutationCtx, userId: Id<"users">): Promise<boolean> {
+  const user = await ctx.db.get(userId);
+  return !!user && rolesOf(user).includes("editor");
 }
 
 /** Admins haben immer Zugriff auf alle Hefte. */

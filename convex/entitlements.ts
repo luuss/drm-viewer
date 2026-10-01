@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, mutation } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { entitlementSource } from "./schema";
 import { requirePublisher, audit } from "./roles";
@@ -141,5 +141,39 @@ export const revokeByEmail = mutation({
     for (const r of rows) await ctx.db.delete(r._id);
     await audit(ctx, "entitlement.revoke", issueId, email);
     return rows.length;
+  },
+});
+
+/** Freiexemplare eines Hefts (von Hand freigeschaltet), fuer die Redaktion. */
+export const listGrants = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requirePublisher(ctx);
+    const rows = await ctx.db
+      .query("entitlements")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .take(5000);
+    const out = [];
+    for (const r of rows) {
+      if (r.source !== "admin") continue;
+      const user = await ctx.db.get(r.userId);
+      out.push({ _id: r._id, email: user?.email ?? null, createdAt: r.createdAt });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+/** Ein Freiexemplar zuruecknehmen. Kaeufe und Abos bleiben unberuehrt. */
+export const revokeGrant = mutation({
+  args: { entitlementId: v.id("entitlements") },
+  handler: async (ctx, { entitlementId }) => {
+    await requirePublisher(ctx);
+    const row = await ctx.db.get(entitlementId);
+    if (!row) return;
+    if (row.source !== "admin") {
+      throw new Error("Nur Freiexemplare lassen sich hier zurücknehmen");
+    }
+    await ctx.db.delete(entitlementId);
+    await audit(ctx, "entitlement.revokeGrant", row.issueId, row.userId);
   },
 });

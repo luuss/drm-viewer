@@ -259,6 +259,145 @@ export const listForEditors = query({
   },
 });
 
+/**
+ * Heftliste der Redaktion, schlank: je Heft die Kennzahlen fuer die
+ * Statusspalte. Seiten und Quellen liest erst der Arbeitsplatz
+ * (`getForEditor`), sonst wird die Liste mit jedem Heft langsamer.
+ */
+export const overviewForEditors = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireEditor(ctx);
+    const rows = await ctx.db.query("issues").order("desc").take(500);
+    const names = new Map<string, string | null>();
+    return Promise.all(
+      rows.map(async (i) => {
+        const articles = await ctx.db
+          .query("articles")
+          .withIndex("by_issue", (q) => q.eq("issueId", i._id))
+          .take(2000);
+        const job = await ctx.db
+          .query("importJobs")
+          .withIndex("by_issue", (q) => q.eq("issueId", i._id))
+          .order("desc")
+          .first();
+        const pubKey = i.publicationId as string;
+        if (!names.has(pubKey)) {
+          names.set(pubKey, (await ctx.db.get(i.publicationId))?.name ?? null);
+        }
+        return {
+          _id: i._id,
+          publicationId: i.publicationId,
+          publicationName: names.get(pubKey) ?? null,
+          title: i.title,
+          displayTitle: i.shopTitle ?? i.title,
+          issueNumber: i.issueNumber ?? null,
+          pageCount: i.pageCount,
+          priceAmountCents: i.priceAmountCents,
+          isPublished: i.isPublished,
+          includedInSubscription: i.includedInSubscription,
+          shopOffered: i.shopDigital?.offered ?? false,
+          articleCount: articles.length,
+          pendingArticles: articles.filter((a) => a.reviewStatus === "pending").length,
+          coverUrl: await assetUrl(ctx, i.coverAssetId),
+          lastJob: job
+            ? {
+                _id: job._id,
+                kind: job.kind,
+                status: job.status,
+                message: job.message ?? null,
+                progress: job.progress ?? null,
+              }
+            : null,
+          createdAt: i.createdAt,
+        };
+      }),
+    );
+  },
+});
+
+/** Ein Heft fuer den Arbeitsplatz der Redaktion: Angaben, Stand, Pruefliste. */
+export const getForEditor = query({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    await requireEditor(ctx);
+    const i = await ctx.db.get(issueId);
+    if (!i) return null;
+    const publication = await ctx.db.get(i.publicationId);
+    const pages = await ctx.db
+      .query("issuePages")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .take(2000);
+    const articles = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .take(2000);
+    const sources = await ctx.db
+      .query("issueSources")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .take(200);
+    const jobs = await ctx.db
+      .query("importJobs")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .order("desc")
+      .take(5);
+    const toc = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .take(1000);
+    return {
+      _id: i._id,
+      publicationId: i.publicationId,
+      publicationName: publication?.name ?? null,
+      publicationSlug: publication?.slug ?? null,
+      title: i.title,
+      slug: i.slug,
+      issueNumber: i.issueNumber ?? null,
+      description: i.description ?? null,
+      publicationDate: i.publicationDate ?? null,
+      priceAmountCents: i.priceAmountCents,
+      priceSource: i.priceSource ?? null,
+      isPublished: i.isPublished,
+      publishedAt: i.publishedAt ?? null,
+      includedInSubscription: i.includedInSubscription,
+      externalSku: i.externalSku ?? null,
+      shopUrl: i.shopUrl ?? null,
+      shopProductId: i.shopProductId ?? null,
+      shopDigital: i.shopDigital ?? null,
+      shopTitle: i.shopTitle ?? null,
+      shopDesignation: i.shopDesignation ?? null,
+      shopSubtitle: i.shopSubtitle ?? null,
+      shopSyncedAt: i.shopSyncedAt ?? null,
+      stripePriceId: i.stripePriceId ?? null,
+      coverUrl: await assetUrl(ctx, i.coverAssetId),
+      pageCount: pages.length || i.pageCount,
+      articleCount: articles.length,
+      approvedArticles: articles.filter((a) => a.reviewStatus === "approved").length,
+      pendingArticles: articles.filter((a) => a.reviewStatus === "pending").length,
+      excludedArticles: articles.filter((a) => a.reviewStatus === "excluded").length,
+      tocCount: toc.length,
+      sources: sources.map((s) => ({
+        _id: s._id,
+        kind: s.kind,
+        role: s.role,
+        filename: s.filename,
+        pageCount: s.pageCount ?? null,
+      })),
+      jobs: jobs.map((job) => ({
+        _id: job._id,
+        kind: job.kind,
+        status: job.status,
+        message: job.message ?? null,
+        progress: job.progress ?? null,
+        createdAt: job.createdAt,
+        finishedAt: job.finishedAt ?? null,
+      })),
+      createdAt: i.createdAt,
+      updatedAt: i.updatedAt,
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     publicationId: v.id("publications"),
@@ -434,8 +573,12 @@ export const update = mutation({
     // Leerer Text entfernt Artikelnummer bzw. Ladenadresse.
     externalSku: v.optional(v.string()),
     shopUrl: v.optional(v.string()),
+    // Eigenes Titelbild der Redaktion (hochgeladenes Asset).
+    coverAssetId: v.optional(v.id("assets")),
+    // Den Preis wieder dem Laden ueberlassen: der naechste Abgleich setzt ihn.
+    priceAuto: v.optional(v.boolean()),
   },
-  handler: async (ctx, { issueId, externalSku, shopUrl, ...patch }) => {
+  handler: async (ctx, { issueId, externalSku, shopUrl, priceAuto, ...patch }) => {
     await requireEditor(ctx);
     const issue = await ctx.db.get(issueId);
     if (!issue) throw new Error("Ausgabe nicht gefunden");
@@ -461,6 +604,7 @@ export const update = mutation({
     // Was die Redaktion eintraegt, bleibt stehen — auch wenn der Laden spaeter
     // etwas anderes sagt.
     if (patch.priceAmountCents !== undefined) clean.priceSource = "redaktion";
+    if (priceAuto && patch.priceAmountCents === undefined) clean.priceSource = undefined;
     await ctx.db.patch(issueId, clean);
   },
 });

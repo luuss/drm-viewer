@@ -44,7 +44,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Link to="/suche" className={here("/suche")}>
                 <Icon name="search" /> Suche
               </Link>
-              <EditorLink active={here("/admin")} />
+              <EditorLink active={loc.pathname.startsWith("/admin") ? "here" : undefined} />
               <Link to="/account" className="user-badge">
                 <Icon name="user" />
                 <UserBadge />
