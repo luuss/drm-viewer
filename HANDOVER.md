@@ -536,6 +536,25 @@ nach ihrer ersten Zeile („Verehrter Leser, 80 Jahre nach …“).
   ihre erste Zeile als Titel; bei der DMZ fehlt ihr dazu die Initiale
   („eltgeschichte ist Kriegsgeschichte“), siehe 5.
 
+## 4h. Lesetext ohne Wiederholung des Kopfes (seit 01.10.2026)
+
+Eine Überschrift, die der Setzer in zwei Absätze gebrochen hat („50 Prozent
+der Russen“ / „sehen Deutschland als „Feind““), stand nach dem Titel noch
+einmal im Lesetext — in 41 Artikeln. Dazu Unterzeilen und Vorspänne, deren
+Wortlaut leicht vom Kopf abwich, und Kästen (Zitatkasten, „Klebezettel“), die
+einen Satz des Artikels wiederholen.
+
+* Worker `_ohne_kopfzeilen` (in `_build_payload`): Blöcke der Art
+  Überschrift/Vorspann, deren Text in Titel, Unterzeile oder Vorspann
+  enthalten ist, und Kästen, deren Text im Fließtext steht, kommen nicht in
+  den Lesetext. Die Rohblöcke bleiben in der Debugansicht.
+* Bestand bereinigt mit `devtools:removeArticleBlocksInternal` (Probelauf,
+  dann echt): 171 Blöcke in 60 Artikeln (ZUERST! 120, DMZ-Zeitgeschichte 22,
+  DMZ 170 17, Greim 12); Reihenfolge lückenlos, kein Bildanker verschoben.
+  Plan in `_scratch/umschlag/dopplungen.json`. Nicht angefasst: die
+  wiederholten Bezugszeilen der ZUERST-Leserbriefe („Zu „…“ in ZUERST!
+  2/2026“ steht vor jedem Brief zum selben Artikel) — das ist der Druck.
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde
