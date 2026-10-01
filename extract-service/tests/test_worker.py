@@ -431,3 +431,34 @@ def test_einfarbige_flaechen_verschiedener_form_sind_nicht_dasselbe():
     hoch = worker.render.fingerprint(_jpeg(771, 933))
     assert worker.render.same_picture(quer, worker.render.fingerprint(_jpeg(1237, 933)))
     assert not worker.render.same_picture(quer, hoch)
+
+
+def test_lesetext_wiederholt_den_kopf_nicht():
+    from extractor.model import AssembledArticle, SourceBlock
+
+    def block(text, kind, seite=4):
+        return SourceBlock(page_index=seite, text=text, x0=0.1, y0=0.1, x1=0.9, y1=0.2, kind=kind)
+
+    article = AssembledArticle(
+        title="50 Prozent der Russen sehen Deutschland als „Feind“",
+        subtitle="Trauriger Erfolg",
+        blocks=[
+            # Die Ueberschrift, in zwei Absaetze gebrochen.
+            block("50 Prozent der Russen", "heading"),
+            block("sehen Deutschland als „Feind“", "heading"),
+            block("Trauriger Erfolg", "lead"),
+            block("Einer aktuellen Umfrage zufolge betrachten die Hälfte der Russen Deutschland als Feind.", "paragraph"),
+            # Zitatkasten mit einem Satz aus dem Text.
+            block("betrachten die Hälfte der Russen Deutschland als Feind", "box"),
+            # Ein Kasten mit eigenem Inhalt bleibt.
+            block("Die Umfrage befragte 1.600 Personen in 50 Regionen.", "box"),
+            # Eine Zwischenueberschrift mit Titelwort bleibt.
+            block("Russen", "subheading"),
+        ],
+    )
+    texte = [b.text for b in worker._ohne_kopfzeilen(article.blocks, article)]
+    assert texte == [
+        "Einer aktuellen Umfrage zufolge betrachten die Hälfte der Russen Deutschland als Feind.",
+        "Die Umfrage befragte 1.600 Personen in 50 Regionen.",
+        "Russen",
+    ]

@@ -885,19 +885,7 @@ class Job:
     def _build_payload(self, articles, page_images: dict[int, bytes]) -> list[dict]:
         payload = []
         for order, article in enumerate(articles, start=1):
-            reader_blocks = flow_text_blocks(article.blocks)
-            # Unterzeile und Vorspann stehen schon im Kopf des Artikels. Als
-            # Block noch einmal gedruckt, liest sich das wie ein Versehen.
-            kopfzeilen = {
-                t.strip()
-                for t in (article.subtitle, article.teaser, article.title)
-                if t
-            }
-            reader_blocks = [
-                b
-                for b in reader_blocks
-                if not (b.kind in ("lead", "heading") and b.text.strip() in kopfzeilen)
-            ]
+            reader_blocks = _ohne_kopfzeilen(flow_text_blocks(article.blocks), article)
             blocks = [
                 {
                     "order": i + 1,
@@ -1244,6 +1232,42 @@ def main() -> int:
             continue
         time.sleep(idle_poll_delay(empty_polls))
         empty_polls += 1
+
+
+def _glatt(text: str) -> str:
+    return " ".join((text or "").split()).casefold()
+
+
+def _ohne_kopfzeilen(blocks, article) -> list:
+    """Bloecke, die im Lesetext nur wiederholen, was der Kopf schon sagt.
+
+    Unterzeile und Vorspann stehen im Kopf des Artikels; als Block noch
+    einmal gedruckt, liest sich das wie ein Versehen. Dasselbe gilt fuer
+    eine Ueberschrift, die der Setzer in zwei Absaetze gebrochen hat ("50
+    Prozent der Russen" / "sehen Deutschland als Feind"): der Titel traegt
+    beide Zeilen, im Text sind sie ueberfluessig. Ein Zitatkasten, der einen
+    Satz des Artikels wiederholt, ist ein Blickfang der Druckseite — im
+    Fliesstext eine Dopplung.
+    """
+    kopf = [
+        _glatt(t) for t in (article.title, article.subtitle, article.teaser) if t
+    ]
+    koerper = [_glatt(b.text) for b in blocks if b.kind not in ("box", "quote")]
+    out = []
+    for b in blocks:
+        t = _glatt(b.text)
+        if not t:
+            continue
+        if b.kind in ("lead", "heading") and len(t) >= 3 and any(t in k for k in kopf):
+            continue
+        if (
+            b.kind in ("box", "quote")
+            and len(t) >= 25
+            and any(t in k for k in koerper)
+        ):
+            continue
+        out.append(b)
+    return out
 
 
 def _text_regions(blocks) -> list[dict]:
