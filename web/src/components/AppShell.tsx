@@ -58,6 +58,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Link to="/" className={here("/")}>
                 <Icon name="kiosk" /> Kiosk
               </Link>
+              <Link to="/suche" className={here("/suche")}>
+                <Icon name="search" /> Suche
+              </Link>
               <Link
                 to={loc.pathname === "/" ? "/login" : `/login?next=${encodeURIComponent(loc.pathname)}`}
                 className="btn secondary small"

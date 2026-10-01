@@ -6,6 +6,7 @@ import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import Kasse from "../components/Kasse";
 import { heraus, hinein, kassenUrl, useWarenkorb } from "../lib/warenkorb";
+import HeftGalerie, { type GalerieBild } from "./HeftGalerie";
 
 export default function IssueDetailPage() {
   const { slug } = useParams();
@@ -54,11 +55,27 @@ export default function IssueDetailPage() {
     }
   }
 
+  // Titelbild, dahinter das gedruckte Inhaltsverzeichnis. Aus der Suche
+  // kommend (`?bild=inhalt`) steht gleich das Verzeichnis vorn.
+  const bilder: GalerieBild[] = [
+    ...(issue.coverUrl ? [{ url: issue.coverUrl, alt: issue.displayTitle, titel: true }] : []),
+    ...issue.tocImages.map((b, i) => ({
+      url: b.url,
+      alt:
+        issue.tocImages.length > 1
+          ? `Inhaltsverzeichnis, Seite ${i + 1}`
+          : "Inhaltsverzeichnis",
+    })),
+  ];
+  const start = params.get("bild") === "inhalt" && issue.tocImages.length > 0
+    ? bilder.length - issue.tocImages.length
+    : 0;
+
   return (
     <div className="page issue-detail">
       <div className="cover-wrap">
-        {issue.coverUrl ? (
-          <img src={issue.coverUrl} alt={issue.displayTitle} />
+        {bilder.length > 0 ? (
+          <HeftGalerie key={issue._id} bilder={bilder} start={start} />
         ) : (
           <div className="cover-placeholder">{issue.displayTitle[0]}</div>
         )}

@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { requireEditor } from "./roles";
 import { assertUploadAllowed } from "./uploadRules";
 import { Id } from "./_generated/dataModel";
+import { isPublicTocPage } from "./tocPreview";
 
 export const assetKind = v.union(
   v.literal("source"),
@@ -144,8 +145,9 @@ export async function assetUrl(
 
 /**
  * Was das Kachel-Gateway braucht, um ein Bild auszuliefern: wo es liegt und
- * ob es oeffentlich ist. Titelbilder stehen im Kiosk und sind frei; alles
- * andere gehoert zum bezahlten Inhalt.
+ * ob es oeffentlich ist. Titelbilder und die Seiten des gedruckten
+ * Inhaltsverzeichnisses stehen im Kiosk und sind frei; alles andere gehoert
+ * zum bezahlten Inhalt.
  */
 export const resolveForServiceInternal = internalQuery({
   args: { assetId: v.string() },
@@ -158,7 +160,7 @@ export const resolveForServiceInternal = internalQuery({
     }
     if (!asset) return null;
     return {
-      public: asset.kind === "cover",
+      public: asset.kind === "cover" || (await isPublicTocPage(ctx, asset)),
       issueId: asset.issueId ?? null,
       key: asset.key,
       bucket: asset.bucket ?? null,

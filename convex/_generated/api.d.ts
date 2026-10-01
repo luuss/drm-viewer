@@ -57,6 +57,7 @@ import type * as subscriptionCatalog from "../subscriptionCatalog.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as tabellen from "../tabellen.js";
 import type * as toc from "../toc.js";
+import type * as tocPreview from "../tocPreview.js";
 import type * as uploadRules from "../uploadRules.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
@@ -117,6 +118,7 @@ declare const fullApi: ApiFromModules<{
   subscriptions: typeof subscriptions;
   tabellen: typeof tabellen;
   toc: typeof toc;
+  tocPreview: typeof tocPreview;
   uploadRules: typeof uploadRules;
   uploads: typeof uploads;
   users: typeof users;

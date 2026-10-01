@@ -1133,22 +1133,166 @@ button.small, .btn.small {
 /* Einzelansicht einer Ausgabe */
 .issue-detail {
   display: grid;
-  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
   gap: var(--s7);
   align-items: start;
 }
 @media (max-width: 48rem) {
   .issue-detail { grid-template-columns: 1fr; gap: var(--s5); }
-  .issue-detail .cover-wrap { max-width: 14rem; }
+  .issue-detail .cover-wrap { max-width: 20rem; }
 }
-.issue-detail .cover-wrap img,
-.issue-detail .cover-wrap .cover-placeholder {
+.issue-detail .cover-wrap > img,
+.issue-detail .cover-wrap > .cover-placeholder,
+.heft-galerie .galerie-haupt {
   width: 100%;
   aspect-ratio: 3 / 4;
-  object-fit: cover;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   border: 1px solid var(--rule);
+}
+.issue-detail .cover-wrap > img { object-fit: cover; }
+
+/* Heftvorschau: grosses Bild, darunter Miniaturen fuer Titel und
+   Inhaltsverzeichnis. Eine Heftseite steht ganz im Rahmen, das Titelbild
+   fuellt ihn. */
+.heft-galerie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.heft-galerie .galerie-haupt {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+  cursor: zoom-in;
+}
+.heft-galerie .galerie-haupt img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.heft-galerie .galerie-haupt.titel img { object-fit: cover; }
+.heft-galerie .galerie-lupe {
+  position: absolute;
+  right: var(--s3);
+  bottom: var(--s3);
+  display: grid;
+  place-items: center;
+  width: var(--ctl-h-sm);
+  height: var(--ctl-h-sm);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s, color 0.15s;
+}
+.heft-galerie .galerie-haupt:hover .galerie-lupe {
+  background: var(--accent);
+  color: #fff;
+}
+.heft-galerie .galerie-daumen {
+  display: flex;
+  justify-content: center;
+  gap: var(--s2);
+}
+.heft-galerie .galerie-daumen button {
+  width: 3.5rem;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 2px solid var(--rule);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+.heft-galerie .galerie-daumen button:hover { opacity: 1; }
+.heft-galerie .galerie-daumen button.on {
+  border-color: var(--accent);
+  opacity: 1;
+}
+.heft-galerie .galerie-daumen img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* Lupe: Vollbild ueber allem, dunkel wie die Leseansicht. */
+.bild-lupe {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(12, 13, 17, 0.96);
+  color: var(--bar-text);
+}
+.bild-lupe .lupe-bild {
+  position: absolute;
+  inset: 0;
+}
+.bild-lupe .lupe-knopf {
+  display: grid;
+  place-items: center;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--bar-line);
+  background: rgba(17, 19, 24, 0.75);
+  color: var(--bar-text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bild-lupe .lupe-knopf:hover { background: var(--accent); border-color: var(--accent); }
+.bild-lupe :focus-visible { outline-color: var(--night-ink); }
+.bild-lupe .lupe-zu {
+  position: absolute;
+  top: var(--s4);
+  right: var(--s4);
+}
+.bild-lupe .lupe-zurueck,
+.bild-lupe .lupe-weiter {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.bild-lupe .lupe-zurueck { left: var(--s4); }
+.bild-lupe .lupe-weiter { right: var(--s4); }
+.bild-lupe .lupe-leiste {
+  position: absolute;
+  left: 50%;
+  bottom: var(--s4);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2);
+  border-radius: var(--radius);
+  background: rgba(17, 19, 24, 0.75);
+}
+.bild-lupe .lupe-daumen {
+  width: 2.25rem;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid var(--bar-line);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.bild-lupe .lupe-daumen.on { border-color: var(--accent); opacity: 1; }
+.bild-lupe .lupe-daumen img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
 }
 /* Ohne flex-start zieht sich ein einzelner Knopf ueber die ganze Spalte. */
 .issue-info {
@@ -1274,6 +1418,80 @@ button.small, .btn.small {
 /* Der Fundtext wird auf Lesebreite gehalten; ueber die ganze Blattbreite
    verliert das Auge die Zeile. */
 .search-results .snippet { font-size: var(--fs-sub); max-width: var(--prose); }
+
+/* Treffer aus den Verzeichnissen ungekaufter Hefte: Titelbild daneben,
+   darunter die gefundenen Eintraege und der Weg in den Warenkorb. */
+.search-results.kiosk-hits > li {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--s4);
+}
+.kiosk-hit-cover {
+  flex: 0 0 5.5rem;
+  display: block;
+}
+.kiosk-hit-cover img,
+.kiosk-hit-cover .cover-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--rule);
+}
+.kiosk-hit-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  min-width: 0;
+  flex: 1;
+}
+.kiosk-hit-entries {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  width: 100%;
+  max-width: var(--prose);
+  font-size: var(--fs-sub);
+}
+.kiosk-hit-entries li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding-bottom: var(--s1);
+  border-bottom: 1px dotted var(--rule);
+}
+.kiosk-hit-entries .section { color: var(--muted); }
+.kiosk-hit-entries .page {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.kiosk-hit-entries .more { color: var(--muted); border-bottom: 0; }
+.kiosk-hit-entries mark {
+  background: var(--accent-soft);
+  color: inherit;
+  padding: 0 0.1em;
+  border-radius: 2px;
+}
+.kiosk-hit-buy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+.kiosk-hit-buy .price {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: var(--fs-h4);
+}
+@media (max-width: 30rem) {
+  .kiosk-hit-cover { flex-basis: 4rem; }
+}
 
 .profile section {
   background: var(--surface);

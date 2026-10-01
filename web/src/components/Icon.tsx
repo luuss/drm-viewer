@@ -13,7 +13,9 @@ export type IconName =
   | "pages"
   | "search"
   | "spread"
-  | "user";
+  | "user"
+  | "zoom-in"
+  | "zoom-out";
 
 type Props = {
   name: IconName;
@@ -82,6 +84,12 @@ export default function Icon({ name, className = "", size = 18 }: Props) {
       )}
       {name === "search" && (
         <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /></>
+      )}
+      {name === "zoom-in" && (
+        <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /><path d="M10.5 7.5v6" /><path d="M7.5 10.5h6" /></>
+      )}
+      {name === "zoom-out" && (
+        <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /><path d="M7.5 10.5h6" /></>
       )}
       {name === "spread" && (
         <><path d="M12 5.5A6.5 6.5 0 0 0 4 4v15a6.5 6.5 0 0 1 8 1.5z" /><path d="M12 5.5A6.5 6.5 0 0 1 20 4v15a6.5 6.5 0 0 0-8 1.5z" /></>

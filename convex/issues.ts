@@ -18,6 +18,7 @@ import { assertSkuFree } from "./shopIntegration";
 import { cleanShopUrl, cleanSku, issueShopLink, issueShopSku } from "./shopLinks";
 import { seriesFor } from "./shopCovers";
 import { internal } from "./_generated/api";
+import { tocImages } from "./tocPreview";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -114,6 +115,8 @@ export const getPublic = query({
       publicationDate: issue.publicationDate ?? null,
       articleCount: issue.articleCount ?? 0,
       coverUrl: await assetUrl(ctx, issue.coverAssetId),
+      // Seiten des gedruckten Inhaltsverzeichnisses, frei wie das Titelbild.
+      tocImages: issue.isPublished ? await tocImages(ctx, issueId) : [],
       owned,
       // Kaufadresse im Laden; ohne eingetragene Produktseite die Suche.
       shopUrl: issueShopLink(issue, publication?.name ?? null),

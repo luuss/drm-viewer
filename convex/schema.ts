@@ -386,7 +386,12 @@ export default defineSchema(
     level: v.number(),
   })
     .index("by_issue", ["issueId"])
-    .index("by_issue_order", ["issueId", "order"]),
+    .index("by_issue_order", ["issueId", "order"])
+    // Kiosk-Suche: die Verzeichnisse aller Hefte, auch der ungekauften.
+    .searchIndex("search_label", {
+      searchField: "label",
+      filterFields: ["issueId"],
+    }),
 
   /**
    * Produkte des Verlagsladens, auf die Anzeigen im Heft zeigen: letzter

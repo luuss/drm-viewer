@@ -37,6 +37,7 @@ export default function App() {
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
           <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
           <Route path="/warenkorb" element={<Shell><WarenkorbPage /></Shell>} />
+          <Route path="/suche" element={<Shell><SearchPage /></Shell>} />
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
