@@ -456,7 +456,29 @@ Zählung in der unteren Leiste lief eins neben den gedruckten Seitenzahlen.
   sich, auf U3 für die DMZ; DMZ 170 auf U2 für sich, auf U3 für die
   Zeitgeschichte; Zeitgeschichte 80 und Greim auf U2 für sich), die sechs
   Anzeigen-Artikel dazu sind entfernt (`_scratch/umschlag/abo-links.py`).
-  Buchanzeigen auf U3/U4 bleiben Artikel mit Ladenknopf.
+* **Buchanzeigen auf dem Umschlag sind ebenfalls Seitenlinks** (seit 01.10.).
+  Eine Tafel mit Preisen oder Bestellhinweisen (`extractor/anzeige.py`,
+  `ist_anzeige`) wird kein Artikel: genau eine Artikelnummer → `shop` mit
+  `reference` (Produktseite); eine Reihe mehrfach genannt oder neben einer
+  Liste von Artikelnummern → `series` (Kategorie der Reihe,
+  `shopCovers.SERIES`); sonst `shop` mit Suchbegriffen (`suchbegriffe`:
+  mehrfach genannter Verfasser, Titelzeile, tragende Wörter) und `single`
+  (ein Preis = ein Produkt). `pageLinks.resolveInternal` fragt nach jedem
+  Import den Laden (`chooseTarget`): Einzelanzeige → Produktseite, wenn ein
+  Begriff genau ein Produkt trifft; Sammelanzeige → Suchseite des Begriffs mit
+  den meisten Treffern, ein mehrwortiger (Verfasser) ab drei Treffern zuerst.
+  Ohne Antwort des Ladens später erneut; bis dahin und ohne Treffer gilt die
+  Suchseite des ersten Begriffs. Eine Tafel ohne Preise (Greim U4, Orden des
+  Greim) bleibt Artikel. Bestand: ZUERST! U4 → Produktseite „Zeugen deutscher
+  Geschichte“; DMZ 170 U4 → Suche „Stefan Scheil“; DMZ-Zeitgeschichte 80
+  U3/U4 → Suche „Geschichte Waffen-SS“; Greim U3 → Kategorie Schwerterträger
+  (`_scratch/umschlag/umschlag-links.py`). Neu auflösen: `clearResolvedInternal`
+  + `resolveInternal`; einzelne Felder: `setFieldsInternal`.
+* **Der Tipp kommt über die Zeichenfläche.** OpenSeadragon bricht das
+  Klick-Ereignis an der Zeichenfläche ab, bevor es bei React ankommt; die
+  Knöpfe der Flächen (`.hotspot`) bekommen nie einen Klick. Der Treffertest in
+  `PageMode` (`canvas-click`) ist der einzige Weg — er prüft Linkflächen vor
+  Artikelflächen und öffnet den neuen Tab, mit Sperre gegen doppeltes Öffnen.
 * **Bestand nachgerüstet** (`_scratch/umschlag/nachruesten.py <issueId>
   <umschlag.pdf> [--echt]`, Probelauf ohne `--echt`): `issuePages:insertInternal`
   fügt Seiten ein und rückt alles nach, was Seiten zählt — Artikel (Anfang,
