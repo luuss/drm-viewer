@@ -85,9 +85,21 @@ export default function PageMode({
   const readyRef = useRef(false);
   const openedPagesRef = useRef<number[]>([]);
   const regionsRef = useRef(regions);
+  const linksRef = useRef(links);
   const openArticleRef = useRef(onOpenArticle);
   const navigatePageRef = useRef(onNavigatePage);
   regionsRef.current = regions;
+  linksRef.current = links;
+  // Ein Tipp kann die Seite auf zwei Wegen erreichen (Knopf und
+  // Zeichenflaeche); nach draussen darf er nur einmal fuehren.
+  const zuletztGeoeffnet = useRef<{ url: string; at: number } | null>(null);
+  const nachDraussen = useCallback((url: string) => {
+    const now = Date.now();
+    const vorher = zuletztGeoeffnet.current;
+    if (vorher && vorher.url === url && now - vorher.at < 800) return;
+    zuletztGeoeffnet.current = { url, at: now };
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, []);
   openArticleRef.current = onOpenArticle;
   navigatePageRef.current = onNavigatePage;
 
@@ -164,6 +176,21 @@ export default function PageMode({
         const ny = point.y / size.y;
         if (nx < 0 || nx > 1 || ny < 0 || ny > 1) continue;
         const pageIndex = openedPagesRef.current[slot];
+        // Flaechen nach draussen gehen vor. Der Knopf darunter bekommt den
+        // Klick nie: OpenSeadragon bricht ihn an der Zeichenflaeche ab,
+        // bevor er bei React ankommt.
+        const link = linksRef.current.find(
+          (l) =>
+            l.pageIndex === pageIndex &&
+            nx >= l.x0 &&
+            nx <= l.x1 &&
+            ny >= l.y0 &&
+            ny <= l.y1,
+        );
+        if (link) {
+          nachDraussen(link.url);
+          return;
+        }
         for (const region of regionsRef.current) {
           if (region.pageIndex !== pageIndex) continue;
           if (nx < region.x0 || nx > region.x1 || ny < region.y0 || ny > region.y1) {
@@ -200,7 +227,7 @@ export default function PageMode({
       viewer.destroy();
       viewerRef.current = null;
     };
-  }, [sessionToken, syncLayers]);
+  }, [sessionToken, syncLayers, nachDraussen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -349,9 +376,9 @@ export default function PageMode({
                       />
                     ))}
                     {/* Nach draussen geht es ohne Zwischenfrage, im neuen Tab.
-                        Diese Flaechen kennt nur die Ebene hier; der Klick auf
-                        die Zeichenflaeche oben findet keine Artikelflaeche
-                        darunter und tut nichts — sonst ginge der Tab zweimal auf. */}
+                        Den Klick verarbeitet der Treffertest der Zeichenflaeche
+                        oben; der Knopf hier zeigt die Flaeche beim Zeigen und
+                        traegt sie fuer Tastatur und Vorleser. */}
                     {pageLinks.map((link, index) => (
                       <button
                         key={`link-${index}`}
@@ -362,7 +389,7 @@ export default function PageMode({
                           width: `${(link.x1 - link.x0) * 100}%`,
                           height: `${(link.y1 - link.y0) * 100}%`,
                         }}
-                        onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                        onClick={() => nachDraussen(link.url)}
                         aria-label={
                           link.label ? `${link.label} – im Laden öffnen` : "Im Laden öffnen"
                         }

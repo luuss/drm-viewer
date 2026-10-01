@@ -2,7 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { internal } from "./_generated/api";
-import { defaultSubscriptionUrl } from "./pageLinks";
+import { chooseProduct, defaultSubscriptionUrl, searchUrl, seriesUrl } from "./pageLinks";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -88,5 +88,28 @@ describe("Seitenlinks", () => {
     expect(defaultSubscriptionUrl("dmz-zeitgeschichte")).toBe(
       "https://lesenundschenken.de/module/luszeitformulare/formular?f=abo-dmz-zeitgeschichte",
     );
+    expect(seriesUrl("schwertertraeger")).toBe(
+      "https://lesenundschenken.de/zeitschriften/schwertertraeger",
+    );
+    expect(searchUrl("Waffen-SS")).toBe("https://lesenundschenken.de/suche?s=Waffen-SS");
+  });
+
+  test("ein Produkt nur bei genau einem Treffer", () => {
+    const produkt = (id: number, reference: string, active = true) => ({
+      id,
+      name: `Buch ${id}`,
+      reference,
+      priceCents: 2980,
+      url: `https://lesenundschenken.de/${id}-buch.html`,
+      coverUrl: null,
+      manufacturer: "",
+      active,
+      digital: null,
+    });
+    expect(chooseProduct([produkt(1, "101208")])?.id).toBe(1);
+    expect(chooseProduct([produkt(1, "101208"), produkt(2, "101209")])).toBeNull();
+    expect(chooseProduct([produkt(1, "101208"), produkt(2, "101209")], "101209")?.id).toBe(2);
+    expect(chooseProduct([produkt(1, "101208", false)])).toBeNull();
+    expect(chooseProduct([])).toBeNull();
   });
 });

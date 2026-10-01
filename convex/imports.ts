@@ -562,6 +562,10 @@ export const activateResultInternal = internalMutation({
     }
 
     const links = await replaceImportedLinks(ctx, issueId, pageLinks ?? []);
+    if ((pageLinks ?? []).some((l) => l.kind === "shop")) {
+      // Produkt oder Suchseite zu den Anzeigen im Laden nachschlagen.
+      await ctx.scheduler.runAfter(0, internal.pageLinks.resolveInternal, { issueId });
+    }
 
     await ctx.db.patch(issueId, { articleCount: articles.length, updatedAt: now });
     // Buchanzeigen erkennen und mit dem Laden verbinden (articleProducts.ts).

@@ -26,6 +26,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import render
 from extractor.abo import abo_aufruf
+from extractor.anzeige import (
+    artikelnummern,
+    ist_anzeige,
+    reihe_der_sammlung,
+    suchbegriffe,
+)
 from extractor.article_assembler import assemble, assemble_cover_pages, flow_text_blocks
 from extractor.idml_extract import (
     extract_idml_blocks,
@@ -207,7 +213,7 @@ class Job:
         toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
         self._toc_eintraege = len(toc_hints)
         # Erst nach dem Verzeichnis: das zaehlt die Artikel nach ihrer Stelle.
-        payload_articles, page_links = self._abo_links(payload_articles)
+        payload_articles, page_links = self._seitenlinks(payload_articles)
         self.beat(92, "Ergebnis wird uebernommen")
         result = self.convex.post(
             "/service/jobs/result",
@@ -229,13 +235,17 @@ class Job:
         )
         return "review", "Bereit zur redaktionellen Pruefung" + self._verzeichnis_hinweis()
 
-    def _abo_links(self, payload_articles: list[dict]) -> tuple[list[dict], list[dict]]:
-        """Abo-Aufrufe aus den Artikeln nehmen und als Seitenlinks zurueckgeben.
+    def _seitenlinks(self, payload_articles: list[dict]) -> tuple[list[dict], list[dict]]:
+        """Anzeigen aus den Artikeln nehmen und als Seitenlinks zurueckgeben.
 
-        Der Aufruf auf U2 oder U3 (und eine Abo-Anzeige im Innenteil) ist kein
-        Lesetext. Im Seitenmodus fuehrt ein Tipp darauf gleich zum
-        Abo-Formular der beworbenen Reihe im Laden. Auf dem Umschlag ist die
-        ganze Tafel die Flaeche, innen die Rahmen der Anzeige.
+        Ein Abo-Aufruf (auf U2 oder U3, oder eine Abo-Anzeige im Innenteil)
+        und eine Anzeigentafel des Umschlags sind kein Lesetext. Im
+        Seitenmodus fuehrt ein Tipp darauf gleich in den Laden: zum
+        Abo-Formular der beworbenen Reihe, zur Kategorie einer Reihe (Sammlung
+        ihrer Hefte), zum Produkt (eine Artikelnummer) oder zur Suche
+        (Suchbegriffe, der Laden entscheidet). Auf dem Umschlag ist die ganze
+        Tafel die Flaeche, innen die Rahmen der Anzeige. Eine Umschlagtafel
+        ohne Preise und Bestellhinweise bleibt ein Artikel.
         """
         eigene = self.data.get("publicationSlug")
         cover = getattr(self, "_cover_pages", set())
@@ -244,14 +254,27 @@ class Job:
         for a in payload_articles:
             umschlag = a["pageStart"] in cover
             text = " ".join(b["text"] for b in a["blocks"])
+            titel = a.get("title") or ""
+            ziel: dict | None = None
             reihe = abo_aufruf(
-                text,
-                a.get("title", ""),
-                eigene,
-                min_treffer=3,
-                max_zeichen=None if umschlag else 3000,
+                text, titel, eigene, min_treffer=3, max_zeichen=None if umschlag else 3000
             )
-            if not reihe:
+            if reihe:
+                ziel = {"kind": "subscription", "publicationSlug": reihe}
+            elif umschlag and ist_anzeige(text):
+                nummern = artikelnummern(text)
+                sammlung = reihe_der_sammlung(text)
+                if sammlung:
+                    ziel = {"kind": "series", "publicationSlug": sammlung}
+                elif len(nummern) == 1:
+                    ziel = {
+                        "kind": "shop",
+                        "reference": nummern[0],
+                        "queries": suchbegriffe(titel, text),
+                    }
+                else:
+                    ziel = {"kind": "shop", "queries": suchbegriffe(titel, text)}
+            if ziel is None:
                 behalten.append(a)
                 continue
             seiten = sorted({r["pageIndex"] for r in a["regions"]} or {a["pageStart"]})
@@ -273,16 +296,16 @@ class Job:
                         "y0": round(box[1], 5),
                         "x1": round(box[2], 5),
                         "y1": round(box[3], 5),
-                        "kind": "subscription",
-                        "publicationSlug": reihe,
-                        "label": (a.get("title") or "")[:120],
+                        **ziel,
+                        "label": titel[:120],
                     }
                 )
         if links:
             log(
-                "job.aboLinks",
+                "job.pageLinks",
                 jobId=self.job_id,
                 links=len(links),
+                kinds=sorted({l["kind"] for l in links}),
                 dropped=len(payload_articles) - len(behalten),
             )
         return behalten, links

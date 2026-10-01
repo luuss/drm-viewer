@@ -138,7 +138,7 @@ def test_abo_aufruf_wird_seitenlink_statt_artikel():
         "blocks": [{"text": "Polen verleibte sich 1945 " + "Text " * 900}],
         "regions": [{"pageIndex": 6, "x0": 0.1, "y0": 0.1, "x1": 0.9, "y1": 0.9, "kind": "body"}],
     }
-    behalten, links = worker.Job._abo_links(stub, [abo, artikel, innen])
+    behalten, links = worker.Job._seitenlinks(stub, [abo, artikel, innen])
     assert [a["order"] for a in behalten] == [3]
     assert links == [
         {"pageIndex": 1, "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0, "kind": "subscription",
@@ -146,3 +146,30 @@ def test_abo_aufruf_wird_seitenlink_statt_artikel():
         {"pageIndex": 40, "x0": 0.5, "y0": 0.6, "x1": 0.95, "y1": 0.95, "kind": "subscription",
          "publicationSlug": "zuerst", "label": "Jetzt abonnieren"},
     ]
+
+
+def test_umschlaganzeigen_werden_ladenlinks_je_nach_inhalt():
+    stub = _Stub()
+    stub.data = {"publicationSlug": "dmz"}
+    stub._cover_pages = {1, 82, 83}
+
+    def tafel(seite, titel, text):
+        return {"order": 9, "title": titel, "pageStart": seite, "pageEnd": seite,
+                "blocks": [{"text": text}],
+                "regions": [{"pageIndex": seite, "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0, "kind": "other"}]}
+
+    einzeln = tafel(1, "Das Ritterkreuz", "Das Ritterkreuz. 216 S., geb., € 24,80. Art. 101208. Jetzt bestellen.")
+    sammlung = tafel(82, "Ihre Sammlung", "Bibliothek der Tapfersten: Heft 1 Art. 478003, Heft 2 Art. 478016, "
+                     "je t 13,80. Bibliothek der Tapfersten, Schwerterträger. Bestellen Sie nach.")
+    mehrere = tafel(83, "Der Historiker, für den nur Fakten zählen",
+                    "Stefan Scheil: Polens Zwischenkrieg, 320 S., € 29,80. Stefan Scheil: Der Oberste "
+                    "Kriegsrat, 320 S., € 29,80. DMZ-Versand.")
+    orden = tafel(83, "Auszeichnungen", "Eisernes Kreuz 2. Klasse (1914), Pour le Mérite (1918).")
+    behalten, links = worker.Job._seitenlinks(stub, [einzeln, sammlung, mehrere, orden])
+    assert [a["title"] for a in behalten] == ["Auszeichnungen"]
+    assert [(l["kind"], l.get("reference"), l.get("publicationSlug"), l.get("queries", [])[:2]) for l in links] == [
+        ("shop", "101208", None, ["Das Ritterkreuz", "Ritterkreuz"]),
+        ("series", None, "schwertertraeger", []),
+        ("shop", None, None, ["Stefan Scheil", "Der Historiker, für den nur Fakten zählen"]),
+    ]
+    assert all(l["x1"] == 1.0 and l["y1"] == 1.0 for l in links)

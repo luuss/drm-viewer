@@ -355,9 +355,20 @@ export default defineSchema(
     issueId: v.id("issues"),
     pageIndex: v.number(),
     ...regionBox,
-    kind: v.union(v.literal("subscription"), v.literal("url")),
+    // `series`: Kategorie einer Reihe (Sammelanzeige), `shop`: Produkt oder
+    // Suche im Laden — `queries` und `reference` sagen, wonach, `url` ist
+    // das aufgeloeste Ziel (pageLinks.resolveInternal).
+    kind: v.union(
+      v.literal("subscription"),
+      v.literal("series"),
+      v.literal("shop"),
+      v.literal("url"),
+    ),
     publicationSlug: v.optional(v.string()),
     url: v.optional(v.string()),
+    queries: v.optional(v.array(v.string())),
+    reference: v.optional(v.string()),
+    resolvedAt: v.optional(v.number()),
     label: v.optional(v.string()),
     source: v.union(v.literal("import"), v.literal("editor")),
   }).index("by_issue", ["issueId"]),
