@@ -117,7 +117,7 @@ export default function SearchPage() {
                               </span>
                             )}
                           </span>
-                          {e.page && <span className="page">S. {e.page}</span>}
+                          {e.page && <span className="seite">S. {e.page}</span>}
                         </li>
                       ))}
                       {h.more > 0 && <li className="more">+ {h.more}</li>}
