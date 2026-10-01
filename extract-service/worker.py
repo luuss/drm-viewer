@@ -59,6 +59,7 @@ from extractor.idml_articles import (
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
+from extractor.rubriken import seitenrubriken, stehende_rubrik, titel_bereinigen
 from extractor.toc_layout import (
     refine_toc_hints,
     text_items_from_pdf,
@@ -196,6 +197,34 @@ class Job:
         else:
             articles = assemble(blocks, images, toc_hints=toc_hints)
             quelle = "pdf"
+        # Stehende Rubriken (Editorial, Impressum, Historischer Kalender)
+        # haben im Satz oft keine Ueberschrift und hiessen nach ihrer ersten
+        # Zeile. Sie heissen nach ihrer Rubrik — aus dem Verzeichnis oder der
+        # Seitenrubrik.
+        rubriken = seitenrubriken(blocks)
+        verzeichnis = {}
+        for h in toc_hints:
+            verzeichnis.setdefault(h.page_index, h.label)
+        # Je Seite bekommt nur der erste Text ohne Ueberschrift den Namen der
+        # Rubrik; drei Buchbesprechungen hiessen sonst alle gleich.
+        vergeben: set[tuple[int, str]] = set()
+        gesehen: set[int] = set()
+        for a in articles:
+            seite = a.pages[0]
+            neu = titel_bereinigen(
+                a.title,
+                aus_text=a.title_from_body,
+                seitenrubrik=rubriken.get(seite),
+                verzeichnis=verzeichnis.get(seite),
+                erster_auf_seite=seite not in gesehen,
+            )
+            gesehen.add(seite)
+            if neu != a.title:
+                kern = (stehende_rubrik(neu) or neu).lower()
+                if (seite, kern) in vergeben:
+                    continue
+                vergeben.add((seite, kern))
+                a.title = neu
         log(
             "job.assembled",
             jobId=self.job_id,
@@ -952,6 +981,37 @@ class Job:
                     }
                 )
             out.append(entry)
+
+        # Stehende Rubriken stehen im Verzeichnis, auch wenn das gedruckte
+        # sie nicht nennt (das Editorial der DMZ) — ohne Klickflaeche, an
+        # ihrer Stelle in der Seitenfolge.
+        belegt = {e.get("articleOrder") for e in out}
+        for index, article in enumerate(articles):
+            if index + 1 in belegt or not article.pages:
+                continue
+            if stehende_rubrik(article.title) == article.title:
+                # Nennt das Verzeichnis die Rubrik auf dieser oder der
+                # naechsten Seite schon ("Leserbriefe/Impressum 81", die Briefe
+                # beginnen auf 80), braucht es keinen zweiten Eintrag.
+                seite = article.pages[0]
+                if any(
+                    e.get("pageIndex") in (seite, seite + 1)
+                    and article.title.lower() in e["label"].lower()
+                    for e in out
+                ):
+                    continue
+                out.append(
+                    {
+                        "order": 0,
+                        "label": article.title,
+                        "pageIndex": article.pages[0],
+                        "level": 1,
+                        "articleOrder": index + 1,
+                    }
+                )
+        out.sort(key=lambda e: (e.get("pageIndex", 0), e["order"]))
+        for i, e in enumerate(out, start=1):
+            e["order"] = i
         return out
 
     # Bildrahmen und platziertes Bild duerfen sich im Seitenverhaeltnis um

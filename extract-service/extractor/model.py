@@ -211,6 +211,10 @@ class AssembledArticle:
     author: str | None = None
     teaser: str | None = None
     confidence: float = 1.0
+    # Der Titel ist die erste Zeile des Textes, weil der Satz keine
+    # Ueberschrift hat (Editorial, Impressum). Dann darf ihn die Rubrik
+    # ersetzen (rubriken.titel_bereinigen).
+    title_from_body: bool = False
 
     @property
     def pages(self) -> list[int]:

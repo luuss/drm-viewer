@@ -422,6 +422,7 @@ def artikel_aus_satz(
                 eigene.append(_als(b, "lead"))
         eigene.extend(story.blocks)
 
+        aus_text = False
         if kopf:
             titel = _text(kopf)
         else:
@@ -434,6 +435,7 @@ def artikel_aus_satz(
                 in ("ueberschrift", "zwischentitel")
                 and len(erster.text) <= 120
             )
+            aus_text = not eigene_zeile
             if eigene_zeile:
                 titel = erster.text
                 eigene[eigene.index(erster)] = _als(erster, "heading")
@@ -460,6 +462,7 @@ def artikel_aus_satz(
             subtitle=_text(unter) if unter else None,
             author=autor,
             teaser=_text(einleitung) if einleitung else None,
+            title_from_body=not kopf and aus_text,
         )
         artikel.append(stueck)
         for seite in story.seiten:

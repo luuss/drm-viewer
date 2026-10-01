@@ -131,3 +131,48 @@ export const rebuildFromArticlesInternal = internalMutation({
     return articles.length;
   },
 });
+
+/**
+ * Einen Eintrag ohne Anmeldung einfuegen — fuer Werkzeuge mit
+ * Deploy-Schluessel. Er reiht sich nach seiner Seite ein; die Folge wird neu
+ * durchnummeriert.
+ */
+export const insertInternal = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    label: v.string(),
+    pageIndex: v.number(),
+    articleId: v.optional(v.id("articles")),
+    section: v.optional(v.string()),
+  },
+  handler: async (ctx, { issueId, label, pageIndex, articleId, section }) => {
+    const rows = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
+      .collect();
+    const id = await ctx.db.insert("tocEntries", {
+      issueId,
+      order: 0,
+      label: label.slice(0, 300),
+      section,
+      pageIndex,
+      articleId,
+      level: 1,
+    });
+    const alle = [...rows, { _id: id, order: 0, pageIndex }];
+    // Erst nach Seite, bei gleicher Seite ein neuer Eintrag hinter den alten.
+    alle.sort((a, b) => (a.pageIndex ?? 0) - (b.pageIndex ?? 0) || (a.order || Infinity) - (b.order || Infinity));
+    for (const [i, e] of alle.entries()) {
+      if (e.order !== i + 1) await ctx.db.patch(e._id, { order: i + 1 });
+    }
+    return id;
+  },
+});
+
+/** Beschriftung eines Eintrags ohne Anmeldung setzen — fuer Werkzeuge mit Deploy-Schluessel. */
+export const setLabelInternal = internalMutation({
+  args: { entryId: v.id("tocEntries"), label: v.string() },
+  handler: async (ctx, { entryId, label }) => {
+    await ctx.db.patch(entryId, { label: label.trim().slice(0, 300) });
+  },
+});

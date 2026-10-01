@@ -701,6 +701,25 @@ export const moveRegion = mutation({
  * freigegeben ist, wird mit der Ausgabe sichtbar — und Aenderungen daran sind
  * bei einer veroeffentlichten Ausgabe sofort live.
  */
+/** Titel ohne Anmeldung setzen — fuer Werkzeuge mit Deploy-Schluessel (`npx convex run`). */
+export const setTitleInternal = internalMutation({
+  args: { articleId: v.id("articles"), title: v.string() },
+  handler: async (ctx, { articleId, title }) => {
+    const article = await ctx.db.get(articleId);
+    if (!article) return;
+    const neu = title.trim().slice(0, 300);
+    // Der Suchtext beginnt mit dem Titel; er folgt mit.
+    const rest = article.searchText.startsWith(article.title)
+      ? article.searchText.slice(article.title.length)
+      : "\n\n" + article.searchText;
+    await ctx.db.patch(articleId, {
+      title: neu,
+      searchText: (neu + rest).slice(0, 100000),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /** Freigabe ohne Anmeldung — fuer Werkzeuge mit Deploy-Schluessel (`npx convex run`). */
 export const setReviewStatusInternal = internalMutation({
   args: {
