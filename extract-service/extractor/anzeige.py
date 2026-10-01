@@ -63,6 +63,11 @@ def ist_anzeige(text: str, min_marker: int = 2) -> bool:
     return bool(_PREIS.search(text)) and bool(_KONTAKT.search(text))
 
 
+def preise(text: str) -> int:
+    """Wie viele Preise die Anzeige nennt — einer: ein Produkt, mehrere: eine Liste."""
+    return len(_PREIS.findall(text))
+
+
 def artikelnummern(text: str) -> list[str]:
     """Alle verschiedenen Artikelnummern im Text, in Reihenfolge."""
     gesehen: list[str] = []

@@ -50,6 +50,7 @@ export const pageLinkInput = v.object({
   url: v.optional(v.string()),
   queries: v.optional(v.array(v.string())),
   reference: v.optional(v.string()),
+  single: v.optional(v.boolean()),
   label: v.optional(v.string()),
 });
 
@@ -64,6 +65,7 @@ type PageLinkInput = {
   url?: string;
   queries?: string[];
   reference?: string;
+  single?: boolean;
   label?: string;
 };
 
@@ -210,9 +212,75 @@ export const listUnresolvedInternal = internalQuery({
       .collect();
     return rows
       .filter((r) => r.kind === "shop" && !r.url)
-      .map((r) => ({ id: r._id, queries: r.queries ?? [], reference: r.reference ?? null }));
+      .map((r) => ({
+        id: r._id,
+        queries: r.queries ?? [],
+        reference: r.reference ?? null,
+        single: r.single ?? false,
+      }));
   },
 });
+
+/** Einzelne Felder einer Flaeche setzen — fuer Werkzeuge mit Deploy-Schluessel. */
+export const setFieldsInternal = internalMutation({
+  args: {
+    id: v.id("pageLinks"),
+    single: v.optional(v.boolean()),
+    url: v.optional(v.string()),
+    queries: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, { id, ...felder }) => {
+    const patch: Record<string, unknown> = {};
+    for (const [k, wert] of Object.entries(felder)) if (wert !== undefined) patch[k] = wert;
+    await ctx.db.patch(id, patch);
+  },
+});
+
+/** Die Aufloesung der `shop`-Flaechen eines Hefts verwerfen, damit sie neu laeuft. */
+export const clearResolvedInternal = internalMutation({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    const rows = await ctx.db
+      .query("pageLinks")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    let n = 0;
+    for (const r of rows) {
+      if (r.kind === "shop" && r.url) {
+        await ctx.db.patch(r._id, { url: undefined, resolvedAt: undefined });
+        n++;
+      }
+    }
+    return n;
+  },
+});
+
+/**
+ * Welche Suche eine Anzeige am besten zeigt.
+ *
+ * Eine Anzeige fuer ein Produkt (`single`): der erste Begriff, der genau ein
+ * Produkt trifft, fuehrt auf dessen Seite; sonst die Suchseite des ersten
+ * Begriffs mit Treffern. Eine Sammelanzeige fuehrt auf eine Liste: der
+ * Begriff mit den meisten Treffern — ein mehrwortiger Begriff (der
+ * Verfasser) geht vor, sobald er drei Treffer hat, damit nicht ein
+ * einzelnes Wort mit allem Moeglichen gewinnt.
+ */
+export function chooseTarget(
+  treffer: { q: string; products: ShopProduct[] }[],
+  single: boolean,
+): string | null {
+  if (!treffer.length) return null;
+  if (single) {
+    const einziges = treffer.map((t) => chooseProduct(t.products)).find((p) => p);
+    return einziges ? einziges.url : searchUrl(treffer[0].q);
+  }
+  const brauchbar = (t: { products: ShopProduct[] }) =>
+    t.products.filter((p) => p.active && isShopUrl(p.url)).length;
+  const mehrwortig = treffer.find((t) => t.q.trim().includes(" ") && brauchbar(t) >= 3);
+  if (mehrwortig) return searchUrl(mehrwortig.q);
+  const meiste = [...treffer].sort((a, b) => brauchbar(b) - brauchbar(a))[0];
+  return brauchbar(meiste) > 0 ? searchUrl(meiste.q) : searchUrl(treffer[0].q);
+}
 
 export const setUrlInternal = internalMutation({
   args: { id: v.id("pageLinks"), url: v.string() },
@@ -226,11 +294,10 @@ const RETRY_DELAYS_MS = [5 * 60_000, 30 * 60_000, 2 * 3_600_000];
 /**
  * Die `shop`-Flaechen eines Hefts im Laden aufloesen.
  *
- * Erst die Artikelnummer. Dann die Suchbegriffe: trifft einer genau ein
- * Produkt, ist das die Produktseite; sonst zaehlt der erste Begriff, zu dem
- * der Laden etwas findet, mit seiner Suchseite. Findet der Laden zu keinem
- * Begriff etwas, bleibt die Flaeche bei der Suchseite des ersten Begriffs
- * (`zielAdresse`). Antwortet der Laden nicht, kommt der Lauf spaeter wieder.
+ * Erst die Artikelnummer, dann die Suchbegriffe (`chooseTarget`). Findet
+ * der Laden zu keinem Begriff etwas, bleibt die Flaeche bei der Suchseite
+ * des ersten Begriffs (`zielAdresse`). Antwortet der Laden nicht, kommt der
+ * Lauf spaeter wieder.
  */
 export const resolveInternal = internalAction({
   args: { issueId: v.id("issues"), attempt: v.optional(v.number()) },
@@ -239,8 +306,12 @@ export const resolveInternal = internalAction({
       console.log("pageLinks: SHOP_WEBHOOK_SECRET fehlt, keine Aufloesung im Laden");
       return null;
     }
-    const rows: { id: Id<"pageLinks">; queries: string[]; reference: string | null }[] =
-      await ctx.runQuery(internal.pageLinks.listUnresolvedInternal, { issueId });
+    const rows: {
+      id: Id<"pageLinks">;
+      queries: string[];
+      reference: string | null;
+      single: boolean;
+    }[] = await ctx.runQuery(internal.pageLinks.listUnresolvedInternal, { issueId });
     let resolved = 0;
     const cache = new Map<string, ShopProduct[]>();
     const search = async (q: string): Promise<ShopProduct[]> => {
@@ -260,9 +331,7 @@ export const resolveInternal = internalAction({
             const products = await search(q);
             if (products.length) treffer.push({ q, products });
           }
-          const einziges = treffer.map((t) => chooseProduct(t.products)).find((p) => p);
-          if (einziges) url = einziges.url;
-          else if (treffer.length) url = searchUrl(treffer[0].q);
+          url = chooseTarget(treffer, row.single);
         }
         if (url) {
           await ctx.runMutation(internal.pageLinks.setUrlInternal, { id: row.id, url });

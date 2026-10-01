@@ -2,7 +2,13 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { internal } from "./_generated/api";
-import { chooseProduct, defaultSubscriptionUrl, searchUrl, seriesUrl } from "./pageLinks";
+import {
+  chooseProduct,
+  chooseTarget,
+  defaultSubscriptionUrl,
+  searchUrl,
+  seriesUrl,
+} from "./pageLinks";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -111,5 +117,53 @@ describe("Seitenlinks", () => {
     expect(chooseProduct([produkt(1, "101208"), produkt(2, "101209")], "101209")?.id).toBe(2);
     expect(chooseProduct([produkt(1, "101208", false)])).toBeNull();
     expect(chooseProduct([])).toBeNull();
+  });
+
+  test("Einzelanzeige zur Produktseite, Sammelanzeige zur Liste", () => {
+    const produkt = (id: number) => ({
+      id,
+      name: `Buch ${id}`,
+      reference: String(100000 + id),
+      priceCents: 2980,
+      url: `https://lesenundschenken.de/${id}-buch.html`,
+      coverUrl: null,
+      manufacturer: "",
+      active: true,
+      digital: null,
+    });
+    const viele = (n: number) => Array.from({ length: n }, (_, i) => produkt(i + 1));
+    // Ein Buch: der Titel trifft genau eines.
+    expect(
+      chooseTarget(
+        [
+          { q: "Ulrich Steinmetz", products: viele(3) },
+          { q: "Zeugen deutscher Geschichte", products: [produkt(9)] },
+        ],
+        true,
+      ),
+    ).toBe("https://lesenundschenken.de/9-buch.html");
+    // Mehrere Buecher eines Verfassers: seine Liste, nicht das eine Buch, das
+    // ein einzelnes Wort zufaellig trifft.
+    expect(
+      chooseTarget(
+        [
+          { q: "Stefan Scheil", products: viele(8) },
+          { q: "Der Historiker", products: [produkt(4)] },
+          { q: "Historiker", products: viele(20) },
+        ],
+        false,
+      ),
+    ).toBe(searchUrl("Stefan Scheil"));
+    // Sammelanzeige ohne Verfasser: der Begriff mit den meisten Treffern.
+    expect(
+      chooseTarget(
+        [
+          { q: "Bücher zur Geschichte der Waffen-SS", products: [produkt(1)] },
+          { q: "Waffen-SS", products: viele(12) },
+        ],
+        false,
+      ),
+    ).toBe(searchUrl("Waffen-SS"));
+    expect(chooseTarget([], true)).toBeNull();
   });
 });

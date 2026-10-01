@@ -29,6 +29,7 @@ from extractor.abo import abo_aufruf
 from extractor.anzeige import (
     artikelnummern,
     ist_anzeige,
+    preise,
     reihe_der_sammlung,
     suchbegriffe,
 )
@@ -266,14 +267,14 @@ class Job:
                 sammlung = reihe_der_sammlung(text)
                 if sammlung:
                     ziel = {"kind": "series", "publicationSlug": sammlung}
-                elif len(nummern) == 1:
+                else:
                     ziel = {
                         "kind": "shop",
-                        "reference": nummern[0],
                         "queries": suchbegriffe(titel, text),
+                        "single": len(nummern) == 1 or preise(text) == 1,
                     }
-                else:
-                    ziel = {"kind": "shop", "queries": suchbegriffe(titel, text)}
+                    if len(nummern) == 1:
+                        ziel["reference"] = nummern[0]
             if ziel is None:
                 behalten.append(a)
                 continue

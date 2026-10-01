@@ -368,6 +368,9 @@ export default defineSchema(
     url: v.optional(v.string()),
     queries: v.optional(v.array(v.string())),
     reference: v.optional(v.string()),
+    // Eine Anzeige mit genau einem Preis bewirbt ein Produkt; mehrere Preise
+    // sind eine Sammelanzeige, die auf eine Liste im Laden fuehrt.
+    single: v.optional(v.boolean()),
     resolvedAt: v.optional(v.number()),
     label: v.optional(v.string()),
     source: v.union(v.literal("import"), v.literal("editor")),
