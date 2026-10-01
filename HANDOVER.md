@@ -491,6 +491,35 @@ Zählung in der unteren Leiste lief eins neben den gedruckten Seitenzahlen.
 * Reader: nichts geändert. Mit U2 an Stelle 1 stimmen Paare (U2|3, 4|5 …,
   82|U3, U4 allein) und Zähler („Seite 3“ ist die gedruckte 3, U2 zeigt „U2“).
 
+## 4g. Stehende Rubriken: Titel und Verzeichnis (seit 01.10.2026)
+
+Editorial, Impressum, Historischer Kalender, Leserbriefe, Buchbesprechungen
+und die Kolumne haben im Satz meist keine Überschrift; als Artikel hießen sie
+nach ihrer ersten Zeile („Verehrter Leser, 80 Jahre nach …“).
+
+* `extractor/rubriken.py`: `stehende_rubrik` erkennt Anrede („Verehrter
+  Leser“ → Editorial), Leserbrief-Bezug („Zu „…“ in DMZ 169“ → Leserbriefe)
+  und Rubriknamen am Textanfang („Impressum Deutsche …“ → Impressum).
+  `titel_bereinigen` ersetzt einen Titel, der aus dem Text stammt
+  (`AssembledArticle.title_from_body`, gesetzt in `artikel_aus_satz`), durch
+  den Eintrag des gedruckten Verzeichnisses für die Seite („Claus-M.
+  Wolfschlag: Die Kolumne“) oder — nur für das Hauptstück der Seite — durch
+  die Seitenrubrik des Satzes („EDITORIAL“). Je Seite bekommt eine Rubrik nur
+  einen Artikel; drei Buchbesprechungen hießen sonst alle gleich.
+* `_build_toc_entries` legt für eine stehende Rubrik ohne Eintrag im
+  gedruckten Verzeichnis einen Eintrag an (ohne Klickfläche, an ihrer Stelle
+  in der Seitenfolge), außer die Seite oder die Folgeseite hat schon einen mit
+  dem Namen („Leserbriefe/Impressum 81“).
+* Bestand: `_scratch/umschlag/titel.py` (Probelauf ohne `--echt`) hat 13 Titel
+  berichtigt und vier Einträge ergänzt (Editorial in DMZ 170 und
+  DMZ-Zeitgeschichte 80, Historischer Kalender in DMZ 170, Leserbriefe in
+  ZUERST!); Greims Verzeichnis, das aus den Titeln entstand, folgt mit.
+  Werkzeuge: `articles:setTitleInternal`, `toc:insertInternal`,
+  `toc:setLabelInternal`.
+* Offen: Buchbesprechungen und Leserbriefe nach dem ersten je Seite behalten
+  ihre erste Zeile als Titel; bei der DMZ fehlt ihr dazu die Initiale
+  („eltgeschichte ist Kriegsgeschichte“), siehe 5.
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde
