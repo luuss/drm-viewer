@@ -337,15 +337,29 @@ def _image_score(article: AssembledArticle, img: SourceImage) -> float:
     Deshalb zaehlen drei Dinge, in dieser Reihenfolge:
     waagerechte Ueberdeckung (Spalte), senkrechter Abstand, und als
     Stichentscheid die Textmenge des Artikels auf der Seite.
+
+    Liegt der Satz vor, kennt er die Textrahmen. Ein Bild, das in einem
+    Rahmen steht (der Text laeuft darum herum), gehoert zu dessen Artikel —
+    auch wenn der Nachbar in derselben Spalte mehr Text hat. Auf einer
+    Meldungsseite mit fuenf kurzen Stuecken entscheidet sonst die Textmenge,
+    und das Kalenderblatt der kleinen Meldung landet beim grossen Nachbarn.
     """
     breite = max(img.x1 - img.x0, 1e-6)
+    bildflaeche = max((img.x1 - img.x0) * (img.y1 - img.y0), 1e-6)
     beste_ueberdeckung = 0.0
+    im_rahmen = 0.0
     kleinster_abstand = 1e9
     zeichen = 0
     for b in article.blocks:
         if b.page_index != img.page_index or b.kind == "caption":
             continue
         zeichen += b.char_count
+        kasten = getattr(b, "frame_box", None)
+        if kasten is not None:
+            innen = max(0.0, min(kasten[2], img.x1) - max(kasten[0], img.x0)) * max(
+                0.0, min(kasten[3], img.y1) - max(kasten[1], img.y0)
+            )
+            im_rahmen = max(im_rahmen, min(1.0, innen / bildflaeche))
         ueberdeckung = (min(b.x1, img.x1) - max(b.x0, img.x0)) / breite
         beste_ueberdeckung = max(beste_ueberdeckung, min(1.0, ueberdeckung))
         if b.y0 >= img.y1:
@@ -359,7 +373,12 @@ def _image_score(article: AssembledArticle, img: SourceImage) -> float:
     if beste_ueberdeckung <= 0 and kleinster_abstand > NEAR_GAP:
         return 0.0
     naehe = max(0.0, 1.0 - min(kleinster_abstand, NEAR_GAP) / NEAR_GAP)
-    return beste_ueberdeckung * 1.0 + naehe * 0.8 + min(1.0, zeichen / 1500) * 0.2
+    return (
+        beste_ueberdeckung * 1.0
+        + naehe * 0.8
+        + min(1.0, zeichen / 1500) * 0.2
+        + im_rahmen * 2.0
+    )
 
 
 def _attach_images(articles: list[AssembledArticle], images: list[SourceImage]) -> None:

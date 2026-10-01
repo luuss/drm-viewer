@@ -960,3 +960,108 @@ export const replaceForIssueInternal = internalMutation({
     return { ids };
   },
 });
+
+/**
+ * Bloecke, Flaechen und Bilder in einen anderen Artikel desselben Hefts
+ * ruecken — fuer Werkzeuge mit Deploy-Schluessel (`npx convex run`), wenn der
+ * Import eine Ueberschrift zum falschen Text oder ein Bild zum Nachbarn
+ * gelegt hat. Nichts wird geloescht: die Zeilen wechseln nur den Artikel.
+ * Verschobene Bloecke reihen sich hinter den vorhandenen ein (bei einem
+ * Tausch ganzer Textkoerper bleibt so ihre Folge), Bilder ordnen sich nach
+ * Seite und Lage, und der Suchtext aller beruehrten Artikel wird neu gebaut.
+ */
+export const moveContentInternal = internalMutation({
+  args: {
+    toArticleId: v.id("articles"),
+    blockIds: v.optional(v.array(v.id("articleBlocks"))),
+    regionIds: v.optional(v.array(v.id("articleRegions"))),
+    assetIds: v.optional(v.array(v.id("articleAssets"))),
+  },
+  handler: async (
+    ctx,
+    { toArticleId, blockIds = [], regionIds = [], assetIds = [] },
+  ) => {
+    const ziel = await ctx.db.get(toArticleId);
+    if (!ziel) throw new Error("Zielartikel nicht gefunden");
+    const beruehrt = new Set<Id<"articles">>([toArticleId]);
+    const bewegt = new Set<string>();
+
+    for (const id of blockIds) {
+      const row = await ctx.db.get(id);
+      if (!row) throw new Error(`Block ${id} nicht gefunden`);
+      if (row.issueId !== ziel.issueId) throw new Error("Block aus anderer Ausgabe");
+      beruehrt.add(row.articleId);
+      bewegt.add(id);
+      await ctx.db.patch(id, { articleId: toArticleId });
+    }
+    for (const id of regionIds) {
+      const row = await ctx.db.get(id);
+      if (!row) throw new Error(`Flaeche ${id} nicht gefunden`);
+      if (row.issueId !== ziel.issueId) throw new Error("Flaeche aus anderer Ausgabe");
+      beruehrt.add(row.articleId);
+      bewegt.add(id);
+      await ctx.db.patch(id, { articleId: toArticleId });
+    }
+    for (const id of assetIds) {
+      const row = await ctx.db.get(id);
+      if (!row) throw new Error(`Bild ${id} nicht gefunden`);
+      if (row.issueId !== ziel.issueId) throw new Error("Bild aus anderer Ausgabe");
+      beruehrt.add(row.articleId);
+      bewegt.add(id);
+      await ctx.db.patch(id, { articleId: toArticleId });
+    }
+
+    for (const articleId of beruehrt) {
+      const blocks = await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_article", (q) => q.eq("articleId", articleId))
+        .collect();
+      // Zugezogene hinter die vorhandenen, in ihrer alten Folge.
+      blocks.sort(
+        (a, b) =>
+          Number(bewegt.has(a._id)) - Number(bewegt.has(b._id)) || a.order - b.order,
+      );
+      for (const [i, b] of blocks.entries()) {
+        if (b.order !== i + 1) await ctx.db.patch(b._id, { order: i + 1 });
+      }
+      const regions = await ctx.db
+        .query("articleRegions")
+        .withIndex("by_article", (q) => q.eq("articleId", articleId))
+        .collect();
+      regions.sort(
+        (a, b) =>
+          Number(bewegt.has(a._id)) - Number(bewegt.has(b._id)) ||
+          (a.order ?? 0) - (b.order ?? 0),
+      );
+      for (const [i, r] of regions.entries()) {
+        if (r.order !== i) await ctx.db.patch(r._id, { order: i });
+      }
+      const assets = await ctx.db
+        .query("articleAssets")
+        .withIndex("by_article", (q) => q.eq("articleId", articleId))
+        .collect();
+      assets.sort(
+        (a, b) =>
+          (a.sourcePageIndex ?? 0) - (b.sourcePageIndex ?? 0) ||
+          (a.sourceY ?? 0) - (b.sourceY ?? 0) ||
+          a.order - b.order,
+      );
+      for (const [i, x] of assets.entries()) {
+        if (x.order !== i) await ctx.db.patch(x._id, { order: i });
+      }
+      await rebuildSearchText(ctx, articleId);
+    }
+    return { articles: beruehrt.size, moved: bewegt.size };
+  },
+});
+
+/** Blocktext ohne Anmeldung berichtigen — fuer Werkzeuge mit Deploy-Schluessel. */
+export const setBlockTextInternal = internalMutation({
+  args: { blockId: v.id("articleBlocks"), text: v.string() },
+  handler: async (ctx, { blockId, text }) => {
+    const block = await ctx.db.get(blockId);
+    if (!block) throw new Error("Block nicht gefunden");
+    await ctx.db.patch(blockId, { text });
+    await rebuildSearchText(ctx, block.articleId);
+  },
+});

@@ -12,7 +12,7 @@ from extractor.idml_articles import (  # noqa: E402
     rolle_fuer,
     stories_bilden,
 )
-from extractor.model import SourceBlock  # noqa: E402
+from extractor.model import SourceBlock, SourceImage  # noqa: E402
 
 
 def block(
@@ -281,3 +281,37 @@ def test_deckungsgleiche_rahmen_bleiben_beide():
     a = _Rahmen(0, 0.486, 0.867, 0.853, 0.933)
     b = _Rahmen(0, 0.486, 0.867, 0.853, 0.933)
     assert ohne_unterlagen([a, b], [], {}) == [a, b]
+
+
+def test_zeilen_finden_ihren_text_in_der_eigenen_spalte():
+    """Meldungsseite in zwei Spalten: die Zeile links oben gehoert zum Text links."""
+    blocks = [
+        block("Richterbund: Neue Asylklagewelle droht", story="k1", style="Kleine Überschrift rot", page=3, y0=0.06, x0=0.05),
+        block("Der Deutsche Richterbund hält die Reform " + "x" * 700, story="t1", style="Mengentext mit Initiale", page=3, y0=0.10, x0=0.05),
+        block("BAMF widerruft Status fast nie", story="k2", style="Kleine Überschrift rot", page=3, y0=0.07, x0=0.36),
+        block("Das Bundesamt für Migration " + "y" * 700, story="t2", style="Mengentext mit Initiale", page=3, y0=0.09, x0=0.37),
+    ]
+    artikel = artikel_aus_satz(blocks)
+    paare = {a.title: a.blocks[-1].text[:12] for a in artikel}
+    assert paare == {
+        "Richterbund: Neue Asylklagewelle droht": "Der Deutsche",
+        "BAMF widerruft Status fast nie": "Das Bundesam",
+    }
+
+
+def test_bild_im_rahmen_der_kleinen_meldung_bleibt_dort():
+    """Zwei Meldungen untereinander in einer Spalte: das Kalenderblatt steht im
+    Rahmen der kleinen unteren, auch wenn die obere viel mehr Text hat."""
+    blocks = [
+        block("Georg Hurdelbrink wird Untersturmführer", story="k1", style="Kleine Überschrift rot", page=3, y0=0.06, x0=0.05),
+        block("Am 20. April 1942 wurde Georg " + "x" * 2000, story="t1", style="Mengentext mit Initiale", page=3, y0=0.10, x0=0.05),
+        block("Albert Hektor gefallen", story="k2", style="Kleine Überschrift rot", page=3, y0=0.62, x0=0.05),
+        block("Während der schweren Abwehrkämpfe " + "y" * 400, story="t2", style="Mengentext mit Initiale", page=3, y0=0.66, x0=0.05),
+    ]
+    # Der obere Rahmen reicht bis 0.60, der untere von 0.66 bis 0.95.
+    blocks[1].frame_box = (0.05, 0.10, 0.45, 0.60)
+    blocks[3].frame_box = (0.05, 0.66, 0.45, 0.95)
+    kalenderblatt = SourceImage(page_index=3, x0=0.05, y0=0.66, x1=0.19, y1=0.75)
+    artikel = artikel_aus_satz(blocks, [kalenderblatt])
+    bilder = {a.title: len(a.images) for a in artikel}
+    assert bilder == {"Georg Hurdelbrink wird Untersturmführer": 0, "Albert Hektor gefallen": 1}

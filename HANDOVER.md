@@ -559,6 +559,43 @@ einen Satz des Artikels wiederholen.
 
 ---
 
+## 4i. Meldungsseiten: Zeile, Text und Bild in derselben Spalte (seit 01.10.2026)
+
+Auf einer Seite mit vier kurzen Meldungen in zwei Spalten bekam die Zeile
+links oben den Text rechts oben (ZUERST! S. 6: „Richterbund“ trug den
+BAMF-Text und umgekehrt), und ein Bild im Rahmen der kleinen Meldung landete
+beim großen Nachbarn in derselben Spalte (Kalenderblätter der DMZ-Zeitgeschichte,
+Buchtitel bei den Besprechungen, das Arbeitsamt-Foto in ZUERST!).
+
+* `idml_articles._kopf_zuordnen`: erst die Seite, dann die **Spalte** (Text
+  beginnt fast bündig unter der Zeile, `SPALTEN_TOLERANZ` 0,08 Seitenbreite),
+  dann der Abstand. Vorher zählte nur der Abstand, und die Zeile links oben
+  liegt der rechten Spalte in der Höhe näher als ihrem eigenen Text.
+* `article_assembler._image_score`: ein Bild, das **im Textrahmen** eines
+  Artikels steht (der Text läuft darum herum), gehört zu diesem Artikel —
+  Rahmendeckung zählt doppelt so viel wie alles andere. Vorher entschied bei
+  gleicher Spalte die Textmenge auf der Seite, also der große Nachbar.
+* Tests: `test_zeilen_finden_ihren_text_in_der_eigenen_spalte`,
+  `test_bild_im_rahmen_der_kleinen_meldung_bleibt_dort`.
+* Prüfung über den ganzen Bestand (`_scratch/bilder-zuordnung/`): `vergleich.py`
+  wertet den Satz neu aus und vergleicht Textkörper und Bildmengen je Artikel
+  mit dem Live-Stand, `geometrie.py` prüft jedes Bild gegen die Textrahmen der
+  Nachbarn (nach dem Fix 0 Verdachtsfälle bei 548 Bildern). Nachgesehen am
+  gerenderten Druckbild (`pdftoppm`).
+* Bestand berichtigt mit `reparieren.py --echt` über zwei neue Funktionen,
+  **ohne Löschen**: `articles:moveContentInternal` rückt Blöcke, Flächen und
+  Bildzeilen in einen anderen Artikel desselben Hefts (Reihenfolge und
+  Suchtext werden neu gebaut), `articles:setBlockTextInternal` berichtigt einen
+  Blocktext. Ergebnis: 3 vertauschte Paare in ZUERST! (S. 6, 33, 63) getauscht,
+  14 Bilder in 16 Artikeln umgehängt (ZUERST! 6, DMZ 170 1, DMZ-Zeitgeschichte 7),
+  dazu 21 Absätze der DMZ 170, denen seit dem alten Import die Initiale fehlte
+  („ie Schlacht von Waterloo“ → „Die Schlacht …“). Danach: kein Artikel mehr
+  mit fremdem Text oder fremdem Bild; die fünf Bilder, die ein Artikel laut
+  Satz noch „zu wenig“ hat, sind Doppelte derselben Vorlage (Aufmacher über
+  die Doppelseite, Bücherstapel), die der Import absichtlich nur einmal speichert.
+
+---
+
 ## 5. Was in dieser Sitzung gebaut wurde
 
 * **Eine Story ist ein Artikel.** Der Satz wird direkt gelesen statt über

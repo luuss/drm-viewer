@@ -315,6 +315,9 @@ def _titel_kandidaten(stories: list[Story], rolle: str) -> list[Story]:
 # Wie weit vor dem Text eine Ueberschrift stehen darf. Ein Aufmacher bringt
 # die Zeile auf der linken Seite, der Text beginnt rechts daneben.
 VORLAUF_SEITEN = 1
+# So weit duerfen Zeile und Text seitlich auseinanderliegen und noch in
+# derselben Spalte stehen (Anteil der Seitenbreite).
+SPALTEN_TOLERANZ = 0.08
 
 
 def _kopf_zuordnen(
@@ -326,8 +329,13 @@ def _kopf_zuordnen(
     einem Aufmacher steht sie auf der linken Seite und der Text beginnt erst
     rechts. Die Hoehe auf der Seite taugt nicht als Reihenfolge: die
     Textspalte beginnt oft ein paar Millimeter ueber der Zeile, weil ihr
-    Rahmen bis an den Satzspiegel reicht. Deshalb zaehlt die Seite, und
-    innerhalb einer Seite der kleinste Abstand.
+    Rahmen bis an den Satzspiegel reicht. Deshalb zaehlt die Seite, dann die
+    Spalte, dann der Abstand.
+
+    Die Spalte zuerst: auf einer Meldungsseite stehen vier Zeilen und vier
+    Texte in zwei Spalten; die Zeile links oben und der Text rechts oben
+    liegen in der Hoehe naeher beieinander als Zeile und Text derselben
+    Spalte. Der Text einer Zeile beginnt in ihrer Spalte, unter ihr.
     """
     zuordnung: dict[str, Story] = {}
     for kopf in sorted(kandidaten, key=lambda s: (s.erste_seite, s.oben, s.links)):
@@ -339,14 +347,23 @@ def _kopf_zuordnen(
         ]
         if not moeglich:
             continue
-        ziel = min(
-            moeglich,
-            key=lambda k: (
+
+        def passt(k: Story) -> tuple:
+            gleiche_seite = k.erste_seite == kopf.erste_seite
+            # Dieselbe Spalte: der Text beginnt (fast) buendig mit der Zeile
+            # und nicht ueber ihr.
+            gleiche_spalte = (
+                gleiche_seite
+                and abs(k.links - kopf.links) <= SPALTEN_TOLERANZ
+                and k.oben >= kopf.oben - SPALTEN_TOLERANZ
+            )
+            return (
                 k.erste_seite - kopf.erste_seite,
-                abs(k.oben - kopf.oben),
-                abs(k.links - kopf.links),
-            ),
-        )
+                0 if gleiche_spalte else 1,
+                abs(k.oben - kopf.oben) + abs(k.links - kopf.links),
+            )
+
+        ziel = min(moeglich, key=passt)
         zuordnung[ziel.story_id] = kopf
     return zuordnung
 
