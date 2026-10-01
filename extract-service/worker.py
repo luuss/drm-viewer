@@ -1245,21 +1245,35 @@ def _ohne_kopfzeilen(blocks, article) -> list:
     einmal gedruckt, liest sich das wie ein Versehen. Dasselbe gilt fuer
     eine Ueberschrift, die der Setzer in zwei Absaetze gebrochen hat ("50
     Prozent der Russen" / "sehen Deutschland als Feind"): der Titel traegt
-    beide Zeilen, im Text sind sie ueberfluessig. Ein Zitatkasten, der einen
-    Satz des Artikels wiederholt, ist ein Blickfang der Druckseite — im
-    Fliesstext eine Dopplung.
+    beide Zeilen, im Text sind sie ueberfluessig.
+
+    Streng: Eine Zeile faellt nur weg, wenn Titel, Unterzeile oder Vorspann
+    genau so beginnen — und eine folgende Zeile nur, wenn sie genau dort
+    weitermacht, wo die vorige aufhoerte. Eine Ueberschrift, deren Woerter
+    nur zufaellig im Titel vorkommen, bleibt. Ein Zitatkasten faellt nur weg,
+    wenn sein ganzer Text in einem Absatz des Artikels steht.
     """
-    kopf = [
-        _glatt(t) for t in (article.title, article.subtitle, article.teaser) if t
-    ]
+    # Was vom Kopf noch nicht durch eine Zeile abgedeckt ist, von vorn.
+    rest = {
+        name: _glatt(t)
+        for name, t in (
+            ("titel", article.title),
+            ("unterzeile", article.subtitle),
+            ("vorspann", article.teaser),
+        )
+        if t
+    }
     koerper = [_glatt(b.text) for b in blocks if b.kind not in ("box", "quote")]
     out = []
     for b in blocks:
         t = _glatt(b.text)
         if not t:
             continue
-        if b.kind in ("lead", "heading") and len(t) >= 3 and any(t in k for k in kopf):
-            continue
+        if b.kind in ("lead", "heading"):
+            treffer = next((k for k, r in rest.items() if r and r.startswith(t)), None)
+            if treffer is not None:
+                rest[treffer] = rest[treffer][len(t) :].lstrip()
+                continue
         if (
             b.kind in ("box", "quote")
             and len(t) >= 25

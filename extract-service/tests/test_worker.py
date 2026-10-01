@@ -454,6 +454,10 @@ def test_lesetext_wiederholt_den_kopf_nicht():
             block("Die Umfrage befragte 1.600 Personen in 50 Regionen.", "box"),
             # Eine Zwischenueberschrift mit Titelwort bleibt.
             block("Russen", "subheading"),
+            # Eine Ueberschrift, deren Woerter nur zufaellig im Titel stehen,
+            # bleibt: der Titel beginnt nicht so, und sie setzt nichts fort.
+            block("Deutschland als „Feind“", "heading"),
+            block("der Russen", "heading"),
         ],
     )
     texte = [b.text for b in worker._ohne_kopfzeilen(article.blocks, article)]
@@ -461,4 +465,6 @@ def test_lesetext_wiederholt_den_kopf_nicht():
         "Einer aktuellen Umfrage zufolge betrachten die Hälfte der Russen Deutschland als Feind.",
         "Die Umfrage befragte 1.600 Personen in 50 Regionen.",
         "Russen",
+        "Deutschland als „Feind“",
+        "der Russen",
     ]
