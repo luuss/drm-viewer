@@ -91,7 +91,7 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
           "Anmeldung mit der E-Mail-Adresse über den zugesandten Anmeldelink.",
           "Eingabe der Rechnungsadresse (beim ersten Kauf).",
           "Eingabe der Kartendaten oder Auswahl der gespeicherten Karte.",
-          "Ausdrückliche Zustimmung zum Beginn der Vertragsausführung vor Ablauf der Widerrufsfrist (siehe § 6).",
+          "Ausdrückliche Zustimmung zum Beginn der Vertragsausführung vor Ablauf der Widerrufsfrist für die Digitalausgaben dieses Kaufs (siehe § 6).",
           "Verbindliche Absendung der Bestellung durch Anklicken des Buttons „Jetzt zahlungspflichtig kaufen“.",
         ],
       },

@@ -33,7 +33,7 @@ const LEER: Adresse = { vorname: "", nachname: "", strasse: "", plz: "", ort: ""
 type Angebot = {
   betragCents: number;
   steuerCents: number;
-  positionen: { steuersatz: number | null }[];
+  positionen: { titel: string; steuersatz: number | null }[];
 };
 
 export type KasseProps = {
@@ -384,6 +384,14 @@ function KasseKonto({
           {waiver?.text ??
             "Ich stimme ausdrücklich zu, dass Sie vor Ablauf der Widerrufsfrist mit der Ausführung des Vertrags beginnen. Mir ist bekannt, dass ich durch diese Zustimmung mit Beginn der Ausführung des Vertrags mein Widerrufsrecht verliere."}{" "}
           (<Link to="/widerruf">Widerrufsbelehrung</Link>)
+          {angebot && (
+            <>
+              {" "}
+              Die Zustimmung gilt nur für{" "}
+              {angebot.positionen.length === 1 ? "die Digitalausgabe" : "die Digitalausgaben"}{" "}
+              dieses Kaufs: {angebot.positionen.map((p) => `„${p.titel}“`).join(", ")}.
+            </>
+          )}
         </span>
       </label>
 

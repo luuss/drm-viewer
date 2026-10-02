@@ -460,8 +460,16 @@ kaufPruefen ──────────────────────�
 setzt sie waehrend `validateOrder` in `LusdigitalLeserKauf::$verzicht`;
 `hookSendMailAlterTemplateVars` haengt sie als Kasten „Ihre Zustimmung zum
 vorzeitigen Beginn (Widerrufsverzicht)“ an die Bestellbestaetigung
-(§ 312f Abs. 3 BGB). Fehlen sie, steht dort der Standardwortlaut mit der
-Uhrzeit der Buchung.
+(§ 312f Abs. 3 BGB) und nennt darin nur die digitalen Positionen der
+Bestellung; ohne digitale Position kein Kasten. Fehlen die Felder, steht dort
+der Standardwortlaut mit der Uhrzeit der Buchung.
+
+Der Verzicht wird nur in der Kasse des Lesers abgefragt, und die verkauft nur
+Digitalausgaben (Leser: `issueShopSku` nur bei `shopDigital.offered`; Shop:
+`artikelFinden` nur Digital-Kombination oder virtuelles Produkt,
+`isVirtualCart`, sonst 409). Belegt wird er je Heft in `consents`. Der
+Netzladen selbst fragt keinen Verzicht ab; dort bleibt das Widerrufsrecht
+bestehen.
 
 Im Shop (`classes/LeserKauf.php`):
 
