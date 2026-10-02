@@ -83,6 +83,24 @@ BEIWERK_HOECHSTLAENGE = 120
 # So viel Text braucht eine Story, um als eigener Artikel zu gelten. Darunter
 # ist sie ein Kasten, eine Bildunterschrift oder ein Rest.
 ARTIKEL_MINDESTZEICHEN = 400
+# Eine Buchanzeige ist auch darunter ein eigener Artikel: Verfasser, Titel und
+# drei Saetze mit Umfang und Preis ("Bücher gegen den Zeitgeist", fuenfzehn
+# Buecher je Seite) kommen auf 250 bis 350 Zeichen. Ohne eigenen Artikel
+# gingen sie auf einer reinen Anzeigenseite ganz verloren.
+ANZEIGE_MINDESTZEICHEN = 150
+# Verfasser und Titel einer Anzeige stehen oft in eigenen Rahmen ohne
+# Absatzformat ueber der Beschreibung ("Stefan Scheil/Robert Owen / Die
+# russische Verschwörung"). Sie gehoeren dazu, wenn sie fast buendig darueber
+# in derselben Spalte stehen (Anteil der Seitenhoehe; im Satz 0,7 bis 1,1 %).
+# Der Kopf einer Anzeigenseite ("großer deutscher Soldaten", 2,5 % darueber)
+# oder einer Gruppe ("Unser Kalenderprogramm", ueber sechs Spalten) nicht.
+TITELRAHMEN_LUECKE = 0.015
+TITELRAHMEN_UEBERLAPPUNG = 0.01
+TITELRAHMEN_BREITE = 1.5
+TITELRAHMEN_HOECHSTZAHL = 3
+# Umfang einer Buchbeschreibung ("400 S.,", "256 Seiten,"); mit einem Preis
+# daneben ist der Text ein Buchangebot.
+_UMFANG = re.compile(r"(?<![\d.,])(?:\d{2,3}|\d\.\d{3})\s?(?:S\.|Seiten)\s?,")
 
 
 def rolle_fuer(style: str | None, text_laenge: int = 0) -> str:
@@ -228,6 +246,20 @@ class Story:
         if kaesten:
             return min(k[0] for k in kaesten)
         return min((b.x0 for b in erste), default=0.0)
+
+    @property
+    def rahmen(self) -> tuple[float, float, float, float]:
+        """Umriss aller Rahmen auf der ersten Seite."""
+        erste = [b for b in self.blocks if b.page_index == self.erste_seite]
+        kaesten = [b.frame_box or (b.x0, b.y0, b.x1, b.y1) for b in erste]
+        if not kaesten:
+            return (0.0, 0.0, 0.0, 0.0)
+        return (
+            min(k[0] for k in kaesten),
+            min(k[1] for k in kaesten),
+            max(k[2] for k in kaesten),
+            max(k[3] for k in kaesten),
+        )
 
     def rolle(self) -> str:
         """Rolle der Story: die Rolle mit den meisten Zeichen."""
@@ -380,6 +412,85 @@ def _erster_satz(text: str, laenge: int = 80) -> str:
     return f"{schnitt} …"
 
 
+def ist_buchanzeige(text: str) -> bool:
+    """Bietet der Text ein Buch an? Ein Preis mit Umfang oder Artikelnummer.
+
+    Ein Preis allein reicht nicht: das Impressum nennt den Abopreis, eine
+    Meldung den Auftragswert.
+    """
+    from .anzeige import _PREIS, _REFERENZ
+
+    return bool(_PREIS.search(text)) and bool(
+        _UMFANG.search(text) or _REFERENZ.search(text)
+    )
+
+
+def _ist_titelrahmen(story: Story) -> bool:
+    """Kurze Zeilen ohne Absatzformat, die keine Anschrift sind."""
+    from .anzeige import _KONTAKT
+
+    return (
+        story.rolle() == "beiwerk"
+        and all(
+            (b.style_name or "").lower() in OHNE_FORMAT
+            and len(b.text) <= BEIWERK_HOECHSTLAENGE
+            for b in story.blocks
+        )
+        and not _KONTAKT.search(_text(story))
+    )
+
+
+def _titelrahmen(anzeige: Story, frei: list[Story]) -> list[Story]:
+    """Die Rahmen ohne Format, die fast buendig ueber der Anzeige stehen.
+
+    Von unten nach oben: erst der Rahmen direkt ueber der Beschreibung, dann
+    der ueber diesem. Zurueck kommen sie in Lesereihenfolge.
+    """
+    gefunden: list[Story] = []
+    x0, oben, x1, _ = anzeige.rahmen
+    while len(gefunden) < TITELRAHMEN_HOECHSTZAHL:
+
+        def luecke(s: Story) -> float | None:
+            if s in gefunden or s.erste_seite != anzeige.erste_seite:
+                return None
+            sx0, _, sx1, sunten = s.rahmen
+            breite = min(sx1 - sx0, x1 - x0)
+            if breite <= 0 or min(sx1, x1) - max(sx0, x0) < breite / 2:
+                return None
+            if sx1 - sx0 > TITELRAHMEN_BREITE * (x1 - x0):
+                return None
+            abstand = oben - sunten
+            if not -TITELRAHMEN_UEBERLAPPUNG <= abstand <= TITELRAHMEN_LUECKE:
+                return None
+            return abstand
+
+        moeglich = [(luecke(s), s) for s in frei]
+        moeglich = [(a, s) for a, s in moeglich if a is not None]
+        if not moeglich:
+            break
+        naechster = min(moeglich, key=lambda m: m[0])[1]
+        gefunden.append(naechster)
+        oben = naechster.rahmen[1]
+    return list(reversed(gefunden))
+
+
+def _anzeigenzeilen(story: Story) -> str:
+    """Titel einer Anzeige aus ihren kurzen Anfangszeilen, ohne den Verfasser.
+
+    "Harry Lippmann" / "Militärmuseen in Deutschland" / "Informationsgeballt
+    …" ergibt "Militärmuseen in Deutschland". Ohne Format laesst sich der
+    Verfasser nicht vom Titel trennen; dann zaehlen alle kurzen Zeilen.
+    """
+    zeilen: list[str] = []
+    for b in story.blocks:
+        if len(b.text) > BEIWERK_HOECHSTLAENGE or len(zeilen) >= 3:
+            break
+        if rolle_fuer(b.style_name, len(b.text)) == "autor":
+            continue
+        zeilen.append(b.text.strip())
+    return " ".join(z for z in zeilen if z)
+
+
 def artikel_aus_satz(
     blocks: list[SourceBlock], images: list | None = None
 ) -> list[AssembledArticle]:
@@ -396,12 +507,31 @@ def artikel_aus_satz(
     Story und bleibt stehen.
     """
     stories = initialen_einsetzen(stories_bilden(blocks))
-    koerper = [
+    lang = [
         s
         for s in stories
         if s.rolle() == "mengentext" and s.textzeichen >= ARTIKEL_MINDESTZEICHEN
     ]
-    koerper.sort(key=lambda s: (s.erste_seite, s.oben, s.links))
+    # Kurze Buchanzeigen tragen Verfasser und Titel selbst; eine Ueberschrift
+    # der Seite ("ALT!" als Blickfang) bekommen sie nicht.
+    kurze_anzeigen = [
+        s
+        for s in stories
+        if s.rolle() == "mengentext"
+        and ANZEIGE_MINDESTZEICHEN <= s.textzeichen < ARTIKEL_MINDESTZEICHEN
+        and ist_buchanzeige(_text(s))
+    ]
+    koerper = sorted(lang + kurze_anzeigen, key=lambda s: (s.erste_seite, s.oben, s.links))
+    anzeigen = {s.story_id for s in koerper if ist_buchanzeige(_text(s))}
+    frei = [s for s in stories if _ist_titelrahmen(s)]
+    titelrahmen: dict[str, list[Story]] = {}
+    for story in koerper:
+        if story.story_id not in anzeigen:
+            continue
+        gefunden = _titelrahmen(story, frei)
+        if gefunden:
+            titelrahmen[story.story_id] = gefunden
+            frei = [s for s in frei if s not in gefunden]
 
     ueberschriften = _titel_kandidaten(stories, "ueberschrift")
     unterzeilen = _titel_kandidaten(stories, "unterzeile")
@@ -411,12 +541,14 @@ def artikel_aus_satz(
     kurze = [
         s
         for s in stories
-        if s.rolle() == "mengentext" and s.textzeichen < ARTIKEL_MINDESTZEICHEN
+        if s.rolle() == "mengentext"
+        and s.textzeichen < ARTIKEL_MINDESTZEICHEN
+        and s not in kurze_anzeigen
     ]
 
-    kopf_zu = _kopf_zuordnen(koerper, ueberschriften)
-    unter_zu = _kopf_zuordnen(koerper, unterzeilen)
-    einleitung_zu = _kopf_zuordnen(koerper, einleitungen)
+    kopf_zu = _kopf_zuordnen(lang, ueberschriften)
+    unter_zu = _kopf_zuordnen(lang, unterzeilen)
+    einleitung_zu = _kopf_zuordnen(lang, einleitungen)
 
     vergeben: set[str] = set()
     artikel: list[AssembledArticle] = []
@@ -438,10 +570,20 @@ def artikel_aus_satz(
             for b in einleitung.blocks:
                 eigene.append(_als(b, "lead"))
         eigene.extend(story.blocks)
+        rahmen = [] if kopf else titelrahmen.get(story.story_id, [])
+        eigene[0:0] = [_als(b, "heading") for r in rahmen for b in r.blocks]
 
         aus_text = False
         if kopf:
             titel = _text(kopf)
+        elif story.story_id in anzeigen and _anzeigenzeilen(story):
+            # Verfasser und Titel in der Anzeige selbst; ein Rahmen darueber
+            # ist dann ein Werbesatz ("Legionäre für Europa").
+            titel = _anzeigenzeilen(story)
+        elif rahmen:
+            # Sonst nennt der Rahmen direkt ueber der Beschreibung Verfasser
+            # und Titel, darueber steht der Werbesatz.
+            titel = _text(rahmen[-1])
         else:
             # Kurze Meldungen tragen ihre Zeile als ersten Absatz der eigenen
             # Story ("Philipp Wild geboren" im Kalenderblatt). Dann ist das

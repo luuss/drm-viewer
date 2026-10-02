@@ -315,3 +315,104 @@ def test_bild_im_rahmen_der_kleinen_meldung_bleibt_dort():
     artikel = artikel_aus_satz(blocks, [kalenderblatt])
     bilder = {a.title: len(a.images) for a in artikel}
     assert bilder == {"Georg Hurdelbrink wird Untersturmführer": 0, "Albert Hektor gefallen": 1}
+
+
+def rahmen(
+    text: str, *, story: str, style: str, box: tuple[float, float, float, float]
+) -> SourceBlock:
+    return SourceBlock(
+        page_index=80,
+        text=text,
+        x0=box[0],
+        y0=box[1],
+        x1=box[2],
+        y1=box[3],
+        kind="paragraph",
+        origin="idml",
+        story_id=story,
+        frame_id=f"{story}-rahmen",
+        style_name=style,
+        frame_box=box,
+    )
+
+
+OHNE = "$ID/NormalParagraphStyle"
+BESCHREIBUNG = (
+    "Wie Deutschland der Erste Weltkrieg aufgezwungen wurde. – "
+    + "Stefan Scheil ordnet das alles ein. " * 25
+)
+
+
+def test_titelzeilen_ueber_der_anzeige_gehoeren_dazu():
+    # DMZ 170, S. 80: Werbesatz, Verfasser und Titel stehen in eigenen
+    # Rahmen ohne Format ueber der Beschreibung; Anschrift und Kolumnentitel
+    # gehoeren nicht dazu.
+    blocks = [
+        rahmen("„Deutschland haßte den Krieg“", story="w", style=OHNE, box=(0.523, 0.087, 0.943, 0.114)),
+        rahmen("Stefan Scheil/Robert Owen", story="t", style=OHNE, box=(0.529, 0.125, 0.943, 0.167)),
+        rahmen("Die russische Verschwörung", story="t", style=OHNE, box=(0.529, 0.125, 0.943, 0.167)),
+        rahmen(BESCHREIBUNG, story="b", style=OHNE, box=(0.526, 0.174, 0.941, 0.507)),
+        rahmen("256 Seiten, viele s/w. Abb., geb. im Großformat. t 25,95", story="b", style=OHNE, box=(0.526, 0.174, 0.941, 0.507)),
+        rahmen("DMZ-Versand", story="v", style=OHNE, box=(0.638, 0.517, 0.943, 0.547)),
+        rahmen("Deutsche Militärzeitschrift Nr. 170", story="k", style=OHNE, box=(0.514, 0.956, 0.952, 0.972)),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert a.title == "Stefan Scheil/Robert Owen Die russische Verschwörung"
+    assert [b.text for b in a.blocks if b.kind == "heading"] == [
+        "„Deutschland haßte den Krieg“",
+        "Stefan Scheil/Robert Owen",
+        "Die russische Verschwörung",
+    ]
+    assert "DMZ-Versand" not in [b.text for b in a.blocks]
+
+
+def test_kopf_der_anzeigenseite_ist_kein_titel():
+    # Der Seitenkopf steht zu weit ueber der Anzeige, der Gruppenkopf ist
+    # viel breiter als sie.
+    blocks = [
+        rahmen("großer deutscher Soldaten", story="s", style=OHNE, box=(0.001, 0.075, 0.485, 0.133)),
+        rahmen("Unser Kalenderprogramm", story="g", style=OHNE, box=(0.0, 0.15, 0.95, 0.155)),
+        rahmen(BESCHREIBUNG, story="b", style=OHNE, box=(0.212, 0.158, 0.464, 0.33)),
+        rahmen("256 Seiten, geb. t 25,95", story="b", style=OHNE, box=(0.212, 0.158, 0.464, 0.33)),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert not [b for b in a.blocks if b.kind == "heading"]
+
+
+def test_kurze_buchanzeige_wird_eigener_artikel():
+    # "Sachbücher zur Militärgeschichte": fuenfzehn Anzeigen um 300 Zeichen
+    # auf einer Seite ohne Artikel. Frueher fielen sie ganz weg.
+    def anzeige(story: str, autor: str, titel: str, x: float) -> list[SourceBlock]:
+        box = (x, 0.217, x + 0.166, 0.342)
+        return [
+            rahmen(autor, story=story, style="Bücherseite Autor 2023", box=box),
+            rahmen(titel, story=story, style="Bücherseite Titel 2023", box=box),
+            rahmen(
+                "Informationsgeballt stellt der Band 700 Militärmuseen und "
+                "Festungsanlagen vor. Mit regionalen Übersichten für das "
+                "gezielte Anfahren. 400 S., viele farb. Abb., Pb. t 25,–",
+                story=story,
+                style="Bücherseite Text 2023",
+                box=box,
+            ),
+        ]
+
+    blocks = (
+        anzeige("a1", "Harry Lippmann", "Militärmuseen in Deutschland", 0.048)
+        + anzeige("a2", "Danny Bauer", "Heinrich Kling", 0.232)
+        # Ein kurzer Text ohne Preis bleibt ein Rest.
+        + [rahmen("Band II", story="r", style="Bücherseite Text 2023", box=(0.03, 0.05, 0.12, 0.1))]
+    )
+    artikel = artikel_aus_satz(blocks)
+    assert [a.title for a in artikel] == ["Militärmuseen in Deutschland", "Heinrich Kling"]
+    assert artikel[0].author == "Harry Lippmann"
+
+
+def test_impressum_ist_keine_buchanzeige():
+    from extractor.idml_articles import ist_buchanzeige
+
+    assert ist_buchanzeige("Militärmuseen. 400 S., viele farb. Abb., Pb. t 25,–")
+    assert ist_buchanzeige("Kalender Ritterkreuzträger. Art. 460691 t 14,90")
+    assert not ist_buchanzeige(
+        "Impressum. Postfach 52, Tel. 04384/5970. Jahresabo t 49,90 frei Haus."
+    )
