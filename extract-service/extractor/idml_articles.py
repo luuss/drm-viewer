@@ -516,6 +516,77 @@ def _gruppen_bilden(
     return out, gruppen
 
 
+# Rubriken, unter denen eine Seite mehrere kurze Meldungen sammelt. Die Seite
+# ist ein Artikel, jede Meldung ein Abschnitt darin.
+MELDUNGSRUBRIK = re.compile(r"^\s*(?:nachrichten|meldungen|kurzmeldungen)\b", re.I)
+
+
+def _meldungsseiten(
+    artikel: list[AssembledArticle],
+    paare: list[tuple[Story, AssembledArticle]],
+    stories: list[Story],
+) -> list[AssembledArticle]:
+    """Die Meldungen einer Rubrikseite zu einem Artikel zusammenlegen.
+
+    "Nachrichten aus Deutschland" in der DMZ: vier Meldungen, jede eine eigene
+    Story mit eigener Zeile. Als vier Artikel stuenden sie lose im Heft; die
+    Rubrik ist der Titel, die Zeilen der Meldungen werden Zwischentitel, in
+    der Reihenfolge der Seite.
+    """
+    rubriken: dict[int, str] = {}
+    for s in stories:
+        if not s.blocks or "rubrik" not in (s.blocks[0].style_name or "").lower():
+            continue
+        text = _text(s)
+        if MELDUNGSRUBRIK.match(text) and len(s.seiten) == 1:
+            rubriken.setdefault(s.erste_seite, text)
+    if not rubriken:
+        return artikel
+    ersetzt: dict[int, AssembledArticle | None] = {}
+    for seite, rubrik in rubriken.items():
+        meldungen = [st for story, st in paare if story.seiten == [seite]]
+        if len(meldungen) < 2:
+            continue
+        bloecke: list[SourceBlock] = []
+        for m in meldungen:
+            zeilen = []
+            for b in m.blocks:
+                if b.kind != "heading" or len(zeilen) == len(m.blocks) - 1:
+                    break
+                zeilen.append(b)
+            rest = m.blocks[len(zeilen):]
+            if zeilen:
+                from dataclasses import replace
+
+                bloecke.append(
+                    replace(
+                        zeilen[0],
+                        kind="subheading",
+                        text=" ".join(z.text.strip() for z in zeilen),
+                    )
+                )
+            else:
+                bloecke.append(_als(_kopie_mit_text(m.blocks[0], m.title), "subheading"))
+            bloecke.extend(rest)
+        sammel = AssembledArticle(title=rubrik, blocks=bloecke)
+        ersetzt[id(meldungen[0])] = sammel
+        for m in meldungen[1:]:
+            ersetzt[id(m)] = None
+    out: list[AssembledArticle] = []
+    for a in artikel:
+        if id(a) not in ersetzt:
+            out.append(a)
+        elif ersetzt[id(a)] is not None:
+            out.append(ersetzt[id(a)])
+    return out
+
+
+def _kopie_mit_text(block: SourceBlock, text: str) -> SourceBlock:
+    from dataclasses import replace
+
+    return replace(block, text=text)
+
+
 def _anzeigenzeilen(story: Story) -> str:
     """Titel einer Anzeige aus ihren kurzen Anfangszeilen, ohne den Verfasser.
 
@@ -599,6 +670,7 @@ def artikel_aus_satz(
 
     vergeben: set[str] = set()
     artikel: list[AssembledArticle] = []
+    paare: list[tuple[Story, AssembledArticle]] = []
     belegte_seiten: dict[int, AssembledArticle] = {}
 
     for story in koerper:
@@ -673,7 +745,17 @@ def artikel_aus_satz(
             title_from_body=not kopf and aus_text,
         )
         artikel.append(stueck)
-        for seite in story.seiten:
+        paare.append((story, stueck))
+
+    artikel = _meldungsseiten(artikel, paare, stories)
+    noch_da = {id(a) for a in artikel}
+    for story, stueck in paare:
+        if id(stueck) in noch_da:
+            for seite in story.seiten:
+                belegte_seiten.setdefault(seite, stueck)
+    for stueck in artikel:
+        # Zusammengelegte Meldungsseite.
+        for seite in stueck.pages:
             belegte_seiten.setdefault(seite, stueck)
 
     # Kaesten und kurze Reste wandern in den Artikel ihrer Seite — und dort

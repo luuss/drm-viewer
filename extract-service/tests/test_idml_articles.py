@@ -441,3 +441,28 @@ def test_anzeigen_unter_gemeinsamem_kopf_sind_ein_artikel():
     assert gruppe.title == "Unser Kalenderprogramm für 2026"
     assert sum("Art." in b.text for b in gruppe.blocks) == 2
     assert not any("Art." in b.text for b in nachruf.blocks)
+
+
+def test_meldungsseite_wird_ein_artikel_mit_zwischentiteln():
+    # DMZ 170, S. 34: "Nachrichten aus Deutschland" mit vier Meldungen.
+    def meldung(story: str, zeilen: list[str], text: str, y: float) -> list[SourceBlock]:
+        box = (0.048, y, 0.952, y + 0.18)
+        # Der Satz liefert die Zeilen der Meldung schon als Ueberschrift.
+        from dataclasses import replace
+
+        return [replace(rahmen(z, story=story, style="HÜ Nachrichten", box=box), kind="heading") for z in zeilen] + [
+            rahmen(text + " Weiterer Text." * 30, story=story, style="Mengentext", box=box)
+        ]
+
+    blocks = (
+        [rahmen("Nachrichten aus Deutschland", story="r", style="Rubrikname DMZ 2023", box=(0.514, 0.035, 0.871, 0.052))]
+        + meldung("m1", ["Der „Wolf“ 2", "kommt zur Truppe"], "Der neue „Wolf“ 2.", 0.077)
+        + meldung("m2", ["Verbesserung für „Trophy“"], "Aktive Schutzsysteme.", 0.742)
+    )
+    [a] = artikel_aus_satz(blocks)
+    assert a.title == "Nachrichten aus Deutschland"
+    assert [b.text for b in a.blocks if b.kind == "subheading"] == [
+        "Der „Wolf“ 2 kommt zur Truppe",
+        "Verbesserung für „Trophy“",
+    ]
+    assert not [b for b in a.blocks if b.kind == "heading"]
