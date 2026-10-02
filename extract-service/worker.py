@@ -56,6 +56,7 @@ from extractor.pdf_extract import (
 from extractor.idml_articles import (
     artikel_aus_satz,
     ohne_unterlagen,
+    ohne_vorschaubilder,
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
@@ -748,6 +749,7 @@ class Job:
         gefiltert = ohne_unterlagen(
             bildrahmen, textrahmen, rollen_je_story(rohe_blocks)
         )
+        gefiltert = ohne_vorschaubilder(gefiltert, textrahmen, rohe_blocks)
         if len(gefiltert) != len(bildrahmen):
             log(
                 "job.unterlagen",

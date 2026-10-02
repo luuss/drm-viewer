@@ -466,3 +466,18 @@ def test_meldungsseite_wird_ein_artikel_mit_zwischentiteln():
         "Verbesserung für „Trophy“",
     ]
     assert not [b for b in a.blocks if b.kind == "heading"]
+
+
+def test_titelbild_der_vorschau_ist_kein_artikelbild():
+    from types import SimpleNamespace as NS
+
+    from extractor.idml_articles import ohne_vorschaubilder
+
+    # Schwertertraeger 36, S. 49: das Titelbild von Heft 37 ueber der
+    # Ankuendigung, daneben ein Foto des Artikels weiter oben.
+    blocks = [rahmen("Die nächste Ausgabe der Schwerterträger ist am 19. Juni 2026 im Handel",
+                     story="v", style=OHNE, box=(0.048, 0.851, 0.409, 0.937))]
+    text = [NS(page_number=48, x0=0.048, y0=0.851, x1=0.409, y1=0.937, story_id="v")]
+    vorschau = NS(page_number=48, x0=0.086, y0=0.607, x1=0.357, y1=0.872)
+    foto = NS(page_number=48, x0=0.036, y0=0.045, x1=0.482, y1=0.42)
+    assert ohne_vorschaubilder([vorschau, foto], text, blocks) == [foto]

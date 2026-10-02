@@ -180,6 +180,38 @@ def ohne_unterlagen(bildrahmen: list, textrahmen: list, rollen: dict) -> list:
     return [b for b in behalten if not _fasst_bild_ein(b, behalten)]
 
 
+# Die Vorschau aufs naechste Heft: "Die nächste Ausgabe der Schwerterträger
+# ist am 19. Juni 2026 im Handel", daneben dessen Titelbild.
+VORSCHAU = re.compile(r"\bn[äa]chste\b.{0,60}\bim\s+Handel", re.I | re.S)
+VORSCHAU_ABSTAND = 0.03
+
+
+def ohne_vorschaubilder(bildrahmen: list, textrahmen: list, blocks: list[SourceBlock]) -> list:
+    """Das Titelbild des naechsten Hefts ist kein Artikelbild.
+
+    Es steht an der Ankuendigung, meist auf der Impressumseite; ohne diese
+    Regel bekam es der Artikel, dessen Text in derselben Spalte endet
+    ("Jagdflieger 1914/18" im Schwertertraeger 36).
+    """
+    vorschau = {s.story_id for s in stories_bilden(blocks) if VORSCHAU.search(_text(s))}
+    if not vorschau:
+        return bildrahmen
+    kaesten = [t for t in textrahmen if t.story_id in vorschau]
+
+    def an_vorschau(bild) -> bool:
+        for t in kaesten:
+            if t.page_number != bild.page_number:
+                continue
+            breite = min(t.x1 - t.x0, bild.x1 - bild.x0)
+            if breite <= 0 or min(t.x1, bild.x1) - max(t.x0, bild.x0) < breite / 2:
+                continue
+            if max(t.y0 - bild.y1, bild.y0 - t.y1) <= VORSCHAU_ABSTAND:
+                return True
+        return False
+
+    return [b for b in bildrahmen if not an_vorschau(b)]
+
+
 def _flaeche(rahmen) -> float:
     return max(0.0, rahmen.x1 - rahmen.x0) * max(0.0, rahmen.y1 - rahmen.y0)
 
