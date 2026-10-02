@@ -152,3 +152,36 @@ def titel_bereinigen(
         return " ".join(verzeichnis.split())
     # Zuletzt die Anrede — nur, wenn nichts anderes die Seite benennt.
     return stehende_rubrik(titel) or titel
+
+
+def verzeichnis_teilen(hints: list, rubriken: dict[int, str]) -> list:
+    """Einen Verzeichniseintrag ueber eine Doppelseite in seine zwei Rubriken teilen.
+
+    Das Kalenderblatt der DMZ steht links unter "Kalenderblatt", rechts unter
+    "Personen" (oder "Ereignisse"); das gedruckte Verzeichnis nennt beides als
+    eine Zeile, "Kalenderblatt Personen". Im Leser sind es zwei Eintraege,
+    jeder auf seiner Seite. Geteilt wird nur, wenn die Zeile genau aus den
+    Kopfzeilen der Seite und ihrer Folgeseite besteht.
+    """
+    from dataclasses import replace
+
+    def wie(text: str) -> str:
+        return " ".join(text.split()).casefold()
+
+    out = []
+    for h in hints:
+        links = rubriken.get(h.page_index)
+        rechts = rubriken.get(h.page_index + 1)
+        if (
+            links
+            and rechts
+            and wie(links) != wie(rechts)
+            and wie(h.label) == wie(f"{links} {rechts}")
+        ):
+            out.append(replace(h, label=" ".join(links.split())))
+            # Die Folgeseite hat keine eigene Zeile im gedruckten Verzeichnis
+            # und deshalb keine Klickflaeche dort.
+            out.append(replace(h, label=" ".join(rechts.split()), page_index=h.page_index + 1, toc_page_index=None))
+        else:
+            out.append(h)
+    return out

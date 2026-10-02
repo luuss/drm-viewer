@@ -59,7 +59,13 @@ from extractor.idml_articles import (
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
-from extractor.rubriken import kopfzeilen, seitenrubriken, stehende_rubrik, titel_bereinigen
+from extractor.rubriken import (
+    kopfzeilen,
+    seitenrubriken,
+    stehende_rubrik,
+    titel_bereinigen,
+    verzeichnis_teilen,
+)
 from extractor.toc_layout import (
     refine_toc_hints,
     text_items_from_pdf,
@@ -236,6 +242,9 @@ class Job:
             articles=len(articles),
             source=quelle,
         )
+
+        # "Kalenderblatt Personen" ueber eine Doppelseite: zwei Eintraege.
+        toc_hints = verzeichnis_teilen(toc_hints, rubriken)
 
         if self.data.get("kind") == "nachtrag":
             return self._nachtrag(articles, page_images)
