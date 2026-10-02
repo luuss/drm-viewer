@@ -50,10 +50,6 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
         lines: ["Rechtsanwalt Laurens Notdurft", "Am Fischtal 76c, 14169 Berlin"],
       },
       {
-        h: "Streitbeilegung",
-        p: "Zur Teilnahme an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle sind wir nicht verpflichtet und nicht bereit.",
-      },
-      {
         h: "Für alle externen Links gilt",
         p: "Wir betonen ausdrücklich, daß wir keinerlei Einfluß auf die Gestaltung und die Inhalte der gelinkten Seiten haben. Deshalb distanzieren wir uns hiermit vorsorglich von allen Inhalten aller gelinkten Seiten auf dieser Homepage und machen uns ihre Inhalte nicht zu eigen. Wir weisen ausdrücklich darauf hin, daß alle Seiten fremder Autoren, auf die in den von uns erstellten und hier abrufbaren Seiten verwiesen wird, nicht in unserem Verantwortungsbereich liegen. Die Erstellung der Verweise zu Seiten anderer Personen geschieht unter Vorbehalt, da wir nicht alle Verweise regelmäßig auf Gesetzesübertretungen überprüfen können. Falls unsere Seiten auf Seiten verweisen, deren Inhalt nach deutschem oder europäischem Recht strafbar ist, so distanzieren wir uns ausdrücklich gemäß Entscheidung des BGH vom 30.01.1996.",
       },

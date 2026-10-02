@@ -348,7 +348,7 @@ export const bestellungAnlegen = internalAction({
   handler: async (ctx, { kaufId }): Promise<null> => {
     const d = await ctx.runQuery(internal.leserKasse.bestellungDaten, { kaufId });
     if (!d) return null;
-    const { kauf, adresse } = d;
+    const { kauf, adresse, verzicht } = d;
     if (kauf.status !== "bezahlt" && kauf.status !== "fehler") return null;
     if (!kauf.paymentIntentId || !adresse) {
       await ctx.runMutation(internal.leserKasse.bestellungErgebnis, {
@@ -370,6 +370,12 @@ export const bestellungAnlegen = internalAction({
           email: kauf.email,
           skus: kauf.skus,
           ...adresseFuerShop(adresse),
+          ...(verzicht?.text
+            ? {
+                widerrufsverzicht_text: verzicht.text,
+                widerrufsverzicht_zeit: new Date(verzicht.zeit).toISOString(),
+              }
+            : {}),
         },
         { timeoutMs: 60_000 },
       );

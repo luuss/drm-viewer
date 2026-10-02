@@ -419,7 +419,19 @@ export const bestellungDaten = internalQuery({
   handler: async (ctx, { kaufId }) => {
     const kauf = await ctx.db.get(kaufId);
     if (!kauf) return null;
-    return { kauf, adresse: await adresseVon(ctx, kauf.userId) };
+    // Widerrufsverzicht zur Zahlung: der Shop bestaetigt ihn in der
+    // Bestellbestaetigung (§ 312f Abs. 3 BGB).
+    const verzicht = kauf.paymentIntentId
+      ? await ctx.db
+          .query("consents")
+          .withIndex("by_stripe_session", (q) => q.eq("stripeSessionId", kauf.paymentIntentId))
+          .first()
+      : null;
+    return {
+      kauf,
+      adresse: await adresseVon(ctx, kauf.userId),
+      verzicht: verzicht ? { text: verzicht.text ?? "", zeit: verzicht.createdAt } : null,
+    };
   },
 });
 

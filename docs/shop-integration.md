@@ -452,8 +452,16 @@ kaufPruefen ──────────────────────�
 {"action":"create_order","ts":…,"mode":"live","payment_intent":"pi_…","amount_cents":1380,
  "email":"kunde@example.de","skus":["SCHWERTERTRAEGER-36-DIGITAL"],
  "firstname":"Erika","lastname":"Mustermann","company":"","address1":"Hauptstraße 1",
- "address2":"","postcode":"10115","city":"Berlin","country_iso":"DE"}
+ "address2":"","postcode":"10115","city":"Berlin","country_iso":"DE",
+ "widerrufsverzicht_text":"Ich stimme ausdrücklich zu, …","widerrufsverzicht_zeit":"2026-10-02T13:05:00.000Z"}
 ```
+
+`widerrufsverzicht_*` kommen aus `consents` (Zeile zum PaymentIntent). Der Shop
+setzt sie waehrend `validateOrder` in `LusdigitalLeserKauf::$verzicht`;
+`hookSendMailAlterTemplateVars` haengt sie als Kasten „Ihre Zustimmung zum
+vorzeitigen Beginn (Widerrufsverzicht)“ an die Bestellbestaetigung
+(§ 312f Abs. 3 BGB). Fehlen sie, steht dort der Standardwortlaut mit der
+Uhrzeit der Buchung.
 
 Im Shop (`classes/LeserKauf.php`):
 
