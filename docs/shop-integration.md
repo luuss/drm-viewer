@@ -456,20 +456,35 @@ kaufPruefen ──────────────────────�
  "widerrufsverzicht_text":"Ich stimme ausdrücklich zu, …","widerrufsverzicht_zeit":"2026-10-02T13:05:00.000Z"}
 ```
 
-`widerrufsverzicht_*` kommen aus `consents` (Zeile zum PaymentIntent). Der Shop
-setzt sie waehrend `validateOrder` in `LusdigitalLeserKauf::$verzicht`;
-`hookSendMailAlterTemplateVars` haengt sie als Kasten „Ihre Zustimmung zum
-vorzeitigen Beginn (Widerrufsverzicht)“ an die Bestellbestaetigung
-(§ 312f Abs. 3 BGB) und nennt darin nur die digitalen Positionen der
-Bestellung; ohne digitale Position kein Kasten. Fehlen die Felder, steht dort
-der Standardwortlaut mit der Uhrzeit der Buchung.
+`widerrufsverzicht_*` kommen aus `consents` (Zeile zum PaymentIntent).
 
-Der Verzicht wird nur in der Kasse des Lesers abgefragt, und die verkauft nur
-Digitalausgaben (Leser: `issueShopSku` nur bei `shopDigital.offered`; Shop:
-`artikelFinden` nur Digital-Kombination oder virtuelles Produkt,
-`isVirtualCart`, sonst 409). Belegt wird er je Heft in `consents`. Der
-Netzladen selbst fragt keinen Verzicht ab; dort bleibt das Widerrufsrecht
-bestehen.
+### Widerrufsverzicht (Leser und Netzladen)
+
+Der Verzicht auf das Widerrufsrecht (§ 356 Abs. 5 BGB) wird nur fuer
+Digitalartikel verlangt (virtuelles Produkt oder Kombination „Ausgabe:
+Digital“) und gilt nur fuer diese. Logik im Shop-Modul
+`lusdigital/classes/Verzicht.php`, Tabelle `ps_lusdigital_verzicht` je
+Warenkorb (`artikel` = Schluessel `id_product-id_product_attribute`, Wortlaut,
+Zeit, Quelle `netzladen`|`leser`, `id_order`).
+
+* Netzladen-Kasse: Hook `termsAndConditions` zeigt im Zahlungsschritt ein
+  Pflicht-Haekchen `lusdigital-verzicht` nur bei Digitalartikeln, mit deren
+  Namen und dem Satz, dass das Widerrufsrecht fuer alle uebrigen Artikel
+  unberuehrt bleibt. Ohne Digitalartikel kein Haekchen. Theme und Stripe geben
+  den Bestellknopf erst frei, wenn alle Haekchen gesetzt sind.
+  `views/js/verzicht.js` meldet jedes An-/Abhaken (und noch einmal beim
+  Klick auf Bestellen) an `POST /module/lusdigital/verzicht` (Token der
+  Sitzung); der Server bestimmt Artikel und Wortlaut selbst aus dem Warenkorb.
+* Leser: `create_order` speichert den Verzicht aus dem Leser zum Warenkorb,
+  bevor `validateOrder` laeuft. Die Leser-Kasse nimmt nur Digitalausgaben an
+  (Leser: `issueShopSku`; Shop: `artikelFinden`, `isVirtualCart`, sonst 409).
+* `actionValidateOrder`: interne Notiz an der Bestellung (Netzladen) mit den
+  Positionen mit Verzicht und ggf. „Kein Widerrufsverzicht protokolliert fuer …
+  – dafuer besteht das Widerrufsrecht“.
+* Bestellbestaetigung (`sendMailAlterTemplateVars`): Kasten „Ihre Zustimmung
+  zum vorzeitigen Beginn (Widerrufsverzicht)“ nur mit den Positionen, fuer die
+  er erteilt wurde, plus „Fuer alle uebrigen Artikel dieser Bestellung besteht
+  Ihr Widerrufsrecht unveraendert.“ (§ 312f Abs. 3 BGB).
 
 Im Shop (`classes/LeserKauf.php`):
 
