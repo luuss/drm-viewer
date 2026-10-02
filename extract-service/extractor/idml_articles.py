@@ -474,6 +474,48 @@ def _titelrahmen(anzeige: Story, frei: list[Story]) -> list[Story]:
     return list(reversed(gefunden))
 
 
+def _gruppenkopf(anzeige: Story, frei: list[Story]) -> Story | None:
+    """Ein breiter Kopf fast buendig ueber der Anzeige ("Unser Kalenderprogramm")."""
+    x0, oben, x1, _ = anzeige.rahmen
+    for s in frei:
+        if s.erste_seite != anzeige.erste_seite:
+            continue
+        sx0, _, sx1, sunten = s.rahmen
+        if sx1 - sx0 <= TITELRAHMEN_BREITE * (x1 - x0):
+            continue
+        if min(sx1, x1) - max(sx0, x0) < (x1 - x0) / 2:
+            continue
+        if -TITELRAHMEN_UEBERLAPPUNG <= oben - sunten <= TITELRAHMEN_LUECKE:
+            return s
+    return None
+
+
+def _gruppen_bilden(
+    kurze: list[Story], frei: list[Story]
+) -> tuple[list[Story], list[tuple[Story, Story]]]:
+    """Kurze Anzeigen unter einem gemeinsamen Kopf werden ein Artikel.
+
+    Das Kalenderprogramm (sechs Kalender unter "Unser Kalenderprogramm für
+    2026") ist eine Anzeige mit sechs Produkten. Eine Buecherseite hat nur
+    ihren Seitentitel weit oben; ihre Buecher bleiben einzeln.
+    """
+    je_seite: dict[int, list[Story]] = {}
+    for s in kurze:
+        je_seite.setdefault(s.erste_seite, []).append(s)
+    out: list[Story] = []
+    gruppen: list[tuple[Story, Story]] = []
+    for seite, liste in je_seite.items():
+        kopf = next((k for k in (_gruppenkopf(s, frei) for s in liste) if k), None)
+        if kopf is None or len(liste) < 2:
+            out.extend(liste)
+            continue
+        liste = sorted(liste, key=lambda s: (s.oben, s.links))
+        gruppe = Story(liste[0].story_id, [b for s in liste for b in s.blocks])
+        out.append(gruppe)
+        gruppen.append((gruppe, kopf))
+    return out, gruppen
+
+
 def _anzeigenzeilen(story: Story) -> str:
     """Titel einer Anzeige aus ihren kurzen Anfangszeilen, ohne den Verfasser.
 
@@ -521,12 +563,17 @@ def artikel_aus_satz(
         and ANZEIGE_MINDESTZEICHEN <= s.textzeichen < ARTIKEL_MINDESTZEICHEN
         and ist_buchanzeige(_text(s))
     ]
-    koerper = sorted(lang + kurze_anzeigen, key=lambda s: (s.erste_seite, s.oben, s.links))
-    anzeigen = {s.story_id for s in koerper if ist_buchanzeige(_text(s))}
     frei = [s for s in stories if _ist_titelrahmen(s)]
     titelrahmen: dict[str, list[Story]] = {}
+    als_anzeige = {s.story_id for s in kurze_anzeigen}
+    kurze_anzeigen, gruppen = _gruppen_bilden(kurze_anzeigen, frei)
+    for gruppe, kopf in gruppen:
+        titelrahmen[gruppe.story_id] = [kopf]
+        frei = [s for s in frei if s is not kopf]
+    koerper = sorted(lang + kurze_anzeigen, key=lambda s: (s.erste_seite, s.oben, s.links))
+    anzeigen = {s.story_id for s in koerper if ist_buchanzeige(_text(s))}
     for story in koerper:
-        if story.story_id not in anzeigen:
+        if story.story_id not in anzeigen or story.story_id in titelrahmen:
             continue
         gefunden = _titelrahmen(story, frei)
         if gefunden:
@@ -543,7 +590,7 @@ def artikel_aus_satz(
         for s in stories
         if s.rolle() == "mengentext"
         and s.textzeichen < ARTIKEL_MINDESTZEICHEN
-        and s not in kurze_anzeigen
+        and s.story_id not in als_anzeige
     ]
 
     kopf_zu = _kopf_zuordnen(lang, ueberschriften)
@@ -576,6 +623,8 @@ def artikel_aus_satz(
         aus_text = False
         if kopf:
             titel = _text(kopf)
+        elif any(story is g for g, _ in gruppen):
+            titel = _text(rahmen[-1])
         elif story.story_id in anzeigen and _anzeigenzeilen(story):
             # Verfasser und Titel in der Anzeige selbst; ein Rahmen darueber
             # ist dann ein Werbesatz ("Legionäre für Europa").

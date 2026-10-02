@@ -416,3 +416,28 @@ def test_impressum_ist_keine_buchanzeige():
     assert not ist_buchanzeige(
         "Impressum. Postfach 52, Tel. 04384/5970. Jahresabo t 49,90 frei Haus."
     )
+
+
+def test_anzeigen_unter_gemeinsamem_kopf_sind_ein_artikel():
+    # DMZ-Zeitgeschichte 80, S. 63: sechs Kalender unter "Unser
+    # Kalenderprogramm für 2026" sind eine Anzeige, nicht sechs Artikel —
+    # und haengen nicht zusaetzlich am Nachruf daneben.
+    def kalender(story: str, titel: str, nummer: str, x: float) -> list[SourceBlock]:
+        box = (x, 0.633, x + 0.143, 0.761)
+        return [
+            rahmen(titel, story=story, style=OHNE, box=box),
+            rahmen("Herausragende Soldaten im Farbbild. " * 5, story=story, style=OHNE, box=box),
+            rahmen(f"Art. {nummer} t 14,80", story=story, style=OHNE, box=box),
+        ]
+
+    blocks = (
+        [rahmen("Wie wir erst jetzt erfahren " + "x" * 600, story="n", style="Mengentext", box=(0.049, 0.072, 0.484, 0.582))]
+        + [rahmen("Unser Kalenderprogramm für 2026", story="k", style=OHNE, box=(0.219, 0.593, 0.952, 0.626))]
+        + kalender("c1", "Farbbildkalender: Deutsche Panzer", "460705", 0.504)
+        + kalender("c2", "Farbbildkalender: Ritterkreuzträger", "460691", 0.802)
+    )
+    artikel = artikel_aus_satz(blocks)
+    nachruf, gruppe = artikel
+    assert gruppe.title == "Unser Kalenderprogramm für 2026"
+    assert sum("Art." in b.text for b in gruppe.blocks) == 2
+    assert not any("Art." in b.text for b in nachruf.blocks)
