@@ -244,14 +244,26 @@ export function findHints(article: { title: string; blocks: RuleBlock[] }): Hint
       above -= 1;
     }
     const lines: string[] = [];
-    for (let j = above; j >= 0 && lines.length < MAX_LINES; j--) {
+    let j = above;
+    for (; j >= 0 && lines.length < MAX_LINES; j--) {
       const line = blocks[j].text.trim();
       if (!line || line.length > MAX_LINE || extents[j] !== null || refs[j].length > 0) break;
       lines.unshift(line);
     }
-    if (lines.length === 0 && !citation) {
-      const title = article.title.trim();
-      if (title && title.length <= MAX_LINE && !title.endsWith("…")) lines.push(title);
+    // Reichen die Zeilen bis an den Anfang des Artikels, fehlt der Buchtitel:
+    // der Lesetext wiederholt den Artikeltitel nicht. Im Satz stand er
+    // zwischen Verfasser und Beschreibung ("Sophie Liebnitz" /
+    // "Halbmondsüchtig" / "Xenomanie in Europa. – …"), dort gehoert er hin.
+    const title = article.title.trim();
+    if (
+      ((j < 0 && lines.length > 0) || (!citation && lines.length === 0)) &&
+      title &&
+      title.length <= MAX_LINE &&
+      !title.endsWith("…") &&
+      lines.length < MAX_LINES &&
+      !lines.some((l) => tokens(l).join(" ") === tokens(title).join(" "))
+    ) {
+      lines.push(title);
     }
     // Der Untertitel laeuft oft in die Beschreibung: "Aufarbeiten statt
     // verdrängen. – Die Vertreibung …".

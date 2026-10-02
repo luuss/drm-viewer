@@ -95,6 +95,25 @@ describe("Anzeigen erkennen", () => {
     ]);
   });
 
+  test("der Titel ueber den Anzeigenzeilen zaehlt mit, auch wenn der Lesetext ihn auslaesst", () => {
+    // ZUERST! S. 77: "Halbmondsüchtig" steht nur als Artikeltitel, der
+    // Lesetext beginnt mit dem Verfasser.
+    const [hint] = findHints(
+      article("Halbmondsüchtig", [
+        "Sophie Liebnitz",
+        "Xenomanie in Europa. – Europas Weltoffenheit ist einzigartig. Die " +
+          "fatale Folge ist eine Selbstaufgabe ohne Beispiel: Grenzen fallen, " +
+          "Traditionen werden preisgegeben, und wer widerspricht, gilt als " +
+          "Feind der offenen Gesellschaft. 160 S., Pb. t 20,–",
+      ]),
+    );
+    expect(hint.kind).toBe("title");
+    if (hint.kind !== "title") return;
+    expect(hint.lines.slice(0, 2)).toEqual(["Sophie Liebnitz", "Halbmondsüchtig"]);
+    expect(hint.queries).toContain("Halbmondsüchtig");
+    expect(hint.zone).toContain("Halbmondsüchtig");
+  });
+
   test("Schreibweisen der Artikelnummer, aber kein Gesetzesartikel", () => {
     const refs = (text: string) =>
       findHints(article("", [text])).flatMap((h) => (h.kind === "number" ? [h.reference] : []));
