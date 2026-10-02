@@ -65,7 +65,7 @@ from extractor.rubriken import (
     seitenrubriken,
     stehende_rubrik,
     titel_bereinigen,
-    verzeichnis_teilen,
+    verzeichnis_doppelseite,
 )
 from extractor.toc_layout import (
     refine_toc_hints,
@@ -244,8 +244,8 @@ class Job:
             source=quelle,
         )
 
-        # "Kalenderblatt Personen" ueber eine Doppelseite: zwei Eintraege.
-        toc_hints = verzeichnis_teilen(toc_hints, rubriken)
+        # "Kalenderblatt Personen" ueber eine Doppelseite: "Kalenderblatt – Personen".
+        toc_hints = verzeichnis_doppelseite(toc_hints, rubriken)
 
         if self.data.get("kind") == "nachtrag":
             return self._nachtrag(articles, page_images)

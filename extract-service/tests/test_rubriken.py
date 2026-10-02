@@ -123,13 +123,12 @@ def test_meldungsrubrik_behaelt_ihren_ganzen_namen():
     assert titel_bereinigen("Nachrichten aus aller Welt", aus_text=False) == "Nachrichten aus aller Welt"
 
 
-def test_kalenderblatt_ueber_die_doppelseite_wird_zwei_eintraege():
+def test_kalenderblatt_ueber_die_doppelseite_bekommt_einen_strich():
     from extractor.model import TocHint
-    from extractor.rubriken import verzeichnis_teilen
+    from extractor.rubriken import verzeichnis_doppelseite
 
     hint = TocHint(label="Kalenderblatt Personen", page_index=63, toc_page_index=2, x0=0.1, y0=0.5, x1=0.4, y1=0.52)
     andere = TocHint(label="Arctic Convoy", page_index=65, toc_page_index=2, x0=0.1, y0=0.6, x1=0.4, y1=0.62)
-    links, rechts, rest = verzeichnis_teilen([hint, andere], {63: "Kalenderblatt", 64: "Personen", 65: "Film"})
-    assert (links.label, links.page_index, links.toc_page_index) == ("Kalenderblatt", 63, 2)
-    assert (rechts.label, rechts.page_index, rechts.toc_page_index) == ("Personen", 64, None)
+    eins, rest = verzeichnis_doppelseite([hint, andere], {63: "Kalenderblatt", 64: "Personen", 65: "Film"})
+    assert (eins.label, eins.page_index, eins.toc_page_index) == ("Kalenderblatt – Personen", 63, 2)
     assert rest is andere
