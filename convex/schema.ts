@@ -632,6 +632,7 @@ export default defineSchema(
       v.literal("full"),
       // Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses neu legen.
       v.literal("toc"),
+      v.literal("nachtrag"),
     ),
     status: v.union(
       v.literal("queued"),

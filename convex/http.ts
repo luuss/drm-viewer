@@ -241,6 +241,22 @@ workerRoute("/service/jobs/result", (ctx, body) =>
   }),
 );
 
+workerRoute("/service/jobs/articles", (ctx, body) =>
+  ctx.runQuery(internal.imports.liveArticlesInternal, { issueId: body.issueId }),
+);
+
+workerRoute("/service/jobs/merge", (ctx, body) =>
+  ctx.runMutation(internal.imports.mergeResultInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    issueId: body.issueId,
+    probe: body.probe === true,
+    remove: body.remove ?? [],
+    insert: body.insert ?? [],
+    orders: body.orders ?? [],
+  }),
+);
+
 workerRoute("/service/jobs/toc-regions", (ctx, body) =>
   ctx.runMutation(internal.imports.activateTocRegionsInternal, {
     jobId: body.jobId,

@@ -237,6 +237,9 @@ class Job:
             source=quelle,
         )
 
+        if self.data.get("kind") == "nachtrag":
+            return self._nachtrag(articles, page_images)
+
         payload_articles = self._build_payload(articles, page_images)
         log(
             "job.images",
@@ -882,6 +885,73 @@ class Job:
             None,
         )
 
+    def _nachtrag(self, articles, page_images) -> tuple[str, str]:
+        """Nur einsetzen, was sich gegenueber dem Bestand aendert.
+
+        Ein Artikel aus dem Satz, dessen Stories genau ein Artikel im Bestand
+        traegt, bleibt unberuehrt — samt Freigabe, Titel und Nacharbeiten.
+        Alle anderen kommen neu; Bestandsartikel, die eine ihrer Stories
+        tragen, werden durch sie ersetzt. Artikel ohne Satz (Umschlag) bleiben
+        ausser Betracht. Mit payload "probe" wird nur gezaehlt.
+        """
+        probe = (self.data.get("payload") or "") == "probe"
+        live = self.convex.post("/service/jobs/articles", {"issueId": self.issue_id})
+        bestand = {
+            frozenset(a["stories"]): a for a in live if a["stories"]
+        }
+
+        def stories(article) -> frozenset:
+            bloecke = _ohne_kopfzeilen(flow_text_blocks(article.blocks), article)
+            return frozenset(b.story_id for b in bloecke if b.story_id)
+
+        orders: list[dict] = []
+        geaendert: list[tuple[int, object]] = []
+        for order, article in enumerate(articles, start=1):
+            if any(b.origin != "idml" for b in article.blocks):
+                continue
+            eigene = stories(article)
+            if not eigene:
+                continue
+            gleich = bestand.get(eigene)
+            if gleich is not None:
+                orders.append({"articleId": gleich["articleId"], "order": order})
+            else:
+                geaendert.append((order, article))
+
+        betroffen = set().union(*(stories(a) for _, a in geaendert)) if geaendert else set()
+        remove = [
+            a["articleId"]
+            for a in live
+            if betroffen & set(a["stories"])
+            and a["articleId"] not in {o["articleId"] for o in orders}
+        ]
+        self._ohne_bilder = probe
+        insert = self._build_payload([a for _, a in geaendert], page_images)
+        for (order, _), p in zip(geaendert, insert):
+            p["order"] = order
+        # Abo-Aufrufe werden auch hier keine Artikel.
+        insert, _links = self._seitenlinks(insert)
+        result = self.convex.post(
+            "/service/jobs/merge",
+            {
+                "jobId": self.job_id,
+                "workerId": WORKER_ID,
+                "issueId": self.issue_id,
+                "probe": probe,
+                "remove": remove,
+                "insert": insert,
+                "orders": orders,
+            },
+        )
+        log("job.nachtrag", jobId=self.job_id, probe=probe, **result)
+        weg = "; ".join(result.get("removed", []))
+        neu = "; ".join(result.get("inserted", []))
+        kopf = "Probelauf" if probe else "Nachgetragen"
+        return "done", (
+            f"{kopf}: {len(result.get('removed', []))} ersetzt, "
+            f"{len(result.get('inserted', []))} neu. Weg: {weg} | Neu: {neu}"
+        )[:4000]
+
     def _build_payload(self, articles, page_images: dict[int, bytes]) -> list[dict]:
         payload = []
         for order, article in enumerate(articles, start=1):
@@ -1090,6 +1160,8 @@ class Job:
         self, article, page_images: dict[int, bytes], reader_blocks
     ) -> list[dict]:
         out = []
+        if getattr(self, "_ohne_bilder", False):
+            return out
         # Dasselbe Bild steht in einem Artikel nur einmal: ein Aufmacher ueber
         # die Doppelseite gehoert im Satz zu beiden Seiten, ein Buchtitel liegt
         # als Stapel fuenfmal uebereinander. Verglichen wird das fertige Bild,

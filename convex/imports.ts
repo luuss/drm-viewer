@@ -9,7 +9,8 @@ import {
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, audit } from "./roles";
 import { articleInput } from "./articles";
-import { deleteLinksForIssue } from "./articleProducts";
+import type { Infer } from "convex/values";
+import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
 import { pageLinkInput, replaceImportedLinks } from "./pageLinks";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
@@ -26,9 +27,13 @@ export const jobKind = v.union(
   // Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses neu legen;
   // Artikel und Freigaben bleiben stehen (activateTocRegionsInternal).
   v.literal("toc"),
+  // Den Satz neu lesen und nur die Artikel einsetzen oder ersetzen, die sich
+  // dabei aendern (mergeResultInternal). Alles andere bleibt stehen, auch
+  // Freigaben. Mit payload "probe" wird nur gezaehlt.
+  v.literal("nachtrag"),
 );
 
-type JobKind = "prepare" | "pdf" | "idml" | "full" | "toc";
+type JobKind = "prepare" | "pdf" | "idml" | "full" | "toc" | "nachtrag";
 
 async function queueJob(
   ctx: MutationCtx,
@@ -477,6 +482,87 @@ export const activateTocRegionsInternal = internalMutation({
  * neuen Stand — nie eine Mischung. Quellen, Stammdaten, Kaeufe und
  * Freischaltungen bleiben unberuehrt.
  */
+type ArticleInput = Infer<typeof articleInput>;
+
+/** Einen Artikel samt Absaetzen, Flaechen und Bildern anlegen. */
+async function insertArticle(
+  ctx: MutationCtx,
+  issueId: Id<"issues">,
+  a: ArticleInput,
+  reviewStatus: "pending" | "approved",
+  now: number,
+): Promise<Id<"articles">> {
+  const searchText = [
+    a.title,
+    a.subtitle ?? "",
+    a.teaser ?? "",
+    ...a.blocks.map((b) => b.text),
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 100000);
+  const articleId = await ctx.db.insert("articles", {
+    issueId,
+    order: a.order,
+    title: a.title.slice(0, 300),
+    subtitle: a.subtitle,
+    author: a.author,
+    teaser: a.teaser,
+    source: a.source,
+    reviewStatus,
+    confidence: a.confidence,
+    primaryPageIndex: a.primaryPageIndex,
+    pageStart: a.pageStart,
+    pageEnd: a.pageEnd,
+    searchText,
+    createdAt: now,
+    updatedAt: now,
+  });
+  for (const b of a.blocks) {
+    await ctx.db.insert("articleBlocks", {
+      articleId,
+      issueId,
+      order: b.order,
+      type: b.type,
+      text: b.text,
+      sourcePageIndex: b.sourcePageIndex,
+      sourceY: b.sourceY,
+      sourceStoryId: b.sourceStoryId,
+      sourceFrameId: b.sourceFrameId,
+      styleName: b.styleName,
+      confidence: b.confidence,
+      table: b.table,
+    });
+  }
+  for (const [i, r] of a.regions.entries()) {
+    await ctx.db.insert("articleRegions", {
+      articleId,
+      issueId,
+      pageIndex: r.pageIndex,
+      x0: r.x0,
+      y0: r.y0,
+      x1: r.x1,
+      y1: r.y1,
+      kind: r.kind ?? "body",
+      targetPageIndex: r.targetPageIndex,
+      order: i,
+    });
+  }
+  for (const [i, img] of (a.images ?? []).entries()) {
+    await ctx.db.insert("articleAssets", {
+      articleId,
+      issueId,
+      assetId: img.assetId,
+      order: i,
+      caption: img.caption,
+      sourcePageIndex: img.sourcePageIndex,
+      sourceY: img.sourceY,
+      afterBlockOrder: img.afterBlockOrder,
+    });
+  }
+  return articleId;
+}
+
 export const activateResultInternal = internalMutation({
   args: {
     jobId: v.id("importJobs"),
@@ -532,75 +618,7 @@ export const activateResultInternal = internalMutation({
     const now = Date.now();
     const byOrder = new Map<number, Id<"articles">>();
     for (const a of articles) {
-      const searchText = [
-        a.title,
-        a.subtitle ?? "",
-        a.teaser ?? "",
-        ...a.blocks.map((b) => b.text),
-      ]
-        .filter(Boolean)
-        .join("\n\n")
-        .slice(0, 100000);
-      const articleId = await ctx.db.insert("articles", {
-        issueId,
-        order: a.order,
-        title: a.title.slice(0, 300),
-        subtitle: a.subtitle,
-        author: a.author,
-        teaser: a.teaser,
-        source: a.source,
-        reviewStatus: "pending",
-        confidence: a.confidence,
-        primaryPageIndex: a.primaryPageIndex,
-        pageStart: a.pageStart,
-        pageEnd: a.pageEnd,
-        searchText,
-        createdAt: now,
-        updatedAt: now,
-      });
-      byOrder.set(a.order, articleId);
-      for (const b of a.blocks) {
-        await ctx.db.insert("articleBlocks", {
-          articleId,
-          issueId,
-          order: b.order,
-          type: b.type,
-          text: b.text,
-          sourcePageIndex: b.sourcePageIndex,
-          sourceY: b.sourceY,
-          sourceStoryId: b.sourceStoryId,
-          sourceFrameId: b.sourceFrameId,
-          styleName: b.styleName,
-          confidence: b.confidence,
-          table: b.table,
-        });
-      }
-      for (const [i, r] of a.regions.entries()) {
-        await ctx.db.insert("articleRegions", {
-          articleId,
-          issueId,
-          pageIndex: r.pageIndex,
-          x0: r.x0,
-          y0: r.y0,
-          x1: r.x1,
-          y1: r.y1,
-          kind: r.kind ?? "body",
-          targetPageIndex: r.targetPageIndex,
-          order: i,
-        });
-      }
-      for (const [i, img] of (a.images ?? []).entries()) {
-        await ctx.db.insert("articleAssets", {
-          articleId,
-          issueId,
-          assetId: img.assetId,
-          order: i,
-          caption: img.caption,
-          sourcePageIndex: img.sourcePageIndex,
-          sourceY: img.sourceY,
-          afterBlockOrder: img.afterBlockOrder,
-        });
-      }
+      byOrder.set(a.order, await insertArticle(ctx, issueId, a, "pending", now));
     }
 
     const toc =
@@ -646,5 +664,150 @@ export const activateResultInternal = internalMutation({
       }),
     );
     return { articles: articles.length, toc: toc.length };
+  },
+});
+
+// --- Nachtrag: nur geaenderte Artikel ersetzen ----------------------------------
+
+/**
+ * Welche Stories jeder Artikel der Ausgabe traegt. Der Worker vergleicht damit
+ * sein Ergebnis aus dem Satz mit dem Bestand (Auftrag "nachtrag").
+ */
+export const liveArticlesInternal = internalQuery({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    const articles = await ctx.db
+      .query("articles")
+      .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
+      .collect();
+    const out = [];
+    for (const a of articles) {
+      const blocks = await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_article", (q) => q.eq("articleId", a._id))
+        .collect();
+      const stories = [
+        ...new Set(blocks.map((b) => b.sourceStoryId).filter((s): s is string => !!s)),
+      ];
+      out.push({
+        articleId: a._id,
+        order: a.order,
+        title: a.title,
+        pageStart: a.pageStart,
+        reviewStatus: a.reviewStatus,
+        stories,
+      });
+    }
+    return out;
+  },
+});
+
+async function deleteArticle(ctx: MutationCtx, articleId: Id<"articles">) {
+  const blocks = await ctx.db
+    .query("articleBlocks")
+    .withIndex("by_article", (q) => q.eq("articleId", articleId))
+    .collect();
+  for (const b of blocks) {
+    await deleteLinksForBlock(ctx, b._id);
+    await ctx.db.delete(b._id);
+  }
+  for (const table of ["articleRegions", "articleAssets"] as const) {
+    const rows = await ctx.db
+      .query(table)
+      .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
+      .collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+  }
+  await ctx.db.delete(articleId);
+}
+
+/**
+ * Ergebnis eines Nachtrags uebernehmen: `remove` faellt weg, `insert` kommt
+ * dazu, danach werden alle Artikel der Ausgabe nach Seite und Satzfolge neu
+ * gezaehlt. Neue Artikel uebernehmen die Freigabe, wenn die Ausgabe ganz
+ * freigegeben ist. Verzeichniseintraege und Lesestaende auf einen ersetzten
+ * Artikel zeigen danach auf seinen Nachfolger auf derselben Seite.
+ */
+export const mergeResultInternal = internalMutation({
+  args: {
+    jobId: v.id("importJobs"),
+    workerId: v.string(),
+    issueId: v.id("issues"),
+    probe: v.boolean(),
+    remove: v.array(v.id("articles")),
+    insert: v.array(articleInput),
+    // Stelle im Satz fuer die bleibenden Artikel.
+    orders: v.array(v.object({ articleId: v.id("articles"), order: v.number() })),
+  },
+  handler: async (ctx, { jobId, workerId, issueId, probe, remove, insert, orders }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job || job.issueId !== issueId) throw new Error("Auftrag passt nicht zur Ausgabe");
+    if (job.workerId && job.workerId !== workerId) {
+      throw new Error("Sperre liegt bei einem anderen Worker");
+    }
+    const articles = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    const weg = new Set(remove.map(String));
+    const removed = articles.filter((a) => weg.has(a._id));
+    const summary = {
+      removed: removed.map((a) => `${a.pageStart}: ${a.title.slice(0, 60)}`),
+      inserted: insert.map((a) => `${a.pageStart}: ${a.title.slice(0, 60)}`),
+    };
+    if (probe) return summary;
+
+    const allApproved = articles.length > 0 && articles.every((a) => a.reviewStatus === "approved");
+    const now = Date.now();
+    for (const a of removed) await deleteArticle(ctx, a._id);
+    const neu: { id: Id<"articles">; pageStart: number; rank: number }[] = [];
+    for (const a of insert) {
+      const id = await insertArticle(ctx, issueId, a, allApproved ? "approved" : "pending", now);
+      neu.push({ id, pageStart: a.pageStart, rank: a.order });
+    }
+
+    // Verweise auf ersetzte Artikel umhaengen.
+    const nachfolger = (pageStart: number) =>
+      neu.filter((n) => n.pageStart === pageStart).sort((x, y) => x.rank - y.rank)[0]?.id;
+    const toc = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    for (const t of toc) {
+      if (!t.articleId || !weg.has(t.articleId)) continue;
+      const alt = removed.find((a) => a._id === t.articleId)!;
+      await ctx.db.patch(t._id, { articleId: nachfolger(alt.pageStart) });
+    }
+    const progress = await ctx.db.query("readingProgress").collect();
+    for (const p of progress) {
+      if (p.issueId !== issueId || !p.articleId || !weg.has(p.articleId)) continue;
+      const alt = removed.find((a) => a._id === p.articleId)!;
+      await ctx.db.patch(p._id, { articleId: nachfolger(alt.pageStart) });
+    }
+
+    // Neu zaehlen: Seite, dann Stelle im Satz; Artikel ohne Satz (Umschlag)
+    // behalten ihre Stelle untereinander.
+    const rang = new Map(orders.map((o) => [o.articleId as string, o.order]));
+    const alle = [
+      ...articles
+        .filter((a) => !weg.has(a._id))
+        .map((a) => ({ id: a._id, pageStart: a.pageStart, rank: rang.get(a._id) ?? a.order })),
+      ...neu,
+    ].sort((x, y) => x.pageStart - y.pageStart || x.rank - y.rank);
+    for (const [i, a] of alle.entries()) {
+      const doc = await ctx.db.get(a.id);
+      if (doc && doc.order !== i + 1) await ctx.db.patch(a.id, { order: i + 1 });
+    }
+    await ctx.db.patch(issueId, { articleCount: alle.length, updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.articleProducts.matchInternal, { issueId });
+    console.log(
+      JSON.stringify({
+        event: "import.merged",
+        issueId,
+        removed: removed.length,
+        inserted: insert.length,
+      }),
+    );
+    return summary;
   },
 });
