@@ -3,11 +3,13 @@ import { internalMutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 /** Aktueller Wortlaut. Bei Aenderung Version hochzaehlen — alte Zustimmungen bleiben belegbar. */
-export const WITHDRAWAL_WAIVER_VERSION = "2026-09-29";
+// Wortlaut fuer digitale Inhalte (§ 356 Abs. 5 BGB): das Recht erlischt mit
+// Beginn der Ausfuehrung, nicht erst mit vollstaendiger Erfuellung.
+export const WITHDRAWAL_WAIVER_VERSION = "2026-10-02";
 export const WITHDRAWAL_WAIVER_TEXT =
-  "Ich verlange ausdrücklich, dass Sie vor Ablauf der Widerrufsfrist mit der " +
-  "Ausführung des Vertrags beginnen. Mir ist bekannt, dass ich mit vollständiger " +
-  "Vertragserfüllung mein Widerrufsrecht verliere.";
+  "Ich stimme ausdrücklich zu, dass Sie vor Ablauf der Widerrufsfrist mit der " +
+  "Ausführung des Vertrags beginnen. Mir ist bekannt, dass ich durch diese " +
+  "Zustimmung mit Beginn der Ausführung des Vertrags mein Widerrufsrecht verliere.";
 
 export const consentType = v.union(
   v.literal("withdrawal_waiver"),

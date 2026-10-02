@@ -382,7 +382,7 @@ function KasseKonto({
         <input type="checkbox" checked={verzicht} onChange={(e) => setVerzicht(e.target.checked)} />
         <span>
           {waiver?.text ??
-            "Ich verlange ausdrücklich, dass Sie vor Ablauf der Widerrufsfrist mit der Ausführung des Vertrags beginnen. Mir ist bekannt, dass ich mit vollständiger Vertragserfüllung mein Widerrufsrecht verliere."}{" "}
+            "Ich stimme ausdrücklich zu, dass Sie vor Ablauf der Widerrufsfrist mit der Ausführung des Vertrags beginnen. Mir ist bekannt, dass ich durch diese Zustimmung mit Beginn der Ausführung des Vertrags mein Widerrufsrecht verliere."}{" "}
           (<Link to="/widerruf">Widerrufsbelehrung</Link>)
         </span>
       </label>
