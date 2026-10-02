@@ -193,3 +193,16 @@ export const removeInternal = internalMutation({
     }
   },
 });
+
+/** Ziel eines Eintrags setzen — fuer Werkzeuge mit Deploy-Schluessel. */
+export const setTargetInternal = internalMutation({
+  args: {
+    entryId: v.id("tocEntries"),
+    pageIndex: v.number(),
+    articleId: v.optional(v.id("articles")),
+  },
+  handler: async (ctx, { entryId, pageIndex, articleId }) => {
+    await ctx.db.patch(entryId, { pageIndex, articleId });
+    return null;
+  },
+});
