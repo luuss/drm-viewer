@@ -134,6 +134,10 @@ def titel_bereinigen(
     aus_seite = (
         stehende_rubrik(seitenrubrik, mit_anrede=False) if erster_auf_seite else None
     )
+    if eigene and not aus_text and eigene.lower() in ("nachrichten", "meldungen"):
+        # Eine gesetzte Rubrikzeile ist schon der Name: "Nachrichten aus
+        # Deutschland" und "Nachrichten aus aller Welt" sind zwei Rubriken.
+        return titel
     if eigene:
         # Der Titel nennt seine Rubrik selbst ("Leserbriefe" unter der
         # Kopfzeile "Buchbesprechungen" der Nachbarseite).

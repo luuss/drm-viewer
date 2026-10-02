@@ -117,3 +117,7 @@ def test_stehende_rubriken_kommen_ins_verzeichnis():
     ]
     # Nur gedruckte Eintraege haben eine Klickflaeche.
     assert payload[2]["regions"] and payload[3]["regions"] and not payload[0]["regions"]
+
+
+def test_meldungsrubrik_behaelt_ihren_ganzen_namen():
+    assert titel_bereinigen("Nachrichten aus aller Welt", aus_text=False) == "Nachrichten aus aller Welt"
