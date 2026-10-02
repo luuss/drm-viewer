@@ -16,10 +16,13 @@ export const get = query({
       )
       .unique();
     if (!row) return null;
+    // Ein Artikel kann seit dem Speichern entfernt worden sein (Umschlag,
+    // Nachtrag); dann gilt nur noch die Seite.
+    const article = row.articleId ? await ctx.db.get(row.articleId) : null;
     return {
       mode: row.mode,
       pageIndex: row.pageIndex,
-      articleId: row.articleId ?? null,
+      articleId: article ? article._id : null,
       updatedAt: row.updatedAt,
     };
   },

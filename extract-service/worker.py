@@ -292,7 +292,7 @@ class Job:
         ihrer Hefte), zum Produkt (eine Artikelnummer) oder zur Suche
         (Suchbegriffe, der Laden entscheidet). Auf dem Umschlag ist die ganze
         Tafel die Flaeche, innen die Rahmen der Anzeige. Eine Umschlagtafel
-        ohne Preise und Bestellhinweise bleibt ein Artikel.
+        ohne Preise und Bestellhinweise wird gar nichts.
         """
         eigene = self.data.get("publicationSlug")
         cover = getattr(self, "_cover_pages", set())
@@ -322,7 +322,11 @@ class Job:
                     if len(nummern) == 1:
                         ziel["reference"] = nummern[0]
             if ziel is None:
-                behalten.append(a)
+                # Eine Umschlagseite ohne Anzeige und ohne Abo-Aufruf (die
+                # Rueckseite des Schwertertraegers) ist weder Artikel noch
+                # Klickflaeche.
+                if not umschlag:
+                    behalten.append(a)
                 continue
             seiten = sorted({r["pageIndex"] for r in a["regions"]} or {a["pageStart"]})
             for seite in seiten:

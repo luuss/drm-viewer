@@ -166,7 +166,8 @@ def test_umschlaganzeigen_werden_ladenlinks_je_nach_inhalt():
                     "Kriegsrat, 320 S., € 29,80. DMZ-Versand.")
     orden = tafel(83, "Auszeichnungen", "Eisernes Kreuz 2. Klasse (1914), Pour le Mérite (1918).")
     behalten, links = worker.Job._seitenlinks(stub, [einzeln, sammlung, mehrere, orden])
-    assert [a["title"] for a in behalten] == ["Auszeichnungen"]
+    # Eine Umschlagseite ohne Anzeige (Greim U4) ist weder Artikel noch Link.
+    assert behalten == []
     assert [(l["kind"], l.get("reference"), l.get("publicationSlug"), l.get("queries", [])[:2], l.get("single")) for l in links] == [
         ("shop", "101208", None, ["Das Ritterkreuz", "Ritterkreuz"], True),
         ("series", None, "schwertertraeger", [], None),
