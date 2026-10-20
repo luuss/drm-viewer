@@ -1182,6 +1182,8 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .nur-meine[aria-pressed="true"] .kaestchen .icon { visibility: visible; }
 /* Eigene Ausgabe: Rahmen und Band in der Farbe der Reihe. */
 .reihe-seite .issue-card.eigen { border: 2px solid var(--reihe); }
+/* Abo-Kachel: steht vor den Heften, Rahmen und Band wie eine eigene Ausgabe. */
+.reihe-seite .issue-card.abo-kachel { border: 2px solid var(--reihe); }
 .reihe-seite .issue-card .issue-cover-preview { position: relative; }
 .eigen-band {
   position: absolute;

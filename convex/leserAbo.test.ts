@@ -1,0 +1,175 @@
+import { convexTest } from "convex-test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import schema from "./schema";
+import { api, internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
+import { signaturBilden } from "./leserStripe";
+import { ABO_HERKUNFT, aboAusStripe } from "./leserAbo";
+
+const modules = import.meta.glob("./**/*.ts");
+
+const WH_LIVE = "whsec_live_geheimnis";
+
+function kasseLive() {
+  process.env.LESER_STRIPE_MODE = "live";
+  process.env.LESER_STRIPE_SECRET_KEY_LIVE = "sk_live_x";
+  process.env.LESER_STRIPE_PUBLISHABLE_KEY_LIVE = "pk_live_x";
+  process.env.LESER_STRIPE_WEBHOOK_SECRET_LIVE = WH_LIVE;
+}
+
+async function aufbau(t: any) {
+  return await t.run(async (ctx: any) => {
+    const now = Date.now();
+    const userId = await ctx.db.insert("users", { email: "leser@example.de" });
+    const publicationId = await ctx.db.insert("publications", {
+      name: "ZUERST!",
+      slug: "zuerst",
+      isActive: true,
+      createdAt: now,
+    });
+    const heft = await ctx.db.insert("issues", {
+      publicationId,
+      title: "ZUERST! 3/2026",
+      slug: "zuerst-3-2026",
+      pageCount: 4,
+      priceAmountCents: 690,
+      isPublished: true,
+      publishedAt: now - 1000,
+      includedInSubscription: true,
+      createdAt: now - 1000,
+      updatedAt: now,
+    });
+    return {
+      userId: userId as Id<"users">,
+      publicationId: publicationId as Id<"publications">,
+      heft: heft as Id<"issues">,
+    };
+  });
+}
+
+async function senden(t: any, event: any) {
+  const rumpf = JSON.stringify(event);
+  const sig = await signaturBilden(rumpf, WH_LIVE, Math.floor(Date.now() / 1000));
+  return await t.fetch("/stripe/webhook", {
+    method: "POST",
+    headers: { "stripe-signature": sig, "content-type": "application/json" },
+    body: rumpf,
+  });
+}
+
+function abo(s: { userId: string; publicationId: string }, extra: Record<string, unknown> = {}) {
+  const jetzt = Math.floor(Date.now() / 1000);
+  return {
+    id: "sub_1",
+    customer: "cus_1",
+    status: "active",
+    start_date: jetzt - 60,
+    cancel_at_period_end: false,
+    // Neuere API-Versionen fuehren das Laufzeitende am Posten.
+    items: { data: [{ price: { id: "price_1" }, current_period_end: jetzt + 365 * 86400 }] },
+    metadata: { source: ABO_HERKUNFT, userId: s.userId, publicationId: s.publicationId },
+    ...extra,
+  };
+}
+
+describe("leserAbo", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    kasseLive();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    for (const k of [
+      "LESER_STRIPE_MODE",
+      "LESER_STRIPE_SECRET_KEY_LIVE",
+      "LESER_STRIPE_PUBLISHABLE_KEY_LIVE",
+      "LESER_STRIPE_WEBHOOK_SECRET_LIVE",
+    ]) {
+      delete process.env[k];
+    }
+  });
+
+  test("aboAusStripe liest das Laufzeitende auch vom Posten", () => {
+    const a = aboAusStripe(abo({ userId: "u", publicationId: "p" }), "live");
+    expect(a).toMatchObject({ stripeSubscriptionId: "sub_1", stripePriceId: "price_1", status: "active" });
+    expect(a.currentPeriodEnd).toBeGreaterThan(Date.now());
+    expect(aboAusStripe(abo({ userId: "u", publicationId: "p" }), "live", true)).toMatchObject({
+      status: "canceled",
+      cancelAtPeriodEnd: true,
+    });
+  });
+
+  test("ein neuer Preis loest den alten ab; im Angebot nur im Modus der Kasse", async () => {
+    const t = convexTest(schema, modules);
+    const s = await aufbau(t);
+    const setzen = (cents: number, modus: "test" | "live") =>
+      t.mutation(internal.leserAbo.planSetzen, {
+        publicationId: s.publicationId,
+        modus,
+        priceAmountCents: cents,
+        stripePriceId: `price_${cents}_${modus}`,
+        stripeProductId: "prod_1",
+        stripeTaxRateId: "txr_1",
+      });
+    await setzen(4900, "live");
+    await setzen(5900, "live");
+    await setzen(100, "test");
+    const offers = await t.query(api.plans.offers, {});
+    expect(offers).toHaveLength(1);
+    expect(offers[0].headline).toMatchObject({ priceAmountCents: 5900, interval: "year" });
+    expect(offers[0].tiers.flatMap((x: any) => x.plans)).toHaveLength(1);
+
+    delete process.env.LESER_STRIPE_MODE;
+    expect(await t.query(api.plans.offers, {})).toEqual([]);
+  });
+
+  test("Webhook: eigenes Abo schaltet frei, fremde Abos des Ladenkontos nicht", async () => {
+    const t = convexTest(schema, modules);
+    const s = await aufbau(t);
+
+    const fremd = await senden(t, {
+      type: "customer.subscription.created",
+      data: { object: abo(s, { id: "sub_fremd", metadata: {} }) },
+    });
+    expect(fremd.status).toBe(200);
+
+    await senden(t, { type: "customer.subscription.created", data: { object: abo(s) } });
+    const stand = await t.run(async (ctx: any) => ({
+      subs: await ctx.db.query("subscriptions").collect(),
+      rechte: await ctx.db.query("entitlements").collect(),
+    }));
+    expect(stand.subs).toHaveLength(1);
+    expect(stand.subs[0]).toMatchObject({ stripeSubscriptionId: "sub_1", stripeModus: "live", status: "active" });
+    expect(stand.rechte.map((r: any) => r.issueId)).toEqual([s.heft]);
+
+    const als = t.withIdentity({ subject: `${s.userId}|s` });
+    expect((await als.query(api.subscriptions.myStatus, {})).active).toBe(true);
+
+    await senden(t, { type: "customer.subscription.deleted", data: { object: abo(s, { status: "canceled" }) } });
+    expect((await als.query(api.subscriptions.myStatus, {})).active).toBe(false);
+  });
+
+  test("Webhook: bezahlter Checkout wird als Kauf vermerkt, fremder nicht", async () => {
+    const t = convexTest(schema, modules);
+    const s = await aufbau(t);
+    const sitzung = (metadata: Record<string, string>) => ({
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_1",
+          mode: "subscription",
+          payment_status: "paid",
+          amount_total: 4900,
+          customer_details: { email: "leser@example.de" },
+          metadata,
+        },
+      },
+    });
+    await senden(t, sitzung({}));
+    expect(await t.run(async (ctx: any) => await ctx.db.query("purchases").collect())).toHaveLength(0);
+    await senden(t, sitzung({ source: ABO_HERKUNFT, userId: s.userId }));
+    const kaeufe = await t.run(async (ctx: any) => await ctx.db.query("purchases").collect());
+    expect(kaeufe).toHaveLength(1);
+    expect(kaeufe[0]).toMatchObject({ amountCents: 4900, status: "paid" });
+  });
+});

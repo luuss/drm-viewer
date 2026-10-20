@@ -10,7 +10,7 @@ import Kasse from "../components/Kasse";
 /**
  * Auswahl im Leser. Mit Kartenkauf (leserKasse.status.aktiv) wird hier
  * bezahlt, sonst fuehrt „Zur Kasse“ in den Laden, dort liegen die Hefte schon
- * im Warenkorb. Hefte ohne Digitalausgabe im Laden fallen heraus.
+ * im Warenkorb.
  */
 export default function WarenkorbPage() {
   const ids = useWarenkorb();
@@ -29,13 +29,15 @@ export default function WarenkorbPage() {
 
   const zeilen = (gekauft ?? ids)
     .map((id) => issues.find((i) => i._id === id))
-    .filter((i): i is (typeof issues)[number] => !!i && !!i.shopSku);
+    .filter((i): i is (typeof issues)[number] => !!i);
+  // Fuer den Sprung in den Laden zaehlen nur Hefte mit Digitalausgabe dort.
+  const skus = zeilen.flatMap((i) => (i.shopSku ? [i.shopSku] : []));
   const summe = zeilen.reduce((s, i) => s + i.priceAmountCents, 0);
 
   function zurKasse() {
     const url = kassenUrl(
       storefront!.shopUrl,
-      zeilen.map((i) => i.shopSku!),
+      skus,
       me?.email ?? null,
     );
     leeren();
@@ -95,11 +97,11 @@ export default function WarenkorbPage() {
             kasseOffen ? (
               <Kasse
                 issueIds={zeilen.map((i) => i._id)}
-                shopKasse={kassenUrl(
-                  storefront.shopUrl,
-                  zeilen.map((i) => i.shopSku!),
-                  me?.email ?? null,
-                )}
+                shopKasse={
+                  skus.length === zeilen.length
+                    ? kassenUrl(storefront.shopUrl, skus, me?.email ?? null)
+                    : null
+                }
                 onBezahlt={() => setGekauft(zeilen.map((i) => i._id))}
                 onFertig={() => zeilen.forEach((i) => heraus(i._id))}
               />

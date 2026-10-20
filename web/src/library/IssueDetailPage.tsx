@@ -141,7 +141,7 @@ export default function IssueDetailPage() {
           <button className="btn" onClick={() => navigate(`/reader/${issueId}`)}>
             Jetzt lesen
           </button>
-        ) : issue.shopSku && kasse?.aktiv ? (
+        ) : kasse?.aktiv ? (
           <>
             {!kasseOffen && (
               <div className="row actions">
@@ -162,12 +162,17 @@ export default function IssueDetailPage() {
             {kasseOffen && (
               <Kasse
                 issueIds={[issue._id]}
-                shopKasse={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
+                shopKasse={
+                  issue.shopSku
+                    ? kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)
+                    : null
+                }
                 leseZiel={`/reader/${issueId}`}
                 onBezahlt={() => setGekauft(true)}
                 onFertig={() => heraus(issue._id)}
               />
             )}
+            <ShopHinweis />
           </>
         ) : (
           <>
