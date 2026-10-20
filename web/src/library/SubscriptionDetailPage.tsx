@@ -22,10 +22,11 @@ const SAMPLE_COPY_URL: Record<string, string> = {
 };
 
 /**
- * Abo-Seite eines Titels. Hier — und erst hier — waehlt der Kunde Abo-Art und
- * Liefergebiet; vorausgewaehlt ist die Stufe, deren Preis der Kiosk zeigt.
- * Abgeschlossen wird das Digital-Abo im Laden. Der eigene Checkout ueber den
- * Zahlungsdienst ist nur per Schalter (`STRIPE_CHECKOUT_ENABLED`) an.
+ * Abo-Seite eines Titels. Abgeschlossen wird das Digital-Jahresabo ueber
+ * Stripe Checkout im Konto des Ladens (leserAbo.abschliessen); gibt es
+ * mehrere Preisstufen, waehlt der Kunde hier. Ohne kaeufliche Stufe fuehrt
+ * der Knopf in den Laden. Der alte eigene Checkout (`STRIPE_CHECKOUT_ENABLED`)
+ * bleibt als Rueckweg.
  */
 export default function SubscriptionDetailPage() {
   const { slug = "" } = useParams();
@@ -33,7 +34,8 @@ export default function SubscriptionDetailPage() {
   const offer = useQuery(api.plans.offerBySlug, { slug });
   const waiver = useQuery(api.consents.currentWaiver, {});
   const storefront = useQuery(api.shopIntegration.storefront, {});
-  const subscribe = useAction(api.billing.createSubscriptionCheckout);
+  const subscribeAlt = useAction(api.billing.createSubscriptionCheckout);
+  const abschliessen = useAction(api.leserAbo.abschliessen);
   const [chosen, setChosen] = useState<Id<"subscriptionPlans"> | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,9 +53,8 @@ export default function SubscriptionDetailPage() {
 
   const plans = offer.tiers.flatMap((t) => t.plans);
   const selected = plans.find((p) => p._id === chosen) ?? offer.headline;
-  // Eigener Checkout nur mit Schalter und Preisstufen; sonst fuehrt der
-  // Knopf in den Laden.
-  const stripeMode = storefront.stripeCheckout && selected !== null;
+  // Checkout nur mit kaeuflicher Preisstufe; sonst fuehrt der Knopf in den Laden.
+  const stripeMode = (storefront.stripeAbo || storefront.stripeCheckout) && selected !== null;
   const perInterval = selected?.interval === "year" ? "pro Jahr" : "pro Monat";
   const sampleUrl = SAMPLE_COPY_URL[slug];
 
@@ -63,12 +64,10 @@ export default function SubscriptionDetailPage() {
     setBusy(true);
     try {
       const origin = window.location.origin;
-      const { url } = await subscribe({
-        planId: selected._id,
-        successUrl: `${origin}/library?abo=1`,
-        cancelUrl: `${origin}/abo/${slug}`,
-        withdrawalWaiver: accepted,
-      });
+      const ziele = { successUrl: `${origin}/library?abo=1`, cancelUrl: `${origin}/abo/${slug}` };
+      const { url } = storefront!.stripeAbo
+        ? await abschliessen({ planId: selected._id, widerrufsverzicht: accepted, ...ziele })
+        : await subscribeAlt({ planId: selected._id, withdrawalWaiver: accepted, ...ziele });
       window.location.href = url;
     } catch (e: any) {
       setErr(cleanError(e) ?? "Abo fehlgeschlagen");
@@ -117,6 +116,7 @@ export default function SubscriptionDetailPage() {
 
         {stripeMode ? (
           <>
+            {plans.length > 1 && (
             <fieldset className="subscription-choice">
               <legend>Abo-Art und Liefergebiet wählen</legend>
               <div className="subscription-grid">
@@ -154,6 +154,7 @@ export default function SubscriptionDetailPage() {
                 })}
               </div>
             </fieldset>
+            )}
 
             <div className="price">
               {formatEuro(selected!.priceAmountCents)}
@@ -161,6 +162,10 @@ export default function SubscriptionDetailPage() {
                 {" "}{perInterval} · {selected!.name}
               </span>
             </div>
+            <p className="hint">
+              Verlängert sich automatisch um ein Jahr und ist jederzeit zum Ende der Laufzeit
+              kündbar, im Profil.
+            </p>
 
             <Authenticated>
               <label className="consent">

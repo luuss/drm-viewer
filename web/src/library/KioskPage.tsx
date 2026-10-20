@@ -79,7 +79,7 @@ export default function KioskPage() {
                   )}
                   {/* Ohne eigenen Checkout gilt der Preis des Digital-Abos im
                       Laden; die Stripe-Preisstufen waeren irrefuehrend. */}
-                  {storefront.stripeCheckout && o.headline ? (
+                  {(storefront.stripeAbo || storefront.stripeCheckout) && o.headline ? (
                     <>
                       <div className="price">
                         {formatEuro(o.headline.priceAmountCents)}

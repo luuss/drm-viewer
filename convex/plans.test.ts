@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
 import {
@@ -9,6 +9,15 @@ import {
 } from "./subscriptionCatalog";
 
 const modules = import.meta.glob("./**/*.ts");
+
+// Die Stufen hier sind die des alten eigenen Checkouts (ohne stripeModus);
+// kaeuflich sind sie nur mit dessen Schalter.
+beforeEach(() => {
+  process.env.STRIPE_CHECKOUT_ENABLED = "true";
+});
+afterEach(() => {
+  delete process.env.STRIPE_CHECKOUT_ENABLED;
+});
 
 /** Beide Verlagstitel mit allen Preisstufen aus dem Katalog, dazu ein Titel ohne Abo. */
 async function seed(t: ReturnType<typeof convexTest>) {

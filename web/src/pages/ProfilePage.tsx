@@ -21,8 +21,8 @@ export default function ProfilePage() {
   const purchases = useQuery(api.purchases.mine, {});
   const logins = useQuery(api.sessions.mine, {});
   const deleteAccount = useAction(api.account.deleteMyAccount);
-  const portal = useAction(api.billing.createPortalSession);
-  const cancelSub = useAction(api.billing.cancelMySubscription);
+  const portal = useAction(api.leserAbo.portal);
+  const kuendigen = useAction(api.leserAbo.kuendigen);
   const revokeLogin = useMutation(api.sessions.revoke);
   const { signOut } = useAuthActions();
   const setName = useMutation(api.account.setName);
@@ -67,28 +67,33 @@ export default function ProfilePage() {
             {subStatus.subscriptions.map((s) => (
               <li key={s._id} className="sub-line">
                 <span>
-                  Status {s.status}
+                  {s.publication ?? "Abo"}
                   {s.currentPeriodEnd
-                    ? ` · läuft bis ${new Date(s.currentPeriodEnd).toLocaleDateString("de-DE")}`
+                    ? s.cancelAtPeriodEnd
+                      ? ` · gekündigt, läuft bis ${new Date(s.currentPeriodEnd).toLocaleDateString("de-DE")}`
+                      : ` · verlängert sich am ${new Date(s.currentPeriodEnd).toLocaleDateString("de-DE")}`
                     : ""}
-                  {s.cancelAtPeriodEnd ? " · gekündigt zum Laufzeitende" : ""}
+                  {s.status === "past_due" ? " · Zahlung offen" : ""}
                 </span>
-                {!s.cancelAtPeriodEnd && (
-                  <button
-                    className="btn secondary small"
-                    disabled={busy}
-                    onClick={() =>
-                      guard(async () => {
-                        await cancelSub({
-                          stripeSubscriptionId: s.stripeSubscriptionId,
-                        });
-                        setMsg("Kündigung zum Laufzeitende vorgemerkt.");
-                      })
-                    }
-                  >
-                    Kündigen
-                  </button>
-                )}
+                <button
+                  className="btn secondary small"
+                  disabled={busy}
+                  onClick={() =>
+                    guard(async () => {
+                      await kuendigen({
+                        stripeSubscriptionId: s.stripeSubscriptionId,
+                        zuruecknehmen: s.cancelAtPeriodEnd,
+                      });
+                      setMsg(
+                        s.cancelAtPeriodEnd
+                          ? "Kündigung zurückgenommen, das Abo läuft weiter."
+                          : "Kündigung zum Laufzeitende vorgemerkt.",
+                      );
+                    })
+                  }
+                >
+                  {s.cancelAtPeriodEnd ? "Kündigung zurücknehmen" : "Kündigen"}
+                </button>
               </li>
             ))}
           </ul>
