@@ -3,8 +3,14 @@ import { useQuery } from "convex/react";
 import { api, formatDate } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import ReihenKacheln from "../components/ReihenKacheln";
+import { reiheVon } from "../lib/reihen";
 
-/** Nur Ausgaben, auf die der angemeldete Leser Zugriff hat. */
+/**
+ * Nur Ausgaben, auf die der angemeldete Leser Zugriff hat. Gezeigt werden die
+ * Zeitschriften als Kacheln; die Hefte stehen auf der Seite der Zeitschrift,
+ * die eigenen dort markiert. Hefte ohne bekannte Reihe stehen hier als Karten.
+ */
 export default function LibraryPage() {
   const issues = useQuery(api.issues.myLibrary, {});
   if (issues === undefined) return <div className="centered">Laden...</div>;
@@ -34,8 +40,9 @@ export default function LibraryPage() {
         <h2>Meine Ausgaben</h2>
         <p className="hint">Freigeschaltete Hefte, dauerhaft lesbar.</p>
       </div>
+      <ReihenKacheln hefte={issues} />
       <div className="issue-grid">
-        {issues.map((i) => (
+        {issues.filter((i) => !reiheVon(i.publicationName)).map((i) => (
           <Link key={i._id} to={`/reader/${i._id}`} className="issue-card">
             <div className="issue-cover-preview">
               {i.coverUrl ? (

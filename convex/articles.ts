@@ -12,7 +12,8 @@ import { blockType, tableData } from "./schema";
 import { assetUrl } from "./assets";
 import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
 import { internal } from "./_generated/api";
-import { Id } from "./_generated/dataModel";
+import { ausschnitt, passt, suchwoerter, sucheVormerken } from "./suche";
+import { Doc, Id } from "./_generated/dataModel";
 
 const regionInput = v.object({
   pageIndex: v.number(),
@@ -89,6 +90,7 @@ export async function rebuildSearchText(ctx: MutationCtx, articleId: Id<"article
     searchText: parts.filter(Boolean).join("\n\n").slice(0, 100000),
     updatedAt: Date.now(),
   });
+  await sucheVormerken(ctx, article.issueId, articleId);
 }
 
 async function recountIssue(ctx: MutationCtx, issueId: Id<"issues">) {
@@ -327,38 +329,44 @@ export const getForReader = query({
   },
 });
 
+/**
+ * Volltext der Hefte, auf die der Leser Zugriff hat, mit Ausschnitt. Gesucht
+ * wird in den Stuecken aus `suche.ts`, nicht in den Artikeln selbst.
+ */
 export const search = query({
   args: { term: v.string(), issueId: v.optional(v.id("issues")) },
   handler: async (ctx, { term, issueId }) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId || term.trim().length < 3) return [];
+    const begriff = term.trim();
+    const woerter = suchwoerter(begriff);
+    if (!userId || begriff.length < 3 || !woerter) return [];
     const allowed = await accessibleIssueIds(ctx, userId as Id<"users">);
 
     const hits = await ctx.db
-      .query("articles")
+      .query("searchChunks")
       .withSearchIndex("search_text", (q) => {
-        const base = q.search("searchText", term).eq("reviewStatus", "approved");
+        const base = q.search("text", woerter);
         return issueId ? base.eq("issueId", issueId) : base;
       })
-      .take(60);
+      .take(64);
 
+    const hefte = new Map<string, Doc<"issues"> | null>();
+    const gesehen = new Set<string>();
     const out = [];
-    for (const a of hits) {
-      if (!allowed.has(a.issueId as string)) continue;
-      const issue = await ctx.db.get(a.issueId);
+    for (const c of hits) {
+      if (!allowed.has(c.issueId as string)) continue;
+      if (gesehen.has(c.articleId as string) || !passt(c.text, begriff)) continue;
+      if (!hefte.has(c.issueId as string)) hefte.set(c.issueId as string, await ctx.db.get(c.issueId));
+      const issue = hefte.get(c.issueId as string);
       if (!issue?.isPublished) continue;
-      const idx = a.searchText.toLowerCase().indexOf(term.toLowerCase());
-      const start = Math.max(0, idx - 70);
+      gesehen.add(c.articleId as string);
       out.push({
-        _id: a._id,
-        issueId: a.issueId,
+        _id: c.articleId,
+        issueId: c.issueId,
         issueTitle: issue.title,
-        title: a.title,
-        pageIndex: a.primaryPageIndex,
-        snippet:
-          (start > 0 ? "..." : "") +
-          a.searchText.slice(start, start + 220).replace(/\s+/g, " ") +
-          "...",
+        title: c.title,
+        pageIndex: c.pageIndex,
+        snippet: ausschnitt(c.text, begriff),
       });
       if (out.length >= 25) break;
     }
@@ -717,6 +725,7 @@ export const setTitleInternal = internalMutation({
       searchText: (neu + rest).slice(0, 100000),
       updatedAt: Date.now(),
     });
+    await sucheVormerken(ctx, article.issueId, articleId);
   },
 });
 
@@ -732,6 +741,8 @@ export const setReviewStatusInternal = internalMutation({
   },
   handler: async (ctx, { articleId, reviewStatus }) => {
     await ctx.db.patch(articleId, { reviewStatus, updatedAt: Date.now() });
+    const geaendert = await ctx.db.get(articleId);
+    if (geaendert) await sucheVormerken(ctx, geaendert.issueId, articleId);
   },
 });
 
@@ -747,6 +758,8 @@ export const setReviewStatus = mutation({
   handler: async (ctx, { articleId, reviewStatus }) => {
     await requireEditor(ctx);
     await ctx.db.patch(articleId, { reviewStatus, updatedAt: Date.now() });
+    const geaendert = await ctx.db.get(articleId);
+    if (geaendert) await sucheVormerken(ctx, geaendert.issueId, articleId);
     await audit(ctx, `article.review.${reviewStatus}`, articleId);
   },
 });
@@ -777,6 +790,7 @@ export const approveAllPending = mutation({
       // am Heft (articleCount) haengen an der Anzahl, nicht am Status, und
       // duerfen hier nicht angefasst werden.
       await ctx.db.patch(r._id, { reviewStatus: "approved", updatedAt: now });
+      await sucheVormerken(ctx, issueId, r._id);
     }
 
     // Nach dem Deckel kann noch etwas offen sein. Das meldet die Pruefansicht,
@@ -827,6 +841,7 @@ export const removeArticle = mutation({
       }
     }
     await ctx.db.delete(articleId);
+    await sucheVormerken(ctx, article.issueId, articleId);
     await renumber(ctx, article.issueId);
     await recountIssue(ctx, article.issueId);
   },
@@ -849,6 +864,7 @@ export const removeInternal = internalMutation({
       }
     }
     await ctx.db.delete(articleId);
+    await sucheVormerken(ctx, article.issueId, articleId);
     await renumber(ctx, article.issueId);
     await recountIssue(ctx, article.issueId);
   },
@@ -878,6 +894,7 @@ export const replaceForIssueInternal = internalMutation({
           for (const r of rows) await ctx.db.delete(r._id);
         }
         await ctx.db.delete(a._id);
+        await sucheVormerken(ctx, issueId, a._id);
       }
       await deleteLinksForIssue(ctx, issueId);
     }

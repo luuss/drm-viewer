@@ -300,6 +300,25 @@ export default defineSchema(
       filterFields: ["issueId"],
     }),
 
+  /**
+   * Suchtext der Artikel veroeffentlichter Hefte in kurzen Stuecken, mit Titel
+   * und Seite daneben. Abgeleitet, nie von Hand gepflegt: siehe `suche.ts`.
+   */
+  searchChunks: defineTable({
+    articleId: v.id("articles"),
+    issueId: v.id("issues"),
+    title: v.string(),
+    subtitle: v.optional(v.string()),
+    pageIndex: v.number(),
+    text: v.string(),
+  })
+    .index("by_article", ["articleId"])
+    .index("by_issue", ["issueId"])
+    .searchIndex("search_text", {
+      searchField: "text",
+      filterFields: ["issueId"],
+    }),
+
   articleBlocks: defineTable({
     articleId: v.id("articles"),
     issueId: v.id("issues"),

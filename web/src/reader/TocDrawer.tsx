@@ -7,6 +7,11 @@ type Props = {
   issueId: Id<"issues">;
   issueTitle?: string;
   open: boolean;
+  /**
+   * Fest links neben dem Heft statt als Schublade. Dann bleibt die Liste
+   * nach einem Sprung stehen, und "Schliessen" blendet sie nur aus.
+   */
+  docked?: boolean;
   onClose: () => void;
   onPage: (pageIndex: number) => void;
   onArticle: (articleId: Id<"articles">) => void;
@@ -58,6 +63,7 @@ export default function TocDrawer({
   issueId,
   issueTitle,
   open,
+  docked = false,
   onClose,
   onPage,
   onArticle,
@@ -66,73 +72,86 @@ export default function TocDrawer({
   currentPages,
   pageLabel,
 }: Props) {
-  const entries = useQuery(api.toc.listForReader, open ? { issueId } : "skip");
+  const visible = open || docked;
+  const entries = useQuery(api.toc.listForReader, visible ? { issueId } : "skip");
   const list = useRef<HTMLUListElement>(null);
   const currentId = entries
     ? currentEntryId(entries, currentArticleId, currentPages)
     : null;
 
   // Ein Heft hat achtzig Eintraege: der aktuelle steht beim Oeffnen in der
-  // Mitte der Liste, sonst laege die Hervorhebung meist unter dem Rand.
+  // Mitte der Liste, sonst laege die Hervorhebung meist unter dem Rand. Die
+  // feste Liste folgt dem Blaettern, nimmt aber nicht den Fokus: sonst
+  // gehoerten die Pfeiltasten danach der Liste statt dem Heft.
   useEffect(() => {
-    if (!open || !currentId || !list.current) return;
+    if (!visible || !currentId || !list.current) return;
     const box = list.current;
     const entry = box.querySelector<HTMLButtonElement>(".toc-entry.current");
     if (!entry) return;
     const offset = entry.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    if (docked && offset >= 0 && offset + entry.offsetHeight <= box.clientHeight) return;
     box.scrollTop += offset - (box.clientHeight - entry.offsetHeight) / 2;
-    entry.focus({ preventScroll: true });
-  }, [open, currentId]);
+    if (!docked) entry.focus({ preventScroll: true });
+  }, [visible, docked, currentId, entries]);
 
-  if (!open) return null;
+  if (!visible) return null;
 
+  const panel = (
+    <aside
+      className={docked ? "toc-drawer toc-docked" : "toc-drawer"}
+      aria-label="Inhaltsverzeichnis"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <header>
+        <div className="toc-title">
+          {issueTitle && <span className="kicker">{issueTitle}</span>}
+          <h2>Inhalt</h2>
+        </div>
+        <button
+          className="btn quiet small"
+          onClick={onClose}
+          title={docked ? "Inhaltsverzeichnis ausblenden" : undefined}
+        >
+          <Icon name="close" /> {docked ? "Ausblenden" : "Schließen"}
+        </button>
+      </header>
+      {entries === undefined && <p className="hint">Laden...</p>}
+      {entries?.length === 0 && (
+        <p className="hint">Für diese Ausgabe ist kein Inhalt hinterlegt.</p>
+      )}
+      <ul className="toc-list" ref={list}>
+        {entries?.map((e) => {
+          const current = e._id === currentId;
+          return (
+            <li key={e._id} className={`level-${e.level}`}>
+              <button
+                className={current ? "toc-entry current" : "toc-entry"}
+                aria-current={current ? "true" : undefined}
+                onClick={() => {
+                  if (mode === "article" && e.articleId) onArticle(e.articleId);
+                  else if (e.pageIndex !== null) onPage(e.pageIndex);
+                  else if (e.articleId) onArticle(e.articleId);
+                  if (!docked) onClose();
+                }}
+              >
+                <span className="label">{e.label}</span>
+                {e.pageIndex !== null && (
+                  /* Nicht `page`: diese Klasse gehoert dem Seitenrahmen und
+                     zog die Seitenzahl auf die volle Breite der Schublade. */
+                  <span className="page-num">{pageLabel(e.pageIndex)}</span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </aside>
+  );
+
+  if (docked) return panel;
   return (
     <div className="toc-backdrop" onClick={onClose}>
-      <aside
-        className="toc-drawer"
-        aria-label="Inhaltsverzeichnis"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header>
-          <div className="toc-title">
-            {issueTitle && <span className="kicker">{issueTitle}</span>}
-            <h2>Inhalt</h2>
-          </div>
-          <button className="btn quiet small" onClick={onClose}>
-            <Icon name="close" /> Schließen
-          </button>
-        </header>
-        {entries === undefined && <p className="hint">Laden...</p>}
-        {entries?.length === 0 && (
-          <p className="hint">Für diese Ausgabe ist kein Inhalt hinterlegt.</p>
-        )}
-        <ul className="toc-list" ref={list}>
-          {entries?.map((e) => {
-            const current = e._id === currentId;
-            return (
-              <li key={e._id} className={`level-${e.level}`}>
-                <button
-                  className={current ? "toc-entry current" : "toc-entry"}
-                  aria-current={current ? "true" : undefined}
-                  onClick={() => {
-                    if (mode === "article" && e.articleId) onArticle(e.articleId);
-                    else if (e.pageIndex !== null) onPage(e.pageIndex);
-                    else if (e.articleId) onArticle(e.articleId);
-                    onClose();
-                  }}
-                >
-                  <span className="label">{e.label}</span>
-                  {e.pageIndex !== null && (
-                    /* Nicht `page`: diese Klasse gehoert dem Seitenrahmen und
-                       zog die Seitenzahl auf die volle Breite der Schublade. */
-                    <span className="page-num">{pageLabel(e.pageIndex)}</span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </aside>
+      {panel}
     </div>
   );
 }

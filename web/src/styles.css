@@ -116,6 +116,58 @@
       haengt unten am selben Anschlag. Umschlaege behalten ihr Originalformat.
    ============================================================================ */
 
+/* Titelschriften der Reihen im Kopf der Leseansicht. Die Hausschriften der
+   Hefte (Helvetica Neue Condensed, Akzidenz Grotesk, Impact) sind Kaufschriften
+   ohne Weblizenz; diese freien Schriften (SIL OFL) kommen ihnen am naechsten. */
+@font-face {
+  font-family: 'Roboto Condensed';
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+  src: url(/fonts/roboto-condensed-normal-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Roboto Condensed';
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+  src: url(/fonts/roboto-condensed-normal-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Roboto Condensed';
+  font-style: italic;
+  font-weight: 800 900;
+  font-display: swap;
+  src: url(/fonts/roboto-condensed-italic-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Roboto Condensed';
+  font-style: italic;
+  font-weight: 800 900;
+  font-display: swap;
+  src: url(/fonts/roboto-condensed-italic-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Anton';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/anton-normal-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Anton';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/anton-normal-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* Farben des Verlagsshops lesenundschenken.de. */
   --paper: #f4f4f4;         /* Seitengrund, helles Grau */
@@ -404,27 +456,27 @@ main {
   margin-top: auto;
   background: var(--footer);
   color: var(--footer-text);
-  font-size: 0.84375rem;
-  line-height: 1.6;
+  font-size: 1rem;
+  line-height: 1.7;
 }
 .footer-main {
   display: grid;
   grid-template-columns: 1.4fr 1fr 1.2fr;
-  gap: var(--s7);
+  gap: var(--s8, 4rem);
   align-items: start;
-  padding-top: var(--s7);
-  padding-bottom: var(--s6);
+  padding-top: var(--s8, 4rem);
+  padding-bottom: var(--s8, 4rem);
 }
-.footer-logo { height: 3.75rem; width: auto; display: block; margin-bottom: var(--s4); }
+.footer-logo { height: 4.75rem; width: auto; display: block; margin-bottom: var(--s4); }
 .app-footer h4 {
   font-family: var(--sans);
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   line-height: 1.2;
   color: #fff;
-  margin: 0 0 var(--s4);
+  margin: 0 0 var(--s5);
 }
 .app-footer p { color: var(--footer-text); margin: 0; }
 .app-footer a { color: var(--footer-text); }
@@ -435,31 +487,31 @@ main {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
+  gap: var(--s3);
 }
 .footer-contact li {
   display: grid;
-  grid-template-columns: 4.5rem 1fr;
+  grid-template-columns: 5.5rem 1fr;
   gap: var(--s3);
   align-items: baseline;
 }
 .footer-contact .label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.5);
 }
 .footer-contact a { text-decoration: underline; }
-.footer-links { display: flex; flex-direction: column; gap: var(--s2); }
+.footer-links { display: flex; flex-direction: column; gap: var(--s3); }
 .copyright {
   background: var(--copyright);
   color: var(--copyright-text);
-  font-size: 0.78125rem;
+  font-size: 0.875rem;
 }
 .copyright .shell-inner {
-  padding-top: var(--s4);
-  padding-bottom: var(--s4);
+  padding-top: var(--s5);
+  padding-bottom: var(--s5);
   flex-wrap: wrap;
   gap: var(--s2) var(--s4);
 }
@@ -903,6 +955,356 @@ button.small, .btn.small {
    Kiosk, Bibliothek
    ============================================================ */
 
+/* Reihen als Kacheln mit Schriftzug, wie die Kategorien im Netzladen:
+   weisse Karten, eckig. Unten eine Fusszeile mit Anzahl und Weiter-Pfeil. */
+.reihen-kacheln {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s5);
+  margin: 0 0 var(--s7);
+}
+.reihen-kachel {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  color: var(--ink);
+  cursor: pointer;
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+.reihen-kachel:hover {
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-3px);
+}
+a.reihen-kachel { text-decoration: none; }
+.reihen-kachel .reihen-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 11rem;
+  padding: var(--s5) var(--s6);
+}
+.reihen-kachel img {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  height: 5.25rem;
+  object-fit: contain;
+}
+/* Die Schriftzuege haben sehr verschiedene Seitenverhaeltnisse. Gleiche Hoehe
+   liesse ZUERST! riesig und die DMZ winzig wirken; diese Hoehen geben allen
+   etwa dieselbe Flaeche. */
+.reihen-kachel.reihe-zuerst img { height: 5.5rem; }
+.reihen-kachel.reihe-dmz img { height: 7rem; }
+.reihen-kachel.reihe-dmz-zeitgeschichte img { height: 5rem; }
+.reihen-kachel.reihe-schwertertraeger img { height: 4.5rem; }
+/* Fussleiste schwarz fuer alle Reihen, wie ein Balken auf dem Heftruecken.
+   Bunte Hausfarben (Rot, einmal Blau) wirkten nebeneinander unruhig. */
+.reihen-fuss {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: auto;
+  padding: var(--s3) var(--s5);
+  background: #1c1c1c;
+  color: #fff;
+}
+.reihen-kachel .reihen-anzahl {
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+.reihen-weiter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: 0 0 auto;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  color: #fff;
+}
+.reihen-weiter .icon { transition: transform 0.15s ease; }
+.reihen-kachel:hover .reihen-weiter .icon { transform: translateX(var(--s1)); }
+
+/* Kleine Fassung unten auf der Seite einer Zeitschrift. */
+.reihen-kacheln.klein { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--s3); margin: 0; }
+.reihen-kacheln.klein .reihen-logo { height: 6rem; padding: var(--s3) var(--s4); }
+.reihen-kacheln.klein img { height: 3rem; }
+.reihen-kacheln.klein .reihe-dmz img { height: 4rem; }
+.reihen-kacheln.klein .reihen-fuss { padding: var(--s2) var(--s3); }
+.reihen-kacheln.klein .reihen-weiter-text { display: none; }
+
+/* Kopf des Kiosks: die Frage ist die Ueberschrift der Seite. */
+/* Die Blattluecke (--s7) plus Rand stand zu weit von den Kacheln weg. */
+.kiosk-kopf { margin-bottom: calc(var(--s5) - var(--s7)); }
+.kiosk-kopf .kicker {
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.kiosk-kopf h2 { text-wrap: balance; }
+
+/* Eigene Seite einer Zeitschrift: ein ruhiger weisser Kopf mit dem Schriftzug
+   links und Anzahl und Abo rechts, darunter nur ihre Hefte. Eckig wie ein
+   Heft; die Hausfarbe nur an Knopf und Kennzeichnung, kein Balken. */
+.reihe-seite { --reihe: var(--accent); }
+.reihe-kopf {
+  background: #fff;
+  border-bottom: 1px solid var(--rule);
+  /* Ueber die ganze Fensterbreite, auch wenn die Seite schmaler ist. */
+  margin: calc(-1 * var(--s7)) calc(50% - 50vw) var(--s6);
+}
+/* Der Kopf ragt ueber die Seitenbreite hinaus; quer rollen darf deshalb nichts. */
+body:has(.reihe-seite) { overflow-x: clip; }
+.reihe-kopf-innen {
+  max-width: var(--page-max, 72rem);
+  margin: 0 auto;
+  padding: var(--s7) var(--gutter, 1.5rem) var(--s6);
+}
+.reihe-pfad a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+}
+.reihe-pfad a:hover { color: var(--ink); }
+.reihe-kopf-zeile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s6);
+  margin-top: var(--s4);
+}
+.reihe-kopf-zeile > img {
+  display: block;
+  flex: 0 1 auto;
+  max-width: min(26rem, 60%);
+  max-height: 6rem;
+  width: auto;
+  height: auto;
+}
+.reihe-kopf-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s1);
+  text-align: right;
+}
+.reihe-untertitel {
+  margin: 0;
+  font-family: 'Roboto Condensed', 'Arial Narrow', sans-serif;
+  font-weight: 700;
+  font-size: var(--fs-sub);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.reihe-art {
+  margin: 0;
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.reihe-zahl {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--fs-h4);
+  font-weight: 600;
+  color: var(--ink);
+}
+.reihe-abo-knopf {
+  margin-top: var(--s2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  background: var(--reihe);
+  border-color: var(--reihe);
+  color: #fff;
+  border-radius: 0;
+}
+.reihe-abo-knopf:hover { color: #fff; filter: brightness(1.08); }
+.reihe-inhalt section + section { margin-top: var(--s7); }
+.reihe-inhalt h3 {
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--rule);
+}
+/* Kopf der Ausgabenliste: Ueberschrift links, Filter "Nur meine" rechts. */
+.reihe-ausgaben-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--s4);
+}
+.reihe-ausgaben-kopf h3 { margin: 0; padding: 0; border: 0; }
+.nur-meine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--ctl-h-sm);
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  cursor: pointer;
+}
+.nur-meine .kaestchen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid var(--reihe);
+  color: #fff;
+}
+.nur-meine .kaestchen .icon { width: 0.9rem; height: 0.9rem; visibility: hidden; }
+.nur-meine[aria-pressed="true"] .kaestchen { background: var(--reihe); }
+.nur-meine[aria-pressed="true"] .kaestchen .icon { visibility: visible; }
+/* Eigene Ausgabe: Rahmen und Band in der Farbe der Reihe. */
+.reihe-seite .issue-card.eigen { border: 2px solid var(--reihe); }
+.reihe-seite .issue-card .issue-cover-preview { position: relative; }
+.eigen-band {
+  position: absolute;
+  top: var(--s2);
+  left: var(--s2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s1) var(--s2);
+  background: var(--reihe);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.eigen-band .icon { width: 0.85rem; height: 0.85rem; }
+.reihe-abo-karte {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s5);
+  padding: var(--s5) var(--s6);
+  background: var(--reihe);
+  color: #fff;
+  text-decoration: none;
+}
+.reihe-abo-karte:hover { color: #fff; filter: brightness(1.06); }
+.reihe-abo-titel { font-family: var(--serif); font-size: var(--fs-h3); font-weight: 700; }
+.reihe-abo-text { opacity: 0.9; }
+.reihe-abo-karte .btn { background: #fff; color: var(--reihe); border-color: #fff; border-radius: 0; flex: 0 0 auto; }
+.reihe-kontakt-raster {
+  display: grid;
+  /* auto-fit: Mail und Telefon fuellen die Zeile, statt eine leere Spalte zu lassen. */
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--s3);
+}
+.reihe-kontakt-raster > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+/* Erste Reihe des Kontakts: Netzladen und Website, ganze Flaeche klickbar. */
+.reihe-kontakt-wege {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+.reihe-weg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s5);
+  background: #1c1c1c;
+  color: #fff;
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.reihe-weg > span { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
+.reihe-weg .reihe-kontakt-art { color: rgba(255, 255, 255, 0.65); }
+.reihe-weg-ziel {
+  font-family: var(--serif);
+  font-size: var(--fs-h4);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.reihe-weg .icon { flex: 0 0 auto; transition: transform 0.15s ease; }
+.reihe-weg:hover { color: #fff; transform: translateY(-2px); box-shadow: var(--shadow); }
+.reihe-weg:hover .icon { transform: translateX(var(--s1)); }
+@media (max-width: 40rem) {
+  .reihe-kontakt-wege { grid-template-columns: 1fr; }
+}
+.reihe-kontakt-art {
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.reihe-kontakt-raster a { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.reihe-kontakt-raster a:hover { color: var(--reihe); }
+.reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
+.reihe-social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
+  border: 2px solid var(--reihe);
+  color: var(--reihe);
+  font-weight: 700;
+  font-size: var(--fs-sub);
+  text-decoration: none;
+}
+.reihe-social-link:hover { background: var(--reihe); color: #fff; }
+.reihe-seite .issue-card-body .card-action,
+.reihe-seite .issue-card-body .cta .go,
+.reihe-seite .issue-card-body .price { color: var(--reihe); }
+@media (max-width: 48rem) {
+  .reihe-kopf { margin-top: calc(-1 * var(--s5)); }
+  .reihe-kopf-zeile { flex-direction: column; align-items: flex-start; gap: var(--s4); }
+  .reihe-kopf-zeile > img { max-width: min(18rem, 85%); max-height: 4.5rem; }
+  .reihe-kopf-info { align-items: flex-start; text-align: left; }
+  .reihe-abo-karte { flex-direction: column; align-items: flex-start; padding: var(--s4); }
+}
+@media (max-width: 32rem) {
+  .reihen-kacheln { gap: var(--s3); }
+  .reihen-kachel .reihen-logo { height: 6.5rem; padding: var(--s3); }
+  .reihen-kachel img { height: 2.6rem; }
+  .reihen-kachel.reihe-zuerst img { height: 2.75rem; }
+  .reihen-kachel.reihe-dmz img { height: 3.6rem; }
+  .reihen-kachel.reihe-dmz-zeitgeschichte img { height: 2.6rem; }
+  .reihen-kachel.reihe-schwertertraeger img { height: 2.1rem; }
+  .reihen-fuss { padding: var(--s2) var(--s3); }
+  .reihen-weiter-text { display: none; }
+}
+
 .issue-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
@@ -918,7 +1320,8 @@ button.small, .btn.small {
   text-decoration: none;
   color: inherit;
   border: 1px solid var(--rule);
-  border-radius: var(--radius);
+  /* Ein Heft hat Ecken: die Karte ist eckig wie der Umschlag darin. */
+  border-radius: 0;
   overflow: hidden;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
@@ -931,7 +1334,7 @@ button.small, .btn.small {
   color: inherit;
 }
 /* Der Umschlag fuellt die Kartenbreite in seinem Originalformat. So bleibt er
-   ohne Beschnitt sichtbar; die gemeinsame Rundung kommt von der Karte. */
+   ohne Beschnitt sichtbar. */
 .issue-cover-preview {
   display: flex;
   align-items: flex-start;
@@ -1146,15 +1549,16 @@ button.small, .btn.small {
 .heft-galerie .galerie-haupt {
   width: 100%;
   aspect-ratio: 3 / 4;
-  border-radius: var(--radius);
+  border-radius: 0;
   box-shadow: var(--shadow);
   border: 1px solid var(--rule);
 }
-.issue-detail .cover-wrap > img { object-fit: cover; }
+/* Ein einzelnes Titelbild behaelt sein eigenes Format. */
+.issue-detail .cover-wrap > img { aspect-ratio: auto; height: auto; }
 
 /* Heftvorschau: grosses Bild, darunter Miniaturen fuer Titel und
-   Inhaltsverzeichnis. Eine Heftseite steht ganz im Rahmen, das Titelbild
-   fuellt ihn. */
+   Inhaltsverzeichnis. Der Rahmen hat das Format des Titelbilds
+   (--galerie-format), jedes Bild steht ganz darin. */
 .heft-galerie {
   display: flex;
   flex-direction: column;
@@ -1165,6 +1569,7 @@ button.small, .btn.small {
   display: block;
   padding: 0;
   overflow: hidden;
+  aspect-ratio: var(--galerie-format, 3 / 4);
   background: var(--surface);
   cursor: zoom-in;
 }
@@ -1174,7 +1579,6 @@ button.small, .btn.small {
   height: 100%;
   object-fit: contain;
 }
-.heft-galerie .galerie-haupt.titel img { object-fit: cover; }
 .heft-galerie .galerie-lupe {
   position: absolute;
   right: var(--s3);
@@ -1200,7 +1604,7 @@ button.small, .btn.small {
 }
 .heft-galerie .galerie-daumen button {
   width: 3.5rem;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: var(--galerie-format, 3 / 4);
   padding: 0;
   overflow: hidden;
   background: var(--surface);
@@ -2015,9 +2419,10 @@ button.small, .btn.small {
 }
 .reader-bar .issue-title {
   flex: 1;
-  font-family: var(--serif);
+  font-family: 'Roboto Condensed', 'Arial Narrow', sans-serif;
   font-size: var(--fs-h4);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   opacity: 0.92;
   min-width: 0;
   overflow: hidden;
@@ -2047,6 +2452,9 @@ button.small, .btn.small {
   flex: 0 0 auto;
 }
 .mode-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
   background: transparent;
   color: var(--night-muted);
   border: 0;
@@ -2506,6 +2914,89 @@ button.small, .btn.small {
 .toc-entry.current:hover:not(:disabled) .label { color: var(--accent-deep); }
 .toc-entry.current .page-num { color: var(--accent-deep); font-weight: 600; }
 
+/* Kopfleiste: Schriftzug der Reihe neben "Bibliothek". */
+.reader-logo {
+  display: block;
+  flex: 0 0 auto;
+  height: 2.25rem;
+  width: auto;
+}
+.reader-logo.kasten { border-radius: 0; }
+
+/* Titel im Kopf in der Schriftart der Reihe. */
+.reader-bar .issue-title.reihe-zuerst { font-weight: 800; }
+.reader-bar .issue-title.reihe-dmz { font-style: italic; font-weight: 900; }
+.reader-bar .issue-title.reihe-dmz-zeitgeschichte { font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; }
+.reader-bar .issue-title.reihe-schwertertraeger { font-family: 'Anton', Impact, sans-serif; font-weight: 400; letter-spacing: 0.02em; }
+
+
+/* Zeitschriften haben Ecken: in der Leseansicht keine runden Knoepfe. */
+.reader-screen .btn,
+.reader-screen .mode-switch,
+.reader-screen .reader-turn,
+.reader-screen .toc-entry { border-radius: 0; }
+
+/* Breite Schirme: das Verzeichnis steht fest links neben dem Heft, im
+   dunklen Ton der Leseansicht. Das Heft nimmt den Rest der Breite. */
+.reader-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.reader-body > .reader-main { min-width: 0; }
+/* Die Blaetterknoepfe stehen fest am Fensterrand; neben dem festen
+   Verzeichnis ruecken sie hinter dessen Kasten. */
+.reader-body.toc-fest .reader-turn.next { right: calc(20rem + var(--s4)); }
+.reader-bar .btn.quiet.active { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.toc-drawer.toc-docked {
+  position: relative;
+  flex: 0 0 20rem;
+  width: 20rem;
+  overflow: hidden;
+  background: #1d1914;
+  color: var(--night-ink);
+  border-left: 1px solid var(--night-rule);
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+.toc-docked :focus-visible { outline-color: var(--night-ink); }
+.toc-docked header {
+  padding: var(--s3) var(--s2) var(--s3) var(--s4);
+  border-bottom-color: var(--night-rule);
+}
+.toc-docked header h2 { font-size: var(--fs-h4); color: var(--night-ink); }
+.toc-docked .toc-title .kicker,
+.toc-docked .hint { color: var(--night-muted); }
+.toc-docked header .btn.quiet { color: var(--night-muted); border-color: transparent; }
+.toc-docked header .btn.quiet:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.toc-docked .toc-list li + li { border-top-color: rgba(255, 255, 255, 0.06); }
+.toc-docked .toc-entry {
+  min-height: 0;
+  padding: var(--s2) var(--s4);
+  font-size: var(--fs-sub);
+  color: var(--night-ink);
+}
+.toc-docked .toc-list .level-2 .toc-entry {
+  padding-left: var(--s6);
+  font-size: var(--fs-mini);
+  color: var(--night-muted);
+}
+.toc-docked .toc-entry .page-num { font-size: var(--fs-mini); color: var(--night-muted); }
+.toc-docked .toc-entry:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.toc-docked .toc-entry:hover:not(:disabled) .label { color: #fff; }
+.toc-docked .toc-entry.current,
+.toc-docked .toc-entry.current:hover:not(:disabled) {
+  background: rgba(210, 0, 7, 0.22);
+  color: #fff;
+}
+.toc-docked .toc-entry.current .label,
+.toc-docked .toc-entry.current:hover:not(:disabled) .label,
+.toc-docked .toc-entry.current .page-num { color: #fff; }
+
 /* ============================================================
    Schmale Schirme
    ============================================================ */
@@ -2572,6 +3063,7 @@ button.small, .btn.small {
 
 @media (max-width: 32rem) {
   .reader-bar > .btn .button-label { display: none; }
+  .reader-logo { height: 1.75rem; }
 }
 
 @media (max-width: 46rem) {
@@ -3380,3 +3872,133 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 .griff-punkt.s { left: 50%; top: 100%; cursor: ns-resize; }
 .griff-punkt.sw { left: 0; top: 100%; cursor: nesw-resize; }
 .griff-punkt.w { left: 0; top: 50%; cursor: ew-resize; }
+
+
+/* ============================================================
+   Leseansicht auf vergilbtem Zeitschriftenpapier
+   ============================================================
+   Die ganze Leseansicht (Kopf, Heftgrund, Leiste, Verzeichnis, Artikel)
+   steht auf einem braeunlichen Papierton statt auf der Nacht. Die
+   Schriftzuege sind fuer hellen Grund gemacht und stehen so ohne eigenes Feld. */
+.reader-screen {
+  --papier: #ebe1c6;
+  --papier-hell: #f4eedd;
+  --papier-tief: #e1d5b5;
+  --papier-tinte: #2b2319;
+  --papier-leise: #6b5c44;
+  --papier-linie: #d0c09b;
+  --papier-schatten: rgba(60, 45, 20, 0.18);
+  background: var(--papier-tief);
+  color: var(--papier-tinte);
+}
+.reader-screen :focus-visible { outline-color: var(--papier-tinte); }
+.reader-screen .page-spread { background: var(--papier-tief); }
+
+/* Kopf */
+.reader-bar {
+  background: var(--papier);
+  color: var(--papier-tinte);
+  border-bottom: 1px solid var(--papier-linie);
+  box-shadow: 0 1px 3px var(--papier-schatten);
+}
+.reader-bar .issue-title { color: var(--papier-tinte); opacity: 1; }
+.reader-bar .btn.quiet,
+.reader-rail .btn.quiet { color: var(--papier-leise); }
+.reader-bar .btn.quiet:hover:not(:disabled),
+.reader-bar .btn.quiet.active,
+.reader-rail .btn.quiet:hover:not(:disabled) {
+  background: rgba(60, 45, 20, 0.08);
+  border-color: var(--papier-linie);
+  color: var(--papier-tinte);
+}
+.reader-screen .mode-switch {
+  border-color: var(--papier-linie);
+  background: rgba(255, 252, 240, 0.45);
+}
+.reader-screen .mode-switch button { color: var(--papier-leise); }
+.reader-screen .mode-switch button:hover:not(:disabled):not(.active) {
+  background: rgba(60, 45, 20, 0.07);
+  color: var(--papier-tinte);
+}
+.reader-screen .mode-switch button.active { background: var(--accent); color: #fff; }
+.reader-screen .mode-switch button:disabled { color: var(--papier-leise); }
+
+/* Hinweise und Wasserzeichen auf hellem Grund */
+.reader-screen .page-hint { color: var(--papier-leise); }
+.reader-screen .page-hint.retry,
+.reader-screen .page-hint.error {
+  color: var(--papier-tinte);
+  background: rgba(244, 238, 221, 0.9);
+  border-color: var(--papier-linie);
+}
+.reader-screen .watermark { color: rgba(60, 45, 20, 0.35); }
+
+/* Blaetterknoepfe: helles Papier statt dunkles Glas */
+.reader-screen .reader-turn {
+  background: rgba(244, 238, 221, 0.94);
+  color: var(--accent);
+  border-color: var(--papier-linie);
+  box-shadow: 0 6px 18px var(--papier-schatten);
+}
+.reader-screen .reader-turn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.reader-screen .reader-turn:disabled {
+  background: rgba(235, 225, 198, 0.7);
+  border-color: var(--papier-linie);
+  color: var(--papier-linie);
+}
+
+/* Artikelansicht */
+.reader-screen .article-mode { background: var(--papier-hell); color: var(--papier-tinte); }
+
+/* Untere Leiste */
+.reader-rail {
+  background: var(--papier);
+  border-top: 1px solid var(--papier-linie);
+  box-shadow: 0 -1px 3px var(--papier-schatten);
+}
+.reader-rail .rail-label { color: var(--papier-leise); }
+.reader-rail .rail-title { color: var(--papier-tinte); }
+.reader-rail input[type="range"]::-webkit-slider-runnable-track { background: var(--papier-linie); }
+.reader-rail input[type="range"]::-moz-range-track { background: var(--papier-linie); }
+.reader-rail input[type="range"]::-webkit-slider-thumb { border-color: var(--papier-hell); }
+.reader-rail input[type="range"]::-moz-range-thumb { border-color: var(--papier-hell); }
+
+/* Verzeichnis, aufgeklappt und fest */
+.reader-screen .toc-drawer { background: var(--papier-hell); color: var(--papier-tinte); }
+.toc-drawer.toc-docked {
+  background: var(--papier);
+  color: var(--papier-tinte);
+  border-left-color: var(--papier-linie);
+}
+.toc-docked :focus-visible { outline-color: var(--papier-tinte); }
+.toc-docked header { border-bottom-color: var(--papier-linie); }
+.toc-docked header h2 { color: var(--papier-tinte); }
+.toc-docked .toc-title .kicker,
+.toc-docked .hint,
+.toc-docked header .btn.quiet { color: var(--papier-leise); }
+.toc-docked header .btn.quiet:hover:not(:disabled) {
+  background: rgba(60, 45, 20, 0.08);
+  color: var(--papier-tinte);
+}
+.toc-docked .toc-list li + li { border-top-color: rgba(60, 45, 20, 0.1); }
+.toc-docked .toc-entry { color: var(--papier-tinte); }
+.toc-docked .toc-list .level-2 .toc-entry,
+.toc-docked .toc-entry .page-num { color: var(--papier-leise); }
+.toc-docked .toc-entry:hover:not(:disabled),
+.toc-docked .toc-entry:hover:not(:disabled) .label {
+  background: rgba(60, 45, 20, 0.07);
+  color: var(--papier-tinte);
+}
+.toc-docked .toc-entry:hover:not(:disabled) .label { background: none; }
+.toc-docked .toc-entry.current,
+.toc-docked .toc-entry.current:hover:not(:disabled) {
+  background: rgba(210, 0, 7, 0.12);
+  color: var(--accent-deep, #a00006);
+}
+.toc-docked .toc-entry.current .label,
+.toc-docked .toc-entry.current:hover:not(:disabled) .label,
+.toc-docked .toc-entry.current .page-num { color: var(--accent-deep, #a00006); }

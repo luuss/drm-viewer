@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import OpenSeadragon from "openseadragon";
 import Icon from "../components/Icon";
 
-/** `titel`: das Titelbild fuellt den Rahmen, eine Heftseite steht ganz darin. */
+/** `titel`: das Titelbild gibt das Format des Rahmens vor. */
 export type GalerieBild = { url: string; alt: string; titel?: boolean };
 
 /**
@@ -22,6 +22,23 @@ export default function HeftGalerie({
   const [aktiv, setAktiv] = useState(Math.min(start, bilder.length - 1));
   const [lupe, setLupe] = useState(false);
   const bild = bilder[aktiv] ?? bilder[0];
+  // Format des Rahmens = Format des Titelbilds, damit nichts abgeschnitten
+  // wird. Die Hefte sind nicht alle 3:4, DMZ etwa ist schmaler.
+  const [format, setFormat] = useState<string>();
+  const titelUrl = (bilder.find((b) => b.titel) ?? bilder[0])?.url;
+  useEffect(() => {
+    if (!titelUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        setFormat(`${img.naturalWidth} / ${img.naturalHeight}`);
+      }
+    };
+    img.src = titelUrl;
+    return () => {
+      img.onload = null;
+    };
+  }, [titelUrl]);
 
   // Kommt ein Verzeichnis erst nach dem ersten Zeichnen an, bleibt die Wahl gueltig.
   useEffect(() => {
@@ -29,10 +46,13 @@ export default function HeftGalerie({
   }, [aktiv, bilder.length]);
 
   return (
-    <div className="heft-galerie">
+    <div
+      className="heft-galerie"
+      style={format ? ({ "--galerie-format": format } as CSSProperties) : undefined}
+    >
       <button
         type="button"
-        className={`galerie-haupt${bild.titel ? " titel" : ""}`}
+        className="galerie-haupt"
         onClick={() => setLupe(true)}
         aria-label={`${bild.alt} vergrößern`}
       >

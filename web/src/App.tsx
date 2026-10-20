@@ -6,6 +6,7 @@ import LoginPage from "./pages/LoginPage";
 import LibraryPage from "./library/LibraryPage";
 import KioskPage from "./library/KioskPage";
 import IssueDetailPage from "./library/IssueDetailPage";
+import ReihePage from "./library/ReihePage";
 import SubscriptionDetailPage from "./library/SubscriptionDetailPage";
 import LinkLoginPage from "./pages/LinkLoginPage";
 import { api } from "./lib/api";
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/claim/:token" element={<Navigate to="/login" replace />} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
           <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
+          <Route path="/zeitschrift/:slug" element={<Shell><ReihePage /></Shell>} />
           <Route path="/warenkorb" element={<Shell><WarenkorbPage /></Shell>} />
           <Route path="/suche" element={<Shell><SearchPage /></Shell>} />
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
@@ -61,6 +63,7 @@ export default function App() {
           <Route path="/library" element={<Shell><LibraryPage /></Shell>} />
           <Route path="/issue/:slug" element={<Shell><IssueDetailPage /></Shell>} />
           <Route path="/abo/:slug" element={<Shell><SubscriptionDetailPage /></Shell>} />
+          <Route path="/zeitschrift/:slug" element={<Shell><ReihePage /></Shell>} />
           {/* Alte Einloeselinks aus Kaufmails: die Ausgabe haengt an der Adresse. */}
           <Route path="/claim/:token" element={<Navigate to="/login" replace />} />
           <Route path="/warenkorb" element={<Shell><WarenkorbPage /></Shell>} />

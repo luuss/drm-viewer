@@ -34,6 +34,7 @@ from extractor.anzeige import (
     suchbegriffe,
 )
 from extractor.article_assembler import assemble, assemble_cover_pages, flow_text_blocks
+from extractor.buecher import buecher_der_seiten
 from extractor.idml_extract import (
     extract_idml_blocks,
     extract_idml_frames,
@@ -67,6 +68,7 @@ from extractor.rubriken import (
     titel_bereinigen,
     verzeichnis_doppelseite,
 )
+from extractor.titel_anreisser import titel_anreisser
 from extractor.toc_layout import (
     refine_toc_hints,
     text_items_from_pdf,
@@ -352,6 +354,8 @@ class Job:
                         "label": titel[:120],
                     }
                 )
+        # Ueber die Klasse: die Tests rufen `_seitenlinks` mit einem Stub auf.
+        links.extend(Job._buchflaechen(self, links))
         if links:
             log(
                 "job.pageLinks",
@@ -361,6 +365,38 @@ class Job:
                 dropped=len(payload_articles) - len(behalten),
             )
         return behalten, links
+
+    def _buchflaechen(self, vorhandene: list[dict]) -> list[dict]:
+        """Je Buch einer Bucherseite oder Besprechung eine eigene Flaeche.
+
+        Die Anzeige bleibt ein Artikel; ein Tipp auf ein einzelnes Buch fuehrt
+        aber gleich zu diesem Buch im Laden (extractor/buecher.py). Ein Buch
+        auf einer Seite, die schon ganz zu einem Seitenlink gehoert (Abo-Aufruf,
+        Umschlaganzeige), bekommt keine zweite Flaeche.
+        """
+        satz = getattr(self, "_satz_fuer_buecher", None)
+        if not satz:
+            return []
+        try:
+            buecher = buecher_der_seiten(*satz)
+        except Exception as exc:
+            log("job.buecherFailed", jobId=getattr(self, "job_id", None), error=str(exc)[:200])
+            return []
+        ganz = {
+            l["pageIndex"]
+            for l in vorhandene
+            if (l["x1"] - l["x0"]) * (l["y1"] - l["y0"]) >= 0.8
+        }
+        out = [b.als_link() for b in buecher if b.page_index not in ganz]
+        if out:
+            log(
+                "job.buecher",
+                jobId=getattr(self, "job_id", None),
+                buecher=len(out),
+                seiten=sorted({l["pageIndex"] for l in out}),
+                mitNummer=sum(1 for l in out if l.get("reference")),
+            )
+        return out
 
     def _verzeichnis_hinweis(self) -> str:
         """Anhang zur Auftragsmeldung: wie gut das Verzeichnis platziert ist.
@@ -620,6 +656,9 @@ class Job:
                 blocks.extend(satz_blocks)
                 aus_satz = {kanonisch for _quelle, kanonisch in page_map}
             images.extend(satz_images)
+            # Fuer die Buchflaechen (`_seitenlinks`): Rahmen und Bilder, wie
+            # der Satz sie setzt — bevor das Profil Beiwerk aussortiert.
+            self._satz_fuer_buecher = (list(satz_blocks), list(satz_images))
             log(
                 "job.idml",
                 jobId=self.job_id,
@@ -643,6 +682,7 @@ class Job:
             except ValueError as exc:
                 log("job.coverTextFailed", jobId=self.job_id, error=str(exc)[:200])
                 umschlag = {}
+            self._titel_text = self._titelseite(cover_bytes, pages)
             umschlag = {i: t for i, t in umschlag.items() if i in self._cover_pages}
             aspekte = {
                 p["index"]: p["width"] / p["height"] for p in pages if p.get("height")
@@ -792,6 +832,44 @@ class Job:
         log("job.tocPlaced", jobId=self.job_id, source=quelle, **bilanz)
         return platziert
 
+    def _titelseite(self, cover_bytes: bytes | None, pages) -> tuple[int, list] | None:
+        """Die Titelseite (U1) und ihre Textebene samt schraegem Satz."""
+        u1 = next((p["index"] for p in pages if p.get("role") == "front_cover"), None)
+        if u1 is None or not cover_bytes:
+            return None
+        try:
+            text = text_layer_for_cover(cover_bytes, pages, mit_gedrehtem=True)
+        except ValueError:
+            return None
+        return (u1, text[u1]) if text.get(u1) else None
+
+    def _anreisser_regionen(self, hints) -> list[dict]:
+        """Klickflaechen der Anreisser auf der Titelseite, wie Verzeichniszeilen."""
+        # Die Tests rufen die Verzeichnisbildung auch ohne Auftrag auf.
+        titel = getattr(self, "_titel_text", None)
+        if not titel or not hints:
+            return []
+        u1, items = titel
+        gefunden = titel_anreisser(items, hints)
+        log(
+            "job.titelAnreisser",
+            jobId=getattr(self, "job_id", None),
+            regions=len(gefunden),
+            ziele=sorted({a.page_index for a in gefunden}),
+        )
+        return [
+            {
+                "pageIndex": u1,
+                "x0": a.x0,
+                "y0": a.y0,
+                "x1": a.x1,
+                "y1": a.y1,
+                "targetPageIndex": a.page_index,
+                "label": a.label,
+            }
+            for a in gefunden
+        ]
+
     def _nur_verzeichnis(self, pages, blobs, sources) -> tuple[str, str]:
         """Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses erneuern.
 
@@ -818,7 +896,10 @@ class Job:
         hints = toc_from_idml(
             [b for b in satz_blocks if b.origin == "idml"], _printed_offset(pages)
         )
-        text_source = next((s for s in sources if s["kind"] == "text"), None)
+        text_source = next(
+            (s for s in sources if s["kind"] == "text" and s.get("role") != "cover"),
+            None,
+        )
         text_bytes = blobs.get(text_source["assetId"]) if text_source else None
         partner = self._idml_partner(idml_source, sources, blobs)
         if hints:
@@ -843,6 +924,20 @@ class Job:
             for h in hints
             if h.toc_page_index is not None
         ]
+        # Die Anreisser der Titelseite fuehren wie Verzeichniszeilen zum Artikel.
+        # Die zuletzt nachgetragene Umschlag-Textebene gilt.
+        cover_source = next(
+            (
+                s
+                for s in reversed(sources)
+                if s["kind"] == "text" and s.get("role") == "cover"
+            ),
+            None,
+        )
+        self._titel_text = self._titelseite(
+            blobs.get(cover_source["assetId"]) if cover_source else None, pages
+        )
+        regions.extend(self._anreisser_regionen(hints))
         # Eintraege, die das Verzeichnis im Heft noch nicht kennt, kommen
         # dazu; vorhandene bleiben, wie die Redaktion sie gelassen hat.
         entries = [
@@ -1078,6 +1173,20 @@ class Job:
                     }
                 )
             out.append(entry)
+
+        # Die Anreisser der Titelseite fuehren zum selben Artikel wie die
+        # Verzeichniszeile, auf deren Seite sie zeigen.
+        for region in Job._anreisser_regionen(self, hints):
+            ziel = region["targetPageIndex"]
+            article_order = artikel_ab(ziel)
+            if article_order is None and ziel + 1 not in ziele:
+                article_order = artikel_ab(ziel + 1)
+            if article_order is None:
+                continue
+            region = {k: v for k, v in region.items() if k != "label"}
+            payload_articles[article_order - 1]["regions"].append(
+                {**region, "kind": "other"}
+            )
 
         # Stehende Rubriken stehen im Verzeichnis, auch wenn das gedruckte
         # sie nicht nennt (das Editorial der DMZ) — ohne Klickflaeche, an

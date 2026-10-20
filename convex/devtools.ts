@@ -3,9 +3,10 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { slugify } from "./publications";
 import { publishIssue } from "./issues";
-import { audit } from "./roles";
+import { audit, rolesOf } from "./roles";
 import { rebuildSearchText } from "./articles";
 import { deleteLinksForBlock } from "./articleProducts";
+import { heftStueckeLoeschen, sucheVormerken } from "./suche";
 
 /**
  * Hilfen fuer Entwicklung und Integrationspruefung.
@@ -239,6 +240,7 @@ export const setPublishedInternal = internalMutation({
       if (!issue) throw new Error("Ausgabe nicht gefunden");
       await ctx.db.patch(issueId, { isPublished: false, updatedAt: Date.now() });
       await audit(ctx, "issue.unpublish", issueId, "Kommandozeile");
+      await heftStueckeLoeschen(ctx, issueId);
     }
     const issue = await ctx.db.get(issueId);
     return { title: issue?.title ?? null, isPublished: issue?.isPublished ?? null };
@@ -279,6 +281,7 @@ export const setArticleStatusInternal = internalMutation({
       .unique();
     if (!article) throw new Error(`Kein Artikel mit Nummer ${order}`);
     await ctx.db.patch(article._id, { reviewStatus, updatedAt: Date.now() });
+    await sucheVormerken(ctx, issueId, article._id);
     await audit(ctx, "article.setReviewStatus", article._id, `${reviewStatus} (Kommandozeile)`);
     return { title: article.title, reviewStatus };
   },
@@ -500,9 +503,13 @@ export const setRolesByEmail = internalMutation({
     if (!user) {
       if (!create) return { ok: false };
       const userId = await ctx.db.insert("users", { email: adresse, roles });
+      await audit(ctx, "user.setRoles", userId, `${roles.join(",")} (Kommandozeile, neu)`);
       return { ok: true, userId, created: true };
     }
     await ctx.db.patch(user._id, { roles } as any);
+    // Wie in der Oberflaeche protokollieren, sonst ist spaeter nicht zu
+    // klaeren, woher eine Rolle kam.
+    await audit(ctx, "user.setRoles", user._id, `${roles.join(",")} (Kommandozeile)`);
     return { ok: true, userId: user._id };
   },
 });
@@ -530,6 +537,79 @@ export const grantByEmailInternal = internalMutation({
       createdAt: Date.now(),
     });
     return { ok: true, existing: false };
+  },
+});
+
+/**
+ * Alle veroeffentlichten Hefte fuer ein Konto freischalten, von der
+ * Kommandozeile. Schon vorhandene Freischaltungen bleiben, wie sie sind.
+ */
+export const grantAllPublishedByEmailInternal = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email.trim().toLowerCase()))
+      .first();
+    if (!user) return { ok: false, grund: "Kein Konto mit dieser Adresse" };
+    const neu: string[] = [];
+    const schon: string[] = [];
+    for await (const issue of ctx.db.query("issues")) {
+      if (!issue.isPublished) continue;
+      const existing = await ctx.db
+        .query("entitlements")
+        .withIndex("by_user_issue", (q) =>
+          q.eq("userId", user._id as Id<"users">).eq("issueId", issue._id),
+        )
+        .first();
+      if (existing) {
+        schon.push(issue.title);
+        continue;
+      }
+      await ctx.db.insert("entitlements", {
+        userId: user._id as Id<"users">,
+        issueId: issue._id,
+        source: "admin",
+        createdAt: Date.now(),
+      });
+      await audit(ctx, "entitlement.grant", issue._id, `${email} (Kommandozeile)`);
+      neu.push(issue.title);
+    }
+    return { ok: true, neu, schon };
+  },
+});
+
+/**
+ * Konten zu einem Teil der Adresse mit ihren Rechten, zur Pruefung von der
+ * Kommandozeile: gespeicherte Rollen, was daraus folgt, ob die Adresse in
+ * ADMIN_EMAILS steht, und wie viele Sitzungen offen sind.
+ */
+export const usersByEmailPartInternal = internalQuery({
+  args: { teil: v.string() },
+  handler: async (ctx, { teil }) => {
+    const such = teil.trim().toLowerCase();
+    const admins = (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const out = [];
+    for await (const u of ctx.db.query("users")) {
+      const email = (u.email ?? "").toLowerCase();
+      if (!email.includes(such)) continue;
+      const sitzungen = await ctx.db
+        .query("authSessions")
+        .withIndex("userId", (q) => q.eq("userId", u._id))
+        .collect();
+      out.push({
+        userId: u._id,
+        email: u.email ?? null,
+        gespeicherteRollen: Array.isArray((u as any).roles) ? (u as any).roles : [],
+        wirksameRollen: rolesOf(u),
+        inAdminEmails: admins.includes(email),
+        offeneSitzungen: sitzungen.length,
+      });
+    }
+    return out;
   },
 });
 

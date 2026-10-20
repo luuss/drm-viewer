@@ -301,6 +301,34 @@ export const replaceImportedInternal = internalMutation({
   }),
 });
 
+/**
+ * Nur die Buchflaechen eines Hefts ersetzen (Label mit " · "), alle anderen
+ * Flaechen bleiben — fuer das Nachruesten schon importierter Hefte
+ * (extract-service/tools/buecher_nachruesten.py). Danach `resolveInternal`.
+ */
+export const replaceBooksInternal = internalMutation({
+  args: { issueId: v.id("issues"), links: v.array(pageLinkInput) },
+  handler: async (ctx, { issueId, links }) => {
+    const old = await ctx.db
+      .query("pageLinks")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    let removed = 0;
+    for (const row of old) {
+      if (row.source === "import" && row.label?.includes(BOOK_LABEL_SEPARATOR)) {
+        await ctx.db.delete(row._id);
+        removed++;
+      }
+    }
+    for (const link of links) {
+      if (!link.label?.includes(BOOK_LABEL_SEPARATOR)) continue;
+      await ctx.db.insert("pageLinks", { issueId, ...link, source: "import" });
+    }
+    await ctx.scheduler.runAfter(0, internal.pageLinks.resolveInternal, { issueId });
+    return { removed, added: links.length };
+  },
+});
+
 /** Eine Flaeche ohne Anmeldung anlegen — fuer Werkzeuge mit Deploy-Schluessel. */
 export const addInternal = internalMutation({
   args: {
@@ -326,6 +354,7 @@ export const listUnresolvedInternal = internalQuery({
         queries: r.queries ?? [],
         reference: r.reference ?? null,
         single: r.single ?? false,
+        label: r.label ?? null,
       }));
   },
 });
@@ -391,6 +420,176 @@ export function chooseTarget(
   return brauchbar(meiste) > 0 ? searchUrl(meiste.q) : searchUrl(treffer[0].q);
 }
 
+// --- Einzelne Buecher -----------------------------------------------------------
+
+/**
+ * Trenner im `label` einer Buchflaeche: "Titel · Verfasser". Der Import legt
+ * je Buch einer Bucherseite oder Besprechung eine eigene Flaeche an
+ * (extract-service/extractor/buecher.py); an diesem Trenner erkennt die
+ * Aufloesung sie und prueft den Titel streng (`chooseBook`).
+ */
+export const BOOK_LABEL_SEPARATOR = " · ";
+
+const FUELLWOERTER = new Set([
+  "der", "die", "das", "den", "dem", "des", "ein", "eine", "einer", "und",
+  "oder", "mit", "von", "vom", "zum", "zur", "aus", "bei", "nach", "ueber",
+  "fuer", "im", "in", "am", "an", "auf", "zu", "als", "wie",
+]);
+
+/** Kleinbuchstaben, ohne Akzente und Satzzeichen, ß als ss — wie im Worker. */
+export function plainTitle(text: string): string {
+  return text
+    .replace(/ß/g, "ss")
+    .replace(/\u2011/g, "-")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Der Titel ohne Untertitel: bis zum Gedankenstrich oder Doppelpunkt. */
+export function mainTitle(title: string): string {
+  let t = title.replace(/\u2011/g, "-").replace(/\s+/g, " ").trim();
+  for (const sep of [" – ", " — ", ": ", ". "]) {
+    if (t.includes(sep)) {
+      const head = t.split(sep)[0].trim();
+      if (titleWords(head).length >= 1) t = head;
+    }
+  }
+  return t.replace(/^[\s.,;:]+|[\s.,;:]+$/g, "");
+}
+
+function titleWords(text: string): string[] {
+  return plainTitle(text)
+    .split(" ")
+    .filter((w) => w.length >= 3 && !FUELLWOERTER.has(w));
+}
+
+/**
+ * Wie gut ein Produktname zum Buchtitel passt: 3 gleich, 2 einer beginnt mit
+ * dem anderen (Untertitel), 1 alle tragenden Woerter eines mehrwortigen
+ * Titels im Namen, 0 nicht.
+ * "STASI" passt zu "Stasi", "Der Stasi-Mythos" nicht.
+ */
+export function titleRank(productName: string, title: string): number {
+  const name = plainTitle(productName);
+  const head = plainTitle(mainTitle(title));
+  const full = plainTitle(title);
+  if (!head || !name) return 0;
+  if (name === head || name === full) return 3;
+  if (
+    name.startsWith(`${head} `) ||
+    name.startsWith(`${full} `) ||
+    (head.startsWith(`${name} `) && name.includes(" "))
+  ) {
+    return 2;
+  }
+  const words = titleWords(mainTitle(title));
+  const nameWords = new Set(titleWords(productName));
+  // Ein einwortiger Titel ist darin zu leicht enthalten ("Stasi" in "Der
+  // Stasi-Mythos"); er muss gleich sein oder am Anfang stehen.
+  if (
+    words.length >= 2 &&
+    words.every((w) => nameWords.has(w)) &&
+    nameWords.size <= words.length + 4
+  ) {
+    return 1;
+  }
+  return 0;
+}
+
+function surname(author: string): string | null {
+  const first = author.split(/[/,;&]| und /)[0].replace(/\((?:Hrsg?|Hg)\.\)/g, "").trim();
+  const parts = first.split(/\s+/).filter((p) => /^[A-ZÄÖÜ]/.test(p) && p.length > 1);
+  return parts.length ? parts[parts.length - 1].replace(/\.$/, "") : null;
+}
+
+/**
+ * Suchbegriffe fuer den Laden ohne Satzzeichen. Die Ladensuche verlangt jedes
+ * Wort der Anfrage im Produkt; ein Gedankenstrich ("DDR – CDU – AfD"),
+ * Anfuehrungszeichen ("„Panther“") oder ein Komma am Wort fanden deshalb
+ * nichts, obwohl das Buch im Laden steht.
+ */
+export function searchWords(text: string): string {
+  return text.replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Die Anfragen fuer ein Buch: Artikelnummer, die Begriffe aus dem Import,
+ * jeweils ohne Satzzeichen, und der Haupttitel allein (ohne Jahr und
+ * Untertitel, die der Laden oft anders schreibt).
+ */
+export function bookQueries(
+  label: string,
+  reference: string | null,
+  queries: string[],
+): string[] {
+  const [title] = label.split(BOOK_LABEL_SEPARATOR);
+  const out = new Set<string>();
+  const add = (q: string | null | undefined) => {
+    const w = q ? searchWords(q) : "";
+    if (w.length >= 2) out.add(w);
+  };
+  add(reference);
+  for (const q of queries) add(q);
+  // Ein einzelnes Wort vor dem Doppelpunkt ("Kalender: Maenner der ...") ist
+  // eine Gattung, kein Titel: allein gesucht passt es auf Dutzende Produkte,
+  // und der richtige Treffer ginge im Gleichstand unter.
+  if (titleWords(mainTitle(title)).length >= 2) {
+    add(mainTitle(title));
+    add(
+      searchWords(mainTitle(title))
+        .split(" ")
+        .filter((w) => !/^\d+$/.test(w))
+        .join(" "),
+    );
+  }
+  return [...out];
+}
+
+/**
+ * Das Produkt zu einer Buchflaeche. Mit Artikelnummer das Produkt mit genau
+ * dieser Referenz. Sonst nur Produkte, deren Name zum Titel passt, die beste
+ * Stufe zuerst; bleiben mehrere, entscheidet der Verfasser (Herstellerfeld).
+ * Zwei Baende gleichen Namens bleiben offen — dann zeigt die Suchseite beide.
+ */
+export function chooseBook(
+  products: ShopProduct[],
+  label: string,
+  reference?: string | null,
+): ShopProduct | null {
+  const brauchbar = products.filter((p) => p.active && isShopUrl(p.url));
+  if (reference) {
+    const genau = brauchbar.filter((p) => p.reference === reference);
+    if (genau.length === 1) return genau[0];
+  }
+  const [title, author = ""] = label.split(BOOK_LABEL_SEPARATOR);
+  // "Kalender: Maenner der Waffen-SS 2026": vor dem Doppelpunkt steht die
+  // Gattung, der Laden fuehrt den Teil danach als Namen.
+  const titel = [title];
+  const doppelpunkt = title.indexOf(": ");
+  if (doppelpunkt > 0 && titleWords(title.slice(0, doppelpunkt)).length < 2) {
+    titel.push(title.slice(doppelpunkt + 2));
+  }
+  const ranked = new Map<string, { rank: number; product: ShopProduct }>();
+  for (const p of brauchbar) {
+    const rank = Math.max(...titel.map((t) => titleRank(p.name, t)));
+    if (rank > 0 && !ranked.has(p.url)) ranked.set(p.url, { rank, product: p });
+  }
+  if (!ranked.size) return null;
+  const top = Math.max(...[...ranked.values()].map((r) => r.rank));
+  let kandidaten = [...ranked.values()].filter((r) => r.rank === top).map((r) => r.product);
+  const nachname = author ? surname(author) : null;
+  if (kandidaten.length > 1 && nachname) {
+    const mit = kandidaten.filter((p) =>
+      p.manufacturer.toLowerCase().includes(nachname.toLowerCase()),
+    );
+    if (mit.length) kandidaten = mit;
+  }
+  return kandidaten.length === 1 ? kandidaten[0] : null;
+}
+
 export const setUrlInternal = internalMutation({
   args: { id: v.id("pageLinks"), url: v.string() },
   handler: async (ctx, { id, url }) => {
@@ -420,6 +619,7 @@ export const resolveInternal = internalAction({
       queries: string[];
       reference: string | null;
       single: boolean;
+      label: string | null;
     }[] = await ctx.runQuery(internal.pageLinks.listUnresolvedInternal, { issueId });
     let resolved = 0;
     const cache = new Map<string, ShopProduct[]>();
@@ -430,6 +630,23 @@ export const resolveInternal = internalAction({
     try {
       for (const row of rows) {
         let url: string | null = null;
+        if (row.label?.includes(BOOK_LABEL_SEPARATOR)) {
+          // Ein einzelnes Buch: nur ein Produkt mit passendem Titel, sonst
+          // die Suchseite des Titels — nie ein beliebiger einziger Treffer.
+          const products: ShopProduct[] = [];
+          for (const q of bookQueries(row.label, row.reference, row.queries)) {
+            products.push(...(await search(q)));
+          }
+          // Ohne Treffer bleibt die Flaeche offen: sie fuehrt bis dahin auf die
+          // Suchseite des Titels (`zielAdresse`), und ein spaeterer Lauf findet
+          // das Buch, sobald der Laden es fuehrt.
+          const buch = chooseBook(products, row.label, row.reference);
+          if (buch) {
+            await ctx.runMutation(internal.pageLinks.setUrlInternal, { id: row.id, url: buch.url });
+            resolved++;
+          }
+          continue;
+        }
         if (row.reference) {
           const treffer = chooseProduct(await search(row.reference), row.reference);
           if (treffer) url = treffer.url;

@@ -11,9 +11,9 @@ import { rolesOf } from "./roles";
  *    lesbar, was waehrend der Laufzeit dazugehoerte — auch nach einer
  *    Kuendigung — und eine Abo-Luecke schaltet nichts rueckwirkend frei.
  * 2. Kaeufe im Laden (`shopAccess`), ueber die E-Mail-Adresse des Kontos.
- * 3. Admins lesen jedes Heft, auch unveroeffentlichte, ohne Kauf. Die
- *    Redaktion ebenso — das ist ihre Vorschau; in ihrer Bibliothek stehen
- *    die Hefte deshalb nicht.
+ * 3. Redaktion und Admins lesen jedes Heft, auch unveroeffentlichte, ohne
+ *    Kauf. Fuer sie gilt jedes Heft als freigeschaltet: es steht in ihrer
+ *    Bibliothek, und die Suche zeigt ihnen den Text.
  *    Ein Heft gilt unbefristet, ein Digital-Abo alle veroeffentlichten
  *    Abo-Ausgaben der Reihe bis zum Ablaufdatum. Nach Ablauf ist die Reihe
  *    wieder zu — anders als beim Stripe-Abo bleibt nichts dauerhaft.
@@ -45,7 +45,7 @@ export async function accessibleIssueIds(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<Set<string>> {
-  if (await isAdmin(ctx, userId)) {
+  if (await isEditor(ctx, userId)) {
     const all = await ctx.db.query("issues").take(5000);
     return new Set(all.map((i) => i._id as string));
   }
@@ -87,17 +87,12 @@ export async function accessibleIssueIds(
   return ids;
 }
 
-/** Die Redaktion liest jedes Heft, auch ein unveroeffentlichtes (Vorschau). */
+/** Die Redaktion (und damit jeder Admin) liest jedes Heft, auch ein unveroeffentlichtes. */
 async function isEditor(ctx: QueryCtx | MutationCtx, userId: Id<"users">): Promise<boolean> {
   const user = await ctx.db.get(userId);
   return !!user && rolesOf(user).includes("editor");
 }
 
-/** Admins haben immer Zugriff auf alle Hefte. */
-async function isAdmin(ctx: QueryCtx | MutationCtx, userId: Id<"users">): Promise<boolean> {
-  const user = await ctx.db.get(userId);
-  return !!user && rolesOf(user).includes("admin");
-}
 
 // --- Kaeufe im Laden ------------------------------------------------------
 

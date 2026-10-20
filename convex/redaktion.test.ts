@@ -41,9 +41,16 @@ describe("Redaktion", () => {
     const alsLeser = await t.withIdentity({ subject: leserId }).query(api.issues.getPublic, { issueId });
     expect(alsRedaktion?.owned).toBe(true);
     expect(alsLeser).toBeNull();
-    // In der Bibliothek der Redaktion steht das Heft nicht.
+    // Unveroeffentlicht steht das Heft nicht in der Bibliothek der Redaktion.
     const bibliothek = await t.withIdentity({ subject: editorId }).query(api.issues.myLibrary, {});
     expect(bibliothek.some((i: any) => i._id === issueId)).toBe(false);
+    // Veroeffentlicht gilt es fuer die Redaktion als freigeschaltet, ohne Kauf;
+    // fuer Leser nicht.
+    await t.run(async (ctx: any) => ctx.db.patch(issueId, { isPublished: true }));
+    const danach = await t.withIdentity({ subject: editorId }).query(api.issues.myLibrary, {});
+    expect(danach.some((i: any) => i._id === issueId)).toBe(true);
+    const leser = await t.withIdentity({ subject: leserId }).query(api.issues.myLibrary, {});
+    expect(leser.some((i: any) => i._id === issueId)).toBe(false);
   });
 
   test("Heftliste und Arbeitsplatz liefern den Stand", async () => {

@@ -40,6 +40,26 @@ describe("normiereTextelemente", () => {
     expect(out.map((i) => i[0])).toEqual(["Text"]);
   });
 
+  it("nimmt schraegen Satz auf Wunsch mit, als Rechteck um den ganzen Lauf", () => {
+    // 45 Grad: Grundlinie von (300, 200) nach rechts oben, 100 pt lang, 10 pt hoch.
+    const k = Math.SQRT1_2 * 10;
+    const items = [
+      { str: "Anreisser", transform: [k, k, -k, k, 300, 200], width: 100, height: 10 },
+      { str: "Bildnachweis", transform: [0, 8, -8, 0, 630, 500], width: 40, height: 8 },
+    ];
+    expect(normiereTextelemente(items, viewport(883.89), schnitt)).toEqual([]);
+    const out = normiereTextelemente(items, viewport(883.89), schnitt, true);
+    expect(out.map((i) => [i[0], i[6]])).toEqual([["Anreisser", 45]]);
+    const [, x0, y0, x1, y1] = out[0];
+    const d = Math.SQRT1_2;
+    // links: Ecke oben links (300 - 10d), rechts: Ende der Grundlinie (300 + 100d)
+    expect(x0).toBeCloseTo((300 - 10 * d - 21) / 595.276, 3);
+    expect(x1).toBeCloseTo((300 + 100 * d - 21) / 595.276, 3);
+    // oben: hoechster Punkt (200 + 100d + 10d), unten: Anfang der Grundlinie
+    expect(y0).toBeCloseTo((883.89 - 200 - 110 * d - 21) / 841.89, 3);
+    expect(y1).toBeCloseTo((883.89 - 200 - 21) / 841.89, 3);
+  });
+
   it("schneidet Werte auf die Seite und rundet auf vier Stellen", () => {
     const items = [
       // Ragt links ueber das Netzformat hinaus.
