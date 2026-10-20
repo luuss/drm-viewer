@@ -11,7 +11,6 @@ import { requireAdmin, audit } from "./roles";
 import { assetUrl } from "./assets";
 import { deliveryRegion } from "./schema";
 import { subscriptionShopLink } from "./shopLinks";
-import { subscriptionMonths } from "./shopIntegration";
 
 type OfferPlan = {
   _id: Id<"subscriptionPlans">;
@@ -109,14 +108,6 @@ async function offerFor(
     latestIssueTitle: latest?.title ?? null,
     // Kaufadresse des Digital-Abos im Laden, sonst die Suche nach der Reihe.
     shopSubscriptionUrl: subscriptionShopLink(publication),
-    // Mit Artikelnummer kommt das Abo in den Warenkorb des Lesers.
-    digitalAbo: publication.shopSubscriptionSku
-      ? {
-          sku: publication.shopSubscriptionSku,
-          months: subscriptionMonths(publication),
-          priceAmountCents: publication.shopSubscriptionPriceCents ?? null,
-        }
-      : null,
     // Die aktuelle Ausgabe, wie der Verlagsshop sie bezeichnet.
     currentIssue: publication.currentIssueName
       ? {

@@ -168,11 +168,6 @@ export default function ReihePage() {
                   <div className="reihe-abo-text">
                     Jede neue Ausgabe automatisch, auf jedem Gerät lesbar.
                   </div>
-                  {o.digitalAbo?.priceAmountCents && (
-                    <div className="reihe-abo-text">
-                      {formatEuro(o.digitalAbo.priceAmountCents)} für {o.digitalAbo.months} Monate
-                    </div>
-                  )}
                 </div>
                 <span className="btn">
                   Abo ansehen <Icon name="arrow-right" />

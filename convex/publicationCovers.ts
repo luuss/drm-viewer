@@ -1,11 +1,5 @@
 import { v } from "convex/values";
-import {
-  action,
-  internalAction,
-  internalMutation,
-  internalQuery,
-  type ActionCtx,
-} from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { requireEditor } from "./roles";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
@@ -46,44 +40,7 @@ export const listInternal = internalQuery({
         coverSource: p.coverSource ?? null,
         coverAssetId: p.coverAssetId ?? null,
         currentIssueUrl: p.currentIssueUrl ?? null,
-        shopSubscriptionUrl: p.shopSubscriptionUrl ?? null,
       }));
-  },
-});
-
-/** Preis des Digital-Abos, wie die Produktseite im Laden ihn zeigt. */
-export const setAboPreisInternal = internalMutation({
-  args: { publicationId: v.id("publications"), url: v.string(), priceCents: v.number() },
-  handler: async (ctx, { publicationId, url, priceCents }) => {
-    const publication = await ctx.db.get(publicationId);
-    // Inzwischen eine andere Produktseite eingetragen: deren Abgleich gilt.
-    if (!publication || publication.shopSubscriptionUrl !== url) return;
-    if (publication.shopSubscriptionPriceCents === priceCents) return;
-    await ctx.db.patch(publicationId, { shopSubscriptionPriceCents: priceCents });
-  },
-});
-
-async function aboPreisAbgleichen(
-  ctx: ActionCtx,
-  publicationId: Id<"publications">,
-  url: string,
-): Promise<number | null> {
-  const page = await getText(url);
-  const priceCents = page ? parseProductPage(page)?.priceCents : null;
-  if (!priceCents) return null;
-  await ctx.runMutation(internal.publicationCovers.setAboPreisInternal, {
-    publicationId,
-    url,
-    priceCents,
-  });
-  return priceCents;
-}
-
-/** Nach dem Speichern einer Produktseite gleich den Preis holen. */
-export const aboPreisHolen = internalAction({
-  args: { publicationId: v.id("publications"), url: v.string() },
-  handler: async (ctx, { publicationId, url }) => {
-    await aboPreisAbgleichen(ctx, publicationId, url);
   },
 });
 
@@ -360,7 +317,6 @@ export const refreshAll = internalAction({
       coverSource: string | null;
       coverAssetId: Id<"assets"> | null;
       currentIssueUrl: string | null;
-      shopSubscriptionUrl: string | null;
     }[] = await ctx.runQuery(internal.publicationCovers.listInternal, {});
 
     const result = {
@@ -373,27 +329,6 @@ export const refreshAll = internalAction({
     };
     const pageCache = new Map<string, ProductCard[]>();
     for (const publication of publications) {
-      // Digital-Abo: Preis von der eigenen Produktseite, unabhaengig davon,
-      // ob die Reihe auf der Startseite des Ladens steht.
-      if (publication.shopSubscriptionUrl) {
-        try {
-          const preis = await aboPreisAbgleichen(
-            ctx,
-            publication._id,
-            publication.shopSubscriptionUrl,
-          );
-          if (preis) {
-            result.issues.push(
-              `${publication.name} Digital-Abo · ${(preis / 100).toFixed(2)} €`,
-            );
-          } else {
-            result.failed.push(`${publication.slug}: Preis des Digital-Abos`);
-          }
-        } catch (error) {
-          console.error(`Digital-Abo ${publication.slug}`, error);
-          result.failed.push(`${publication.slug}: Preis des Digital-Abos`);
-        }
-      }
       const series = seriesFor(publication.slug);
       const gepflegt = canonicalSeriesName(publication.slug, publication.name);
       if (gepflegt) {

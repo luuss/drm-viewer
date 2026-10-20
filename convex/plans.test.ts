@@ -214,31 +214,3 @@ describe("Abo-Katalog", () => {
     expect(missing.map((v) => v.name)).not.toContain("Kombi-Abonnement Ausland");
   });
 });
-
-describe("Digital-Abo aus dem Laden", () => {
-  test("mit Artikelnummer: im Angebot mit Preis und Laufzeit, ohne: nicht", async () => {
-    const t = convexTest(schema, modules);
-    await t.run(async (ctx) => {
-      await ctx.db.insert("publications", {
-        name: "Schwerterträger",
-        slug: "schwertertraeger",
-        isActive: true,
-        shopSubscriptionSku: "ST-DIGITAL-ABO",
-        shopSubscriptionUrl: "https://lesenundschenken.de/1-abo.html",
-        shopSubscriptionPriceCents: 4900,
-        shopSubscriptionMonths: 6,
-        createdAt: 1,
-      });
-      await ctx.db.insert("publications", {
-        name: "Archiv", slug: "archiv", isActive: true, createdAt: 2,
-      });
-    });
-    const offers = await t.query(api.plans.offers, {});
-    expect(offers).toHaveLength(1);
-    expect(offers[0]).toMatchObject({
-      publicationSlug: "schwertertraeger",
-      headline: null,
-      digitalAbo: { sku: "ST-DIGITAL-ABO", months: 6, priceAmountCents: 4900 },
-    });
-  });
-});

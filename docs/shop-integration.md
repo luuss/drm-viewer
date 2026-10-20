@@ -386,33 +386,6 @@ Sonst:
 `issues.shopUrl` ist zugleich die Seite, die der naechtliche Abgleich
 (`publicationCovers.refreshAll`) fuer Heftbezeichnung und Preis liest.
 
-### Digital-Abo (seit 20.10.2026)
-
-Das Digital-Abo einer Reihe wird im Leser gekauft wie ein Heft: Abo-Seite
-`/abo/<reihe>` mit „Sofort kaufen“ (Kartenkasse) und „In den Warenkorb“,
-im Warenkorb zusammen mit Heften (Eintrag `abo:<publicationId>`). Gebucht
-wird im Laden, freigeschaltet ueber `/shop/entitlements` (`kind:
-subscription`, Laufzeit `shopSubscriptionMonths`, sonst 12 Monate; ein
-weiterer Kauf verlaengert).
-
-Einrichten je Reihe:
-
-1. Im Laden ein **virtuelles Produkt** anlegen (PrestaShop: Produkttyp
-   „Virtuelles Produkt“), aktiv und bestellbar, Referenz = Artikelnummer,
-   etwa `ZUERST-DIGITAL-ABO`. `lusdigital` erkennt virtuelle Produkte ohne
-   Aenderung: `quote`/`create_order` (`artikelFinden`), `warenkorb`,
-   Widerrufsverzicht und Meldung an den Leser behandeln sie als digital.
-   Eine „Ausgabe: Digital“-Kombination ist dafuer nicht noetig.
-2. Redaktion → Einstellungen → Reihen: Artikelnummer, Laufzeit und
-   Produktseite eintragen. Erst mit Artikelnummer ist das Abo kaufbar.
-   Den Preis liest der Leser von der Produktseite (gleich nach dem
-   Speichern und naechtlich im Ladenabgleich,
-   `publications.shopSubscriptionPriceCents`); gebucht wird zum Preis, den
-   `quote` liefert.
-
-Ohne Artikelnummer, aber mit Produktseite fuehrt der Knopf „Digital-Abo im
-Netzladen“ auf der Abo-Seite zur Produktseite.
-
 ## Kartenkauf im Leser (seit 29.09.2026)
 
 Angemeldete Leser zahlen mit Karte direkt im Leser, ohne Umleitung. Beim ersten

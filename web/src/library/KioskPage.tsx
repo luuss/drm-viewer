@@ -94,11 +94,6 @@ export default function KioskPage() {
                           .join(" · ")}
                       </div>
                     </>
-                  ) : o.digitalAbo?.priceAmountCents ? (
-                    <>
-                      <div className="price">{formatEuro(o.digitalAbo.priceAmountCents)}</div>
-                      <div className="price-note">Digital-Abo, {o.digitalAbo.months} Monate</div>
-                    </>
                   ) : (
                     <div className="price-note">Digital-Abo im Netzladen</div>
                   )}

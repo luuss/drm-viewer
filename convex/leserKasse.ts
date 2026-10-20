@@ -12,7 +12,6 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { hasIssueAccess, normalizeEmail } from "./access";
 import { issueShopSku } from "./shopLinks";
-import { subscriptionMonths } from "./shopIntegration";
 import { WITHDRAWAL_WAIVER_TEXT, WITHDRAWAL_WAIVER_VERSION } from "./consents";
 import {
   LAENDER,
@@ -104,28 +103,6 @@ async function adresseSchreiben(
   return a;
 }
 
-/**
- * Hat der Laden fuer diesen Kauf schon ein Digital-Abo der Reihe gemeldet?
- * Gesucht wird eine Abo-Freischaltung der Adresse, die nach dem Kauf
- * entstanden ist und nicht widerrufen wurde.
- */
-async function aboSeitKauf(
-  ctx: QueryCtx,
-  email: string,
-  publicationId: Id<"publications">,
-  seit: number,
-): Promise<boolean> {
-  const rows = await ctx.db
-    .query("shopAccess")
-    .withIndex("by_email_publication", (q) =>
-      q.eq("email", email).eq("publicationId", publicationId),
-    )
-    .take(500);
-  return rows.some(
-    (r) => r.kind === "subscription" && r.revokedAt === undefined && r.createdAt >= seit,
-  );
-}
-
 // --- Oberflaeche ------------------------------------------------------------
 
 /** Was die Kasse braucht: an/aus, Modus, Schluessel fuer Stripe.js, Karte, Adresse. */
@@ -170,17 +147,12 @@ export const kaufStatus = query({
     if (!userId) return null;
     const kauf = await ctx.db.get(kaufId);
     if (!kauf || kauf.userId !== userId) return null;
-    const abos = kauf.aboPublicationIds ?? [];
-    let freigeschaltet = kauf.issueIds.length + abos.length > 0;
+    let freigeschaltet = kauf.issueIds.length > 0;
     for (const issueId of kauf.issueIds) {
       if (!(await hasIssueAccess(ctx, userId, issueId))) {
         freigeschaltet = false;
         break;
       }
-    }
-    for (const publicationId of abos) {
-      if (!freigeschaltet) break;
-      freigeschaltet = await aboSeitKauf(ctx, kauf.email, publicationId, kauf.createdAt);
     }
     return {
       status: kauf.status,
@@ -212,10 +184,6 @@ export const meineKaeufe = query({
         const issue = await ctx.db.get(id);
         if (issue) titel.push(issue.shopTitle ?? issue.title);
       }
-      for (const id of k.aboPublicationIds ?? []) {
-        const publication = await ctx.db.get(id);
-        if (publication) titel.push(aboTitel(publication));
-      }
       out.push({
         _id: k._id,
         createdAt: k.createdAt,
@@ -232,38 +200,25 @@ export const meineKaeufe = query({
 
 // --- Kauf vorbereiten --------------------------------------------------------
 
-/** Bezeichnung des Digital-Abos einer Reihe in Kasse, Stripe und Kaufliste. */
-export function aboTitel(publication: Doc<"publications">): string {
-  return `${publication.name} Digital-Abo, ${subscriptionMonths(publication)} Monate`;
-}
-
 /**
  * Alles, was `kaufen` vor dem Belasten braucht, in einem Lesezugriff:
- * Konto, Adresse, Karte und die Positionen mit Artikelnummer im Shop — Hefte
- * und Digital-Abos. Hefte, die das Konto schon lesen darf, fallen mit Fehler
- * heraus. Ein Abo darf auch laufen: ein weiterer Kauf verlaengert es.
+ * Konto, Adresse, Karte und die Hefte mit Artikelnummer im Shop. Hefte, die
+ * das Konto schon lesen darf, fallen mit Fehler heraus.
  */
 export const kaufVorbereiten = internalQuery({
   args: {
     userId: v.id("users"),
     issueIds: v.array(v.id("issues")),
-    aboPublicationIds: v.optional(v.array(v.id("publications"))),
     modus: modusV,
   },
-  handler: async (ctx, { userId, issueIds, aboPublicationIds, modus }) => {
+  handler: async (ctx, { userId, issueIds, modus }) => {
     const user = await ctx.db.get(userId);
     const email = normalizeEmail(user?.email);
     if (!email) throw new Error("Das Konto hat keine E-Mail-Adresse.");
     const ids = [...new Set(issueIds)];
-    const aboIds = [...new Set(aboPublicationIds ?? [])];
-    if (ids.length + aboIds.length === 0) throw new Error("Nichts ausgewählt.");
+    if (ids.length === 0) throw new Error("Keine Ausgabe ausgewählt.");
     if (ids.length > MAX_HEFTE) throw new Error(`Höchstens ${MAX_HEFTE} Ausgaben je Kauf.`);
-    const positionen: {
-      issueId?: Id<"issues">;
-      publicationId?: Id<"publications">;
-      titel: string;
-      sku: string;
-    }[] = [];
+    const hefte = [];
     for (const id of ids) {
       const issue = await ctx.db.get(id);
       if (!issue || !issue.isPublished) throw new Error("Eine Ausgabe ist nicht mehr erhältlich.");
@@ -274,18 +229,7 @@ export const kaufVorbereiten = internalQuery({
       if (await hasIssueAccess(ctx, userId, id)) {
         throw new Error(`„${issue.shopTitle ?? issue.title}“ gehört schon zu Ihrer Bibliothek.`);
       }
-      positionen.push({ issueId: id, titel: issue.shopTitle ?? issue.title, sku });
-    }
-    for (const id of aboIds) {
-      const publication = await ctx.db.get(id);
-      if (!publication || !publication.isActive || !publication.shopSubscriptionSku) {
-        throw new Error("Ein Digital-Abo ist nicht mehr erhältlich.");
-      }
-      positionen.push({
-        publicationId: id,
-        titel: aboTitel(publication),
-        sku: publication.shopSubscriptionSku,
-      });
+      hefte.push({ issueId: id, titel: issue.shopTitle ?? issue.title, sku });
     }
     const karte = await karteVon(ctx, userId, modus);
     return {
@@ -293,7 +237,7 @@ export const kaufVorbereiten = internalQuery({
       adresse: await adresseVon(ctx, userId),
       stripeCustomerId: karte?.stripeCustomerId ?? null,
       paymentMethodId: karte?.paymentMethodId ?? null,
-      positionen,
+      hefte,
     };
   },
 });
@@ -343,7 +287,6 @@ export const kaufAnlegen = internalMutation({
     email: v.string(),
     modus: modusV,
     issueIds: v.array(v.id("issues")),
-    aboPublicationIds: v.optional(v.array(v.id("publications"))),
     skus: v.array(v.string()),
     betragCents: v.number(),
     karteGespeichert: v.boolean(),
@@ -362,7 +305,7 @@ export const kaufAnlegen = internalMutation({
 });
 
 /**
- * PaymentIntent am Kauf vermerken und den Widerrufsverzicht je Heft und Abo belegen
+ * PaymentIntent am Kauf vermerken und den Widerrufsverzicht je Heft belegen
  * (Wortlaut und Version wie im Formular, Zahlung als Beleg).
  */
 export const zahlungVermerken = internalMutation({
@@ -372,18 +315,14 @@ export const zahlungVermerken = internalMutation({
     const kauf = await ctx.db.get(kaufId);
     if (!kauf) throw new Error("Kauf fehlt");
     await ctx.db.patch(kaufId, { paymentIntentId, updatedAt: Date.now() });
-    const ziele = [
-      ...kauf.issueIds.map((issueId) => ({ issueId })),
-      ...(kauf.aboPublicationIds ?? []).map((publicationId) => ({ publicationId })),
-    ];
-    for (const ziel of ziele) {
+    for (const issueId of kauf.issueIds) {
       await ctx.db.insert("consents", {
         userId: kauf.userId,
         email: kauf.email,
         type: "withdrawal_waiver",
         documentVersion: WITHDRAWAL_WAIVER_VERSION,
         text: WITHDRAWAL_WAIVER_TEXT,
-        ...ziel,
+        issueId,
         stripeSessionId: paymentIntentId,
         createdAt: Date.now(),
       });
