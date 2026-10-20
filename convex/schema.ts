@@ -110,11 +110,14 @@ export default defineSchema(
     currentIssueSubtitle: v.optional(v.string()),
     currentIssueUrl: v.optional(v.string()),
     // Digital-Abo der Reihe im Laden: Artikelnummer, Laufzeit in Monaten
-    // (ohne Angabe 12) und Produktseite. Der Kaufknopf fuehrt dorthin, die
-    // Freischaltung kommt ueber `/shop/entitlements`.
+    // (ohne Angabe 12) und Produktseite. Mit Artikelnummer liegt das Abo wie
+    // ein Heft im Warenkorb des Lesers; die Freischaltung kommt ueber
+    // `/shop/entitlements`. Den Preis zieht der Ladenabgleich von der
+    // Produktseite nach.
     shopSubscriptionSku: v.optional(v.string()),
     shopSubscriptionMonths: v.optional(v.number()),
     shopSubscriptionUrl: v.optional(v.string()),
+    shopSubscriptionPriceCents: v.optional(v.number()),
     // Abo-Formular des Druckhefts im Laden: dorthin fuehrt ein Tipp auf den
     // Abo-Aufruf im Heft (pageLinks). Ohne Eintrag gilt das bekannte Formular.
     shopPrintSubscriptionUrl: v.optional(v.string()),
@@ -593,6 +596,8 @@ export default defineSchema(
     text: v.string(),
     issueId: v.optional(v.id("issues")),
     planId: v.optional(v.id("subscriptionPlans")),
+    // Digital-Abo der Reihe, gekauft im Leser.
+    publicationId: v.optional(v.id("publications")),
     stripeSessionId: v.optional(v.string()),
     createdAt: v.number(),
   })
@@ -779,6 +784,8 @@ export default defineSchema(
     email: v.string(),
     modus: v.union(v.literal("test"), v.literal("live")),
     issueIds: v.array(v.id("issues")),
+    // Digital-Abos im selben Kauf, je Reihe eins.
+    aboPublicationIds: v.optional(v.array(v.id("publications"))),
     skus: v.array(v.string()),
     betragCents: v.number(),
     karteGespeichert: v.boolean(),

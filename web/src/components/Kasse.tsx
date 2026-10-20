@@ -38,6 +38,8 @@ type Angebot = {
 
 export type KasseProps = {
   issueIds: Id<"issues">[];
+  /** Digital-Abos im selben Kauf, je Reihe eins. */
+  aboPublicationIds?: Id<"publications">[];
   /** Kasse des Shops fuer andere Zahlarten (Rechnung, Vorkasse, SEPA). */
   shopKasse: string | null;
   /** Wohin „Jetzt lesen“ nach der Freischaltung fuehrt. */
@@ -91,6 +93,7 @@ type Status = Extract<FunctionReturnType<typeof api.leserKasse.status>, { aktiv:
 
 function KasseKonto({
   issueIds,
+  aboPublicationIds = [],
   shopKasse,
   leseZiel,
   onBezahlt,
@@ -117,7 +120,7 @@ function KasseKonto({
   const [karteBereit, setKarteBereit] = useState(false);
   const karte = useRef<{ stripe: Stripe; elements: StripeElements } | null>(null);
 
-  const schluessel = issueIds.join(",");
+  const schluessel = [...issueIds, ...aboPublicationIds].join(",");
   const land = adresse.land;
   const zahlweise: "gespeichert" | "neu" = status.karte && !neueKarte ? "gespeichert" : "neu";
 
@@ -138,7 +141,7 @@ function KasseKonto({
   useEffect(() => {
     let aktiv = true;
     setAngebotFehler(null);
-    angebotHolen({ issueIds, land })
+    angebotHolen({ issueIds, aboPublicationIds, land })
       .then((a) => aktiv && setAngebot(a))
       .catch((e) => {
         if (!aktiv) return;
@@ -195,6 +198,7 @@ function KasseKonto({
       }
       const r = await kaufenAktion({
         issueIds,
+        aboPublicationIds,
         erwarteterBetragCents: angebot.betragCents,
         widerrufsverzicht: verzicht,
         zahlweise,

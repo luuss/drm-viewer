@@ -107,6 +107,13 @@ async function aufbau(t: any, opts: { email?: string } = {}) {
       name: "Schwerterträger",
       slug: "schwertertraeger",
       isActive: true,
+      shopSubscriptionSku: "ST-DIGITAL-ABO",
+      createdAt: now,
+    });
+    const ohneAbo = await ctx.db.insert("publications", {
+      name: "Archiv",
+      slug: "archiv",
+      isActive: true,
       createdAt: now,
     });
     const heft = (sku: string | null, published = true) =>
@@ -125,6 +132,8 @@ async function aufbau(t: any, opts: { email?: string } = {}) {
       });
     return {
       userId: userId as Id<"users">,
+      reihe: publicationId as Id<"publications">,
+      ohneAbo: ohneAbo as Id<"publications">,
       greim: (await heft("ST-36-DIGITAL")) as Id<"issues">,
       zweites: (await heft("ST-37-DIGITAL")) as Id<"issues">,
       ohneShop: (await heft(null)) as Id<"issues">,
@@ -133,12 +142,19 @@ async function aufbau(t: any, opts: { email?: string } = {}) {
   });
 }
 
-async function kaufAnlegen(t: any, userId: Id<"users">, issueIds: Id<"issues">[], pi = "pi_TEST12345678") {
+async function kaufAnlegen(
+  t: any,
+  userId: Id<"users">,
+  issueIds: Id<"issues">[],
+  pi = "pi_TEST12345678",
+  aboPublicationIds?: Id<"publications">[],
+) {
   const kaufId: Id<"leserKaeufe"> = await t.mutation(internal.leserKasse.kaufAnlegen, {
     userId,
     email: "leser@example.de",
     modus: "test",
     issueIds,
+    aboPublicationIds,
     skus: ["ST-36-DIGITAL"],
     betragCents: 1380,
     karteGespeichert: false,
@@ -173,7 +189,7 @@ describe("leserKasse", () => {
       modus: "test",
     });
     expect(r.email).toBe("leser@example.de");
-    expect(r.hefte.map((h: any) => h.sku)).toEqual(["ST-36-DIGITAL", "ST-37-DIGITAL"]);
+    expect(r.positionen.map((h: any) => h.sku)).toEqual(["ST-36-DIGITAL", "ST-37-DIGITAL"]);
     expect(r.adresse).toBeNull();
 
     await expect(
@@ -182,6 +198,63 @@ describe("leserKasse", () => {
     await expect(
       t.query(internal.leserKasse.kaufVorbereiten, { userId: s.userId, issueIds: [s.entwurf], modus: "test" }),
     ).rejects.toThrow(/nicht mehr erhältlich/);
+  });
+
+  test("kaufVorbereiten nimmt das Digital-Abo einer Reihe mit Artikelnummer", async () => {
+    const t = convexTest(schema, modules);
+    const s = await aufbau(t);
+    const r = await t.query(internal.leserKasse.kaufVorbereiten, {
+      userId: s.userId,
+      issueIds: [s.greim],
+      aboPublicationIds: [s.reihe, s.reihe],
+      modus: "test",
+    });
+    expect(r.positionen).toEqual([
+      { issueId: s.greim, titel: "Heft ST-36-DIGITAL", sku: "ST-36-DIGITAL" },
+      { publicationId: s.reihe, titel: "Schwerterträger Digital-Abo, 12 Monate", sku: "ST-DIGITAL-ABO" },
+    ]);
+    // Nur ein Abo, ohne Heft, geht auch.
+    const nurAbo = await t.query(internal.leserKasse.kaufVorbereiten, {
+      userId: s.userId,
+      issueIds: [],
+      aboPublicationIds: [s.reihe],
+      modus: "test",
+    });
+    expect(nurAbo.positionen.map((p: any) => p.sku)).toEqual(["ST-DIGITAL-ABO"]);
+    await expect(
+      t.query(internal.leserKasse.kaufVorbereiten, {
+        userId: s.userId,
+        issueIds: [],
+        aboPublicationIds: [s.ohneAbo],
+        modus: "test",
+      }),
+    ).rejects.toThrow(/Digital-Abo ist nicht mehr erhältlich/);
+    await expect(
+      t.query(internal.leserKasse.kaufVorbereiten, { userId: s.userId, issueIds: [], modus: "test" }),
+    ).rejects.toThrow(/Nichts ausgewählt/);
+  });
+
+  test("Abo-Kauf: Verzicht je Abo, freigeschaltet erst mit der Meldung des Ladens", async () => {
+    const t = convexTest(schema, modules);
+    const s = await aufbau(t);
+    const kaufId = await kaufAnlegen(t, s.userId, [], "pi_ABO123456789", [s.reihe]);
+    const consents = await t.run(async (ctx: any) => await ctx.db.query("consents").collect());
+    expect(consents).toHaveLength(1);
+    expect(consents[0]).toMatchObject({ publicationId: s.reihe, stripeSessionId: "pi_ABO123456789" });
+
+    const als = t.withIdentity({ subject: `${s.userId}|s` });
+    expect(await als.query(api.leserKasse.kaufStatus, { kaufId })).toMatchObject({ freigeschaltet: false });
+    await t.mutation(internal.shopIntegration.applyOrderInternal, {
+      externalOrderId: "302",
+      email: "leser@example.de",
+      action: "grant",
+      items: [{ sku: "ST-DIGITAL-ABO", lineId: "1" }],
+    });
+    expect(await als.query(api.leserKasse.kaufStatus, { kaufId })).toMatchObject({ freigeschaltet: true });
+
+    await t.run(async (ctx: any) => await ctx.db.patch(kaufId, { status: "bestellt" }));
+    const kaeufe = await als.query(api.leserKasse.meineKaeufe, {});
+    expect(kaeufe[0].titel).toEqual(["Schwerterträger Digital-Abo, 12 Monate"]);
   });
 
   test("ein schon gekauftes Heft laesst sich nicht noch einmal kaufen", async () => {

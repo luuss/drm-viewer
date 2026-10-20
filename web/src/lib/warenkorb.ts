@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Warenkorb im Leser: nur eine Auswahl von Heften im Browser. Bezahlt wird im
- * Laden; „Zur Kasse“ legt die Hefte dort ueber `lusdigital/warenkorb` in den
- * Warenkorb und oeffnet die Kasse.
+ * Warenkorb im Leser: nur eine Auswahl von Heften und Digital-Abos im
+ * Browser. Bezahlt wird im Laden; „Zur Kasse“ legt alles dort ueber
+ * `lusdigital/warenkorb` in den Warenkorb und oeffnet die Kasse.
+ *
+ * Ein Eintrag ist die ID eines Hefts oder `abo:<ID der Reihe>`.
  */
 const KEY = "lus-warenkorb";
 
@@ -39,17 +41,29 @@ function abonnieren(h: () => void) {
   return () => hoerer.delete(h);
 }
 
-/** Ausgewaehlte Hefte (Issue-IDs), aelteste zuerst. */
+const ABO = "abo:";
+
+/** Eintrag fuer das Digital-Abo einer Reihe. */
+export function aboEintrag(publicationId: string): string {
+  return `${ABO}${publicationId}`;
+}
+
+/** Reihe eines Abo-Eintrags, bei einem Heft null. */
+export function aboReihe(eintrag: string): string | null {
+  return eintrag.startsWith(ABO) ? eintrag.slice(ABO.length) : null;
+}
+
+/** Ausgewaehlte Eintraege (Hefte und Abos), aelteste zuerst. */
 export function useWarenkorb(): Liste {
   return useSyncExternalStore(abonnieren, () => stand);
 }
 
-export function hinein(issueId: string) {
-  if (!stand.includes(issueId)) schreiben([...stand, issueId]);
+export function hinein(eintrag: string) {
+  if (!stand.includes(eintrag)) schreiben([...stand, eintrag]);
 }
 
-export function heraus(issueId: string) {
-  schreiben(stand.filter((id) => id !== issueId));
+export function heraus(eintrag: string) {
+  schreiben(stand.filter((id) => id !== eintrag));
 }
 
 export function leeren() {

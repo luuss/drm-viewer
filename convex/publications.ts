@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireEditor, requireAdmin, audit } from "./roles";
 import { assertSkuFree } from "./shopIntegration";
 import { cleanShopUrl, cleanSku } from "./shopLinks";
@@ -100,14 +101,24 @@ export const updateShop = mutation({
     ) {
       throw new Error("Laufzeit in ganzen Monaten zwischen 1 und 120");
     }
+    const url = cleanShopUrl(args.shopSubscriptionUrl);
+    const neueSeite = url !== publication.shopSubscriptionUrl;
     await ctx.db.patch(args.publicationId, {
       shopSubscriptionSku: sku,
       shopSubscriptionMonths: months ?? undefined,
-      shopSubscriptionUrl: cleanShopUrl(args.shopSubscriptionUrl),
+      shopSubscriptionUrl: url,
+      // Der Preis gehoert zur Produktseite; eine neue holt ihren eigenen.
+      ...(neueSeite ? { shopSubscriptionPriceCents: undefined } : {}),
       ...(args.shopPrintSubscriptionUrl !== undefined
         ? { shopPrintSubscriptionUrl: cleanShopUrl(args.shopPrintSubscriptionUrl) }
         : {}),
     });
+    if (url && (neueSeite || publication.shopSubscriptionPriceCents === undefined)) {
+      await ctx.scheduler.runAfter(0, internal.publicationCovers.aboPreisHolen, {
+        publicationId: args.publicationId,
+        url,
+      });
+    }
     await audit(
       ctx,
       "publication.shop",

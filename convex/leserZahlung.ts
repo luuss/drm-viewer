@@ -42,20 +42,25 @@ async function angemeldet(ctx: ActionCtx): Promise<Id<"users">> {
   return userId as Id<"users">;
 }
 
+/** Eine Position der Kasse: ein Heft oder das Digital-Abo einer Reihe. */
+type Position = {
+  issueId?: Id<"issues">;
+  publicationId?: Id<"publications">;
+  titel: string;
+  sku: string;
+};
+
 type Angebot = {
   betragCents: number;
   steuerCents: number;
   land: string;
-  positionen: { issueId: Id<"issues">; titel: string; sku: string; preisCents: number; steuersatz: number | null }[];
+  positionen: (Position & { preisCents: number; steuersatz: number | null })[];
 };
 
-async function angebotHolen(
-  hefte: { issueId: Id<"issues">; titel: string; sku: string }[],
-  land: string,
-): Promise<Angebot> {
+async function angebotHolen(positionen: Position[], land: string): Promise<Angebot> {
   let json: Record<string, any>;
   try {
-    json = await callShopApi("quote", { skus: hefte.map((h) => h.sku), country_iso: land });
+    json = await callShopApi("quote", { skus: positionen.map((h) => h.sku), country_iso: land });
   } catch (e) {
     console.error(JSON.stringify({ event: "leser.angebot.fehler", fehler: String((e as Error).message) }));
     throw new Error("Der Preis ließ sich im Netzladen gerade nicht abfragen. Bitte gleich noch einmal versuchen.");
@@ -69,7 +74,7 @@ async function angebotHolen(
     betragCents,
     steuerCents: Number(json.tax_cents) || 0,
     land: String(json.country_iso ?? land),
-    positionen: hefte.map((h) => {
+    positionen: positionen.map((h) => {
       const z = zeilen.find((x) => x?.sku === h.sku);
       return {
         ...h,
@@ -82,16 +87,21 @@ async function angebotHolen(
 
 /** Preis aus dem Shop fuer die Auswahl, bevor der Kunde zahlt. */
 export const angebot = action({
-  args: { issueIds: v.array(v.id("issues")), land: v.optional(v.string()) },
-  handler: async (ctx, { issueIds, land }): Promise<Angebot> => {
+  args: {
+    issueIds: v.array(v.id("issues")),
+    aboPublicationIds: v.optional(v.array(v.id("publications"))),
+    land: v.optional(v.string()),
+  },
+  handler: async (ctx, { issueIds, aboPublicationIds, land }): Promise<Angebot> => {
     const konfig = konfigOderFehler();
     const userId = await angemeldet(ctx);
     const vorbereitet = await ctx.runQuery(internal.leserKasse.kaufVorbereiten, {
       userId,
       issueIds,
+      aboPublicationIds,
       modus: konfig.modus,
     });
-    return await angebotHolen(vorbereitet.hefte, (land ?? vorbereitet.adresse?.land ?? "DE").toUpperCase());
+    return await angebotHolen(vorbereitet.positionen, (land ?? vorbereitet.adresse?.land ?? "DE").toUpperCase());
   },
 });
 
@@ -129,6 +139,7 @@ async function stripeKunde(
 export const kaufen = action({
   args: {
     issueIds: v.array(v.id("issues")),
+    aboPublicationIds: v.optional(v.array(v.id("publications"))),
     erwarteterBetragCents: v.number(),
     widerrufsverzicht: v.boolean(),
     zahlweise: v.union(v.literal("gespeichert"), v.literal("neu")),
@@ -156,6 +167,7 @@ export const kaufen = action({
     const vb = await ctx.runQuery(internal.leserKasse.kaufVorbereiten, {
       userId,
       issueIds: args.issueIds,
+      aboPublicationIds: args.aboPublicationIds,
       modus: konfig.modus,
     });
     if (!vb.adresse) throw new Error("Bitte die Rechnungsadresse angeben.");
@@ -164,7 +176,7 @@ export const kaufen = action({
     }
 
     // Der Preis kommt aus dem Shop, genau so wird dort gebucht.
-    const preis = await angebotHolen(vb.hefte, vb.adresse.land);
+    const preis = await angebotHolen(vb.positionen, vb.adresse.land);
     if (preis.betragCents !== args.erwarteterBetragCents) {
       throw new Error(
         `Der Preis hat sich geändert, er beträgt jetzt ${(preis.betragCents / 100)
@@ -188,8 +200,9 @@ export const kaufen = action({
       userId,
       email: vb.email,
       modus: konfig.modus,
-      issueIds: vb.hefte.map((h) => h.issueId),
-      skus: vb.hefte.map((h) => h.sku),
+      issueIds: vb.positionen.flatMap((p) => (p.issueId ? [p.issueId] : [])),
+      aboPublicationIds: vb.positionen.flatMap((p) => (p.publicationId ? [p.publicationId] : [])),
+      skus: vb.positionen.map((p) => p.sku),
       betragCents: preis.betragCents,
       karteGespeichert: args.zahlweise === "gespeichert",
     });
@@ -199,8 +212,8 @@ export const kaufen = action({
       currency: "eur",
       customer: kunde,
       payment_method_types: ["card"],
-      description: kaufBeschreibung(vb.hefte.map((h) => h.titel)),
-      metadata: kaufMetadaten({ kaufId, userId, email: vb.email, skus: vb.hefte.map((h) => h.sku) }),
+      description: kaufBeschreibung(vb.positionen.map((p) => p.titel)),
+      metadata: kaufMetadaten({ kaufId, userId, email: vb.email, skus: vb.positionen.map((p) => p.sku) }),
     };
 
     let pi: any;

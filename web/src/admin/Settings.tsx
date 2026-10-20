@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { api, type Id } from "../lib/api";
+import { api, formatEuro, type Id } from "../lib/api";
 import { MeldungZeile, useMeldung } from "./adminUi";
 
 type Reihe = FunctionReturnType<typeof api.publications.listAll>[number];
@@ -126,6 +126,13 @@ function ReiheKarte({ reihe: p }: { reihe: Reihe }) {
         Produktseite des Digital-Abos
         <input name="url" type="url" defaultValue={p.shopSubscriptionUrl ?? ""} placeholder="https://" />
       </label>
+      {p.shopSubscriptionUrl && (
+        <p className="hint small">
+          {p.shopSubscriptionPriceCents
+            ? `Preis laut Produktseite: ${formatEuro(p.shopSubscriptionPriceCents)}`
+            : "Preis von der Produktseite noch nicht gelesen"}
+        </p>
+      )}
       <label>
         Abo-Formular des Druckhefts (Ziel der Abo-Aufrufe im Heft)
         <input

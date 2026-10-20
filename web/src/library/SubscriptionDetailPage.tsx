@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/react";
 import { api, formatEuro, type Id, cleanError } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import Kasse from "../components/Kasse";
+import { aboEintrag, heraus, hinein, kassenUrl, useWarenkorb } from "../lib/warenkorb";
 
 const REGION_LABEL: Record<string, string> = {
   inland: "Inland",
@@ -22,10 +24,11 @@ const SAMPLE_COPY_URL: Record<string, string> = {
 };
 
 /**
- * Abo-Seite eines Titels. Hier — und erst hier — waehlt der Kunde Abo-Art und
- * Liefergebiet; vorausgewaehlt ist die Stufe, deren Preis der Kiosk zeigt.
- * Abgeschlossen wird das Digital-Abo im Laden. Der eigene Checkout ueber den
- * Zahlungsdienst ist nur per Schalter (`STRIPE_CHECKOUT_ENABLED`) an.
+ * Abo-Seite eines Titels. Das Digital-Abo ist ein Artikel im Laden: mit
+ * Artikelnummer wird es hier gekauft wie ein Heft — sofort mit Karte oder
+ * ueber den Warenkorb, zusammen mit Heften. Ohne Artikelnummer fuehrt der
+ * Knopf auf die Produktseite im Laden. Der eigene Checkout ueber Stripe-Abos
+ * (Abo-Art und Liefergebiet) ist nur per Schalter (`STRIPE_CHECKOUT_ENABLED`) an.
  */
 export default function SubscriptionDetailPage() {
   const { slug = "" } = useParams();
@@ -33,6 +36,12 @@ export default function SubscriptionDetailPage() {
   const offer = useQuery(api.plans.offerBySlug, { slug });
   const waiver = useQuery(api.consents.currentWaiver, {});
   const storefront = useQuery(api.shopIntegration.storefront, {});
+  const me = useQuery(api.users.me, {});
+  // Kartenkauf im Leser (Stripe, gebucht im Shop). Aus: Sprung in die Kasse des Shops.
+  const kasse = useQuery(api.leserKasse.status, {});
+  const [params] = useSearchParams();
+  const [kasseOffen, setKasseOffen] = useState(params.has("kaufen") || params.has("kauf"));
+  const auswahl = useWarenkorb();
   const subscribe = useAction(api.billing.createSubscriptionCheckout);
   const [chosen, setChosen] = useState<Id<"subscriptionPlans"> | null>(null);
   const [accepted, setAccepted] = useState(false);
@@ -56,6 +65,10 @@ export default function SubscriptionDetailPage() {
   const stripeMode = storefront.stripeCheckout && selected !== null;
   const perInterval = selected?.interval === "year" ? "pro Jahr" : "pro Monat";
   const sampleUrl = SAMPLE_COPY_URL[slug];
+  const abo = stripeMode ? null : offer.digitalAbo;
+  const eintrag = aboEintrag(offer.publicationId);
+  const imKorb = auswahl.includes(eintrag);
+  const shopKasse = abo ? kassenUrl(storefront.shopUrl, [abo.sku], me?.email ?? null) : null;
 
   async function startAbo() {
     if (!selected) return;
@@ -90,7 +103,9 @@ export default function SubscriptionDetailPage() {
         <div className="meta">
           {stripeMode && selected
             ? `${selected.interval === "year" ? "Jahresabonnement" : "Monatsabonnement"} · Preise inkl. MwSt.`
-            : "Digital-Abo · Preis und Laufzeit im Netzladen"}
+            : abo
+              ? `Digital-Abo · ${abo.months} Monate`
+              : "Digital-Abo · Preis und Laufzeit im Netzladen"}
         </div>
         {offer.currentIssue && (
           <div className="current-issue">
@@ -190,6 +205,46 @@ export default function SubscriptionDetailPage() {
               </button>
             </Unauthenticated>
             {err && <div className="err">{err}</div>}
+          </>
+        ) : abo && shopKasse ? (
+          <>
+            {abo.priceAmountCents !== null && (
+              <div className="price">
+                {formatEuro(abo.priceAmountCents)}
+                <span className="hint"> für {abo.months} Monate · inkl. MwSt.</span>
+              </div>
+            )}
+            {kasse?.aktiv && kasseOffen ? (
+              <Kasse
+                issueIds={[]}
+                aboPublicationIds={[offer.publicationId]}
+                shopKasse={shopKasse}
+                onFertig={() => heraus(eintrag)}
+              />
+            ) : (
+              <div className="row actions">
+                {kasse?.aktiv ? (
+                  <button className="btn" onClick={() => setKasseOffen(true)}>
+                    Sofort kaufen <Icon name="arrow-right" />
+                  </button>
+                ) : (
+                  // Direkt in die Kasse des Ladens, das Abo liegt dort schon im Warenkorb.
+                  <a className="btn" href={shopKasse} onClick={() => heraus(eintrag)}>
+                    Sofort kaufen <Icon name="arrow-right" />
+                  </a>
+                )}
+                {imKorb ? (
+                  <Link className="btn secondary" to="/warenkorb">
+                    <Icon name="cart" /> Im Warenkorb
+                  </Link>
+                ) : (
+                  <button className="btn secondary" onClick={() => hinein(eintrag)}>
+                    <Icon name="cart" /> In den Warenkorb
+                  </button>
+                )}
+              </div>
+            )}
+            <ShopHinweis />
           </>
         ) : (
           <>
