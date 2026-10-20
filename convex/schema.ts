@@ -510,10 +510,6 @@ export default defineSchema(
     region: v.optional(deliveryRegion),
     isActive: v.boolean(),
     sortOrder: v.optional(v.number()),
-    // Digital-Jahresabo im Stripe-Konto des Ladens (leserAbo.ts): Modus des
-    // Kontos und Steuersatz der Rechnung. Ohne Modus: alter eigener Checkout.
-    stripeModus: v.optional(v.union(v.literal("test"), v.literal("live"))),
-    stripeTaxRateId: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_stripe_price", ["stripePriceId"])
@@ -533,8 +529,6 @@ export default defineSchema(
     endedAt: v.optional(v.number()),
     cancelAtPeriodEnd: v.optional(v.boolean()),
     lastSyncedAt: v.optional(v.number()),
-    // Abo im Stripe-Konto des Ladens (leserAbo.ts); ohne: alter Checkout.
-    stripeModus: v.optional(v.union(v.literal("test"), v.literal("live"))),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])

@@ -19,7 +19,6 @@ export default function ReihePage() {
   const issues = useQuery(api.issues.listPublished, {});
   const offers = useQuery(api.plans.offers, {});
   const eigene = useQuery(api.issues.myLibrary, {});
-  const storefront = useQuery(api.shopIntegration.storefront, {});
   const [nurMeine, setNurMeine] = useState(false);
 
   if (!reihe) {
@@ -51,12 +50,6 @@ export default function ReihePage() {
   const fortschritt = new Map(meine.map((i) => [i._id, i.progress]));
   const gezeigt = nurMeine ? alle.filter((i) => i.eigen) : alle;
   const k = reihe.kontakt;
-  const abo = abos[0] ?? null;
-  // Preis nur, wenn das Abo hier abgeschlossen werden kann (Stripe Checkout).
-  const aboPreis =
-    abo?.headline && storefront && (storefront.stripeAbo || storefront.stripeCheckout)
-      ? abo.headline
-      : null;
 
   return (
     <div
@@ -111,38 +104,12 @@ export default function ReihePage() {
               </button>
             )}
           </div>
-          {gezeigt.length === 0 && !abo ? (
+          {gezeigt.length === 0 ? (
             <div className="empty">
               <p>Noch keine Ausgabe als E-Paper veröffentlicht.</p>
             </div>
           ) : (
             <div className="issue-grid">
-              {/* Das Abo steht immer zuerst, oben links vor den Heften. */}
-              {abo && (
-                <Link to={`/abo/${abo.publicationSlug}`} className="issue-card abo-kachel">
-                  <div className="issue-cover-preview">
-                    {abo.coverUrl ? (
-                      <img src={abo.coverUrl} alt={abo.coverTitle ?? reihe.name} loading="lazy" />
-                    ) : (
-                      <div className="cover-placeholder">{reihe.name[0]}</div>
-                    )}
-                    <span className="eigen-band">Jahresabo</span>
-                  </div>
-                  <div className="issue-card-body">
-                    <div className="title">{reihe.name} im Digital-Abo</div>
-                    <div className="meta">Jede neue Ausgabe automatisch, auf jedem Gerät lesbar.</div>
-                    {aboPreis && (
-                      <div className="price">
-                        {formatEuro(aboPreis.priceAmountCents)}
-                        {aboPreis.interval === "year" ? " / Jahr" : " / Monat"}
-                      </div>
-                    )}
-                    <div className="card-action">
-                      Abo ansehen <Icon name="arrow-right" />
-                    </div>
-                  </div>
-                </Link>
-              )}
               {gezeigt.map((i) => (
                 <Link
                   key={i._id}

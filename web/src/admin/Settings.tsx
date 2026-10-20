@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { api, formatEuro, type Id } from "../lib/api";
+import { api, type Id } from "../lib/api";
 import { MeldungZeile, useMeldung } from "./adminUi";
 
 type Reihe = FunctionReturnType<typeof api.publications.listAll>[number];
@@ -28,7 +28,6 @@ export default function Settings() {
 
 function Reihen() {
   const publications = useQuery(api.publications.listAll, {});
-  const plaene = useQuery(api.plans.listAll, {});
   const createPublication = useMutation(api.publications.create);
   const [meldung, tue, busy] = useMeldung();
   const [name, setName] = useState("");
@@ -37,13 +36,7 @@ function Reihen() {
     <section className="einstellungen-abschnitt">
       <h2>Reihen</h2>
       <div className="karten-gitter">
-        {publications?.map((p) => (
-          <ReiheKarte
-            key={p._id}
-            reihe={p}
-            jahresabo={plaene?.find((x) => x.publicationId === p._id && x.isActive && x.stripeModus) ?? null}
-          />
-        ))}
+        {publications?.map((p) => <ReiheKarte key={p._id} reihe={p} />)}
       </div>
       <form
         className="inline-form short"
@@ -66,63 +59,7 @@ function Reihen() {
   );
 }
 
-type Plan = FunctionReturnType<typeof api.plans.listAll>[number];
-
-/**
- * Preis des Digital-Jahresabos (Stripe Checkout im Ladenkonto). Speichern legt
- * bei Stripe Produkt und Preis an; ein neuer Preis gilt fuer neue Abschluesse.
- * Leer speichern nimmt das Abo aus dem Verkauf.
- */
-function JahresaboPreis({ reihe, plan }: { reihe: Reihe; plan: Plan | null }) {
-  const preisSetzen = useAction(api.leserAbo.preisSetzen);
-  const [meldung, tue, busy] = useMeldung();
-  const [euro, setEuro] = useState(plan ? (plan.priceAmountCents / 100).toFixed(2).replace(".", ",") : "");
-
-  function speichern() {
-    const roh = euro.trim().replace(",", ".");
-    const cents = roh ? Math.round(Number(roh) * 100) : null;
-    if (cents !== null && !Number.isFinite(cents)) return;
-    void tue(
-      () => preisSetzen({ publicationId: reihe._id, priceAmountCents: cents }),
-      cents === null ? "Abo aus dem Verkauf genommen" : "Preis gespeichert",
-    );
-  }
-
-  return (
-    <>
-      <h4>Digital-Jahresabo</h4>
-      <div className="feld-reihe">
-        <label className="schmal">
-          Preis pro Jahr in €
-          <input
-            inputMode="decimal"
-            value={euro}
-            onChange={(e) => setEuro(e.target.value)}
-            onKeyDown={(e) => {
-              // Nicht das Formular der Reihe abschicken.
-              if (e.key === "Enter") {
-                e.preventDefault();
-                speichern();
-              }
-            }}
-            placeholder="leer = nicht im Verkauf"
-          />
-        </label>
-        <button type="button" className="btn secondary" disabled={busy !== null} onClick={speichern}>
-          Preis übernehmen
-        </button>
-      </div>
-      <p className="hint small">
-        {plan
-          ? `Im Verkauf für ${formatEuro(plan.priceAmountCents)} pro Jahr${plan.stripeModus === "test" ? " (Stripe-Testmodus)" : ""}.`
-          : "Nicht im Verkauf."}
-      </p>
-      <MeldungZeile meldung={meldung} />
-    </>
-  );
-}
-
-function ReiheKarte({ reihe: p, jahresabo }: { reihe: Reihe; jahresabo: Plan | null }) {
+function ReiheKarte({ reihe: p }: { reihe: Reihe }) {
   const updateShop = useMutation(api.publications.updateShop);
   const setActive = useMutation(api.publications.setActive);
   const [meldung, tue, busy] = useMeldung();
@@ -166,7 +103,6 @@ function ReiheKarte({ reihe: p, jahresabo }: { reihe: Reihe; jahresabo: Plan | n
           aktiv
         </label>
       </div>
-      <JahresaboPreis key={jahresabo?._id ?? "keiner"} reihe={p} plan={jahresabo} />
       <h4>Digital-Abo im Netzladen</h4>
       <div className="feld-reihe">
         <label>

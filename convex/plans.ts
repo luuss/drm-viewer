@@ -10,8 +10,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireAdmin, audit } from "./roles";
 import { assetUrl } from "./assets";
 import { deliveryRegion } from "./schema";
-import { stripeCheckoutEnabled, subscriptionShopLink } from "./shopLinks";
-import { stripeKonfig } from "./leserStripe";
+import { subscriptionShopLink } from "./shopLinks";
 
 type OfferPlan = {
   _id: Id<"subscriptionPlans">;
@@ -69,17 +68,6 @@ export function groupPlans(
   return { headline, tiers };
 }
 
-/**
- * Eine Preisstufe ist kaeuflich, wenn sie aktiv ist und ihr Checkout laeuft:
- * Jahresabos im Ladenkonto (leserAbo.ts) im Modus der Kasse, Stufen des
- * alten eigenen Checkouts nur mit `STRIPE_CHECKOUT_ENABLED`.
- */
-export function kaeuflich(plan: Doc<"subscriptionPlans">): boolean {
-  if (!plan.isActive) return false;
-  if (plan.stripeModus) return stripeKonfig()?.modus === plan.stripeModus;
-  return stripeCheckoutEnabled();
-}
-
 async function offerFor(
   ctx: QueryCtx,
   publication: Doc<"publications">,
@@ -88,7 +76,7 @@ async function offerFor(
   // Ohne Stripe-Preisstufen gibt es das Abo nur, wenn die Reihe ein
   // Digital-Abo im Laden hat; Preis und Laufzeit stehen dann dort.
   const grouped =
-    groupPlans(plans.filter(kaeuflich)) ??
+    groupPlans(plans.filter((p) => p.isActive)) ??
     (publication.shopSubscriptionSku || publication.shopSubscriptionUrl
       ? { headline: null, tiers: [] as OfferTier[] }
       : null);
@@ -140,7 +128,7 @@ export const offers = query({
     const plans = await ctx.db.query("subscriptionPlans").collect();
     const byPublication = new Map<string, Doc<"subscriptionPlans">[]>();
     for (const plan of plans) {
-      if (!kaeuflich(plan)) continue;
+      if (!plan.isActive) continue;
       const own = byPublication.get(plan.publicationId) ?? [];
       own.push(plan);
       byPublication.set(plan.publicationId, own);

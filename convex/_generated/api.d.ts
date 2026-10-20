@@ -27,7 +27,6 @@ import type * as imports from "../imports.js";
 import type * as issuePages from "../issuePages.js";
 import type * as issueSources from "../issueSources.js";
 import type * as issues from "../issues.js";
-import type * as leserAbo from "../leserAbo.js";
 import type * as leserKasse from "../leserKasse.js";
 import type * as leserStripe from "../leserStripe.js";
 import type * as leserWebhook from "../leserWebhook.js";
@@ -90,7 +89,6 @@ declare const fullApi: ApiFromModules<{
   issuePages: typeof issuePages;
   issueSources: typeof issueSources;
   issues: typeof issues;
-  leserAbo: typeof leserAbo;
   leserKasse: typeof leserKasse;
   leserStripe: typeof leserStripe;
   leserWebhook: typeof leserWebhook;

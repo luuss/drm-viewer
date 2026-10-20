@@ -5,7 +5,6 @@ import { Doc, Id } from "./_generated/dataModel";
 import { normalizeEmail } from "./access";
 import { SHOP_URL } from "./shopCovers";
 import { stripeCheckoutEnabled } from "./shopLinks";
-import { stripeKonfig } from "./leserStripe";
 
 /**
  * Server-zu-Server-Schnittstelle fuer den Laden (PrestaShop auf
@@ -415,11 +414,9 @@ export async function assertSkuFree(
 /** Was die Oberflaeche ueber den Kaufweg wissen muss. */
 export const storefront = query({
   args: {},
-  returns: v.object({ stripeCheckout: v.boolean(), stripeAbo: v.boolean(), shopUrl: v.string() }),
+  returns: v.object({ stripeCheckout: v.boolean(), shopUrl: v.string() }),
   handler: async () => ({
     stripeCheckout: stripeCheckoutEnabled(),
-    // Jahresabo ueber Stripe Checkout im Ladenkonto (leserAbo.ts).
-    stripeAbo: stripeKonfig() !== null,
     shopUrl: `${SHOP_URL}/`,
   }),
 });

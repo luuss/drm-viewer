@@ -1,7 +1,6 @@
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { HERKUNFT, kartenFehler, webhookGeheimnisse, webhookPruefen } from "./leserStripe";
-import { aboEreignis } from "./leserAbo";
 
 /**
  * Stripe-Webhook des Lesers: `POST /hooks/stripe/webhook` (Convex-Pfad
@@ -10,8 +9,7 @@ import { aboEreignis } from "./leserAbo";
  *
  * Das Stripe-Konto gehoert dem Shop; hier kommen auch dessen Zahlungen an.
  * Beachtet wird nur, was der Leser selbst angelegt hat: PaymentIntents mit
- * `metadata.source = "leser"` bzw. Erstattungen zu einem Kauf im Leser, und
- * Checkout, Abo und Rechnung des Digital-Jahresabos (`"leser-abo"`).
+ * `metadata.source = "leser"` bzw. Erstattungen zu einem Kauf im Leser.
  * Alles andere bekommt 200 und bleibt liegen.
  */
 export const stripeWebhook = httpAction(async (ctx, request) => {
@@ -33,9 +31,6 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
-  // Digital-Jahresabo (leserAbo.ts): eigene Ereignisse, eigene Kennung.
-  if (await aboEreignis(ctx, event, modus)) return Response.json({ received: true });
-
   const obj = event?.data?.object ?? {};
   const eigen = obj?.metadata?.source === HERKUNFT;
 
