@@ -3,6 +3,8 @@ import { useQuery } from "convex/react";
 import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
 import { heraus, hinein, useWarenkorb } from "../lib/warenkorb";
+import ReihenKacheln from "../components/ReihenKacheln";
+import { reiheVon } from "../lib/reihen";
 
 const REGION_LABEL: Record<string, string> = {
   inland: "Inland",
@@ -11,9 +13,10 @@ const REGION_LABEL: Record<string, string> = {
 };
 
 /**
- * Kiosk: die Abos je Titel und die veroeffentlichten Ausgaben. Beides sind
- * Karten, die auf eine eigene Seite fuehren; gekauft wird erst dort. Das Abo
- * zeigt hier nur den Inlandspreis des Normalabonnements — die Abo-Art und das
+ * Kiosk: nur die Zeitschriften als Kacheln mit ihrem Schriftzug. Die Hefte
+ * und das Abo stehen erst auf der Seite der Zeitschrift. Hefte ohne bekannte
+ * Reihe haetten dort keine Seite; sie stehen deshalb hier als Karten. Das Abo
+ * zeigt nur den Inlandspreis des Normalabonnements — die Abo-Art und das
  * Liefergebiet waehlt der Kunde auf der Abo-Seite.
  */
 export default function KioskPage() {
@@ -26,17 +29,28 @@ export default function KioskPage() {
     return <div className="centered">Laden...</div>;
   }
 
+  const hefte = issues.filter((i) => !reiheVon(i.publicationName));
+  const abos = offers.filter((o) => !reiheVon(o.publicationName));
+
   return (
     <div className="page">
-      <div className="page-head">
-        <h2>Kiosk</h2>
+      <div className="page-head kiosk-kopf">
+        <span className="kicker">Kiosk</span>
+        <h2>Für welche Zeitschrift interessieren Sie sich?</h2>
+        <p className="hint">
+          Wählen Sie eine Zeitschrift. Dort finden Sie alle Ausgaben und das Digital-Abo.
+        </p>
       </div>
 
-      {offers.length > 0 && (
+      <div id="zeitschriften">
+        <ReihenKacheln hefte={issues} />
+      </div>
+
+      {abos.length > 0 && (
         <section>
           <h3>Abonnements</h3>
           <div className="issue-grid">
-            {offers.map((o) => (
+            {abos.map((o) => (
               <Link
                 key={o.publicationId}
                 to={`/abo/${o.publicationSlug}`}
@@ -93,55 +107,57 @@ export default function KioskPage() {
         </section>
       )}
 
-      <section>
-        <h3>Einzelausgaben</h3>
-        <div className="issue-grid">
-          {issues.map((i) => (
-            <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
-              <div className="issue-cover-preview">
-                {i.coverUrl ? (
-                  <img src={i.coverUrl} alt={i.displayTitle} loading="lazy" />
-                ) : (
-                  <div className="cover-placeholder">{i.displayTitle[0]}</div>
-                )}
-              </div>
-              <div className="issue-card-body">
-                <div className="title">{i.publicationName ?? i.displayTitle}</div>
-                {i.publicationName && i.displayTitle !== i.publicationName && (
-                  <div className="meta strong">{i.displayTitle}</div>
-                )}
-                {i.edition && <div className="meta">{i.edition}</div>}
-                <div className="price">{formatEuro(i.priceAmountCents)}</div>
-                {i.shopSku && (
-                  <button
-                    type="button"
-                    className={`card-cart${auswahl.includes(i._id) ? " on" : ""}`}
-                    aria-pressed={auswahl.includes(i._id)}
-                    onClick={(e) => {
-                      // Die Karte ist ein Link; der Knopf waehlt nur aus.
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (auswahl.includes(i._id)) heraus(i._id);
-                      else hinein(i._id);
-                    }}
-                  >
-                    <Icon name="cart" size={15} />
-                    {auswahl.includes(i._id) ? "Im Warenkorb" : "In den Warenkorb"}
-                  </button>
-                )}
-                <div className="card-action">
-                  Ausgabe ansehen <Icon name="arrow-right" />
+      {hefte.length > 0 && (
+        <section>
+          <h3>Einzelausgaben</h3>
+          <div className="issue-grid">
+            {hefte.map((i) => (
+              <Link key={i._id} to={`/issue/${i.slug}`} className="issue-card">
+                <div className="issue-cover-preview">
+                  {i.coverUrl ? (
+                    <img src={i.coverUrl} alt={i.displayTitle} loading="lazy" />
+                  ) : (
+                    <div className="cover-placeholder">{i.displayTitle[0]}</div>
+                  )}
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-        {issues.length === 0 && (
-          <div className="empty">
-            <p>Noch keine Ausgabe veröffentlicht.</p>
+                <div className="issue-card-body">
+                  <div className="title">{i.publicationName ?? i.displayTitle}</div>
+                  {i.publicationName && i.displayTitle !== i.publicationName && (
+                    <div className="meta strong">{i.displayTitle}</div>
+                  )}
+                  {i.edition && <div className="meta">{i.edition}</div>}
+                  <div className="price">{formatEuro(i.priceAmountCents)}</div>
+                  {i.shopSku && (
+                    <button
+                      type="button"
+                      className={`card-cart${auswahl.includes(i._id) ? " on" : ""}`}
+                      aria-pressed={auswahl.includes(i._id)}
+                      onClick={(e) => {
+                        // Die Karte ist ein Link; der Knopf waehlt nur aus.
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (auswahl.includes(i._id)) heraus(i._id);
+                        else hinein(i._id);
+                      }}
+                    >
+                      <Icon name="cart" size={15} />
+                      {auswahl.includes(i._id) ? "Im Warenkorb" : "In den Warenkorb"}
+                    </button>
+                  )}
+                  <div className="card-action">
+                    Ausgabe ansehen <Icon name="arrow-right" />
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
+      {issues.length === 0 && (
+        <div className="empty">
+          <p>Noch keine Ausgabe veröffentlicht.</p>
+        </div>
+      )}
     </div>
   );
 }

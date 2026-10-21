@@ -60,7 +60,7 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
     title: "Allgemeine Geschäftsbedingungen",
     body: [
       {
-        p: "Allgemeine Geschäftsbedingungen der Lesen & Schenken Verlagsauslieferung und Versandgesellschaft mbH für digitale Ausgaben im Leser (lesen.lesenundschenken.de)",
+        p: "Allgemeine Geschäftsbedingungen der Lesen & Schenken Verlagsauslieferung und Versandgesellschaft mbH für digitale Ausgaben im Leser (digital.lesenundschenken.de)",
       },
       {
         h: "§ 1 Geltungsbereich und Begriffsdefinitionen",
@@ -68,7 +68,7 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
           <>
             (1) Die nachfolgenden Allgemeinen Geschäftsbedingungen gelten für alle Verträge über
             digitale Ausgaben, die zwischen uns und einem Verbraucher über den Leser unter
-            lesen.lesenundschenken.de geschlossen werden, in ihrer zum Zeitpunkt der Bestellung
+            digital.lesenundschenken.de geschlossen werden, in ihrer zum Zeitpunkt der Bestellung
             gültigen Fassung. Sie gelten außerdem für das Lesen digitaler Ausgaben und
             Digital-Abos, die im Netzladen unter lesenundschenken.de gekauft wurden; für die
             Bestellung im Netzladen gelten dessen {ext(`${SHOP}/content/3-agb`, "AGB")}.
@@ -103,7 +103,7 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
           <>
             (4) Speicherung des Vertragstextes: Wir senden dem Verbraucher die Bestelldaten mit der
             Bestellbestätigung und der Rechnung per E-Mail zu. Die AGB kann der Verbraucher
-            jederzeit unter <Link to="/agb">lesen.lesenundschenken.de/agb</Link> einsehen. Die
+            jederzeit unter <Link to="/agb">digital.lesenundschenken.de/agb</Link> einsehen. Die
             gekauften Ausgaben stehen in der Bibliothek seines Kontos.
           </>
         ),
@@ -201,7 +201,7 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
           <>
             Diese Datenschutzerklärung informiert die Nutzer („Sie“) über die Art, den Umfang und
             die Zwecke der Erhebung und Verwendung personenbezogener Daten im Leser unter
-            lesen.lesenundschenken.de (im Folgenden „Leser“), in dem Sie digitale Ausgaben kaufen
+            digital.lesenundschenken.de (im Folgenden „Leser“), in dem Sie digitale Ausgaben kaufen
             und lesen. Ihre Käufe werden als Bestellung im Netzladen unter lesenundschenken.de
             gebucht; für den Netzladen gilt dessen{" "}
             {ext(`${SHOP}/content/6-datenschutz`, "Datenschutzerklärung")}. Verantwortliche Stelle

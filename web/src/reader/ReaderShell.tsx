@@ -8,10 +8,31 @@ import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import { reiheVon } from "../lib/reihen";
 import { ProductChoice } from "./ShopProduct";
 
 type Mode = "page" | "article";
 type PageLayout = "single" | "spread";
+
+/** Schriftzug der Reihe fuer die Kopfleiste. Er steht dort auf einem weissen Feld. */
+function reihenLogo(publicationName: string | null | undefined) {
+  const reihe = reiheVon(publicationName);
+  return reihe ? { ...reihe, src: reihe.hell } : null;
+}
+
+/** Ab dieser Breite steht das Inhaltsverzeichnis fest links neben dem Heft. */
+const BREIT = "(min-width: 64rem)";
+
+function useBreit() {
+  const [breit, setBreit] = useState(() => window.matchMedia(BREIT).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(BREIT);
+    const onChange = () => setBreit(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return breit;
+}
 
 /** Umschlag allein, danach echte linke/rechte Magazinpaare. */
 function spreadStart(index: number) {
@@ -47,9 +68,7 @@ export default function ReaderShell() {
   const [watermark, setWatermark] = useState("");
   const [mode, setMode] = useState<Mode>("page");
   const [pageLayout, setPageLayout] = useState<PageLayout>(() =>
-    window.localStorage.getItem("reader-page-layout") === "spread"
-      ? "spread"
-      : "single",
+    window.localStorage.getItem("reader-page-layout") === "spread" ? "spread" : "single",
   );
   const [pageIndex, setPageIndex] = useState(0);
   const [articleId, setArticleId] = useState<Id<"articles"> | null>(null);
@@ -57,6 +76,13 @@ export default function ReaderShell() {
   // Lesetext. Null heisst: am Anfang des Artikels.
   const [artikelEinstieg, setArtikelEinstieg] = useState<number | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
+  // Auf breiten Schirmen steht das Verzeichnis fest links; der Knopf "Inhalt"
+  // blendet es aus und wieder ein. Die Wahl bleibt ueber Hefte hinweg.
+  const breit = useBreit();
+  const [tocFest, setTocFest] = useState(
+    () => window.localStorage.getItem("reader-toc-fest") !== "aus",
+  );
+  const tocDocked = breit && tocFest;
   // Angetippte Anzeige im Seitenmodus: erst die Auswahl "bestellen oder lesen".
   const [adChoice, setAdChoice] = useState<{
     articleId: Id<"articles">;
@@ -70,7 +96,9 @@ export default function ReaderShell() {
     if (access !== false || issue === undefined) return;
     // Die Verkaufsseite laeuft unter `/issue/:slug`, nicht unter der Kennung.
     // Mit der Kennung landete der Leser auf "Ausgabe nicht gefunden".
-    navigate(issue?.slug ? `/issue/${issue.slug}` : "/library", { replace: true });
+    navigate(issue?.slug ? `/issue/${issue.slug}` : "/library", {
+      replace: true,
+    });
   }, [access, issue, navigate]);
 
   useEffect(() => {
@@ -157,6 +185,10 @@ export default function ReaderShell() {
     window.localStorage.setItem("reader-page-layout", pageLayout);
   }, [pageLayout]);
 
+  useEffect(() => {
+    window.localStorage.setItem("reader-toc-fest", tocFest ? "an" : "aus");
+  }, [tocFest]);
+
   const persist = useCallback(
     (next: { mode: Mode; pageIndex: number; articleId: Id<"articles"> | null }) => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
@@ -224,7 +256,10 @@ export default function ReaderShell() {
       // die angetippte Seite des ersten bleibt stehen.
       setAdChoice((current) =>
         current?.articleId === id
-          ? { articleId: id, fromPageIndex: current.fromPageIndex ?? fromPageIndex }
+          ? {
+              articleId: id,
+              fromPageIndex: current.fromPageIndex ?? fromPageIndex,
+            }
           : { articleId: id, fromPageIndex },
       );
     },
@@ -265,9 +300,7 @@ export default function ReaderShell() {
     // Nur wenn die gemerkte Seite nicht zum Artikel gehoert, wird auf seinen
     // Anfang gesprungen.
     const covers =
-      current != null &&
-      pageIndex >= current.pageStart &&
-      pageIndex <= current.pageEnd;
+      current != null && pageIndex >= current.pageStart && pageIndex <= current.pageEnd;
     const target = covers ? pageIndex : (current?.primaryPageIndex ?? pageIndex);
     setPageIndex(target);
     persist({ mode: "page", pageIndex: target, articleId });
@@ -374,6 +407,7 @@ export default function ReaderShell() {
           ? ""
           : printed
       : (articleList[articleIndex]?.title ?? "").slice(0, 40);
+  const logo = reihenLogo(issue?.publicationName);
 
   return (
     <div
@@ -409,14 +443,20 @@ export default function ReaderShell() {
           <Icon name="arrow-left" />
           <span className="button-label">Bibliothek</span>
         </button>
-        <span className="issue-title">{issue?.title}</span>
+        {logo && (
+          <img
+            className={logo.kasten ? "reader-logo kasten" : "reader-logo"}
+            src={logo.src}
+            alt={logo.alt}
+          />
+        )}
+        <span className={logo ? `issue-title reihe-${logo.slug}` : "issue-title"}>
+          {issue?.title}
+        </span>
         <div className="mode-switch" role="group" aria-label="Ansicht">
-          <button
-            className={mode === "page" ? "active" : ""}
-            onClick={switchToPages}
-          >
+          <button className={mode === "page" ? "active" : ""} onClick={switchToPages}>
             <Icon name="pages" />
-            Seiten
+            Seitenansicht
           </button>
           <button
             className={mode === "article" ? "active" : ""}
@@ -424,11 +464,15 @@ export default function ReaderShell() {
             disabled={articleList.length === 0}
           >
             <Icon name="book-open" />
-            Artikel
+            Artikelansicht
           </button>
         </div>
         {mode === "page" && (
-          <div className="mode-switch page-layout-switch" role="group" aria-label="Seitenlayout">
+          <div
+            className="mode-switch page-layout-switch"
+            role="group"
+            aria-label="Seitenlayout"
+          >
             <button
               className={pageLayout === "single" ? "active" : ""}
               onClick={() => setPageLayout("single")}
@@ -451,51 +495,75 @@ export default function ReaderShell() {
             </button>
           </div>
         )}
-        <button className="btn quiet small" onClick={() => setTocOpen(true)}>
+        <button
+          className={tocDocked ? "btn quiet small active" : "btn quiet small"}
+          aria-pressed={breit ? tocDocked : undefined}
+          onClick={() => (breit ? setTocFest((f) => !f) : setTocOpen(true))}
+        >
           <Icon name="list" />
           <span className="button-label">Inhalt</span>
         </button>
       </header>
 
-      <main className="reader-main">
-        {mode === "page" ? (
-          sessionToken ? (
-            <PageMode
-              issueId={issueId}
-              pageIndexes={visiblePageIndexes}
-              spread={pageLayout === "spread"}
-              sessionToken={sessionToken}
-              regions={regions ?? []}
-              links={links ?? []}
+      <div className={tocDocked ? "reader-body toc-fest" : "reader-body"}>
+        <main className="reader-main">
+          {mode === "page" ? (
+            sessionToken ? (
+              <PageMode
+                issueId={issueId}
+                pageIndexes={visiblePageIndexes}
+                spread={pageLayout === "spread"}
+                sessionToken={sessionToken}
+                regions={regions ?? []}
+                links={links ?? []}
+                watermark={watermark}
+                onOpenArticle={openFromPage}
+                onNavigatePage={goPage}
+                onPrev={prev}
+                onNext={next}
+                canPrev={canPrev}
+                canNext={canNext}
+              />
+            ) : (
+              <div className="page-hint">Lesesitzung wird geöffnet...</div>
+            )
+          ) : (
+            <ArticleMode
+              articleId={articleId ?? articleList[0]?._id ?? null}
+              products={
+                productsByArticle.get(
+                  (articleId ?? articleList[0]?._id) as Id<"articles">,
+                )?.products ?? []
+              }
+              fromPageIndex={artikelEinstieg}
               watermark={watermark}
-              onOpenArticle={openFromPage}
-              onNavigatePage={goPage}
+              pageLabel={pageLabel}
               onPrev={prev}
               onNext={next}
               canPrev={canPrev}
               canNext={canNext}
+              sessionToken={sessionToken}
             />
-          ) : (
-            <div className="page-hint">Lesesitzung wird geöffnet...</div>
-          )
-        ) : (
-          <ArticleMode
-            articleId={articleId ?? articleList[0]?._id ?? null}
-            products={
-              productsByArticle.get((articleId ?? articleList[0]?._id) as Id<"articles">)
-                ?.products ?? []
-            }
-            fromPageIndex={artikelEinstieg}
-            watermark={watermark}
-            pageLabel={pageLabel}
-            onPrev={prev}
-            onNext={next}
-            canPrev={canPrev}
-            canNext={canNext}
-            sessionToken={sessionToken}
-          />
-        )}
-      </main>
+          )}
+        </main>
+
+        <TocDrawer
+          issueId={issueId}
+          issueTitle={issue?.title}
+          open={tocOpen && !tocDocked}
+          docked={tocDocked}
+          mode={mode}
+          currentArticleId={currentArticleId}
+          currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
+          pageLabel={pageLabel}
+          onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
+          onPage={(p) => {
+            setMode("page");
+            goPage(p);
+          }}
+          onArticle={openArticle}
+        />
+      </div>
 
       <ReaderRail
         mode={mode}
@@ -503,22 +571,6 @@ export default function ReaderShell() {
         total={mode === "page" ? pageCount : articleList.length}
         label={label}
         onSeek={(p) => (mode === "page" ? goPage(p) : goArticle(p))}
-      />
-
-      <TocDrawer
-        issueId={issueId}
-        issueTitle={issue?.title}
-        open={tocOpen}
-        mode={mode}
-        currentArticleId={currentArticleId}
-        currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
-        pageLabel={pageLabel}
-        onClose={() => setTocOpen(false)}
-        onPage={(p) => {
-          setMode("page");
-          goPage(p);
-        }}
-        onArticle={openArticle}
       />
 
       {adChoice && mode === "page" && (

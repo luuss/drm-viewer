@@ -4,6 +4,7 @@ import { api, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import ArtikelTabelle from "../components/ArtikelTabelle";
 import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
+import { meldungsfolge } from "./meldungsfolge";
 
 type Props = {
   articleId: Id<"articles"> | null;
@@ -140,6 +141,8 @@ export default function ArticleMode({
           ...images.filter((item) => item.afterBlockOrder === null),
         ];
       }
+      const meldungen = meldungsfolge(blocks, images);
+      if (meldungen) return meldungen;
       const firstTextY = Math.min(...blocks.map((item) => item.y), 1);
       return [
         ...images.filter((item) => item.y < firstTextY),

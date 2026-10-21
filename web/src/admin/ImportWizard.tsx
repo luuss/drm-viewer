@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api, type Id , cleanError } from "../lib/api";
 import { buildPageOrder, type CoverLayout, type PageDraft as Draft } from "./pageOrder";
 import { countPdfPages, uploadAsset } from "./uploadAsset";
-import { textebeneAusPdf } from "./pageRender";
+import { textebeneAusPdf, umschlagTextAusPdf } from "./pageRender";
 import { textebeneAlsBlob, trimBoxAusPdf } from "./textLayer";
 
 type PageDraft = Draft<Id<"assets">>;
@@ -136,6 +136,51 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
     }
   }
 
+  /**
+   * Die Textebene des Umschlags nachtragen. Aus ihr legt der Auftrag `toc`
+   * die Klickflaechen der Anreisser auf der Titelseite (sie fuehren zum
+   * Artikel wie eine Zeile im Inhaltsverzeichnis). Die Seitenbilder des
+   * Umschlags bleiben, wie sie sind.
+   */
+  async function umschlagTextNachtragen(file: File) {
+    setErr(null);
+    setMsg(null);
+    setBusy(`Textebene aus ${file.name} wird gelesen`);
+    try {
+      const pages = await umschlagTextAusPdf(file);
+      if (!pages.some((p) => p.role === "front_cover" && p.items.length)) {
+        throw new Error("Auf der Titelseite dieser Datei steht kein lesbarer Text.");
+      }
+      const blob = new Blob([JSON.stringify({ version: 1, cover: true, pages })], {
+        type: "application/json",
+      });
+      setBusy("Textebene geht hoch");
+      const { assetId } = await uploadAsset(
+        { presignUpload, registerUpload, generateUploadUrl },
+        issueId,
+        blob,
+        "textebene-umschlag.json",
+      );
+      await addSource({
+        issueId,
+        assetId,
+        kind: "text",
+        role: "cover",
+        filename: "textebene-umschlag.json",
+        pageCount: pages.length,
+      });
+      await enqueue({ issueId, kind: "toc" });
+      setMsg(
+        `Umschlag-Textebene (${pages.length} Tafeln) hochgeladen. ` +
+          "Die Anreißer der Titelseite und das Inhaltsverzeichnis werden neu verlinkt.",
+      );
+    } catch (e: any) {
+      setErr(cleanError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function buildProposal() {
     const list = (sources ?? [])
       .filter((s: any) => s.kind === "pdf")
@@ -227,6 +272,14 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
               onChange={(e) => e.target.files?.[0] && textebeneNachtragen(e.target.files[0])}
             />
           </label>
+          <label className="upload">
+            Textebene aus Umschlag (PDF)
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => e.target.files?.[0] && umschlagTextNachtragen(e.target.files[0])}
+            />
+          </label>
         </div>
         <p className="hint">
           Eine .indd-Datei wird nur archiviert; Innenteil und Umschlag dürfen je
@@ -235,6 +288,8 @@ export default function ImportWizard({ issueId }: { issueId: Id<"issues"> }) {
           „Textebene aus Innenteil“ liest aus dem Druck-PDF nur die Lage der
           Zeilen und legt danach die Klickflächen des gedruckten
           Inhaltsverzeichnisses neu; Artikel und Freigaben bleiben stehen.
+          „Textebene aus Umschlag“ macht dasselbe für die Titelseite: ihre
+          Anreißer führen danach zum Artikel.
         </p>
         <ul className="source-list">
           {sources?.map((s: any) => (

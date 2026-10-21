@@ -46,6 +46,8 @@ export type RenderOptions = {
   half?: "left" | "right";
   /** Die Textebene der Seite mitlesen (fuer das gedruckte Inhaltsverzeichnis). */
   mitText?: boolean;
+  /** Dazu gedrehten Satz (Anreisser schraeg ueber die Titelseite). */
+  mitGedrehtem?: boolean;
 };
 
 function canvas(width: number, height: number): OffscreenCanvas | HTMLCanvasElement {
@@ -197,7 +199,12 @@ async function renderAusschnitt(
   // Die Textebene kommt aus demselben Seitenobjekt, in Punkt und ungedreht
   // (`roh`), damit derselbe Schnitt gilt wie fuers Bild.
   const text = options.mitText
-    ? normiereTextelemente((await page.getTextContent()).items as any[], roh, schnitt)
+    ? normiereTextelemente(
+        (await page.getTextContent()).items as any[],
+        roh,
+        schnitt,
+        options.mitGedrehtem,
+      )
     : undefined;
   page.cleanup();
 
@@ -248,10 +255,52 @@ export async function renderUmschlag(
       const gerendert = await renderAusschnitt(page, tafel.quellSeite, tafel.schnitt, {
         ...options,
         mitText: true,
+        // Nur fuer die Anreisser der Titelseite; der Worker liest gedrehte
+        // Stuecke auf den anderen Tafeln nicht.
+        mitGedrehtem: true,
       });
       await onTafel({ ...tafel, ...gerendert }, position, alle.length);
     }
     return { vorn: vorn.length, hinten: hinten.length };
+  });
+}
+
+/**
+ * Nur die Textebene eines Umschlags lesen, je Tafel mit ihrer Rolle — fuer
+ * Hefte, deren Umschlag ohne Textebene importiert wurde. Dieselben Tafeln
+ * wie `renderUmschlag`, samt schraegem Satz (Anreisser der Titelseite).
+ */
+export async function umschlagTextAusPdf(
+  file: Blob,
+  netz?: Netz,
+): Promise<{ sourcePageIndex: number; role: Tafel["role"]; items: TextItem[] }[]> {
+  const trim = await trimBoxAusPdf(file);
+  return await mitPdf(file, async (doc) => {
+    const quellseiten = [];
+    for (let i = 0; i < doc.numPages; i++) {
+      const page = await doc.getPage(i + 1);
+      const roh = page.getViewport({ scale: 1 });
+      quellseiten.push({
+        breite: roh.width,
+        hoehe: roh.height,
+        trim: trim ? anschnitt(roh.width, roh.height, trim.breitePt, trim.hoehePt) : undefined,
+      });
+      page.cleanup();
+    }
+    const { vorn, hinten } = umschlagTafeln(quellseiten, netz);
+    const out = [];
+    for (const [position, tafel] of [...vorn, ...hinten].entries()) {
+      const page = await doc.getPage(tafel.quellSeite + 1);
+      const roh = page.getViewport({ scale: 1 });
+      const inhalt = await page.getTextContent();
+      out.push({
+        sourcePageIndex: position,
+        role: tafel.role,
+        items: normiereTextelemente(inhalt.items as any[], roh, tafel.schnitt, true),
+      });
+      page.cleanup();
+    }
+    return out;
   });
 }
 
