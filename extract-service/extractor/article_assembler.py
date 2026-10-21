@@ -411,6 +411,66 @@ def _attach_images(articles: list[AssembledArticle], images: list[SourceImage]) 
 
     for a in articles:
         a.images.sort(key=lambda i: (i.page_index, round(i.y0, 3), i.x0))
+        meldungsanker(a)
+
+
+def _rechtecke(block: SourceBlock) -> tuple[float, float, float, float]:
+    kasten = getattr(block, "frame_box", None)
+    return kasten if kasten is not None else (block.x0, block.y0, block.x1, block.y1)
+
+
+def _meldungsnaehe(img: SourceImage, rechtecke: list) -> tuple[float, float]:
+    """(Deckung, Abstand) eines Bildes zu den Rahmen einer Meldung.
+
+    Deckung: wie viel der Bildhoehe der Rahmen in der Hoehe begleitet, mehr,
+    wenn das Bild zugleich in seiner Breite steht. Auf einer Meldungsseite
+    steht jedes Bild in der Zeile seiner Meldung, daneben oder im Rahmen.
+    """
+    hoehe = max(img.y1 - img.y0, 1e-6)
+    breite = max(img.x1 - img.x0, 1e-6)
+    deckung, abstand = 0.0, 1e9
+    for x0, y0, x1, y1 in rechtecke:
+        senkrecht = max(0.0, min(y1, img.y1) - max(y0, img.y0)) / hoehe
+        waagerecht = max(0.0, min(x1, img.x1) - max(x0, img.x0)) / breite
+        deckung = max(deckung, senkrecht * (1.0 + waagerecht))
+        abstand = min(abstand, max(0.0, y0 - img.y1, img.y0 - y1))
+    return deckung, abstand
+
+
+def meldungsanker(article: AssembledArticle) -> None:
+    """Bilder einer Meldungsseite hinter die Zeile ihrer Meldung haengen.
+
+    Eine Rubrikseite ("Nachrichten aus aller Welt") ist ein Artikel, die
+    Zeilen der Meldungen sind Zwischentitel. Ohne Anker stellt der Reader ein
+    Bild nur dann vor den Text, wenn es ueber der ersten Zeile steht, alle
+    anderen ans Ende des Artikels — drei Bilder stuenden hinter der letzten
+    Meldung. Welche Meldung: die, deren Rahmen das Bild in der Hoehe begleiten
+    (es steht in derselben Zeile der Seite), bei zwei Spalten die in seiner
+    Breite. Lange Artikel mit Zwischentiteln bleiben unberuehrt: dort beginnt
+    eine Seite nicht mit einer Zeile.
+    """
+    for seite in sorted({b.page_index for b in article.blocks}):
+        bloecke = [b for b in article.blocks if b.page_index == seite and b.kind != "caption"]
+        zeilen = [b for b in bloecke if b.kind == "subheading"]
+        if len(zeilen) < 2 or bloecke[0].kind != "subheading":
+            continue
+        meldungen: list[tuple[SourceBlock, list]] = []
+        for b in bloecke:
+            if b.kind == "subheading":
+                meldungen.append((b, []))
+            meldungen[-1][1].append(_rechtecke(b))
+        for img in article.images:
+            if img.page_index != seite or img.after_block is not None:
+                continue
+            if img.after_block_order is not None:
+                continue
+            bewertet = [(_meldungsnaehe(img, r), zeile) for zeile, r in meldungen]
+            (deckung, _), zeile = max(bewertet, key=lambda t: (t[0][0], -t[0][1]))
+            if deckung <= 0:
+                (_, abstand), zeile = min(bewertet, key=lambda t: t[0][1])
+                if abstand > NEAR_GAP:
+                    continue
+            img.after_block = zeile
 
 
 def _confidence(article: AssembledArticle) -> float:

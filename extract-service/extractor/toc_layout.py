@@ -51,6 +51,9 @@ class TextItem:
     x1: float
     y1: float
     size: float = 0.0
+    # Gedrehter Satz (Grad, gegen den Uhrzeigersinn); das Rechteck umschliesst
+    # dann den ganzen schraegen Lauf. Nur die Titelseite liefert ihn mit.
+    winkel: float = 0.0
 
     @property
     def numeric(self) -> bool:
@@ -133,22 +136,28 @@ def parse_text_layer(data: bytes) -> dict[int, list[TextItem]]:
     return out
 
 
-def _items(roh) -> list[TextItem]:
+def _items(roh, mit_gedrehtem: bool = False) -> list[TextItem]:
+    """Stuecke der Textebene; gedrehte (siebtes Feld: Winkel) nur auf Wunsch."""
     items: list[TextItem] = []
     for raw in roh or []:
         try:
             text = str(raw[0])
             x0, y0, x1, y1 = (float(v) for v in raw[1:5])
             size = float(raw[5]) if len(raw) > 5 else 0.0
+            winkel = float(raw[6]) if len(raw) > 6 else 0.0
         except (TypeError, ValueError, IndexError):
             continue
         if not text.strip() or x1 <= x0 or y1 <= y0:
             continue
-        items.append(TextItem(text, x0, y0, x1, y1, size))
+        if winkel and not mit_gedrehtem:
+            continue
+        items.append(TextItem(text, x0, y0, x1, y1, size, winkel))
     return items
 
 
-def text_layer_for_cover(data: bytes, pages: list[dict]) -> dict[int, list[TextItem]]:
+def text_layer_for_cover(
+    data: bytes, pages: list[dict], mit_gedrehtem: bool = False
+) -> dict[int, list[TextItem]]:
     """Die Textebene der Umschlagtafeln, ueber ihre Rolle den Leserseiten zugeordnet.
 
     Der Browser liest je Tafel (U1 bis U4) die Textebene und nennt ihre Rolle
@@ -173,7 +182,7 @@ def text_layer_for_cover(data: bytes, pages: list[dict]) -> dict[int, list[TextI
         rolle = page.get("role")
         if rolle not in je_rolle:
             continue
-        out[je_rolle[rolle]] = _items(page.get("items"))
+        out[je_rolle[rolle]] = _items(page.get("items"), mit_gedrehtem)
     return out
 
 
