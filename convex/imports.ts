@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { sucheVormerken } from "./suche";
 import {
   internalMutation,
   internalQuery,
@@ -518,6 +519,7 @@ async function insertArticle(
     createdAt: now,
     updatedAt: now,
   });
+  await sucheVormerken(ctx, issueId, articleId);
   for (const b of a.blocks) {
     await ctx.db.insert("articleBlocks", {
       articleId,
@@ -605,6 +607,7 @@ export const activateResultInternal = internalMutation({
         for (const r of rows) await ctx.db.delete(r._id);
       }
       await ctx.db.delete(a._id);
+      await sucheVormerken(ctx, issueId, a._id);
     }
     // Die Verknuepfungen zum Laden haengen an den alten Absaetzen; der
     // Abgleich unten legt sie fuer die neuen wieder an.
@@ -718,7 +721,9 @@ async function deleteArticle(ctx: MutationCtx, articleId: Id<"articles">) {
       .collect();
     for (const r of rows) await ctx.db.delete(r._id);
   }
+  const article = await ctx.db.get(articleId);
   await ctx.db.delete(articleId);
+  if (article) await sucheVormerken(ctx, article.issueId, articleId);
 }
 
 /**

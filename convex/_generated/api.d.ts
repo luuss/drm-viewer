@@ -55,6 +55,7 @@ import type * as stripeEvents from "../stripeEvents.js";
 import type * as stripeRest from "../stripeRest.js";
 import type * as subscriptionCatalog from "../subscriptionCatalog.js";
 import type * as subscriptions from "../subscriptions.js";
+import type * as suche from "../suche.js";
 import type * as tabellen from "../tabellen.js";
 import type * as toc from "../toc.js";
 import type * as tocPreview from "../tocPreview.js";
@@ -116,6 +117,7 @@ declare const fullApi: ApiFromModules<{
   stripeRest: typeof stripeRest;
   subscriptionCatalog: typeof subscriptionCatalog;
   subscriptions: typeof subscriptions;
+  suche: typeof suche;
   tabellen: typeof tabellen;
   toc: typeof toc;
   tocPreview: typeof tocPreview;

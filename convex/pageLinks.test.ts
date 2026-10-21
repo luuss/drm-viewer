@@ -3,8 +3,12 @@ import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { internal } from "./_generated/api";
 import {
+  bookQueries,
+  chooseBook,
+  searchWords,
   chooseProduct,
   chooseTarget,
+  titleRank,
   defaultSubscriptionUrl,
   searchUrl,
   seriesUrl,
@@ -59,6 +63,45 @@ async function heft(t: any) {
 }
 
 describe("Seitenlinks", () => {
+  test("Nachruesten ersetzt nur die Buchflaechen", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId } = await heft(t);
+    const buch = (titel: string) => ({
+      pageIndex: 78,
+      x0: 0.05,
+      y0: 0.07,
+      x1: 0.21,
+      y1: 0.34,
+      kind: "shop" as const,
+      queries: [titel],
+      single: true,
+      label: `${titel} · Peter Hahne`,
+    });
+    await t.mutation(internal.pageLinks.replaceImportedInternal, {
+      issueId,
+      links: [
+        { pageIndex: 83, x0: 0, y0: 0, x1: 1, y1: 1, kind: "shop", queries: ["Zeugen"], label: "Zeugen" },
+        buch("Alter Titel"),
+      ],
+    });
+    const result = await t.mutation(internal.pageLinks.replaceBooksInternal, {
+      issueId,
+      links: [buch("Warum macht ihr uns kaputt?")],
+    });
+    expect(result).toEqual({ removed: 1, added: 1 });
+    const labels = await t.run(async (ctx: any) =>
+      (
+        await ctx.db
+          .query("pageLinks")
+          .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+          .collect()
+      ).map((r: any) => r.label ?? "-"),
+    );
+    expect(labels.sort()).toEqual(
+      ["Warum macht ihr uns kaputt? · Peter Hahne", "Zeugen", "-"].sort(),
+    );
+  });
+
   test("der Import ersetzt nur seine eigenen Flaechen", async () => {
     const t = convexTest(schema, modules);
     const { issueId } = await heft(t);
@@ -166,4 +209,101 @@ describe("Seitenlinks", () => {
     ).toBe(searchUrl("Waffen-SS"));
     expect(chooseTarget([], true)).toBeNull();
   });
+
+  test("Buchflaeche: nur ein Produkt mit passendem Titel", () => {
+    let id = 0;
+    const produkt = (name: string, manufacturer = "", reference = "") => ({
+      id: ++id,
+      name,
+      reference,
+      priceCents: 2000,
+      url: `https://lesenundschenken.de/${id}-buch.html`,
+      coverUrl: null,
+      manufacturer,
+      active: true,
+      digital: null,
+    });
+    // Echte Treffer der Ladensuche zu den Buechern aus ZUERST! 3/2026, S. 79.
+    const mythos = produkt("Der Stasi-Mythos");
+    const stasi = produkt("STASI", "Klaus-Rüdiger Mai");
+    expect(chooseBook([mythos, stasi], "Stasi · Klaus-Rüdiger Mai")?.id).toBe(stasi.id);
+    const werk = produkt("Merkels Werk", "Gerald Grosz");
+    const jahre = produkt("16 Jahre Angela Merkel");
+    expect(chooseBook([jahre, werk], "Merkels Werk · Gerald Grosz")?.id).toBe(werk.id);
+    const ddr = produkt("DDR - CDU - AfD");
+    expect(chooseBook([ddr], "DDR – CDU – AfD · Alexander Gauland")?.id).toBe(ddr.id);
+    const jahrbuch = produkt("Verheimlicht - Vertuscht - Vergessen 2026");
+    expect(
+      chooseBook([jahrbuch], "Verheimlicht, vertuscht, vergessen 2026 · Gerhard Wisnewski")?.id,
+    ).toBe(jahrbuch.id);
+    // Ein einziger Treffer der Suche, aber ein anderes Buch: keine Produktseite.
+    expect(
+      chooseBook([produkt("Europa - Grenzenlos")], "An der Grenze · Jan Solwyn"),
+    ).toBeNull();
+    // Untertitel im Laden zaehlt als passend.
+    const kling = produkt("Heinrich Kling - Ein Tiger-As der Leibstandarte");
+    expect(chooseBook([kling], "Heinrich Kling · Danny Bauer")?.id).toBe(kling.id);
+    // Zwei Baende gleichen Namens: offen, die Suchseite zeigt beide.
+    expect(
+      chooseBook([produkt("Unbekannt - April 1945"), produkt("Unbekannt - April 1945")],
+        "Unbekannt – April 1945 · Henrik Schulze"),
+    ).toBeNull();
+    // Gleichstand im Titel: der Verfasser entscheidet.
+    const a = produkt("Kriegs-Kultur", "Martin van Creveld");
+    const b = produkt("Kriegs-Kultur", "Jemand Anders");
+    expect(chooseBook([b, a], "Kriegs-Kultur · Martin van Creveld")?.id).toBe(a.id);
+    // Artikelnummer vor Titel.
+    const kalender = produkt("Ritterkreuzträger 2026", "", "460691");
+    expect(chooseBook([kalender], "Farbbildkalender: Ritterkreuzträger · ", "460691")?.id).toBe(
+      kalender.id,
+    );
+  });
+
+  test("Titelstufen", () => {
+    expect(titleRank("STASI", "Stasi")).toBe(3);
+    expect(titleRank("Die deutsche Militärelite 1939-1945", "Die deutsche Militärelite")).toBe(2);
+    expect(titleRank("Der Stasi-Mythos", "Stasi")).toBe(0);
+    expect(titleRank("Panther im Einsatz II", "„Panther“ im Einsatz II")).toBe(3);
+  });
 });
+
+describe("bookQueries", () => {
+  test("nimmt Satzzeichen heraus, die die Ladensuche nie findet", () => {
+    expect(searchWords("DDR – CDU – AfD")).toBe("DDR CDU AfD");
+    expect(searchWords("„Panther“ im Einsatz II")).toBe("Panther im Einsatz II");
+  });
+
+  test("sucht zusaetzlich nur mit dem Haupttitel, ohne Jahreszahl", () => {
+    const q = bookQueries(
+      "Verheimlicht, vertuscht, vergessen 2026 · Gerhard Wisnewski",
+      null,
+      ["Verheimlicht, vertuscht, vergessen 2026"],
+    );
+    expect(q).toContain("Verheimlicht vertuscht vergessen 2026");
+    expect(q).toContain("Verheimlicht vertuscht vergessen");
+    expect(q.every((x) => !/[,„“–]/.test(x))).toBe(true);
+  });
+
+  test("sucht eine Gattung vor dem Doppelpunkt nicht allein", () => {
+    const q = bookQueries("Kalender: Männer der Waffen‑SS 2026 · ", null, [
+      "Kalender: Männer der Waffen‑SS 2026",
+    ]);
+    expect(q).toEqual(["Kalender Männer der Waffen SS 2026"]);
+  });
+
+  test("findet ein Buch, dessen Gattung vor dem Doppelpunkt steht", () => {
+    const p = (name: string, url: string) => ({
+      name, url, active: true, reference: "", manufacturer: "",
+    });
+    const kalender = p("Männer der Waffen-SS 2026", "https://lesenundschenken.de/10437-a.html");
+    const fremd = p("Kalender Ritterkreuzträger 2026", "https://lesenundschenken.de/10435-b.html");
+    expect(chooseBook([fremd, kalender] as any, "Kalender: Männer der Waffen‑SS 2026 · ")).toBe(
+      kalender,
+    );
+  });
+
+  test("stellt die Artikelnummer voran", () => {
+    expect(bookQueries("Soldatenköpfe · ", "460721", ["Soldatenköpfe"])[0]).toBe("460721");
+  });
+});
+

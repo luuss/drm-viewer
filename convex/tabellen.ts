@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { sucheVormerken } from "./suche";
 import { internalMutation, MutationCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { tableData } from "./schema";
@@ -198,6 +199,7 @@ async function aufgehenLassen(
 
   for (const b of altBloecke) await ctx.db.delete(b._id);
   await ctx.db.delete(alt._id);
+  await sucheVormerken(ctx, alt.issueId, alt._id);
 }
 
 async function suchtextNeu(ctx: MutationCtx, articleId: Id<"articles">) {
@@ -213,6 +215,7 @@ async function suchtextNeu(ctx: MutationCtx, articleId: Id<"articles">) {
     searchText: teile.filter(Boolean).join("\n\n").slice(0, 100000),
     updatedAt: Date.now(),
   });
+  await sucheVormerken(ctx, article.issueId, articleId);
 }
 
 /** Reihenfolge 1..n wie beim Zusammenfuehren in der Redaktion, Zaehler dazu. */

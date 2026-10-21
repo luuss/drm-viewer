@@ -19,6 +19,7 @@ import { cleanShopUrl, cleanSku, issueShopLink, issueShopSku } from "./shopLinks
 import { seriesFor } from "./shopCovers";
 import { internal } from "./_generated/api";
 import { tocImages } from "./tocPreview";
+import { heftStueckeLoeschen } from "./suche";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -156,7 +157,9 @@ export const myLibrary = query({
     const out = [];
     for (const id of ids) {
       const issue = await ctx.db.get(id as Id<"issues">);
-      if (!issue) continue;
+      // Unveroeffentlichte Hefte sieht die Redaktion in ihrer Vorschau, nicht
+      // in der Bibliothek.
+      if (!issue?.isPublished) continue;
       const progress = await ctx.db
         .query("readingProgress")
         .withIndex("by_user_issue", (q) =>
@@ -642,6 +645,8 @@ export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
     updatedAt: Date.now(),
   });
   await audit(ctx, "issue.publish", issueId);
+  // Volltextsuche: die Stuecke des Hefts anlegen.
+  await ctx.scheduler.runAfter(0, internal.suche.heftNeu, { issueId });
 
   // Neue Ausgabe: laufende Abos der Publikation bekommen sie dauerhaft.
   const subs = await ctx.db.query("subscriptions").collect();
@@ -664,6 +669,7 @@ export const setPublished = mutation({
     if (!issue) throw new Error("Ausgabe nicht gefunden");
     await ctx.db.patch(issueId, { isPublished: false, updatedAt: Date.now() });
     await audit(ctx, "issue.unpublish", issueId);
+    await heftStueckeLoeschen(ctx, issueId);
   },
 });
 
@@ -681,6 +687,7 @@ export const remove = mutation({
       "articleProducts",
       "tocEntries",
       "importJobs",
+      "searchChunks",
     ] as const;
     for (const table of tables) {
       const rows = await ctx.db

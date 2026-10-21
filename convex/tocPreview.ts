@@ -6,6 +6,7 @@ import { assetUrl } from "./assets";
 import { shopLabels } from "./issues";
 import { issueShopSku } from "./shopLinks";
 import { Doc, Id } from "./_generated/dataModel";
+import { passt, suchwoerter } from "./suche";
 
 /**
  * Leserseiten, auf denen das gedruckte Inhaltsverzeichnis steht. Erkennbar an
@@ -78,32 +79,39 @@ export async function tocImages(ctx: QueryCtx, issueId: Id<"issues">) {
 }
 
 /**
- * Suche in den Inhaltsverzeichnissen aller veroeffentlichten Hefte, auch ohne
- * Anmeldung. Hefte mit Zugriff fehlen hier: deren ganzer Text kommt aus
- * `articles.search`. Die Treffer sind nach Heft gebuendelt, damit man vom
+ * Suche in allen veroeffentlichten Heften, auch ohne Anmeldung: in den
+ * Verzeichnissen und im Volltext. Hefte mit Zugriff fehlen hier, deren
+ * Treffer kommen mit Ausschnitt aus `articles.search`. Von allen anderen
+ * verlaesst kein Text aus dem Artikel den Server: ein Treffer nennt nur den
+ * Titel (wie im Verzeichnis), die Unterzeile, wenn der Artikel im Verzeichnis
+ * steht, und die Seite. Die Treffer sind nach Heft gebuendelt, damit man vom
  * Schlagwort direkt zum Heft und in den Warenkorb kommt.
  */
 export const searchCatalog = query({
   args: { term: v.string() },
   handler: async (ctx, { term }) => {
     const begriff = term.trim();
-    if (begriff.length < 3) return [];
+    const woerter = suchwoerter(begriff);
+    if (begriff.length < 3 || !woerter) return [];
     const userId = await getAuthUserId(ctx);
     const freigeschaltet = userId
       ? await accessibleIssueIds(ctx, userId as Id<"users">)
       : new Set<string>();
 
-    // Treffer im Titel eines Eintrags und in der Unterzeile darunter. Die
-    // Unterzeile ist die des verknuepften Artikels; sie zaehlt nur, wenn der
-    // Artikel im Verzeichnis steht.
-    const imTitel = await ctx.db
-      .query("tocEntries")
-      .withSearchIndex("search_label", (q) => q.search("label", begriff))
-      .take(80);
-    const inUnterzeile = await ctx.db
-      .query("articles")
-      .withSearchIndex("search_subtitle", (q) => q.search("subtitle", begriff))
-      .take(80);
+    // Treffer im Titel eines Verzeichniseintrags und im Text der Artikel.
+    // Der Index verknuepft Woerter mit ODER; erst `passt` verlangt alle.
+    const imTitel = (
+      await ctx.db
+        .query("tocEntries")
+        .withSearchIndex("search_label", (q) => q.search("label", woerter))
+        .take(40)
+    ).filter((e) => passt(e.label, begriff));
+    const imText = (
+      await ctx.db
+        .query("searchChunks")
+        .withSearchIndex("search_text", (q) => q.search("text", woerter))
+        .take(64)
+    ).filter((c) => !freigeschaltet.has(c.issueId as string) && passt(c.text, begriff));
 
     const verzeichnisse = new Map<string, Doc<"tocEntries">[]>();
     const verzeichnis = async (issueId: Id<"issues">) => {
@@ -117,10 +125,37 @@ export const searchCatalog = query({
       }
       return rows;
     };
-    const kandidaten: Doc<"tocEntries">[] = [...imTitel];
-    for (const a of inUnterzeile) {
-      const eintrag = (await verzeichnis(a.issueId)).find((t) => t.articleId === a._id);
-      if (eintrag) kandidaten.push(eintrag);
+
+    type Kandidat = {
+      key: string;
+      issueId: Id<"issues">;
+      label: string;
+      section: string | null;
+      pageIndex: number | null;
+      articleId: Id<"articles"> | null;
+      imText: boolean;
+    };
+    const kandidaten: Kandidat[] = imTitel.map((e) => ({
+      key: e._id as string,
+      issueId: e.issueId,
+      label: e.label,
+      section: e.section ?? null,
+      pageIndex: e.pageIndex ?? null,
+      articleId: e.articleId ?? null,
+      imText: false,
+    }));
+    for (const c of imText) {
+      // Steht der Artikel im Verzeichnis, erscheint er mit dessen Eintrag.
+      const eintrag = (await verzeichnis(c.issueId)).find((t) => t.articleId === c.articleId);
+      kandidaten.push({
+        key: (eintrag?._id ?? c.articleId) as string,
+        issueId: c.issueId,
+        label: eintrag?.label ?? c.title,
+        section: eintrag?.section ?? null,
+        pageIndex: eintrag?.pageIndex ?? c.pageIndex,
+        articleId: c.articleId,
+        imText: true,
+      });
     }
 
     const hefte = new Map<
@@ -128,11 +163,12 @@ export const searchCatalog = query({
       {
         issue: Doc<"issues">;
         entries: {
-          _id: Id<"tocEntries">;
+          _id: string;
           label: string;
           subtitle: string | null;
           section: string | null;
           page: string | null;
+          imText: boolean;
         }[];
       }
     >();
@@ -140,8 +176,11 @@ export const searchCatalog = query({
     const gesehen = new Set<string>();
     for (const e of kandidaten) {
       const key = e.issueId as string;
-      if (ausgelassen.has(key) || gesehen.has(e._id as string)) continue;
-      gesehen.add(e._id as string);
+      if (ausgelassen.has(key) || gesehen.has(e.key)) continue;
+      // Derselbe Artikel ueber Titel und Text: nur einmal.
+      if (e.articleId && gesehen.has(e.articleId as string)) continue;
+      gesehen.add(e.key);
+      if (e.articleId) gesehen.add(e.articleId as string);
       let heft = hefte.get(key);
       if (!heft) {
         const issue = await ctx.db.get(e.issueId);
@@ -154,7 +193,7 @@ export const searchCatalog = query({
       }
       // Gedruckte Seitenzahl, nicht die Stelle in der Leserfolge.
       const seite =
-        e.pageIndex !== undefined
+        e.pageIndex !== null
           ? await ctx.db
               .query("issuePages")
               .withIndex("by_issue_index", (q) =>
@@ -162,13 +201,25 @@ export const searchCatalog = query({
               )
               .unique()
           : null;
-      const artikel = e.articleId ? await ctx.db.get(e.articleId) : null;
+      // Die Unterzeile steht im gedruckten Verzeichnis und ist so frei wie
+      // dieses, aber nur, wenn der Artikel dort steht.
+      const imVerzeichnis =
+        e.articleId !== null &&
+        (await verzeichnis(e.issueId)).some((t) => t.articleId === e.articleId);
+      // Aus einem Stueck, nicht aus dem Artikel: der waere bis 100 kB gross.
+      const stueck = imVerzeichnis
+        ? await ctx.db
+            .query("searchChunks")
+            .withIndex("by_article", (q) => q.eq("articleId", e.articleId!))
+            .first()
+        : null;
       heft.entries.push({
-        _id: e._id,
+        _id: e.key,
         label: e.label,
-        subtitle: artikel?.subtitle?.trim() || null,
-        section: e.section ?? null,
+        subtitle: stueck?.subtitle?.trim() || null,
+        section: e.section,
         page: seite?.printedLabel ?? null,
+        imText: e.imText,
       });
     }
 

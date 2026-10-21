@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 
@@ -74,7 +74,8 @@ async function heft(t: any, { published = true } = {}) {
       primaryPageIndex: 7,
       pageStart: 7,
       pageEnd: 8,
-      searchText: "Die Schlacht von Carpiquet",
+      // Wie beim Import: Titel, Unterzeile, Text.
+      searchText: "Die Schlacht von Carpiquet\n\nKanadier gegen die Hitlerjugend im Juli 1944",
       createdAt: now,
       updatedAt: now,
     });
@@ -152,6 +153,11 @@ describe("Inhaltsverzeichnis in der Heftvorschau", () => {
     const t = convexTest(schema, modules);
     const { issueId } = await heft(t);
     await heft(t, { published: false });
+    // Die Volltextstuecke entstehen sonst beim Veroeffentlichen.
+    vi.useFakeTimers();
+    await t.mutation(internal.suche.allesNeu, {});
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    vi.useRealTimers();
     const treffer = await t.query(api.tocPreview.searchCatalog, { term: "Carpiquet" });
     expect(treffer).toHaveLength(1);
     expect(treffer[0]._id).toBe(issueId);
@@ -167,5 +173,8 @@ describe("Inhaltsverzeichnis in der Heftvorschau", () => {
     expect(unterzeile[0].entries[0].subtitle).toBe(
       "Kanadier gegen die Hitlerjugend im Juli 1944",
     );
+    // Mehrere Teile muessen alle passen; ein einzelner Buchstabe allein
+    // fand frueher fast jedes Heft.
+    expect(await t.query(api.tocPreview.searchCatalog, { term: "carpiquet x" })).toEqual([]);
   });
 });
