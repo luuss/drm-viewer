@@ -118,6 +118,31 @@ danach `account:purgeByEmailInternal`).
 
 ---
 
+## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
+
+Der Leser heisst seit 19.10.2026 **https://digital.lesenundschenken.de**
+(Wunsch der Geschaeftsfuehrung). Was dafuer geaendert wurde:
+
+* Plesk: `digital.lesenundschenken.de` traegt die Direktiven aus
+  `deploy/apache/digital.vhost_ssl.conf` (vorher nur eine Umleitung, Sicherung
+  `/root/digital.vhost_ssl.conf.vor-2026-10-19`).
+* `lesen.lesenundschenken.de` (`deploy/apache/lesen.vhost_ssl.conf`): Seiten
+  leiten mit 301 auf `digital.` um, die Startseite auf `/library`. `/hooks/`,
+  `/convex/`, `/api/` und `/medien/` antworten weiter direkt, weil der
+  Stripe-Webhook und alte Tabs dorthin rufen.
+* `/opt/hefte-digital/.env`: `PUBLIC_WEB_ORIGIN`, `CONVEX_CLOUD_ORIGIN`
+  (`…/convex`), `CONVEX_SITE_ORIGIN` (`…/hooks`), `PUBLIC_UPLOAD_ORIGIN`
+  (`…/medien`) auf `digital.`; Sicherung `.env.vor-dmz-2026-10-19`. Danach
+  Backend neu, `convex-setup` (APP_PUBLIC_URL, SITE_URL, …) und ein neuer
+  Deploy, weil `auth.config.ts` die Adresse beim Deploy liest. Alle Leser
+  mussten sich danach neu anmelden.
+* Shop-Modul `lusdigital`: `LUSDIGITAL_URL` und `LUSDIGITAL_LESER_URL` auf
+  `digital.`, Anmeldemails nehmen Links auf `digital.` und `lesen.` an.
+* `_scratch/verlag-direkt.env`: `CONVEX_SELF_HOSTED_URL=https://digital.lesenundschenken.de`.
+* Offen: Stripe-Webhook zeigt noch auf `lesen.…/hooks/stripe/webhook` (geht,
+  kann bleiben). Apple Pay braucht `digital.lesenundschenken.de` als
+  Zahlungsdomain in Stripe.
+
 ## 2. Verlagsserver und Verkauf über den Shop (Stand 26.09.2026 abends)
 
 **Die Anlage läuft auf https://lesen.lesenundschenken.de**, vor ihr Cloudflare.
@@ -593,6 +618,65 @@ Buchtitel bei den Besprechungen, das Arbeitsamt-Foto in ZUERST!).
   mit fremdem Text oder fremdem Bild; die fünf Bilder, die ein Artikel laut
   Satz noch „zu wenig“ hat, sind Doppelte derselben Vorlage (Aufmacher über
   die Doppelseite, Bücherstapel), die der Import absichtlich nur einmal speichert.
+
+## 4j. Titelseite: Anreißer führen zum Artikel (seit 05.10.2026)
+
+Ein Tipp auf einen Anreißer der Titelseite (Titelthema, Leiste oben, schräger
+Streifen über der Ecke) springt im Seitenmodus zur Seite des Artikels, wie
+eine Zeile im Inhaltsverzeichnis.
+
+* **Erkennung** (`extract-service/extractor/titel_anreisser.py`): die
+  Textebene der Titelseite (U1) wird zu Blöcken gebündelt (Zeilen ähnlicher
+  Höhe, dicht untereinander; schräger Satz bildet eigene Bänder). Jeder Block
+  wird mit Titel und Unterzeile der Verzeichniseinträge verglichen, Wörter
+  gewichtet nach Seltenheit im Heft („ICE“, „Kriegsrat“, „Zayas“ zählen viel,
+  „Deutschland“ wenig). Nur ein klarer Sieger bekommt eine Fläche; Kopf,
+  Preise, Strichcode und senkrechter Randtext nie. Felder einer
+  Anreißerleiste werden auf ihre ganze Zelle gezogen (Text plus Bild).
+* **Schräger Satz:** pdf.js liefert gedrehte Läufe; `normiereTextelemente`
+  nimmt sie mit `gedreht=true` als Rechteck um den ganzen Lauf mit Winkel als
+  siebtem Feld. Nur der Umschlag liest so (`renderUmschlag`,
+  `umschlagTextAusPdf`); `toc_layout._items` überspringt gedrehte Stücke,
+  außer `text_layer_for_cover(..., mit_gedrehtem=True)`.
+* **Speicherung:** als Verzeichnisflächen (`articleRegions` mit
+  `targetPageIndex`) auf U1, im vollen Import (`_build_toc_entries`) und im
+  Auftrag `toc` (`_nur_verzeichnis`). Ein `toc`-Auftrag legt sie also mit neu.
+* **Bestand nachrüsten:** Admin → Heft → Erweitert → „Textebene aus Umschlag
+  (PDF)“ mit dem Umschlag-PDF. Lädt nur die Textebene hoch (Quelle `text`,
+  Rolle `cover`) und stellt einen `toc`-Auftrag ein. Ohne Umschlag-PDF (nur
+  Titelbild als TIF) gibt es keine Anreißer.
+* Tests: `tests/test_titel_anreisser.py` mit der echten Titelseite von
+  ZUERST! 3/2026 (sechs Anreißer → S. 28, 44, 66, 6, 6, 16), Vorlage unter
+  `tests/fixtures/titel/`; `textLayer.test.ts` für den schrägen Lauf.
+  Erzeugen einer Vorlage aus einem Umschlag-PDF ohne Browser:
+  `_scratch/titel-anreisser/umschlag-text.ts` (mit esbuild bündeln, siehe Kopf).
+
+## 4k. Leseansicht: Kopf und festes Inhaltsverzeichnis (seit 05.10.2026)
+
+* Kopfleiste: Schriftzug der Reihe neben „Bibliothek“ (`REIHEN_LOGOS` in
+  `ReaderShell.tsx`, Zuordnung über den Reihennamen, Bilder in
+  `web/public/img/`), Hefttitel in der Titelschrift der Reihe
+  (`.issue-title.reihe-<slug>`). Die Hausschriften der Hefte sind
+  Kaufschriften ohne Weblizenz (Abmahnrisiko), deshalb freie Ersatzschriften
+  (SIL OFL, selbst gehostet): Roboto Condensed (ZUERST!, DMZ kursiv,
+  Zeitgeschichte), Anton statt Impact (Schwerterträger).
+* Ab 64rem Breite steht das Inhaltsverzeichnis fest rechts (unter dem Knopf
+  „Inhalt“, der es ein- und ausblendet; Wahl in `localStorage`
+  `reader-toc-fest`). Schmaler bleibt es die Schublade. Der rechte
+  Blätterknopf rückt neben die Liste.
+* Leseansicht und Heftkarten eckig (`border-radius: 0`): es sind Zeitschriften.
+* Kiosk und „Meine Ausgaben“: oben Reihen-Kacheln mit Schriftzug (wie die
+  Kategorien im Netzladen, `components/ReihenKacheln.tsx`). Ein Tipp öffnet
+  die eigene Seite der Reihe `/zeitschrift/<slug>` (`library/ReihePage.tsx`):
+  Schriftzug groß, Balken in der Hausfarbe, nur ihre Hefte (eigene zuerst,
+  dann alle), ihr Abo, Kontakt (Internet, Mail, Telefon, Netzladen) und
+  Social-Media-Links; die anderen Reihen erst ganz unten unter „Weitere
+  Zeitschriften“. Alles dazu (Logos hell/dunkel, Farbe, Kontakt, Folge) steht
+  in `web/src/lib/reihen.ts`; eine neue Reihe (Der Schlesier) dort eintragen.
+  Kontaktdaten aus den Impressen der Hefte. **Achtung:** dmz-netz.de /
+  deutschemilitaerzeitschrift.de, dmz-zeitgeschichte.de und
+  schwertertraeger.de zeigen fremden Inhalt („Nachtleben“, „Lust am
+  Programmieren“, Stand 05.10.2026), deshalb dort kein Internet-Link.
 
 ---
 
