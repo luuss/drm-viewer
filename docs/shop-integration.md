@@ -494,6 +494,16 @@ Zeit, Quelle `netzladen`|`leser`, `id_order`).
   zu „Fuer die uebrigen Artikel dieser Bestellung haben Sie das Recht …“.
   Keinen eigenen Satz zum Erloeschen des Widerrufsrechts ausgeben (Wunsch
   des Betreibers). Ohne Verzicht bleibt der Satz der Vorlage.
+* Widerrufsknopf (Fremdmodul `rbfree`, lokal angepasst, Sicherungen
+  `*.bak-20261027`): `RbfWithdrawalService::getWithdrawableProducts` laesst
+  Digitalartikel (`LusdigitalVerzicht::istDigital`) und Positionen in einem
+  laufenden Widerruf weg. Bestellungen nur mit Digitalartikeln haben keinen
+  Knopf und keinen Hinweis. Im Formular waehlt der Kunde die Artikel
+  (`rbf_lines[]`, Pflicht, Digitalartikel gesperrt), `createWithdrawal`
+  prueft die Auswahl serverseitig und legt `scope` full/partial an. Der Hook
+  `displayOrderDetail` steht in `customer/order-detail.tpl` nur noch einmal
+  (unten), vorher gab es den Knopf doppelt. Smarty kompiliert im Shop nicht
+  neu: nach Vorlagen-Aenderungen `Tools::clearSmartyCache()`.
 * `LusdigitalVerzicht::speichern` fuegt ohne `null_values` ein. Bis
   27.10.2026 machte `null_values` aus der leeren IP der Leser-Kaeufe NULL,
   das Einfuegen scheiterte (Spalte NOT NULL), und fuer Leser-Kaeufe fehlten
