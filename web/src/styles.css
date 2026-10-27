@@ -1458,10 +1458,11 @@ body:has(.reihe-seite) { overflow-x: clip; }
   font-size: var(--fs-sub);
   font-weight: 600;
   text-decoration: none;
-  overflow-wrap: anywhere;
 }
-.reihe-kontakt-liste a > span { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; }
+.reihe-kontakt-liste a > span { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--s3); min-width: 0; }
 .reihe-kontakt-liste .reihe-kontakt-art { flex: 0 0 5.5rem; }
+/* Adresse und Nummer nie mitten im Wort trennen; zu eng -> ganze Zeile unter die Bezeichnung. */
+.reihe-kontakt-wert { white-space: nowrap; }
 .reihe-kontakt-liste .icon { flex: 0 0 auto; color: var(--reihe); }
 .reihe-kontakt-liste a:hover { color: var(--reihe); }
 .reihe-kontakt-art {

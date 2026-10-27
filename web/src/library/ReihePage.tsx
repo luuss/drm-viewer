@@ -261,7 +261,7 @@ export default function ReihePage() {
                     <Icon name="mail" />
                     <span>
                       <span className="reihe-kontakt-art">{m.label}</span>
-                      {m.adresse}
+                      <span className="reihe-kontakt-wert">{m.adresse}</span>
                     </span>
                   </a>
                 </li>
@@ -271,7 +271,7 @@ export default function ReihePage() {
                   <Icon name="phone" />
                   <span>
                     <span className="reihe-kontakt-art">Telefon</span>
-                    {k.tel}
+                    <span className="reihe-kontakt-wert">{k.tel}</span>
                   </span>
                 </a>
               </li>
