@@ -1176,7 +1176,7 @@ a.reihen-kachel { text-decoration: none; }
   flex: 0 0 auto;
   font-size: var(--fs-sub);
   font-weight: 700;
-  color: var(--accent);
+  color: var(--ink);
 }
 .reihen-weiter .icon { transition: transform 0.15s ease; }
 .reihen-kachel:hover .reihen-weiter .icon { transform: translateX(var(--s1)); }
