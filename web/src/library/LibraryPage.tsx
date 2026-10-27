@@ -51,8 +51,8 @@ function einordnen(h: Heftdaten): { jahr: number | null; rang: number } {
 
 type Ansicht = "detail" | "kompakt" | "liste";
 const ANSICHTEN: [Ansicht, string][] = [
-  ["detail", "Detail"],
   ["kompakt", "Kompakt"],
+  ["detail", "Detail"],
   ["liste", "Liste"],
 ];
 const ANSICHT_KEY = "bibliothek-ansicht";
@@ -60,9 +60,9 @@ const ANSICHT_KEY = "bibliothek-ansicht";
 function gemerkteAnsicht(): Ansicht {
   try {
     const wert = window.localStorage.getItem(ANSICHT_KEY);
-    return ANSICHTEN.some(([a]) => a === wert) ? (wert as Ansicht) : "detail";
+    return ANSICHTEN.some(([a]) => a === wert) ? (wert as Ansicht) : "kompakt";
   } catch {
-    return "detail";
+    return "kompakt";
   }
 }
 
@@ -75,8 +75,8 @@ function rangDerReihe(key: string) {
  * Nur Ausgaben, auf die der angemeldete Leser Zugriff hat, ohne Umweg ueber
  * Kacheln: je Zeitschrift eine Ueberschrift, darunter die Jahrgaenge, neuester
  * zuerst. Jeder Jahrgang zeigt, wie viele seiner im Kiosk veroeffentlichten
- * Hefte der Leser hat. Drei Ansichten: Detail (Karten), Kompakt (kleine
- * Umschlaege in einem Raster, Zeitschriften nur als Trenner) und Liste.
+ * Hefte der Leser hat. Drei Ansichten: Kompakt (Standard; kleine Umschlaege,
+ * Zeitschriften nur als Trenner), Detail (Karten) und Liste.
  */
 export default function LibraryPage() {
   const issues = useQuery(api.issues.myLibrary, {});
