@@ -149,7 +149,6 @@ export default function LibraryPage() {
       key,
       name: r.name,
       reihe: r.reihe,
-      anzahl: [...r.jahrgaenge.values()].reduce((n, h) => n + h.length, 0),
       jahrgaenge: [...r.jahrgaenge]
         .sort(([a], [b]) => (b ?? 0) - (a ?? 0))
         .map(([jahr, hefte]) => ({
@@ -217,30 +216,16 @@ export default function LibraryPage() {
       </div>
 
       {ansicht === "kompakt" ? (
-        // Alle Hefte in einem Raster; vor den Heften einer Zeitschrift steht
-        // ihr Schriftzug als Kachel in Umschlaggroesse, wie im Kiosk.
+        // Alle Hefte in einer fliessenden Reihe; vor den Heften einer
+        // Zeitschrift steht ein schmaler grauer Streifen mit ihrem Namen.
         <div className="kompakt-raster">
           {gruppen.map((g) => [
             <Link
               key={g.key}
               to={g.reihe ? `/zeitschrift/${g.reihe.slug}` : "/"}
-              className={`kompakt-trenner${g.reihe ? ` reihe-${g.reihe.slug}` : ""}`}
-              aria-label={`${g.name}, ${g.anzahl} ${g.anzahl === 1 ? "Ausgabe" : "Ausgaben"}`}
+              className="kompakt-trenner"
             >
-              <span className="kompakt-trenner-logo">
-                {g.reihe ? (
-                  <img
-                    src={g.reihe.hell}
-                    alt={g.reihe.alt}
-                    className={g.reihe.kasten ? "kasten" : undefined}
-                  />
-                ) : (
-                  <span className="kompakt-trenner-name">{g.name}</span>
-                )}
-              </span>
-              <span className="kompakt-trenner-fuss">
-                {g.anzahl} {g.anzahl === 1 ? "Ausgabe" : "Ausgaben"}
-              </span>
+              <span>{g.name}</span>
             </Link>,
             ...g.jahrgaenge.flatMap((j) =>
               j.hefte.map((i) => (
