@@ -12,8 +12,10 @@ Aufruf, und PyMuPDF (AGPL) kommt hier gar nicht mehr vor.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
 import io
+import secrets
 import os
 import time
 from collections import OrderedDict, defaultdict, deque
@@ -110,6 +112,70 @@ async def service_call(path: str, body: dict) -> Any:
         print(f"Dienstaufruf {path}: {res.status_code} {res.text[:200]}")
         raise HTTPException(502, "Backend nicht erreichbar")
     return res.json()
+
+
+# --- Einmal-Tickets ------------------------------------------------------------
+# Jede Kachel und jedes Artikelbild braucht ein Ticket, das dieses Gateway
+# signiert hat und genau einmal annimmt. Eine nachgeschickte Anfrage (Bildlupe
+# wie Imagus, "Copy as cURL", ein zweites Laden) bekommt 403, auch wenn das
+# Bild schon da ist. Der Reader holt Tickets in Buendeln
+# (`web/src/reader/schutz.ts`).
+TICKET_TTL = 600
+TICKETS_JE_BUENDEL = 64
+_tickets_benutzt: dict[str, float] = {}
+
+
+def _ticket_signatur(token: str, nonce: str) -> str:
+    return hmac.new(
+        TILE_SERVICE_SECRET.encode(), f"ticket:{token}:{nonce}".encode(), hashlib.sha256
+    ).hexdigest()[:24]
+
+
+def neue_tickets(token: str) -> list[str]:
+    jetzt = int(time.time())
+    out = []
+    for _ in range(TICKETS_JE_BUENDEL):
+        nonce = f"{jetzt}-{secrets.token_hex(8)}"
+        out.append(f"{nonce}.{_ticket_signatur(token, nonce)}")
+    return out
+
+
+def require_ticket(token: str, ticket: str | None) -> None:
+    if not ticket or "." not in ticket:
+        raise HTTPException(403, "Ticket fehlt")
+    nonce, signatur = ticket.split(".", 1)
+    try:
+        ausgestellt = int(nonce.split("-", 1)[0])
+    except ValueError:
+        raise HTTPException(403, "Ticket ungueltig")
+    jetzt = time.time()
+    if jetzt - ausgestellt > TICKET_TTL:
+        raise HTTPException(403, "Ticket abgelaufen")
+    if not hmac.compare_digest(signatur, _ticket_signatur(token, nonce)):
+        raise HTTPException(403, "Ticket ungueltig")
+    if ticket in _tickets_benutzt:
+        print("Ticket doppelt benutzt")
+        raise HTTPException(403, "Ticket schon benutzt")
+    _tickets_benutzt[ticket] = jetzt + TICKET_TTL
+    if len(_tickets_benutzt) > 200_000:
+        for k, ablauf in list(_tickets_benutzt.items()):
+            if ablauf < jetzt:
+                _tickets_benutzt.pop(k, None)
+
+
+def require_fetch(request: Request) -> None:
+    """Nur `fetch` aus der eigenen Seite.
+
+    Browser schicken `Sec-Fetch-*` von selbst und lassen Seiten sie nicht
+    faelschen. Adresszeile (`dest=document`), `<img>` (`dest=image`) und
+    fremde Seiten (`site=cross-site`) kommen so nicht an Inhalte.
+    """
+    site = request.headers.get("sec-fetch-site")
+    ziel = request.headers.get("sec-fetch-dest")
+    if site and site != "same-origin":
+        raise HTTPException(403, "Nur aus dem Reader")
+    if ziel and ziel != "empty":
+        raise HTTPException(403, "Nur aus dem Reader")
 
 
 def check_rate(key: str, limit: int, what: str) -> None:
@@ -219,8 +285,10 @@ async def health() -> dict:
 
 @app.get("/api/session")
 async def session_info(
+    request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> dict:
+    require_fetch(request)
     session = await require_session(x_tile_session)
     return {
         "issueId": session["issueId"],
@@ -235,6 +303,7 @@ async def session_info(
 @app.get("/api/schrift/{familie}")
 async def schrift(
     familie: str,
+    request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> Response:
     """Leseschrift dieser Sitzung: kennt nur ihre verschluesselten Zeichen.
@@ -244,6 +313,7 @@ async def schrift(
     """
     if familie not in schutz.SCHRIFTEN:
         raise HTTPException(404, "Unbekannte Schrift")
+    require_fetch(request)
     session = await require_session(x_tile_session)
     daten = await asyncio.to_thread(
         schutz.schrift, int(session.get("schutzSeed", 0)), familie
@@ -258,7 +328,9 @@ async def schrift(
 @app.get("/api/asset/{asset_id}.jpg")
 async def asset(
     asset_id: str,
+    request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
+    x_ticket: str | None = Header(default=None, alias="X-Ticket"),
 ) -> Response:
     """Ein Bild aus dem Medienspeicher ausliefern.
 
@@ -282,7 +354,9 @@ async def asset(
             media_type=info.get("contentType") or "image/jpeg",
             headers={"Cache-Control": "private, max-age=3600"},
         )
+    require_fetch(request)
     session = await require_session(x_tile_session, info.get("issueId"))
+    require_ticket(x_tile_session or "", x_ticket)
     check_rate(
         f'assets:{session.get("userId")}:{info.get("issueId")}',
         MAX_TILES_PER_MIN,
@@ -302,12 +376,31 @@ async def asset(
     )
 
 
+@app.get("/api/issue/{issue_id}/tickets")
+async def tickets(
+    issue_id: str,
+    request: Request,
+    x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
+) -> Response:
+    """Ein Buendel Einmal-Tickets fuer Kacheln und Bilder dieser Sitzung."""
+    require_fetch(request)
+    session = await require_session(x_tile_session, issue_id)
+    check_rate(f'tickets:{session.get("userId")}:{issue_id}', 120, "Tickets")
+    return Response(
+        content='{"t":[' + ",".join(f'"{t}"' for t in neue_tickets(x_tile_session or "")) + "]}",
+        media_type="application/json",
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
 @app.get("/api/issue/{issue_id}/page/{index}/info")
 async def page_info(
     issue_id: str,
     index: int,
+    request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> dict:
+    require_fetch(request)
     session = await require_session(x_tile_session, issue_id)
     # Metadaten und Bildkacheln brauchen getrennte Zaehler. Mit demselben Key
     # fuellten die vielen Kacheln einer einzigen Seite auch das deutlich
@@ -337,9 +430,13 @@ async def tile(
     level: int,
     col: int,
     row: int,
+    request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
+    x_ticket: str | None = Header(default=None, alias="X-Ticket"),
 ) -> Response:
+    require_fetch(request)
     session = await require_session(x_tile_session, issue_id)
+    require_ticket(x_tile_session or "", x_ticket)
     check_rate(
         f'tiles:{session.get("userId")}:{issue_id}',
         MAX_TILES_PER_MIN,

@@ -4177,12 +4177,22 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   cursor: pointer;
 }
 .reader-abdeckung svg { flex: none; }
+/* Artikelbilder sind Zeichenflaechen, keine <img> (reader/ArticleMode.tsx).
+   Wie ein Bild: nie groesser als es ist, mittig, mit Rahmen. */
+.schutz-bild { display: block; margin-inline: auto; }
 .schutz-bild-platz {
-  display: block;
   width: 100%;
   min-height: 6rem;
   background: var(--rule);
   border-radius: var(--radius-sm);
+}
+.article-body canvas.artikel-bild {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--rule);
 }
 /* Angetippter Absatz aus der Seitenansicht: kurz hervorgehoben. */
 @keyframes einstieg-blink {

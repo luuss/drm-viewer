@@ -151,6 +151,18 @@ danach `account:purgeByEmailInternal`).
   Glyphennamen entfernt, ~1,7 s, danach im Speicher). Im DOM und beim
   Kopieren steht Zeichensalat. Geheimwert `readerSessions.schutzSeed`, der
   Browser bekommt ihn nie. Zahlen in Tabellen bleiben stehen (Zahlenspalten).
+* **Zwei Stufen beim Verwuerfeln:** Bloecke vertauscht, dazu je Block um
+  0/90/180/270 Grad gedreht und mit invertierten 8-px-Querstrichen versehen
+  (`schutz.py` `umformungen`, Gegenstueck `web/src/reader/schutzRechnen.ts`).
+  Im Browser exakt umkehrbar (RMS wie ein normales JPEG), solange das JPEG
+  4:4:4 ist. Falle beim Testen: ein mit Pillow-Standard neu gespeichertes
+  JPEG ist 4:2:0, dann entstehen Farbfehler an den Zellkanten.
+* **Einmal-Tickets:** Jede Kachel und jedes Artikelbild braucht `X-Ticket`,
+  vom Gateway signiert (`/api/issue/<id>/tickets`, Buendel zu 64) und nur
+  einmal angenommen. Nachgeschickte Anfragen (Bildlupen, cURL) bekommen 403.
+  Dazu nimmt das Gateway nur `fetch` von der eigenen Seite an
+  (`Sec-Fetch-Site: same-origin`, `Sec-Fetch-Dest: empty`).
+* **Artikelbilder sind `<canvas>`**, kein `<img>` und kein `blob:`.
 * **Reader-Sperren** (`web/src/reader/kopierschutz.ts`): kein Rechtsklick,
   Markieren, Kopieren, Ziehen, Drucken, Strg+S/U/P, F12. Fokus weg, Tab
   gewechselt, Maus aus dem Fenster oder Druck-Taste: alles verschwimmt, Klick

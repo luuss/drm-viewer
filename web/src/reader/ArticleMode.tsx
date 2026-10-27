@@ -5,54 +5,61 @@ import ReaderTurnButton from "./ReaderTurnButton";
 import ArtikelTabelle from "../components/ArtikelTabelle";
 import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
 import { meldungsfolge } from "./meldungsfolge";
-import { bildAlsBlob, schriftenLaden } from "./schutz";
+import { bildAlsCanvas, schriftenLaden } from "./schutz";
 import type { Klickpunkt } from "./PageMode";
 
 /**
- * Artikelbild ohne Serverpfad im HTML: ueber die Sitzung geholt, im Browser
- * zusammengesetzt, als `blob:` gezeigt.
+ * Artikelbild ohne Adresse: ueber Sitzung und Einmal-Ticket geholt, im
+ * Browser zusammengesetzt und auf eine Zeichenflaeche gemalt. Kein `img`,
+ * also nichts fuer Bildlupen oder "Bild speichern".
  */
 function SchutzBild({
   url,
   sessionToken,
+  issueId,
   schutzKey,
-  ...rest
+  width,
+  height,
 }: {
   url: string;
   sessionToken: string | null | undefined;
+  issueId: string | null;
   schutzKey: number | null;
-  alt: string;
   width?: number;
   height?: number;
 }) {
-  const [src, setSrc] = useState<string | null>(null);
+  const halter = useRef<HTMLSpanElement>(null);
+  const [fertig, setFertig] = useState(false);
   useEffect(() => {
-    if (!url || !sessionToken || schutzKey === null) return;
+    if (!url || !sessionToken || !issueId || schutzKey === null) return;
     const abbruch = new AbortController();
-    let adresse: string | null = null;
-    bildAlsBlob(url, sessionToken, schutzKey, abbruch.signal)
-      .then((blob) => {
-        adresse = blob;
-        if (abbruch.signal.aborted) URL.revokeObjectURL(blob);
-        else setSrc(blob);
+    bildAlsCanvas(url, sessionToken, issueId, schutzKey, abbruch.signal)
+      .then((canvas) => {
+        if (abbruch.signal.aborted || !halter.current) return;
+        canvas.className = "artikel-bild";
+        canvas.setAttribute("aria-hidden", "true");
+        halter.current.replaceChildren(canvas);
+        setFertig(true);
       })
       .catch(() => undefined);
     return () => {
       abbruch.abort();
-      if (adresse) URL.revokeObjectURL(adresse);
-      setSrc(null);
+      halter.current?.replaceChildren();
+      setFertig(false);
     };
-  }, [url, sessionToken, schutzKey]);
-  // Ohne Bild haelt ein leerer Rahmen in Bildgroesse den Platz.
-  if (!src) {
-    return (
-      <span
-        className="schutz-bild-platz"
-        style={rest.width && rest.height ? { aspectRatio: `${rest.width} / ${rest.height}` } : undefined}
-      />
-    );
-  }
-  return <img src={src} draggable={false} {...rest} />;
+  }, [url, sessionToken, issueId, schutzKey]);
+  // Bis das Bild steht, haelt ein leerer Rahmen in Bildgroesse den Platz.
+  return (
+    <span
+      ref={halter}
+      className={fertig ? "schutz-bild" : "schutz-bild schutz-bild-platz"}
+      style={
+        !fertig && width && height
+          ? { aspectRatio: `${width} / ${height}`, maxWidth: `${width}px` }
+          : undefined
+      }
+    />
+  );
 }
 
 /**
@@ -310,8 +317,8 @@ export default function ArticleMode({
                 <SchutzBild
                   url={img.url ?? ""}
                   sessionToken={sessionToken}
+                  issueId={article.issueId}
                   schutzKey={schutzKey}
-                  alt=""
                   // Die eigene Groesse haelt das Bild davon ab, auf
                   // Spaltenbreite hochgezogen zu werden, und haelt waehrend
                   // des Ladens den Platz frei.

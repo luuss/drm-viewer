@@ -9,6 +9,7 @@ import {
   verschluesseler,
   vertauschung,
 } from "./schutz";
+import { umformungen } from "../web/src/reader/schutzRechnen";
 
 const tileService = fileURLToPath(new URL("../tile-service", import.meta.url));
 
@@ -35,11 +36,13 @@ describe("Kopierschutz", () => {
   test("Python im Gateway rechnet Bit fuer Bit gleich", () => {
     const py = python(
       `print(json.dumps({"f": schutz.fnv1a32("987:kacheln:x"), "k": schutz.kachel_schluessel(55),` +
-        ` "p": schutz.vertauschung(500, 3141592653), "a": schutz.SCHUTZ_ALPHABET}))`,
+        ` "p": schutz.vertauschung(500, 3141592653), "a": schutz.SCHUTZ_ALPHABET,` +
+        ` "u": schutz.umformungen(300, 2718281828)}))`,
     );
     expect(py.f).toBe(fnv1a32("987:kacheln:x"));
     expect(py.k).toBe(kachelSchluessel(55));
     expect(py.p).toEqual(vertauschung(500, 3141592653));
     expect(py.a).toBe(SCHUTZ_ALPHABET);
+    expect(py.u).toEqual(umformungen(300, 2718281828));
   });
 });

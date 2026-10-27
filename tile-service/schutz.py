@@ -5,7 +5,7 @@ Gegenstueck zu `convex/schutz.ts` (Text) und `web/src/reader/schutz.ts`
 fuer Bit gleich rechnen; `convex/schutz.test.ts` prueft das.
 
 Verwuerfeln: Ein Bild wird in Bloecke zu BLOCK Pixel geteilt, die vollen
-Bloecke werden vertauscht. BLOCK ist ein Vielfaches von 8, und JPEG wird ohne
+Bloecke werden vertauscht, gedreht und mit invertierten Querstrichen versehen. BLOCK ist ein Vielfaches von 8, und JPEG wird ohne
 Farbunterabtastung (4:4:4) gespeichert. Damit liegt jeder 8x8-Block des JPEG
 ganz in einem Block, und nach dem Zuruecktauschen bleiben keine Naehte.
 """
@@ -69,20 +69,68 @@ def kachel_schluessel(seed: int) -> int:
     return fnv1a32(f"{seed}:kacheln")
 
 
+def umformungen(n: int, seed: int) -> list[tuple[int, int, int]]:
+    """Je Block: Drehung (Viertel), Zeilenbaender, Spaltenbaender (je 8 Bit).
+
+    Ein eigener Strom neben der Vertauschung, damit beide Stufen unabhaengig
+    sind. Gegenstueck in `web/src/reader/schutz.ts` (`umformungen`).
+    """
+    r = mulberry32(seed ^ 0x9E3779B9)
+    out = []
+    for _ in range(n):
+        out.append((r() % 4, r() & 0xFF, r() & 0xFF))
+    return out
+
+
+def _baender(block: Image.Image, zeilen: int, spalten: int) -> Image.Image:
+    """Querstriche: 8-px-Baender invertieren, erst Zeilen, dann Spalten.
+
+    Wo sich zwei Baender kreuzen, ist doppelt invertiert, also wieder normal.
+    Die Baender liegen auf dem 8er-Raster des JPEG, darum ueberlebt das die
+    Kompression ohne Naehte.
+    """
+    from PIL import ImageOps
+
+    for i in range(BLOCK // 8):
+        if zeilen >> i & 1:
+            box = (0, i * 8, BLOCK, i * 8 + 8)
+            block.paste(ImageOps.invert(block.crop(box)), box[:2])
+    for i in range(BLOCK // 8):
+        if spalten >> i & 1:
+            box = (i * 8, 0, i * 8 + 8, BLOCK)
+            block.paste(ImageOps.invert(block.crop(box)), box[:2])
+    return block
+
+
+_DREHUNG = {1: Image.Transpose.ROTATE_90, 2: Image.Transpose.ROTATE_180, 3: Image.Transpose.ROTATE_270}
+
+
 def verwuerfeln(image: Image.Image, seed: int) -> Image.Image:
-    """Volle Bloecke vertauschen: Block k des Ergebnisses ist Block p[k] des Originals."""
+    """Zwei Stufen je vollem Block.
+
+    1. Vertauschen: Block k des Ergebnisses ist Block p[k] des Originals.
+    2. Den Block um 90°·d gegen den Uhrzeigersinn drehen und mit
+       invertierten Querstrichen versehen.
+
+    Der Reader macht es in umgekehrter Folge rueckgaengig.
+    """
     spalten = image.width // BLOCK
     zeilen = image.height // BLOCK
     n = spalten * zeilen
     if n < 2:
         return image
     p = vertauschung(n, seed)
+    formen = umformungen(n, seed)
     out = image.copy()
     for k in range(n):
         q = p[k]
         sx, sy = (q % spalten) * BLOCK, (q // spalten) * BLOCK
         dx, dy = (k % spalten) * BLOCK, (k // spalten) * BLOCK
-        out.paste(image.crop((sx, sy, sx + BLOCK, sy + BLOCK)), (dx, dy))
+        block = image.crop((sx, sy, sx + BLOCK, sy + BLOCK))
+        drehung, zb, sb = formen[k]
+        if drehung:
+            block = block.transpose(_DREHUNG[drehung])
+        out.paste(_baender(block, zb, sb), (dx, dy))
     return out
 
 
