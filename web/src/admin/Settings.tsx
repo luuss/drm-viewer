@@ -28,7 +28,6 @@ export default function Settings() {
 
 function Reihen() {
   const publications = useQuery(api.publications.listAll, {});
-  const plaene = useQuery(api.plans.listAll, {});
   const createPublication = useMutation(api.publications.create);
   const [meldung, tue, busy] = useMeldung();
   const [name, setName] = useState("");
@@ -37,13 +36,7 @@ function Reihen() {
     <section className="einstellungen-abschnitt">
       <h2>Reihen</h2>
       <div className="karten-gitter">
-        {publications?.map((p) => (
-          <ReiheKarte
-            key={p._id}
-            reihe={p}
-            jahresabo={plaene?.find((x) => x.publicationId === p._id && x.isActive && x.stripeModus) ?? null}
-          />
-        ))}
+        {publications?.map((p) => <ReiheKarte key={p._id} reihe={p} />)}
       </div>
       <form
         className="inline-form short"
@@ -66,34 +59,72 @@ function Reihen() {
   );
 }
 
-type Plan = FunctionReturnType<typeof api.plans.listAll>[number];
+type Stufe = FunctionReturnType<typeof api.leserAbo.stufen>[number];
+
+const euroText = (cents: number | null) => (cents === null ? "" : (cents / 100).toFixed(2).replace(".", ","));
 
 /**
- * Preis des Digital-Jahresabos (Stripe Checkout im Ladenkonto). Speichern legt
- * bei Stripe Produkt und Preis an; ein neuer Preis gilt fuer neue Abschluesse.
- * Leer speichern nimmt das Abo aus dem Verkauf.
+ * Preisstufen des Digital-Jahresabos (Stripe Checkout im Ladenkonto): Abo-Art
+ * mal Liefergebiet wie im Abo-Katalog. Speichern legt bei Stripe den Preis
+ * an; ein neuer Preis gilt fuer neue Abschluesse. Leer speichern nimmt die
+ * Stufe aus dem Verkauf.
  */
-function JahresaboPreis({ reihe, plan }: { reihe: Reihe; plan: Plan | null }) {
+function JahresaboStufen({ reihe }: { reihe: Reihe }) {
+  const stufen = useQuery(api.leserAbo.stufen, { publicationId: reihe._id });
+  const katalogUebernehmen = useAction(api.leserAbo.katalogUebernehmen);
+  const [meldung, tue, busy] = useMeldung();
+  if (!stufen) return null;
+  const fehlend = stufen.filter((s) => s.katalogCents !== null && s.imVerkauf === null).length;
+
+  return (
+    <>
+      <h4>Digital-Jahresabo</h4>
+      {stufen.length === 0 && <p className="hint small">Für diese Reihe gibt es keinen Abo-Katalog.</p>}
+      {stufen.map((s) => (
+        <StufePreis key={`${s.tier}:${s.region ?? ""}:${s.imVerkauf ?? ""}`} reihe={reihe} stufe={s} />
+      ))}
+      {fehlend > 0 && (
+        <div className="feld-reihe">
+          <button
+            type="button"
+            className="btn secondary"
+            disabled={busy !== null}
+            onClick={() =>
+              tue(
+                () => katalogUebernehmen({ publicationId: reihe._id }),
+                (r) => `${r.angelegt} Stufen angelegt`,
+              )
+            }
+          >
+            Fehlende Stufen zum Katalogpreis anlegen ({fehlend})
+          </button>
+        </div>
+      )}
+      <MeldungZeile meldung={meldung} />
+    </>
+  );
+}
+
+function StufePreis({ reihe, stufe: s }: { reihe: Reihe; stufe: Stufe }) {
   const preisSetzen = useAction(api.leserAbo.preisSetzen);
   const [meldung, tue, busy] = useMeldung();
-  const [euro, setEuro] = useState(plan ? (plan.priceAmountCents / 100).toFixed(2).replace(".", ",") : "");
+  const [euro, setEuro] = useState(euroText(s.imVerkauf));
 
   function speichern() {
     const roh = euro.trim().replace(",", ".");
     const cents = roh ? Math.round(Number(roh) * 100) : null;
     if (cents !== null && !Number.isFinite(cents)) return;
     void tue(
-      () => preisSetzen({ publicationId: reihe._id, priceAmountCents: cents }),
-      cents === null ? "Abo aus dem Verkauf genommen" : "Preis gespeichert",
+      () => preisSetzen({ publicationId: reihe._id, tier: s.tier, region: s.region, priceAmountCents: cents }),
+      cents === null ? "Aus dem Verkauf genommen" : "Preis gespeichert",
     );
   }
 
   return (
     <>
-      <h4>Digital-Jahresabo</h4>
       <div className="feld-reihe">
         <label className="schmal">
-          Preis pro Jahr in €
+          {s.name} in € pro Jahr
           <input
             inputMode="decimal"
             value={euro}
@@ -105,7 +136,7 @@ function JahresaboPreis({ reihe, plan }: { reihe: Reihe; plan: Plan | null }) {
                 speichern();
               }
             }}
-            placeholder="leer = nicht im Verkauf"
+            placeholder={s.katalogCents === null ? "leer = nicht im Verkauf" : `Katalog: ${euroText(s.katalogCents)}`}
           />
         </label>
         <button type="button" className="btn secondary" disabled={busy !== null} onClick={speichern}>
@@ -113,16 +144,14 @@ function JahresaboPreis({ reihe, plan }: { reihe: Reihe; plan: Plan | null }) {
         </button>
       </div>
       <p className="hint small">
-        {plan
-          ? `Im Verkauf für ${formatEuro(plan.priceAmountCents)} pro Jahr${plan.stripeModus === "test" ? " (Stripe-Testmodus)" : ""}.`
-          : "Nicht im Verkauf."}
+        {s.imVerkauf !== null ? `Im Verkauf für ${formatEuro(s.imVerkauf)} pro Jahr.` : "Nicht im Verkauf."}
       </p>
       <MeldungZeile meldung={meldung} />
     </>
   );
 }
 
-function ReiheKarte({ reihe: p, jahresabo }: { reihe: Reihe; jahresabo: Plan | null }) {
+function ReiheKarte({ reihe: p }: { reihe: Reihe }) {
   const updateShop = useMutation(api.publications.updateShop);
   const setActive = useMutation(api.publications.setActive);
   const [meldung, tue, busy] = useMeldung();
@@ -166,7 +195,7 @@ function ReiheKarte({ reihe: p, jahresabo }: { reihe: Reihe; jahresabo: Plan | n
           aktiv
         </label>
       </div>
-      <JahresaboPreis key={jahresabo?._id ?? "keiner"} reihe={p} plan={jahresabo} />
+      <JahresaboStufen reihe={p} />
       <h4>Digital-Abo im Netzladen</h4>
       <div className="feld-reihe">
         <label>

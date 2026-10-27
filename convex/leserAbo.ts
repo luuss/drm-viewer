@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, ActionCtx } from "./_generated/server";
+import { action, internalMutation, internalQuery, query, ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Doc, Id } from "./_generated/dataModel";
@@ -8,6 +8,13 @@ import { audit, requireAdmin } from "./roles";
 import { WITHDRAWAL_WAIVER_TEXT, WITHDRAWAL_WAIVER_VERSION } from "./consents";
 import { StripeKonfig, StripeModus, secretKeyFuer, stripeKonfig } from "./leserStripe";
 import { StripeAufruf, stripeClient } from "./stripeRest";
+import { deliveryRegion } from "./schema";
+import {
+  DeliveryRegion,
+  PlanVariant,
+  SUBSCRIPTION_CATALOG,
+  catalogVariants,
+} from "./subscriptionCatalog";
 
 /**
  * Digital-Jahresabo ueber Stripe Checkout, im Stripe-Konto des Ladens — mit
@@ -63,7 +70,20 @@ export function aboAusStripe(s: any, modus: StripeModus, geloescht = false) {
   };
 }
 
-// --- Preis anlegen (Redaktion) --------------------------------------------------
+// --- Preise anlegen (Redaktion) -------------------------------------------------
+
+/**
+ * Eine Preisstufe ist Abo-Art mal Liefergebiet, wie im Katalog
+ * (subscriptionCatalog.ts). Der fruehere Einzelpreis "Jahresabo" hat kein
+ * Gebiet und wird von der ersten Katalogstufe abgeloest.
+ */
+const EINZELPREIS = "Jahresabo";
+
+const stufe = { tier: v.string(), region: v.optional(deliveryRegion) };
+
+function gleicheStufe(p: Doc<"subscriptionPlans">, tier: string, region: DeliveryRegion | undefined) {
+  return (p.tier ?? p.name) === tier && p.region === region;
+}
 
 export const reiheFuerPreis = internalQuery({
   args: { publicationId: v.id("publications"), modus: v.union(v.literal("test"), v.literal("live")) },
@@ -76,19 +96,28 @@ export const reiheFuerPreis = internalQuery({
       .withIndex("by_publication", (q) => q.eq("publicationId", publicationId))
       .collect();
     const eigene = plaene.filter((p) => p.stripeModus === modus);
+    const katalog = SUBSCRIPTION_CATALOG[publication.slug];
     return {
       name: publication.name,
       // Das Produkt bleibt bei einem neuen Preis dasselbe.
       productId: eigene.find((p) => p.stripeProductId)?.stripeProductId ?? null,
+      varianten: katalog ? catalogVariants(katalog) : [],
+      aktiv: eigene
+        .filter((p) => p.isActive)
+        .map((p) => ({ tier: p.tier ?? p.name, region: p.region })),
     };
   },
 });
 
-/** Neuer Preis wird der aktive; fruehere Preise derselben Reihe gehen aus dem Verkauf. */
+/** Neuer Preis einer Stufe wird der aktive; der fruehere dieser Stufe geht aus dem Verkauf. */
 export const planSetzen = internalMutation({
   args: {
     publicationId: v.id("publications"),
     modus: v.union(v.literal("test"), v.literal("live")),
+    ...stufe,
+    tierNote: v.optional(v.string()),
+    name: v.string(),
+    sortOrder: v.number(),
     priceAmountCents: v.number(),
     stripePriceId: v.string(),
     stripeProductId: v.string(),
@@ -100,11 +129,16 @@ export const planSetzen = internalMutation({
       .withIndex("by_publication", (q) => q.eq("publicationId", a.publicationId))
       .collect();
     for (const p of plaene) {
-      if (p.isActive && p.stripeModus === a.modus) await ctx.db.patch(p._id, { isActive: false });
+      if (!p.isActive || p.stripeModus !== a.modus) continue;
+      if (gleicheStufe(p, a.tier, a.region) || gleicheStufe(p, EINZELPREIS, undefined)) {
+        await ctx.db.patch(p._id, { isActive: false });
+      }
     }
     const id = await ctx.db.insert("subscriptionPlans", {
-      name: "Jahresabo",
-      tier: "Jahresabo",
+      name: a.name,
+      tier: a.tier,
+      tierNote: a.tierNote,
+      region: a.region,
       publicationId: a.publicationId,
       stripePriceId: a.stripePriceId,
       stripeProductId: a.stripeProductId,
@@ -113,27 +147,70 @@ export const planSetzen = internalMutation({
       priceAmountCents: a.priceAmountCents,
       interval: "year",
       isActive: true,
-      sortOrder: 0,
+      sortOrder: a.sortOrder,
       createdAt: Date.now(),
     });
-    await audit(ctx, "abo.preis", a.publicationId, `${a.priceAmountCents} Cent (${a.modus})`);
+    await audit(ctx, "abo.preis", a.publicationId, `${a.name}: ${a.priceAmountCents} Cent (${a.modus})`);
     return id;
   },
 });
 
-/** Jahresabo einer Reihe aus dem Verkauf nehmen; laufende Abos laufen weiter. */
-export const verkaufBeenden = internalMutation({
-  args: { publicationId: v.id("publications"), modus: v.union(v.literal("test"), v.literal("live")) },
-  handler: async (ctx, { publicationId, modus }) => {
+/** Eine Stufe aus dem Verkauf nehmen; laufende Abos laufen weiter. */
+export const stufeBeenden = internalMutation({
+  args: {
+    publicationId: v.id("publications"),
+    modus: v.union(v.literal("test"), v.literal("live")),
+    ...stufe,
+  },
+  handler: async (ctx, { publicationId, modus, tier, region }) => {
     await requireAdmin(ctx);
     const plaene = await ctx.db
       .query("subscriptionPlans")
       .withIndex("by_publication", (q) => q.eq("publicationId", publicationId))
       .collect();
     for (const p of plaene) {
-      if (p.isActive && p.stripeModus === modus) await ctx.db.patch(p._id, { isActive: false });
+      if (p.isActive && p.stripeModus === modus && gleicheStufe(p, tier, region)) {
+        await ctx.db.patch(p._id, { isActive: false });
+      }
     }
-    await audit(ctx, "abo.verkaufBeendet", publicationId, modus);
+    await audit(ctx, "abo.verkaufBeendet", publicationId, `${tier} ${region ?? ""} (${modus})`.trim());
+  },
+});
+
+/** Stufen einer Reihe fuer die Einstellungen: Katalog und was davon im Verkauf ist. */
+export const stufen = query({
+  args: { publicationId: v.id("publications") },
+  handler: async (ctx, { publicationId }) => {
+    await requireAdmin(ctx);
+    const publication = await ctx.db.get(publicationId);
+    if (!publication) return [];
+    const modus = stripeKonfig()?.modus ?? null;
+    const aktiv = (
+      await ctx.db
+        .query("subscriptionPlans")
+        .withIndex("by_publication", (q) => q.eq("publicationId", publicationId))
+        .collect()
+    ).filter((p) => p.isActive && p.stripeModus && p.stripeModus === modus);
+    const katalog = SUBSCRIPTION_CATALOG[publication.slug];
+    const zeilen = (katalog ? catalogVariants(katalog) : []).map((variante) => ({
+      tier: variante.tier,
+      region: variante.region as DeliveryRegion | undefined,
+      name: variante.name,
+      katalogCents: variante.priceAmountCents as number | null,
+      imVerkauf: aktiv.find((p) => gleicheStufe(p, variante.tier, variante.region))?.priceAmountCents ?? null,
+    }));
+    // Was nicht im Katalog steht (etwa der fruehere Einzelpreis), nur zum Herausnehmen.
+    for (const p of aktiv) {
+      if (zeilen.some((z) => gleicheStufe(p, z.tier, z.region))) continue;
+      zeilen.push({
+        tier: p.tier ?? p.name,
+        region: p.region,
+        name: p.name,
+        katalogCents: null,
+        imVerkauf: p.priceAmountCents,
+      });
+    }
+    return zeilen;
   },
 });
 
@@ -160,64 +237,100 @@ async function steuersatz(stripe: StripeAufruf): Promise<string> {
   return neu.id;
 }
 
+/** Legt bei Stripe den Jahrespreis einer Stufe an (Produkt einmal je Reihe) und setzt ihn aktiv. */
+async function stufePreisAnlegen(
+  ctx: ActionCtx,
+  konfig: StripeKonfig,
+  publicationId: Id<"publications">,
+  variante: PlanVariant,
+  priceAmountCents: number,
+): Promise<void> {
+  if (!Number.isInteger(priceAmountCents) || priceAmountCents < 100 || priceAmountCents > 100_000) {
+    throw new Error("Preis in Cent zwischen 1 € und 1000 €");
+  }
+  // Prueft auch die Rolle.
+  const reihe = await ctx.runQuery(internal.leserAbo.reiheFuerPreis, { publicationId, modus: konfig.modus });
+  const stripe = stripeClient(konfig.secretKey);
+  const productId =
+    reihe.productId ??
+    (
+      await stripe(
+        "POST",
+        "products",
+        {
+          name: `${reihe.name} Digital-Jahresabo`,
+          metadata: { source: ABO_HERKUNFT, publicationId },
+        },
+        `leser-abo-produkt-${publicationId}-${konfig.modus}`,
+      )
+    ).id;
+  const preis = await stripe(
+    "POST",
+    "prices",
+    {
+      product: productId,
+      unit_amount: priceAmountCents,
+      currency: "eur",
+      recurring: { interval: "year" },
+      tax_behavior: "inclusive",
+      nickname: variante.name,
+      metadata: { source: ABO_HERKUNFT, publicationId, tier: variante.tier, region: variante.region },
+    },
+    `leser-abo-preis-${publicationId}-${konfig.modus}-${variante.sortOrder}-${priceAmountCents}`,
+  );
+  await ctx.runMutation(internal.leserAbo.planSetzen, {
+    publicationId,
+    modus: konfig.modus,
+    tier: variante.tier,
+    tierNote: variante.tierNote,
+    region: variante.region,
+    name: variante.name,
+    sortOrder: variante.sortOrder,
+    priceAmountCents,
+    stripePriceId: preis.id,
+    stripeProductId: productId,
+    stripeTaxRateId: await steuersatz(stripe),
+  });
+}
+
 /**
- * Preis des Jahresabos einer Reihe setzen (Redaktion → Einstellungen). Legt
- * bei Stripe Produkt (einmal je Reihe), Jahrespreis und Steuersatz an. Ein
- * neuer Preis gilt fuer neue Abschluesse; laufende Abos behalten ihren.
- * `priceAmountCents: null` nimmt das Abo aus dem Verkauf.
+ * Preis einer Stufe setzen (Redaktion → Einstellungen). Ein neuer Preis gilt
+ * fuer neue Abschluesse; laufende Abos behalten ihren.
+ * `priceAmountCents: null` nimmt die Stufe aus dem Verkauf.
  */
 export const preisSetzen = action({
-  args: { publicationId: v.id("publications"), priceAmountCents: v.union(v.number(), v.null()) },
-  handler: async (ctx, { publicationId, priceAmountCents }): Promise<null> => {
+  args: {
+    publicationId: v.id("publications"),
+    ...stufe,
+    priceAmountCents: v.union(v.number(), v.null()),
+  },
+  handler: async (ctx, { publicationId, tier, region, priceAmountCents }): Promise<null> => {
     const konfig = konfigOderFehler();
     if (priceAmountCents === null) {
-      await ctx.runMutation(internal.leserAbo.verkaufBeenden, { publicationId, modus: konfig.modus });
+      await ctx.runMutation(internal.leserAbo.stufeBeenden, { publicationId, modus: konfig.modus, tier, region });
       return null;
     }
-    if (!Number.isInteger(priceAmountCents) || priceAmountCents < 100 || priceAmountCents > 100_000) {
-      throw new Error("Preis in Cent zwischen 1 € und 1000 €");
-    }
-    // Prueft auch die Rolle.
-    const reihe = await ctx.runQuery(internal.leserAbo.reiheFuerPreis, {
-      publicationId,
-      modus: konfig.modus,
-    });
-    const stripe = stripeClient(konfig.secretKey);
-    const productId =
-      reihe.productId ??
-      (
-        await stripe(
-          "POST",
-          "products",
-          {
-            name: `${reihe.name} Digital-Jahresabo`,
-            metadata: { source: ABO_HERKUNFT, publicationId },
-          },
-          `leser-abo-produkt-${publicationId}-${konfig.modus}`,
-        )
-      ).id;
-    const preis = await stripe(
-      "POST",
-      "prices",
-      {
-        product: productId,
-        unit_amount: priceAmountCents,
-        currency: "eur",
-        recurring: { interval: "year" },
-        tax_behavior: "inclusive",
-        metadata: { source: ABO_HERKUNFT, publicationId },
-      },
-      `leser-abo-preis-${publicationId}-${konfig.modus}-${priceAmountCents}`,
-    );
-    await ctx.runMutation(internal.leserAbo.planSetzen, {
-      publicationId,
-      modus: konfig.modus,
-      priceAmountCents,
-      stripePriceId: preis.id,
-      stripeProductId: productId,
-      stripeTaxRateId: await steuersatz(stripe),
-    });
+    const reihe = await ctx.runQuery(internal.leserAbo.reiheFuerPreis, { publicationId, modus: konfig.modus });
+    const variante = reihe.varianten.find((x) => x.tier === tier && x.region === region);
+    if (!variante) throw new Error("Diese Stufe steht nicht im Abo-Katalog der Reihe.");
+    await stufePreisAnlegen(ctx, konfig, publicationId, variante, priceAmountCents);
     return null;
+  },
+});
+
+/** Alle Katalogstufen der Reihe, die noch nicht im Verkauf sind, zum Katalogpreis anlegen. */
+export const katalogUebernehmen = action({
+  args: { publicationId: v.id("publications") },
+  handler: async (ctx, { publicationId }): Promise<{ angelegt: number }> => {
+    const konfig = konfigOderFehler();
+    const reihe = await ctx.runQuery(internal.leserAbo.reiheFuerPreis, { publicationId, modus: konfig.modus });
+    let angelegt = 0;
+    for (const variante of reihe.varianten) {
+      if (reihe.aktiv.some((a) => a.tier === variante.tier && a.region === variante.region)) continue;
+      await stufePreisAnlegen(ctx, konfig, publicationId, variante, variante.priceAmountCents);
+      angelegt++;
+    }
+    return { angelegt };
   },
 });
 
@@ -359,7 +472,7 @@ export const abschliessen = action({
       customer_update: { address: "auto", name: "auto" },
       metadata: merkmale,
       subscription_data: {
-        description: `${vb.reihe} Digital-Jahresabo`,
+        description: `${vb.reihe} Digital-Jahresabo, ${vb.plan.name}`,
         metadata: merkmale,
       },
     });

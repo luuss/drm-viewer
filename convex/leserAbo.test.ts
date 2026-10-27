@@ -99,25 +99,42 @@ describe("leserAbo", () => {
     });
   });
 
-  test("ein neuer Preis loest den alten ab; im Angebot nur im Modus der Kasse", async () => {
+  test("ein neuer Preis loest den alten seiner Stufe ab; im Angebot nur im Modus der Kasse", async () => {
     const t = convexTest(schema, modules);
     const s = await aufbau(t);
-    const setzen = (cents: number, modus: "test" | "live") =>
+    const setzen = (
+      cents: number,
+      modus: "test" | "live",
+      tier = "Normalabonnement",
+      region: "inland" | "ausland" | null = "inland",
+      sortOrder = 0,
+    ) =>
       t.mutation(internal.leserAbo.planSetzen, {
         publicationId: s.publicationId,
         modus,
+        tier,
+        region: region ?? undefined,
+        name: `${tier} ${region ?? ""}`.trim(),
+        sortOrder,
         priceAmountCents: cents,
         stripePriceId: `price_${cents}_${modus}`,
         stripeProductId: "prod_1",
         stripeTaxRateId: "txr_1",
       });
-    await setzen(4900, "live");
-    await setzen(5900, "live");
+    // Der fruehere Einzelpreis ohne Gebiet geht mit der ersten Katalogstufe.
+    await setzen(4900, "live", "Jahresabo", null);
+    await setzen(10440, "live");
+    await setzen(10900, "live");
+    await setzen(13320, "live", "Normalabonnement", "ausland", 1);
+    await setzen(9000, "live", "Schüler- und Studentenabonnement", "inland", 10);
     await setzen(100, "test");
     const offers = await t.query(api.plans.offers, {});
     expect(offers).toHaveLength(1);
-    expect(offers[0].headline).toMatchObject({ priceAmountCents: 5900, interval: "year" });
-    expect(offers[0].tiers.flatMap((x: any) => x.plans)).toHaveLength(1);
+    expect(offers[0].headline).toMatchObject({ priceAmountCents: 10900, interval: "year" });
+    expect(offers[0].tiers.map((x: any) => [x.tier, x.plans.map((p: any) => p.priceAmountCents)])).toEqual([
+      ["Normalabonnement", [10900, 13320]],
+      ["Schüler- und Studentenabonnement", [9000]],
+    ]);
 
     delete process.env.LESER_STRIPE_MODE;
     expect(await t.query(api.plans.offers, {})).toEqual([]);
