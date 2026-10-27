@@ -484,7 +484,19 @@ Zeit, Quelle `netzladen`|`leser`, `id_order`).
 * Bestellbestaetigung (`sendMailAlterTemplateVars`): Kasten „Ihre Zustimmung
   zum vorzeitigen Beginn (Widerrufsverzicht)“ nur mit den Positionen, fuer die
   er erteilt wurde, plus „Fuer alle uebrigen Artikel dieser Bestellung besteht
-  Ihr Widerrufsrecht unveraendert.“ (§ 312f Abs. 3 BGB).
+  Ihr Widerrufsrecht unveraendert.“ (§ 312f Abs. 3 BGB); den Satz nur, wenn
+  es uebrige Artikel gibt.
+* Die Vorlagen `mails/de/{order_conf,payment,preparation,bankwire,cheque}`
+  enthalten fest den Satz „Sie haben das Recht, binnen vierzehn Tagen ab
+  Erhalt der Ware …“. Bei erteiltem Verzicht ersetzt ihn
+  `hookActionEmailAddAfterContent` (`WIDERRUF_SATZ`) durch „Fuer die
+  Digitalausgabe „…“ haben Sie ausdruecklich zugestimmt … erlischt daher mit
+  der Freischaltung.“, bei weiteren Artikeln ergaenzt um das Widerrufsrecht
+  fuer diese. Ohne Verzicht bleibt der Satz der Vorlage.
+* `LusdigitalVerzicht::speichern` fuegt ohne `null_values` ein. Bis
+  27.10.2026 machte `null_values` aus der leeren IP der Leser-Kaeufe NULL,
+  das Einfuegen scheiterte (Spalte NOT NULL), und fuer Leser-Kaeufe fehlten
+  Verzichtszeile und Bestaetigung in der Mail.
 
 Im Shop (`classes/LeserKauf.php`):
 
