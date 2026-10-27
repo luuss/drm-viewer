@@ -1440,26 +1440,28 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .reihe-weg:hover .reihe-weg-seite img { transform: scale(1.03); }
 /* Kontakt: eine kompakte Karte, Eintraege untereinander, jeder klickbar. */
 .reihe-kontakt-karte {
-  max-width: 36rem;
-  padding: var(--s5);
+  max-width: 24rem;
+  padding: var(--s3) var(--s4);
   background: var(--surface);
   border: 1px solid var(--rule);
   border-top: 4px solid var(--reihe);
 }
-.reihe-kontakt-karte h3 { margin: 0 0 var(--s3); }
+.reihe-kontakt-karte h3 { margin: 0 0 var(--s1); padding-bottom: var(--s1); font-size: var(--fs-h4); }
 .reihe-kontakt-liste { list-style: none; margin: 0; padding: 0; }
 .reihe-kontakt-liste li + li { border-top: 1px solid var(--rule); }
 .reihe-kontakt-liste a {
   display: flex;
   align-items: center;
   gap: var(--s3);
-  padding: var(--s3) 0;
+  padding: var(--s2) 0;
   color: var(--ink);
+  font-size: var(--fs-sub);
   font-weight: 600;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.reihe-kontakt-liste a > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.reihe-kontakt-liste a > span { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; }
+.reihe-kontakt-liste .reihe-kontakt-art { flex: 0 0 5.5rem; }
 .reihe-kontakt-liste .icon { flex: 0 0 auto; color: var(--reihe); }
 .reihe-kontakt-liste a:hover { color: var(--reihe); }
 .reihe-kontakt-art {
@@ -1469,7 +1471,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
   text-transform: uppercase;
   color: var(--muted);
 }
-.reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
+.reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
 .reihe-social-link {
   display: inline-flex;
   align-items: center;
@@ -1483,7 +1485,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
 }
 .reihe-social-link:hover { background: var(--reihe); color: #fff; }
 /* Markenfarben der Netze: gefuellte Flaeche, Zeichen und Schrift weiss */
-.reihe-social-link[data-netz] { --netz: var(--reihe); border: 0; padding: calc(var(--s2) + 2px) calc(var(--s4) + 2px); background: var(--netz); color: #fff; }
+.reihe-social-link[data-netz] { --netz: var(--reihe); border: 0; padding: 0; width: 2.25rem; height: 2.25rem; justify-content: center; background: var(--netz); color: #fff; }
 .reihe-social-link[data-netz="telegram"] { --netz: #26a5e4; }
 .reihe-social-link[data-netz="facebook"] { --netz: #0866ff; }
 .reihe-social-link[data-netz="instagram"] { --netz: #e4405f; background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }

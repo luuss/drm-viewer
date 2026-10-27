@@ -287,9 +287,9 @@ export default function ReihePage() {
                     className="reihe-social-link"
                     data-netz={s.name.toLowerCase()}
                     aria-label={`${reihe.name} bei ${s.name}`}
+                    title={s.name}
                   >
                     <SocialIcon name={s.name} />
-                    <span>{s.name}</span>
                   </a>
                 ))}
               </div>
