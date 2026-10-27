@@ -4250,19 +4250,48 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   gap: var(--s4) var(--s3);
   margin-top: var(--s5);
 }
+/* Trenner: weisse Kachel in Umschlaggroesse mit dem Schriftzug, unten die
+   schwarze Leiste wie bei den Zeitschriftenkacheln im Kiosk. */
 .kompakt-trenner {
   display: flex;
-  align-items: flex-end;
-  padding: var(--s3);
-  background: var(--reihe, var(--ink-soft));
-  color: #fff;
+  flex-direction: column;
+  align-self: start;
   aspect-ratio: 3 / 4;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  color: var(--ink);
+  text-decoration: none;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
-.kompakt-trenner span {
+.kompakt-trenner:hover { color: var(--ink); box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+.kompakt-trenner-logo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s3);
+  min-height: 0;
+}
+.kompakt-trenner-logo img {
+  display: block;
+  max-width: 100%;
+  max-height: 3.25rem;
+  object-fit: contain;
+}
+.kompakt-trenner.reihe-dmz img { max-height: 4rem; }
+.kompakt-trenner-name { font-weight: 700; font-size: var(--fs-sub); text-align: center; overflow-wrap: anywhere; }
+.kompakt-trenner-fuss {
+  padding: var(--s1) var(--s2);
+  background: #1c1c1c;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.6875rem;
   font-weight: 700;
-  font-size: var(--fs-sub);
-  line-height: 1.2;
-  overflow-wrap: anywhere;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
 }
 .kompakt-heft {
   display: flex;
@@ -4341,3 +4370,16 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   .heft-liste a { gap: var(--s3); padding: var(--s2) var(--s3); }
   .heft-liste-stand, .heft-liste-go span { display: none; }
 }
+
+/* Liste: dicht, kleine Ueberschriften, ohne Balken. */
+.bibliothek-reihe.liste { margin-top: var(--s5); }
+.bibliothek-reihe.liste h3 {
+  font-size: var(--fs-sub);
+  margin-bottom: var(--s2);
+  padding-bottom: var(--s1);
+}
+.bibliothek-reihe.liste .bibliothek-jahrgang + .bibliothek-jahrgang { margin-top: var(--s3); }
+.bibliothek-reihe.liste .jahrgang-kopf { gap: var(--s2); margin-bottom: var(--s1); }
+.bibliothek-reihe.liste .jahrgang-kopf h4 { font-size: var(--fs-mini); color: var(--ink-soft); }
+.bibliothek-reihe.liste .heft-liste a { gap: var(--s3); padding: var(--s1) var(--s3); }
+.bibliothek-reihe.liste .heft-liste-umschlag { flex-basis: 2.25rem; }

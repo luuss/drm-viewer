@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { api } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
-import { REIHENFOLGE, reiheVon, reihenSchluessel } from "../lib/reihen";
+import { REIHENFOLGE, reiheVon, reihenSchluessel, type Reihe } from "../lib/reihen";
 
 const MONATE = [
   "jan", "feb", "mär", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "dez",
@@ -125,7 +125,7 @@ export default function LibraryPage() {
   type Heft = (typeof issues)[number] & { rang: number };
   const reihen = new Map<
     string,
-    { name: string; farbe: string | null; jahrgaenge: Map<number | null, Heft[]> }
+    { name: string; reihe: Reihe | null; jahrgaenge: Map<number | null, Heft[]> }
   >();
   for (const i of issues) {
     const key = reihenSchluessel(i.publicationName);
@@ -134,7 +134,7 @@ export default function LibraryPage() {
       const reihe = reiheVon(i.publicationName);
       reihen.set(key, {
         name: reihe?.name ?? i.publicationName ?? i.displayTitle,
-        farbe: reihe?.farbe ?? null,
+        reihe,
         jahrgaenge: new Map(),
       });
     }
@@ -148,7 +148,8 @@ export default function LibraryPage() {
     .map(([key, r]) => ({
       key,
       name: r.name,
-      farbe: r.farbe,
+      reihe: r.reihe,
+      anzahl: [...r.jahrgaenge.values()].reduce((n, h) => n + h.length, 0),
       jahrgaenge: [...r.jahrgaenge]
         .sort(([a], [b]) => (b ?? 0) - (a ?? 0))
         .map(([jahr, hefte]) => ({
@@ -176,16 +177,18 @@ export default function LibraryPage() {
     jahr !== null && (
       <div className="jahrgang-kopf">
         <h4>Jahrgang {jahr}</h4>
-        <div
-          className="jahrgang-balken"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={gesamt}
-          aria-valuenow={anzahl}
-          aria-label={`Jahrgang ${jahr}: ${anzahl} von ${gesamt}`}
-        >
-          <span style={{ width: `${(anzahl / gesamt) * 100}%` }} />
-        </div>
+        {ansicht !== "liste" && (
+          <div
+            className="jahrgang-balken"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={gesamt}
+            aria-valuenow={anzahl}
+            aria-label={`Jahrgang ${jahr}: ${anzahl} von ${gesamt}`}
+          >
+            <span style={{ width: `${(anzahl / gesamt) * 100}%` }} />
+          </div>
+        )}
         <span className="jahrgang-zahl">
           {anzahl} von {gesamt}
         </span>
@@ -214,17 +217,31 @@ export default function LibraryPage() {
       </div>
 
       {ansicht === "kompakt" ? (
-        // Alle Hefte in einem Raster; die Zeitschriften trennen nur schmale
-        // Felder in ihrer Farbe.
+        // Alle Hefte in einem Raster; vor den Heften einer Zeitschrift steht
+        // ihr Schriftzug als Kachel in Umschlaggroesse, wie im Kiosk.
         <div className="kompakt-raster">
           {gruppen.map((g) => [
-            <div
+            <Link
               key={g.key}
-              className="kompakt-trenner"
-              style={g.farbe ? ({ "--reihe": g.farbe } as CSSProperties) : undefined}
+              to={g.reihe ? `/zeitschrift/${g.reihe.slug}` : "/"}
+              className={`kompakt-trenner${g.reihe ? ` reihe-${g.reihe.slug}` : ""}`}
+              aria-label={`${g.name}, ${g.anzahl} ${g.anzahl === 1 ? "Ausgabe" : "Ausgaben"}`}
             >
-              <span>{g.name}</span>
-            </div>,
+              <span className="kompakt-trenner-logo">
+                {g.reihe ? (
+                  <img
+                    src={g.reihe.hell}
+                    alt={g.reihe.alt}
+                    className={g.reihe.kasten ? "kasten" : undefined}
+                  />
+                ) : (
+                  <span className="kompakt-trenner-name">{g.name}</span>
+                )}
+              </span>
+              <span className="kompakt-trenner-fuss">
+                {g.anzahl} {g.anzahl === 1 ? "Ausgabe" : "Ausgaben"}
+              </span>
+            </Link>,
             ...g.jahrgaenge.flatMap((j) =>
               j.hefte.map((i) => (
                 <Link key={i._id} to={`/reader/${i._id}`} className="kompakt-heft">
@@ -238,7 +255,10 @@ export default function LibraryPage() {
         </div>
       ) : (
         gruppen.map((g) => (
-          <section key={g.key} className="bibliothek-reihe">
+          <section
+            key={g.key}
+            className={ansicht === "liste" ? "bibliothek-reihe liste" : "bibliothek-reihe"}
+          >
             <h3>{g.name}</h3>
             {g.jahrgaenge.map(({ jahr, gesamt, hefte }) => (
               <div key={jahr ?? "ohne"} className="bibliothek-jahrgang">
