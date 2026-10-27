@@ -1,9 +1,18 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, query, ActionCtx } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  query,
+  ActionCtx,
+  QueryCtx,
+} from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Doc, Id } from "./_generated/dataModel";
-import { normalizeEmail } from "./access";
+import { normalizeEmail, shopSubscriptionIsActive, subscriptionIsActive } from "./access";
+import { reihenDesAbos } from "./subscriptions";
 import { audit, requireAdmin } from "./roles";
 import { WITHDRAWAL_WAIVER_TEXT, WITHDRAWAL_WAIVER_VERSION } from "./consents";
 import { StripeKonfig, StripeModus, secretKeyFuer, stripeKonfig } from "./leserStripe";
@@ -14,6 +23,8 @@ import {
   PlanVariant,
   SUBSCRIPTION_CATALOG,
   catalogVariants,
+  kombiRegel,
+  kombisMit,
 } from "./subscriptionCatalog";
 
 /**
@@ -55,6 +66,17 @@ function ms(s: number | null | undefined): number | undefined {
 /** Abo-Objekt aus Stripe als Argumente fuer `subscriptions.upsertFromStripe`. */
 export function aboAusStripe(s: any, modus: StripeModus, geloescht = false) {
   const posten = s?.items?.data?.[0];
+  const haupt = s.metadata?.publicationId || undefined;
+  // Beim gemeinsamen Kombi-Abo traegt jeder Posten die Reihe seines Preises.
+  const weitere = [
+    ...new Set<string>(
+      [
+        ...(s?.items?.data ?? []).map((x: any) => x?.price?.metadata?.publicationId),
+        ...String(s.metadata?.weitereReihen ?? "").split(","),
+      ].filter((id: any) => id && id !== haupt),
+    ),
+  ];
+  const kombi = s.metadata?.kombi;
   return {
     stripeSubscriptionId: String(s.id),
     stripeCustomerId: typeof s.customer === "string" ? s.customer : String(s.customer?.id ?? ""),
@@ -65,10 +87,121 @@ export function aboAusStripe(s: any, modus: StripeModus, geloescht = false) {
     cancelAtPeriodEnd: geloescht ? true : Boolean(s.cancel_at_period_end),
     endedAt: geloescht ? (ms(s.ended_at) ?? Date.now()) : ms(s.ended_at),
     userId: s.metadata?.userId || undefined,
-    publicationId: s.metadata?.publicationId || undefined,
+    publicationId: haupt,
+    weitereReihen: weitere.length > 0 ? (weitere as Id<"publications">[]) : undefined,
+    kombi: kombi === "zusammen" || kombi === "vorhanden" || kombi === "entfallen" ? kombi : undefined,
     stripeModus: modus,
   };
 }
+
+// --- Kombi-Abo ------------------------------------------------------------------
+
+/** Laufendes Abo der Reihe, im Leser oder als Digital-Abo aus dem Netzladen? */
+export async function hatLaufendesAbo(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  publicationId: Id<"publications">,
+): Promise<boolean> {
+  const subs = await ctx.db
+    .query("subscriptions")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  if (subs.some((s) => subscriptionIsActive(s) && reihenDesAbos(s).includes(publicationId))) {
+    return true;
+  }
+  const email = normalizeEmail((await ctx.db.get(userId))?.email);
+  if (!email) return false;
+  const zeilen = await ctx.db
+    .query("shopAccess")
+    .withIndex("by_email_publication", (q) => q.eq("email", email).eq("publicationId", publicationId))
+    .take(200);
+  return zeilen.some((z) => shopSubscriptionIsActive(z));
+}
+
+/**
+ * Lage einer Kombi-Stufe: Partnerreihe, deren Stufe im selben Gebiet (fuer
+ * den gemeinsamen Abschluss) und ob das Konto dort schon ein Abo hat.
+ * `null`, wenn die Stufe keine Kombi ist.
+ */
+async function kombiLage(ctx: QueryCtx, plan: Doc<"subscriptionPlans">, userId: Id<"users"> | null) {
+  const reihe = await ctx.db.get(plan.publicationId);
+  const regel = reihe ? kombiRegel(reihe.slug, plan.tier) : null;
+  if (!regel) return null;
+  const partner = await ctx.db
+    .query("publications")
+    .withIndex("by_slug", (q) => q.eq("slug", regel.mit))
+    .unique();
+  if (!partner?.isActive) return { regel, partner: null, partnerPlan: null, vorhanden: false };
+  const partnerPlan =
+    (
+      await ctx.db
+        .query("subscriptionPlans")
+        .withIndex("by_publication", (q) => q.eq("publicationId", partner._id))
+        .collect()
+    ).find(
+      (p) =>
+        p.isActive &&
+        p.stripeModus === plan.stripeModus &&
+        (p.tier ?? p.name) === regel.mitStufe &&
+        p.region === plan.region,
+    ) ?? null;
+  const vorhanden = userId ? await hatLaufendesAbo(ctx, userId, partner._id) : false;
+  return { regel, partner, partnerPlan, vorhanden };
+}
+
+/**
+ * Kombi-Angaben fuer die Abo-Seite: je Kombi-Stufe der Reihe die Partnerreihe,
+ * der Preis beider zusammen und ob das Konto dort schon ein Abo hat; dazu die
+ * Kombi-Abos anderer Reihen, die diese Reihe einschliessen.
+ */
+export const kombiAngebot = query({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    const reihe = await ctx.db
+      .query("publications")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    const modus = stripeKonfig()?.modus;
+    if (!reihe || !modus) return { stufen: [], alsPartner: [] };
+    const userId = (await getAuthUserId(ctx)) as Id<"users"> | null;
+    const plaene = (
+      await ctx.db
+        .query("subscriptionPlans")
+        .withIndex("by_publication", (q) => q.eq("publicationId", reihe._id))
+        .collect()
+    ).filter((p) => p.isActive && p.stripeModus === modus);
+    const stufen = [];
+    for (const plan of plaene) {
+      const lage = await kombiLage(ctx, plan, userId);
+      if (!lage?.partner) continue;
+      stufen.push({
+        planId: plan._id,
+        partnerName: lage.partner.name,
+        partnerSlug: lage.partner.slug,
+        partnerStufe: lage.partnerPlan?.name ?? null,
+        zusammenCents: lage.partnerPlan ? plan.priceAmountCents + lage.partnerPlan.priceAmountCents : null,
+        vorhanden: lage.vorhanden,
+      });
+    }
+    const alsPartner = [];
+    for (const k of kombisMit(slug)) {
+      const andere = await ctx.db
+        .query("publications")
+        .withIndex("by_slug", (q) => q.eq("slug", k.reihe))
+        .unique();
+      if (!andere?.isActive) continue;
+      const kombiPlaene = (
+        await ctx.db
+          .query("subscriptionPlans")
+          .withIndex("by_publication", (q) => q.eq("publicationId", andere._id))
+          .collect()
+      ).filter((p) => p.isActive && p.stripeModus === modus && p.tier === k.tier);
+      if (kombiPlaene.length === 0) continue;
+      alsPartner.push({ reiheName: andere.name, reiheSlug: andere.slug, tier: k.tier });
+    }
+    return { stufen, alsPartner };
+  },
+});
 
 // --- Preise anlegen (Redaktion) -------------------------------------------------
 
@@ -356,12 +489,23 @@ export const abschlussVorbereiten = internalQuery({
       .query("leserKarten")
       .withIndex("by_user_modus", (q) => q.eq("userId", userId).eq("modus", modus))
       .unique();
+    const lage = await kombiLage(ctx, plan, userId);
     return {
       email,
       plan: plan as Doc<"subscriptionPlans">,
       reihe: publication.name,
       slug: publication.slug,
       stripeCustomerId: karte?.stripeCustomerId ?? null,
+      kombi: lage
+        ? {
+            partnerId: lage.partner?._id ?? null,
+            partnerName: lage.partner?.name ?? lage.regel.mit,
+            partnerPreis: lage.partnerPlan
+              ? { priceId: lage.partnerPlan.stripePriceId, taxRateId: lage.partnerPlan.stripeTaxRateId ?? null }
+              : null,
+            vorhanden: lage.vorhanden,
+          }
+        : null,
     };
   },
 });
@@ -437,6 +581,8 @@ export const abschliessen = action({
   args: {
     planId: v.id("subscriptionPlans"),
     widerrufsverzicht: v.boolean(),
+    // Nur bei einer Kombi-Stufe: Partnerabo mit abschliessen oder schon vorhanden.
+    kombi: v.optional(v.union(v.literal("zusammen"), v.literal("vorhanden"))),
     successUrl: v.string(),
     cancelUrl: v.string(),
   },
@@ -453,6 +599,32 @@ export const abschliessen = action({
       planId: args.planId,
       modus: konfig.modus,
     });
+    const posten: Record<string, unknown>[] = [
+      { price: vb.plan.stripePriceId, quantity: 1, tax_rates: [vb.plan.stripeTaxRateId] },
+    ];
+    const kombiMerkmale: Record<string, string> = {};
+    let beschreibung = `${vb.reihe} Digital-Jahresabo, ${vb.plan.name}`;
+    if (vb.kombi) {
+      const { partnerId, partnerName, partnerPreis, vorhanden } = vb.kombi;
+      if (args.kombi === "zusammen") {
+        if (!partnerId || !partnerPreis?.taxRateId) {
+          throw new Error(`Das Kombi-Abo zusammen mit ${partnerName} gibt es in diesem Liefergebiet nicht.`);
+        }
+        posten.push({ price: partnerPreis.priceId, quantity: 1, tax_rates: [partnerPreis.taxRateId] });
+        kombiMerkmale.kombi = "zusammen";
+        kombiMerkmale.weitereReihen = partnerId;
+        beschreibung = `${vb.reihe} und ${partnerName} Digital-Jahresabo, ${vb.plan.name}`;
+      } else if (args.kombi === "vorhanden") {
+        if (!vorhanden) {
+          throw new Error(
+            `Das Kombi-Abo setzt ein laufendes Digital-Abo von ${partnerName} voraus. Schließen Sie beide zusammen ab.`,
+          );
+        }
+        kombiMerkmale.kombi = "vorhanden";
+      } else {
+        throw new Error(`Bitte wählen, ob ${partnerName} mit abonniert wird.`);
+      }
+    }
     const stripe = stripeClient(konfig.secretKey);
     const kunde = await kundeFuer(ctx, stripe, konfig, userId, vb.email, vb.stripeCustomerId);
     const merkmale = {
@@ -460,11 +632,12 @@ export const abschliessen = action({
       planId: args.planId,
       userId,
       publicationId: vb.plan.publicationId,
+      ...kombiMerkmale,
     };
     const sitzung = await stripe("POST", "checkout/sessions", {
       mode: "subscription",
       customer: kunde,
-      line_items: [{ price: vb.plan.stripePriceId, quantity: 1, tax_rates: [vb.plan.stripeTaxRateId] }],
+      line_items: posten,
       success_url: eigeneAdresse(args.successUrl, "https://digital.lesenundschenken.de/library?abo=1"),
       cancel_url: eigeneAdresse(args.cancelUrl, `https://digital.lesenundschenken.de/abo/${vb.slug}`),
       locale: "de",
@@ -472,7 +645,7 @@ export const abschliessen = action({
       customer_update: { address: "auto", name: "auto" },
       metadata: merkmale,
       subscription_data: {
-        description: `${vb.reihe} Digital-Jahresabo, ${vb.plan.name}`,
+        description: beschreibung,
         metadata: merkmale,
       },
     });
@@ -626,3 +799,86 @@ export async function aboEreignis(
   }
   return false;
 }
+
+// --- Kombi ohne Partnerabo -----------------------------------------------------------
+
+/** Tage vor der Verlaengerung, ab denen ein Kombi-Abo ohne Partnerabo umgestellt wird. */
+const KOMBI_VORLAUF_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Kombi-Abos "vorhanden", die bald verlaengern, obwohl das Konto kein Abo der
+ * Partnerreihe mehr hat, mit dem Preis, zu dem sie weiterlaufen.
+ */
+export const kombiFaellig = internalQuery({
+  args: { modus: v.union(v.literal("test"), v.literal("live")) },
+  handler: async (ctx, { modus }) => {
+    const jetzt = Date.now();
+    const out: { stripeSubscriptionId: string; preisId: string; steuerId: string; name: string }[] = [];
+    for (const sub of await ctx.db.query("subscriptions").collect()) {
+      if (sub.kombi !== "vorhanden" || sub.stripeModus !== modus || sub.cancelAtPeriodEnd) continue;
+      if (!subscriptionIsActive(sub) || sub.currentPeriodEnd === undefined) continue;
+      if (sub.currentPeriodEnd - jetzt > KOMBI_VORLAUF_MS) continue;
+      const plan = sub.stripePriceId
+        ? await ctx.db
+            .query("subscriptionPlans")
+            .withIndex("by_stripe_price", (q) => q.eq("stripePriceId", sub.stripePriceId!))
+            .first()
+        : null;
+      if (!plan) continue;
+      const lage = await kombiLage(ctx, plan, sub.userId);
+      if (!lage || lage.vorhanden) continue;
+      const sonst = (
+        await ctx.db
+          .query("subscriptionPlans")
+          .withIndex("by_publication", (q) => q.eq("publicationId", plan.publicationId))
+          .collect()
+      ).find(
+        (p) =>
+          p.isActive &&
+          p.stripeModus === modus &&
+          (p.tier ?? p.name) === lage.regel.sonst &&
+          p.region === plan.region &&
+          p.stripeTaxRateId,
+      );
+      if (!sonst) {
+        console.warn(`Kombi-Abo ${sub.stripeSubscriptionId}: keine Stufe ${lage.regel.sonst} im Verkauf`);
+        continue;
+      }
+      out.push({
+        stripeSubscriptionId: sub.stripeSubscriptionId,
+        preisId: sonst.stripePriceId,
+        steuerId: sonst.stripeTaxRateId!,
+        name: sonst.name,
+      });
+    }
+    return out;
+  },
+});
+
+/**
+ * Taeglich: Kombi-Abos ohne Partnerabo verlaengern zum Preis der Stufe
+ * `sonst` (AGB § 7). Ohne anteilige Verrechnung; der neue Preis gilt ab der
+ * naechsten Laufzeit.
+ */
+export const kombiPruefen = internalAction({
+  args: {},
+  handler: async (ctx): Promise<number> => {
+    const konfig = stripeKonfig();
+    if (!konfig) return 0;
+    const faellig = await ctx.runQuery(internal.leserAbo.kombiFaellig, { modus: konfig.modus });
+    const stripe = stripeClient(konfig.secretKey);
+    for (const f of faellig) {
+      const s = await stripe("GET", `subscriptions/${f.stripeSubscriptionId}`, {});
+      const posten = s?.items?.data?.[0];
+      if (!posten) continue;
+      const neu = await stripe("POST", `subscriptions/${f.stripeSubscriptionId}`, {
+        items: [{ id: posten.id, price: f.preisId, tax_rates: [f.steuerId] }],
+        proration_behavior: "none",
+        metadata: { kombi: "entfallen" },
+      });
+      await ctx.runMutation(internal.subscriptions.upsertFromStripe, aboAusStripe(neu, konfig.modus));
+      console.log(JSON.stringify({ event: "abo.kombiEntfallen", abo: f.stripeSubscriptionId, neu: f.name }));
+    }
+    return faellig.length;
+  },
+});

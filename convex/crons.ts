@@ -36,6 +36,9 @@ crons.cron(
   {},
 );
 
+/** Kombi-Abos ohne Abo der Partnerreihe vor der Verlaengerung auf den Normalpreis stellen. */
+crons.daily("kombi-abos pruefen", { hourUTC: 3, minuteUTC: 10 }, internal.leserAbo.kombiPruefen, {});
+
 /** Anmeldelinks aelter als ein Tag loeschen (gueltig sind sie nur 15 min). */
 crons.interval("anmeldelinks aufraeumen", { hours: 6 }, internal.magicLink.cleanupInternal, {});
 

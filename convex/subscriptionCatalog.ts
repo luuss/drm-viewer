@@ -29,6 +29,13 @@ export type CatalogTier = {
   note?: string;
   /** Jahrespreis je Liefergebiet. Fehlt ein Gebiet, gibt es die Stufe dort nicht. */
   prices: Partial<Record<DeliveryRegion, number>>;
+  /**
+   * Kombi-Abo: gilt nur zusammen mit einem Abo der Reihe `mit`. Abgeschlossen
+   * wird es entweder mit deren Stufe `mitStufe` im selben Liefergebiet in
+   * einem gemeinsamen Abo oder zu einem schon laufenden Digital-Abo dieser
+   * Reihe; endet jenes, verlaengert es sich als `sonst` (leserAbo.ts).
+   */
+  kombi?: { mit: string; mitStufe: string; sonst: string };
 };
 
 export type CatalogEntry = {
@@ -54,6 +61,7 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
         name: "Kombi-Abonnement",
         note: "Zusammen mit einem Abonnement der Deutschen Militärzeitschrift",
         prices: { inland: 9600, ausland: 12480 },
+        kombi: { mit: "dmz", mitStufe: "Normalabonnement", sonst: "Normalabonnement" },
       },
       {
         name: "Förderabonnement",
@@ -131,6 +139,22 @@ export type PlanVariant = {
   /** Abo-Art mal zehn plus Liefergebiet: haelt die Katalogreihenfolge. */
   sortOrder: number;
 };
+
+/** Kombi-Regel einer Abo-Art, sofern sie eine ist. */
+export function kombiRegel(slug: string, tier: string | undefined): CatalogTier["kombi"] | null {
+  return SUBSCRIPTION_CATALOG[slug]?.tiers.find((t) => t.name === tier)?.kombi ?? null;
+}
+
+/** Kombi-Abos anderer Reihen, die ein Abo der Reihe `slug` voraussetzen. */
+export function kombisMit(slug: string): { reihe: string; tier: string }[] {
+  const out: { reihe: string; tier: string }[] = [];
+  for (const [reihe, entry] of Object.entries(SUBSCRIPTION_CATALOG)) {
+    for (const tier of entry.tiers) {
+      if (tier.kombi?.mit === slug) out.push({ reihe, tier: tier.name });
+    }
+  }
+  return out;
+}
 
 /** Alle Preisstufen eines Katalogeintrags in Anzeigereihenfolge. */
 export function catalogVariants(entry: CatalogEntry): PlanVariant[] {
