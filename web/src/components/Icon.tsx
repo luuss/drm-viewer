@@ -10,10 +10,12 @@ export type IconName =
   | "kiosk"
   | "library"
   | "list"
+  | "mail"
   | "login"
   | "logout"
   | "menu"
   | "pages"
+  | "phone"
   | "search"
   | "spread"
   | "user"
@@ -86,9 +88,15 @@ export default function Icon({ name, className = "", size = 18 }: Props) {
       {name === "logout" && (
         <><path d="M10 4H5v16h5" /><path d="M21 12H9" /><path d="m16 7 5 5-5 5" /></>
       )}
+      {name === "mail" && (
+        <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3.5 6.5 8.5 6.5 8.5-6.5" /></>
+      )}
       {name === "menu" && <path d="M3 6h18M3 12h18M3 18h18" />}
       {name === "pages" && (
         <><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 7h6M9 11h6M9 15h4" /></>
+      )}
+      {name === "phone" && (
+        <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" />
       )}
       {name === "search" && (
         <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /></>

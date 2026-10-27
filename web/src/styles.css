@@ -1361,53 +1361,99 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .reihe-abo-titel { font-family: var(--serif); font-size: var(--fs-h3); font-weight: 700; }
 .reihe-abo-text { opacity: 0.9; }
 .reihe-abo-karte .btn { background: #fff; color: var(--reihe); border-color: #fff; border-radius: 0; flex: 0 0 auto; }
-.reihe-kontakt-raster {
+/* Zwei grosse Kacheln: Netzladen und Internetseite, oben Bild, unten Band in der Hausfarbe. */
+.page > section.reihe-wege {
   display: grid;
-  /* auto-fit: Mail und Telefon fuellen die Zeile, statt eine leere Spalte zu lassen. */
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: var(--s3);
-}
-.reihe-kontakt-raster > div {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s1);
-  padding: var(--s4);
-  background: var(--surface);
-  border: 1px solid var(--rule);
-}
-/* Erste Reihe des Kontakts: Netzladen und Website, ganze Flaeche klickbar. */
-.reihe-kontakt-wege {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s3);
-  margin-bottom: var(--s3);
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--s4);
+  margin-bottom: var(--s6);
 }
 .reihe-weg {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  padding: var(--s5);
-  background: #1c1c1c;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--reihe);
   color: #fff;
   text-decoration: none;
   box-shadow: var(--shadow-sm);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.reihe-weg > span { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
-.reihe-weg .reihe-kontakt-art { color: rgba(255, 255, 255, 0.65); }
+.reihe-weg-bild {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--reihe) 14%, #f4f1ec);
+}
+.reihe-weg-seite img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  transition: transform 0.3s ease;
+}
+/* Umschlaege leicht gefaechert, der neueste vorn in der Mitte. */
+.reihe-weg-hefte { display: flex; align-items: center; justify-content: center; }
+.reihe-weg-hefte img {
+  height: 80%;
+  width: auto;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  transition: transform 0.3s ease;
+}
+.reihe-weg-hefte img:nth-child(1) { order: 2; z-index: 2; }
+.reihe-weg-hefte img:nth-child(2) { order: 1; margin-right: -3rem; transform: rotate(-6deg) scale(0.9); }
+.reihe-weg-hefte img:nth-child(3) { order: 3; margin-left: -3rem; transform: rotate(6deg) scale(0.9); }
+.reihe-weg:hover .reihe-weg-hefte img:nth-child(1) { transform: translateY(-4px); }
+/* Eigene Werbegrafik fuellt die Flaeche. */
+.reihe-weg-hefte img:not([style]) { height: 100%; width: 100%; object-fit: cover; box-shadow: none; }
+.reihe-weg-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+}
+.reihe-weg-text > span { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
+.reihe-weg-art {
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
 .reihe-weg-ziel {
   font-family: var(--serif);
   font-size: var(--fs-h4);
-  font-weight: 600;
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 .reihe-weg .icon { flex: 0 0 auto; transition: transform 0.15s ease; }
-.reihe-weg:hover { color: #fff; transform: translateY(-2px); box-shadow: var(--shadow); }
+.reihe-weg:hover { color: #fff; transform: translateY(-3px); box-shadow: var(--shadow); }
 .reihe-weg:hover .icon { transform: translateX(var(--s1)); }
-@media (max-width: 40rem) {
-  .reihe-kontakt-wege { grid-template-columns: 1fr; }
+.reihe-weg:hover .reihe-weg-seite img { transform: scale(1.03); }
+/* Kontakt: eine kompakte Karte, Eintraege untereinander, jeder klickbar. */
+.reihe-kontakt-karte {
+  max-width: 36rem;
+  padding: var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-top: 4px solid var(--reihe);
 }
+.reihe-kontakt-karte h3 { margin: 0 0 var(--s3); }
+.reihe-kontakt-liste { list-style: none; margin: 0; padding: 0; }
+.reihe-kontakt-liste li + li { border-top: 1px solid var(--rule); }
+.reihe-kontakt-liste a {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.reihe-kontakt-liste a > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.reihe-kontakt-liste .icon { flex: 0 0 auto; color: var(--reihe); }
+.reihe-kontakt-liste a:hover { color: var(--reihe); }
 .reihe-kontakt-art {
   font-size: var(--fs-mini);
   font-weight: 700;
@@ -1415,8 +1461,6 @@ body:has(.reihe-seite) { overflow-x: clip; }
   text-transform: uppercase;
   color: var(--muted);
 }
-.reihe-kontakt-raster a { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
-.reihe-kontakt-raster a:hover { color: var(--reihe); }
 .reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
 .reihe-social-link {
   display: inline-flex;
@@ -1431,7 +1475,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
 }
 .reihe-social-link:hover { background: var(--reihe); color: #fff; }
 /* Markenfarben der Netze: gefuellte Flaeche, Zeichen und Schrift weiss */
-.reihe-social-link[data-netz] { --netz: var(--reihe); border-color: transparent; background: var(--netz); color: #fff; }
+.reihe-social-link[data-netz] { --netz: var(--reihe); border: 0; padding: calc(var(--s2) + 2px) calc(var(--s4) + 2px); background: var(--netz); color: #fff; }
 .reihe-social-link[data-netz="telegram"] { --netz: #26a5e4; }
 .reihe-social-link[data-netz="facebook"] { --netz: #0866ff; }
 .reihe-social-link[data-netz="instagram"] { --netz: #e4405f; background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }
