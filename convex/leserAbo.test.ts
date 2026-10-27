@@ -281,8 +281,18 @@ describe("leserAbo", () => {
     expect(ohne.stufen).toEqual([
       expect.objectContaining({ planId: s.kombi, partnerName: "DMZ", zusammenCents: 9600 + 5880, vorhanden: false }),
     ]);
+    // Auf der DMZ-Seite: Kombi mit ZUERST!, beide zusammen.
     expect((await als.query(api.leserAbo.kombiAngebot, { slug: "dmz" })).alsPartner).toEqual([
-      { reiheName: "ZUERST!", reiheSlug: "zuerst", tier: "Kombi-Abonnement" },
+      {
+        reiheName: "ZUERST!",
+        reiheSlug: "zuerst",
+        tier: "Kombi-Abonnement",
+        planId: s.kombi,
+        kombiCents: 9600,
+        zusammenCents: 9600 + 5880,
+        vorhanden: false,
+        eigenesAbo: false,
+      },
     ]);
 
     // Digital-Abo der DMZ aus dem Netzladen genuegt.
@@ -302,6 +312,10 @@ describe("leserAbo", () => {
     });
     const mit = await als.query(api.leserAbo.kombiAngebot, { slug: "zuerst" });
     expect(mit.stufen[0].vorhanden).toBe(true);
+    expect((await als.query(api.leserAbo.kombiAngebot, { slug: "dmz" })).alsPartner[0]).toMatchObject({
+      vorhanden: true,
+      eigenesAbo: false,
+    });
   });
 
   test("Kombi ohne DMZ-Abo wird vor der Verlaengerung auf den Normalpreis gestellt", async () => {

@@ -181,6 +181,7 @@ export const kombiAngebot = query({
         partnerStufe: lage.partnerPlan?.name ?? null,
         zusammenCents: lage.partnerPlan ? plan.priceAmountCents + lage.partnerPlan.priceAmountCents : null,
         vorhanden: lage.vorhanden,
+        eigenesAbo: userId ? await hatLaufendesAbo(ctx, userId, reihe._id) : false,
       });
     }
     const alsPartner = [];
@@ -190,14 +191,26 @@ export const kombiAngebot = query({
         .withIndex("by_slug", (q) => q.eq("slug", k.reihe))
         .unique();
       if (!andere?.isActive) continue;
-      const kombiPlaene = (
+      const kombiPlan = (
         await ctx.db
           .query("subscriptionPlans")
           .withIndex("by_publication", (q) => q.eq("publicationId", andere._id))
           .collect()
-      ).filter((p) => p.isActive && p.stripeModus === modus && p.tier === k.tier);
-      if (kombiPlaene.length === 0) continue;
-      alsPartner.push({ reiheName: andere.name, reiheSlug: andere.slug, tier: k.tier });
+      ).find((p) => p.isActive && p.stripeModus === modus && p.tier === k.tier);
+      if (!kombiPlan) continue;
+      const lage = await kombiLage(ctx, kombiPlan, userId);
+      // Abgeschlossen wird die Kombi-Stufe der anderen Reihe; diese Reihe
+      // kommt mit ins Abo, sofern das Konto sie nicht schon hat.
+      alsPartner.push({
+        reiheName: andere.name,
+        reiheSlug: andere.slug,
+        tier: k.tier,
+        planId: kombiPlan._id,
+        kombiCents: kombiPlan.priceAmountCents,
+        zusammenCents: lage?.partnerPlan ? kombiPlan.priceAmountCents + lage.partnerPlan.priceAmountCents : null,
+        vorhanden: lage?.vorhanden ?? false,
+        eigenesAbo: userId ? await hatLaufendesAbo(ctx, userId, andere._id) : false,
+      });
     }
     return { stufen, alsPartner };
   },
@@ -491,6 +504,7 @@ export const abschlussVorbereiten = internalQuery({
       .unique();
     const lage = await kombiLage(ctx, plan, userId);
     return {
+      eigenesAbo: lage ? await hatLaufendesAbo(ctx, userId, plan.publicationId) : false,
       email,
       plan: plan as Doc<"subscriptionPlans">,
       reihe: publication.name,
@@ -606,6 +620,9 @@ export const abschliessen = action({
     // Kombipreis, sonst beide Reihen zusammen in einem Abo.
     if (vb.kombi) {
       const { partnerId, partnerName, partnerPreis, vorhanden } = vb.kombi;
+      if (vb.eigenesAbo) {
+        throw new Error(`Für ${vb.reihe} läuft in diesem Konto schon ein Abo.`);
+      }
       if (vorhanden) {
         kombiMerkmale.kombi = "vorhanden";
       } else {

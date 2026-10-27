@@ -48,12 +48,32 @@ export default function SubscriptionDetailPage() {
   }
 
   const plans = offer.tiers.flatMap((t) => t.plans);
-  // `?stufe=` waehlt eine Abo-Art vor, etwa vom Kombi-Hinweis der Partnerreihe.
+  // Kombi-Abos anderer Reihen, die diese einschliessen (DMZ: Kombi mit
+  // ZUERST!). Abgeschlossen wird deren Kombi-Stufe; diese Reihe kommt mit
+  // ins Abo, sofern das Konto sie nicht schon hat.
+  const fremdeKombis = (kombi?.alsPartner ?? []).filter((k) => k.vorhanden || k.zusammenCents !== null);
+  const fremdeKombi = fremdeKombis.find((k) => k.planId === chosen) ?? null;
+  // `?stufe=` waehlt eine Abo-Art vor.
   const vorgewaehlt = plans.find((p) => p.tier === params.get("stufe"));
-  const selected = plans.find((p) => p._id === chosen) ?? vorgewaehlt ?? offer.headline;
+  const selected = fremdeKombi
+    ? {
+        _id: fremdeKombi.planId,
+        name: `Kombi-Abonnement mit ${fremdeKombi.reiheName}`,
+        priceAmountCents: fremdeKombi.kombiCents,
+        interval: "year" as const,
+      }
+    : (plans.find((p) => p._id === chosen) ?? vorgewaehlt ?? offer.headline);
   const kombiStufe = kombi?.stufen.find((s) => s.planId === selected?._id) ?? null;
   // Kombi: mit eigenem Abo der Partnerreihe nur der Kombipreis, sonst beide zusammen.
   const kombiZusammen = kombiStufe !== null && !kombiStufe.vorhanden;
+  const schonAbo = kombiStufe?.eigenesAbo || fremdeKombi?.eigenesAbo || false;
+  const preisCents = fremdeKombi
+    ? fremdeKombi.vorhanden
+      ? fremdeKombi.kombiCents
+      : fremdeKombi.zusammenCents!
+    : kombiZusammen && kombiStufe.zusammenCents !== null
+      ? kombiStufe.zusammenCents
+      : (selected?.priceAmountCents ?? 0);
   // Checkout nur mit kaeuflicher Preisstufe; sonst fuehrt der Knopf in den Laden.
   const stripeMode = (storefront.stripeAbo || storefront.stripeCheckout) && selected !== null;
   const perInterval = selected?.interval === "year" ? "pro Jahr" : "pro Monat";
@@ -121,7 +141,7 @@ export default function SubscriptionDetailPage() {
 
         {stripeMode ? (
           <>
-            {offer.tiers.length > 1 && (
+            {offer.tiers.length + fremdeKombis.length > 1 && (
               <fieldset className="subscription-choice">
                 <legend>Abo-Art wählen</legend>
                 <div className="subscription-prices">
@@ -144,13 +164,45 @@ export default function SubscriptionDetailPage() {
                       </label>
                     );
                   })}
+                  {fremdeKombis.map((k) => (
+                    <label key={k.planId} className={k.planId === selected!._id ? "selected" : undefined}>
+                      <input
+                        type="radio"
+                        name="plan"
+                        value={k.planId}
+                        checked={k.planId === selected!._id}
+                        onChange={() => setChosen(k.planId)}
+                      />
+                      <span>
+                        Kombi-Abonnement mit {k.reiheName}
+                        <small>
+                          {k.vorhanden
+                            ? `${k.reiheName} zum Kombipreis zu Ihrem Abo`
+                            : `${offer.publicationName} und ${k.reiheName} in einem Abo`}
+                        </small>
+                      </span>
+                      <strong>{formatEuro(k.vorhanden ? k.kombiCents : k.zusammenCents!)}</strong>
+                    </label>
+                  ))}
                 </div>
               </fieldset>
             )}
 
+            {fremdeKombi && (
+              <p className="hint">
+                {fremdeKombi.eigenesAbo
+                  ? `Für ${fremdeKombi.reiheName} läuft in Ihrem Konto schon ein Abo.`
+                  : fremdeKombi.vorhanden
+                    ? `Ihr Digital-Abo von ${offer.publicationName} ist erkannt; ${fremdeKombi.reiheName} kommt zum Kombipreis dazu. Endet das Abo von ${offer.publicationName}, verlängert sich ${fremdeKombi.reiheName} zum Preis des Normalabonnements.`
+                    : `Ein gemeinsames Abo für ${offer.publicationName} und ${fremdeKombi.reiheName} zum Kombipreis, gemeinsam verlängert und nur gemeinsam kündbar.`}
+              </p>
+            )}
+
             {kombiStufe && (
               <p className="hint">
-                {kombiStufe.vorhanden
+                {kombiStufe.eigenesAbo
+                  ? `Für ${offer.publicationName} läuft in Ihrem Konto schon ein Abo.`
+                  : kombiStufe.vorhanden
                   ? `Ihr Digital-Abo von ${kombiStufe.partnerName} ist erkannt; ${offer.publicationName} kommt zum Kombipreis dazu. Endet das Abo von ${kombiStufe.partnerName}, verlängert sich dieses zum Preis des Normalabonnements.`
                   : kombiStufe.zusammenCents !== null
                     ? `Das Kombi-Abonnement schließt ${kombiStufe.partnerName} (${kombiStufe.partnerStufe}) mit ein: ein gemeinsames Abo für beide Hefte, gemeinsam verlängert und nur gemeinsam kündbar.`
@@ -159,11 +211,7 @@ export default function SubscriptionDetailPage() {
             )}
 
             <div className="price">
-              {formatEuro(
-                kombiZusammen && kombiStufe.zusammenCents !== null
-                  ? kombiStufe.zusammenCents
-                  : selected!.priceAmountCents,
-              )}
+              {formatEuro(preisCents)}
               <span className="hint">
                 {" "}{perInterval} · {selected!.name}
                 {kombiZusammen ? ` und ${kombiStufe.partnerName}` : ""}
@@ -190,7 +238,9 @@ export default function SubscriptionDetailPage() {
               <button
                 className="btn"
                 onClick={startAbo}
-                disabled={busy || !accepted || (kombiZusammen && kombiStufe.zusammenCents === null)}
+                disabled={
+                  busy || !accepted || schonAbo || (kombiZusammen && kombiStufe.zusammenCents === null)
+                }
                 aria-busy={busy}
               >
                 {busy ? "Wird geöffnet..." : <><Icon name="arrow-right" /> Abo abschließen</>}
@@ -223,14 +273,6 @@ export default function SubscriptionDetailPage() {
             <ShopHinweis />
           </>
         )}
-
-        {kombi?.alsPartner.map((k) => (
-          <p className="hint" key={k.reiheSlug}>
-            Zusammen mit {k.reiheName} gibt es das{" "}
-            <Link to={`/abo/${k.reiheSlug}?stufe=${encodeURIComponent(k.tier)}`}>{k.tier}</Link>:{" "}
-            {k.reiheName} zum Kombipreis und {offer.publicationName} in einem gemeinsamen Abo.
-          </p>
-        ))}
 
         {sampleUrl && (
           <a
