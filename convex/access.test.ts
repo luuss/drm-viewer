@@ -226,4 +226,24 @@ describe("Admins", () => {
     expect(ergebnis.kunde).toBe(false);
     expect(ergebnis.bibliothek).toEqual([offen, entwurf].map(String).sort());
   });
+
+  test("Rolle reader liest jedes veroeffentlichte Heft, auch spaetere", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, publicationId } = await setup(t);
+    await t.run(async (ctx: any) => ctx.db.patch(userId, { roles: ["reader"] }));
+    const alt = await addIssue(t, publicationId);
+    const entwurf = await addIssue(t, publicationId, { published: false });
+    const neu = await addIssue(t, publicationId);
+    const r = await t.run(async (ctx: any) => {
+      const { hasIssueAccess, accessibleIssueIds } = await import("./access");
+      const ids = await accessibleIssueIds(ctx, userId);
+      return {
+        alt: await hasIssueAccess(ctx, userId, alt),
+        neu: await hasIssueAccess(ctx, userId, neu),
+        entwurf: await hasIssueAccess(ctx, userId, entwurf),
+        liste: [ids.has(alt), ids.has(neu), ids.has(entwurf)],
+      };
+    });
+    expect(r).toEqual({ alt: true, neu: true, entwurf: false, liste: [true, true, false] });
+  });
 });

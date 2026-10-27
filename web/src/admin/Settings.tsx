@@ -301,6 +301,7 @@ function Netzladen() {
 
 const ROLLEN = [
   ["customer", "Leser"],
+  ["reader", "Alle Hefte"],
   ["editor", "Redaktion"],
   ["publisher", "Verlag"],
   ["admin", "Verwaltung"],
@@ -309,6 +310,7 @@ type Rolle = (typeof ROLLEN)[number][0];
 
 const ROLLE_HINWEIS: Record<Rolle, string> = {
   customer: "liest, was gekauft ist",
+  reader: "liest jedes Heft ohne Kauf, verwaltet nichts",
   editor: "bearbeitet Hefte und Artikel",
   publisher: "dazu veröffentlichen, löschen, Freiexemplare",
   admin: "dazu Netzladen, Reihen und Personen",
@@ -316,7 +318,7 @@ const ROLLE_HINWEIS: Record<Rolle, string> = {
 
 /** Die hoechste Rolle zaehlt; die geringeren sind darin enthalten. */
 function hoechste(roles: string[]): Rolle {
-  for (const r of ["admin", "publisher", "editor"] as const) if (roles.includes(r)) return r;
+  for (const r of ["admin", "publisher", "editor", "reader"] as const) if (roles.includes(r)) return r;
   return "customer";
 }
 

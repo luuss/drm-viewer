@@ -2,13 +2,15 @@ import { QueryCtx, MutationCtx, ActionCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Id } from "./_generated/dataModel";
 
-export type Role = "customer" | "editor" | "publisher" | "admin";
+/** `reader`: liest jedes veroeffentlichte Heft ohne Kauf, verwaltet nichts. */
+export type Role = "customer" | "reader" | "editor" | "publisher" | "admin";
 
 /** Wer mehr darf, darf auch das Geringere. */
 const IMPLIED: Record<Role, Role[]> = {
-  admin: ["admin", "publisher", "editor", "customer"],
-  publisher: ["publisher", "editor", "customer"],
-  editor: ["editor", "customer"],
+  admin: ["admin", "publisher", "editor", "reader", "customer"],
+  publisher: ["publisher", "editor", "reader", "customer"],
+  editor: ["editor", "reader", "customer"],
+  reader: ["reader", "customer"],
   customer: ["customer"],
 };
 

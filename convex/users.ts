@@ -57,7 +57,7 @@ export const setRoles = mutation({
   args: { userId: v.id("users"), roles: v.array(v.string()) },
   handler: async (ctx, { userId, roles }) => {
     await requireAdmin(ctx);
-    const allowed = ["customer", "editor", "publisher", "admin"];
+    const allowed = ["customer", "reader", "editor", "publisher", "admin"];
     const clean = roles.filter((r) => allowed.includes(r));
     await ctx.db.patch(userId, { roles: clean } as any);
     await audit(ctx, "user.setRoles", userId, clean.join(","));

@@ -23,7 +23,9 @@ export async function hasIssueAccess(
   userId: Id<"users">,
   issueId: Id<"issues">,
 ): Promise<boolean> {
-  if (await isEditor(ctx, userId)) return true;
+  const rolle = await leseRolle(ctx, userId);
+  if (rolle === "editor") return true;
+  if (rolle === "reader") return (await ctx.db.get(issueId))?.isPublished === true;
   const now = Date.now();
   // Alle Zeilen pruefen: neben einer abgelaufenen Freischaltung kann eine
   // gueltige liegen.
@@ -45,8 +47,16 @@ export async function accessibleIssueIds(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<Set<string>> {
-  if (await isEditor(ctx, userId)) {
+  const rolle = await leseRolle(ctx, userId);
+  if (rolle === "editor") {
     const all = await ctx.db.query("issues").take(5000);
+    return new Set(all.map((i) => i._id as string));
+  }
+  if (rolle === "reader") {
+    const all = await ctx.db
+      .query("issues")
+      .withIndex("by_published", (q) => q.eq("isPublished", true))
+      .take(5000);
     return new Set(all.map((i) => i._id as string));
   }
   const now = Date.now();
@@ -87,10 +97,21 @@ export async function accessibleIssueIds(
   return ids;
 }
 
-/** Die Redaktion (und damit jeder Admin) liest jedes Heft, auch ein unveroeffentlichtes. */
-async function isEditor(ctx: QueryCtx | MutationCtx, userId: Id<"users">): Promise<boolean> {
+/**
+ * Die Redaktion (und damit jeder Admin) liest jedes Heft, auch ein
+ * unveroeffentlichtes. Die Rolle `reader` liest jedes veroeffentlichte Heft,
+ * auch jedes kuenftige, ohne Kauf.
+ */
+async function leseRolle(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<"editor" | "reader" | null> {
   const user = await ctx.db.get(userId);
-  return !!user && rolesOf(user).includes("editor");
+  if (!user) return null;
+  const roles = rolesOf(user);
+  if (roles.includes("editor")) return "editor";
+  if (roles.includes("reader")) return "reader";
+  return null;
 }
 
 
