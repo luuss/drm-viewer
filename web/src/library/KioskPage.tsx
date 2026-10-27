@@ -79,7 +79,7 @@ export default function KioskPage() {
                   )}
                   {/* Ohne eigenen Checkout gilt der Preis des Digital-Abos im
                       Laden; die Stripe-Preisstufen waeren irrefuehrend. */}
-                  {storefront.stripeCheckout && o.headline ? (
+                  {(storefront.stripeAbo || storefront.stripeCheckout) && o.headline ? (
                     <>
                       <div className="price">
                         {formatEuro(o.headline.priceAmountCents)}
@@ -127,23 +127,21 @@ export default function KioskPage() {
                   )}
                   {i.edition && <div className="meta">{i.edition}</div>}
                   <div className="price">{formatEuro(i.priceAmountCents)}</div>
-                  {i.shopSku && (
-                    <button
-                      type="button"
-                      className={`card-cart${auswahl.includes(i._id) ? " on" : ""}`}
-                      aria-pressed={auswahl.includes(i._id)}
-                      onClick={(e) => {
-                        // Die Karte ist ein Link; der Knopf waehlt nur aus.
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (auswahl.includes(i._id)) heraus(i._id);
-                        else hinein(i._id);
-                      }}
-                    >
-                      <Icon name="cart" size={15} />
-                      {auswahl.includes(i._id) ? "Im Warenkorb" : "In den Warenkorb"}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={`card-cart${auswahl.includes(i._id) ? " on" : ""}`}
+                    aria-pressed={auswahl.includes(i._id)}
+                    onClick={(e) => {
+                      // Die Karte ist ein Link; der Knopf waehlt nur aus.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (auswahl.includes(i._id)) heraus(i._id);
+                      else hinein(i._id);
+                    }}
+                  >
+                    <Icon name="cart" size={15} />
+                    {auswahl.includes(i._id) ? "Im Warenkorb" : "In den Warenkorb"}
+                  </button>
                   <div className="card-action">
                     Ausgabe ansehen <Icon name="arrow-right" />
                   </div>

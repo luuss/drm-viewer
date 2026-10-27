@@ -535,7 +535,30 @@ Zeit, Quelle `netzladen`|`leser`, `id_order`).
 * Bestellbestaetigung (`sendMailAlterTemplateVars`): Kasten „Ihre Zustimmung
   zum vorzeitigen Beginn (Widerrufsverzicht)“ nur mit den Positionen, fuer die
   er erteilt wurde, plus „Fuer alle uebrigen Artikel dieser Bestellung besteht
-  Ihr Widerrufsrecht unveraendert.“ (§ 312f Abs. 3 BGB).
+  Ihr Widerrufsrecht unveraendert.“ (§ 312f Abs. 3 BGB); den Satz nur, wenn
+  es uebrige Artikel gibt.
+* Die Vorlagen `mails/de/{order_conf,payment,preparation,bankwire,cheque}`
+  enthalten fest den Satz „Sie haben das Recht, binnen vierzehn Tagen ab
+  Erhalt der Ware …“. Bei erteiltem Verzicht ersetzt ihn
+  `hookActionEmailAddAfterContent` (`WIDERRUF_SATZ`): bei reinen
+  Digitalbestellungen faellt er ersatzlos weg, bei weiteren Artikeln wird er
+  zu „Fuer die uebrigen Artikel dieser Bestellung haben Sie das Recht …“.
+  Keinen eigenen Satz zum Erloeschen des Widerrufsrechts ausgeben (Wunsch
+  des Betreibers). Ohne Verzicht bleibt der Satz der Vorlage.
+* Widerrufsknopf (Fremdmodul `rbfree`, lokal angepasst, Sicherungen
+  `*.bak-20261027`): `RbfWithdrawalService::getWithdrawableProducts` laesst
+  Digitalartikel (`LusdigitalVerzicht::istDigital`) und Positionen in einem
+  laufenden Widerruf weg. Bestellungen nur mit Digitalartikeln haben keinen
+  Knopf und keinen Hinweis. Im Formular waehlt der Kunde die Artikel
+  (`rbf_lines[]`, Pflicht, Digitalartikel gesperrt), `createWithdrawal`
+  prueft die Auswahl serverseitig und legt `scope` full/partial an. Der Hook
+  `displayOrderDetail` steht in `customer/order-detail.tpl` nur noch einmal
+  (unten), vorher gab es den Knopf doppelt. Smarty kompiliert im Shop nicht
+  neu: nach Vorlagen-Aenderungen `Tools::clearSmartyCache()`.
+* `LusdigitalVerzicht::speichern` fuegt ohne `null_values` ein. Bis
+  27.10.2026 machte `null_values` aus der leeren IP der Leser-Kaeufe NULL,
+  das Einfuegen scheiterte (Spalte NOT NULL), und fuer Leser-Kaeufe fehlten
+  Verzichtszeile und Bestaetigung in der Mail.
 
 Im Shop (`classes/LeserKauf.php`):
 
@@ -656,3 +679,25 @@ Die Kontoseite zeigt die angemeldeten Browser mit "Abmelden" je Browser.
 
 Sitzungsdauer: 30 Tage ohne Nutzung, hoechstens 90 Tage, danach neuer Link.
 SSO mit dem Shop gibt es nicht.
+
+## Digital-Jahresabo ueber Stripe Checkout (seit 20.10.2026)
+
+Das Jahresabo einer Reihe wird im Leser ueber Stripe Checkout abgeschlossen,
+im Stripe-Konto des Ladens, nicht im Laden selbst (`convex/leserAbo.ts`).
+Gleiche Anbindung wie der Kartenkauf: `LESER_STRIPE_MODE` und Schluessel,
+Stripe-Kunde aus `leserKarten`, Webhook `/hooks/stripe/webhook` (Endpunkt
+`we_1UL6tJ…`, zusaetzlich `checkout.session.completed`,
+`customer.subscription.*`, `invoice.payment_failed`). Beachtet wird nur, was
+`metadata.source = "leser-abo"` traegt.
+
+* Preis: Redaktion → Einstellungen → Reihen → „Digital-Jahresabo“. Legt bei
+  Stripe Produkt (einmal je Reihe), Jahrespreis und den Steuersatz 7 % MwSt.
+  (inklusive) an. Stripe Tax ist im Konto nicht eingerichtet. Ein neuer Preis
+  gilt fuer neue Abschluesse; leer speichern nimmt das Abo aus dem Verkauf.
+* Freischaltung: `subscriptions.upsertFromStripe`, alle Hefte der Reihe mit
+  „im Abo“, die waehrend der Laufzeit erscheinen, plus das bei Abschluss
+  aktuelle.
+* Kuendigung und Zuruecknahme im Profil; Rechnungen und Zahlungsmittel im
+  Stripe-Kundenportal mit eigener Konfiguration (`metadata.source`).
+* Andere Webhook-Empfaenger im selben Konto (zuerst.de, weltkrieg-online.de)
+  bekommen die Abo-Ereignisse ebenfalls.

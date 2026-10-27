@@ -108,6 +108,7 @@ export const upsertFromStripe = internalMutation({
     cancelAtPeriodEnd: v.optional(v.boolean()),
     endedAt: v.optional(v.number()),
     publicationId: v.optional(v.id("publications")),
+    stripeModus: v.optional(v.union(v.literal("test"), v.literal("live"))),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -153,6 +154,7 @@ export const upsertFromStripe = internalMutation({
       currentPeriodEnd: args.currentPeriodEnd,
       cancelAtPeriodEnd: args.cancelAtPeriodEnd,
       endedAt: args.endedAt,
+      stripeModus: args.stripeModus ?? existing?.stripeModus,
       updatedAt: Date.now(),
     };
 
@@ -224,6 +226,20 @@ export const myStatus = query({
         })),
       ),
     };
+  },
+});
+
+/** Ein Abo des Kontos, fuer Kuendigung und Kundenportal. */
+export const ownedInternal = internalQuery({
+  args: { userId: v.id("users"), stripeSubscriptionId: v.string() },
+  handler: async (ctx, { userId, stripeSubscriptionId }) => {
+    const sub = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_stripe_subscription", (q) =>
+        q.eq("stripeSubscriptionId", stripeSubscriptionId),
+      )
+      .unique();
+    return sub?.userId === userId ? sub : null;
   },
 });
 

@@ -512,7 +512,7 @@ function KaufStand({
         <div className="ok">
           Vielen Dank. Bezahlt und freigeschaltet
           {stand.bestellung ? `, Bestellung ${stand.bestellung}` : ""}. Die Rechnung kommt per
-          E-Mail.
+          E-Mail. Sie können die Ausgabe jetzt in Ihrer Bibliothek lesen.
         </div>
         <div className="row actions">
           {leseZiel ? (
