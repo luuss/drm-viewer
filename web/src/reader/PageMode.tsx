@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import OpenSeadragon from "openseadragon";
 import { TILE_SERVICE_URL, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
-import { kachelSeed, zusammensetzen } from "./schutz";
+import { kachelSeed, mitTicket, zusammensetzen } from "./schutz";
 
 /** Wo auf der Seite getippt wurde, normiert auf 0..1. */
 export type Klickpunkt = { pageIndex: number; x: number; y: number };
@@ -318,10 +318,7 @@ export default function PageMode({
             const abbruch = new AbortController();
             job.userData.abbruch = abbruch;
             const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(job.src);
-            fetch(job.src, {
-              headers: { "X-Tile-Session": sessionToken },
-              signal: abbruch.signal,
-            })
+            mitTicket(job.src, sessionToken, issueId, abbruch.signal)
               .then((res) => {
                 if (!res.ok) throw new Error(`Kachel ${res.status}`);
                 return res.blob();

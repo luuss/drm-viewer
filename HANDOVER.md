@@ -118,6 +118,126 @@ danach `account:purgeByEmailInternal`).
 
 ---
 
+## 1d. Kopf und Fuss wie im Netzladen (26.10.2026)
+
+* `web/src/components/AppShell.tsx` + `styles.css`: Kopf immer eine Zeile
+  (62 px, unter 900 px 56 px, Logo 40/34 px), unter 1100 px Burger-Menue mit
+  Seitenpanel (`.nav-drawer`, wie `.lus-offcanvas` im Shop) statt Umbruch auf
+  2-3 Zeilen. Konto im Kopf nur als Symbol. Neuer Menuepunkt „Netzladen“.
+* Fuss 1:1 mit Shop-Massen (`--shop-max: 1240px`, 18 px Rand, Logo 60 px,
+  Text 13,5 px, Copyright 48 px), steht auf kurzen Seiten ganz unten
+  (`.app-shell` mindestens `100dvh`).
+* Ausgerollt per rsync der drei Dateien + `up -d --build web`. Sicherung
+  `/root/web-vor-nav-2026-10-26.tgz`. Achtung: der Server hatte Aenderungen,
+  die nicht im Git stehen (Abo-Kachel, Bead offen).
+* Lokal testen ohne `.env`: `VITE_CONVEX_URL=https://digital.lesenundschenken.de/convex node node_modules/vite/bin/vite.js --port 5199`
+  in `web/` (abgemeldete Ansicht; angemeldete Leiste per DOM nachgestellt).
+
+## 1e. Kopierschutz und Absatz-Sprung (27.10.2026)
+
+* **Kacheln und Artikelbilder kommen verwuerfelt.** Das Gateway teilt jedes
+  Bild in 64-px-Bloecke und vertauscht die vollen Bloecke
+  (`tile-service/schutz.py`, JPEG 4:4:4, darum keine Naehte). Der Reader setzt
+  sie auf einer Zeichenflaeche zusammen (`web/src/reader/schutz.ts`):
+  Kacheln ueber ein eigenes `downloadTileStart` in `PageMode.tsx`,
+  Artikelbilder als `blob:`-Adresse. Im HTML steht kein Serverpfad mehr, die
+  Sitzung geht nur im Kopf `X-Tile-Session` mit (`?s=` gibt es nicht mehr).
+  Schluessel: `/api/session` liefert `k`, je Kachel
+  `fnv1a32("k:heft:seite:stufe:spalte:zeile")`.
+* **Artikeltext kommt verschluesselt.** `articles.getForReader` verlangt
+  `sessionToken` und legt jedes Zeichen auf einen von zwei Plaetzen im
+  Unicode-Privatbereich (`convex/schutz.ts`). `GET /api/issue/<id>/f/{0,1,2}` (ohne Dateiendung: Cloudflare cacht nach Endung) baut zur Sitzung die passende Schrift (fontTools,
+  Glyphennamen entfernt, ~1,7 s, danach im Speicher). Im DOM und beim
+  Kopieren steht Zeichensalat. Geheimwert `readerSessions.schutzSeed`, der
+  Browser bekommt ihn nie. Zahlen in Tabellen bleiben stehen (Zahlenspalten).
+* **Zwei Stufen beim Verwuerfeln:** Bloecke vertauscht, dazu je Block um
+  0/90/180/270 Grad gedreht und mit invertierten 8-px-Querstrichen versehen
+  (`schutz.py` `umformungen`, Gegenstueck `web/src/reader/schutzRechnen.ts`).
+  Im Browser exakt umkehrbar (RMS wie ein normales JPEG), solange das JPEG
+  4:4:4 ist. Falle beim Testen: ein mit Pillow-Standard neu gespeichertes
+  JPEG ist 4:2:0, dann entstehen Farbfehler an den Zellkanten.
+* **Einmal-Tickets:** Jede Kachel und jedes Artikelbild braucht `X-Req`,
+  vom Gateway signiert (`/api/issue/<id>/n`, Buendel zu 64) und nur
+  einmal angenommen. Nachgeschickte Anfragen (Bildlupen, cURL) bekommen 403.
+  Dazu nimmt das Gateway nur `fetch` von der eigenen Seite an
+  (`Sec-Fetch-Site: same-origin`, `Sec-Fetch-Dest: empty`).
+* **Artikelbilder sind `<canvas>`**, kein `<img>` und kein `blob:`.
+* **Namen nach aussen nichtssagend** (seit 27.10.): Kopf `X-Req` (Ticket),
+  Antwortkopf `X-V` (verwuerfelt), Schriften `F0`/`F1` unter
+  `/api/issue/<id>/f/<n>`, Klassen `gx`, `fb`, `rv`, Mutation `abschluss`.
+  Kommentare und Funktionsnamen entfernt der Minifier. Eine woertliche
+  `debugger`-Anweisung entfernt er ebenfalls; deshalb wird sie zur Laufzeit
+  gebaut (`kopierschutz.ts`). Pruefen nach jedem Bau:
+  `grep -c ZGVidWdnZXI dist/assets/index-*.js` muss 1 sein.
+* **Unsichtbares Wasserzeichen** (`tile-service/wasserzeichen.py`): jede
+  Lesesitzung bekommt eine 32-Bit-Kennung (`readerSessions.wasserzeichenCode`,
+  dauerhaft in der Tabelle `wasserzeichen`). Mit Tag und Pruefsumme werden
+  daraus 64 Bit, verschluesselt (Feistel, Schluessel `WASSERZEICHEN_KEY`, sonst
+  aus `TILE_SERVICE_SECRET` abgeleitet). Eingebettet als Spreizspektrum in
+  Seitenkoordinaten in jede Kachel und jedes Artikelbild, Staerke 2
+  (unsichtbar, mittlere Abweichung 0,9 Graustufen, nur wo Inhalt ist).
+  Auslesen mit Original: `tools/wasserzeichen-lesen.sh fund.jpg --heft <id>
+  --seite <index>` bzw. `--asset <id>`; richtet das Fundbild selbst aus (Rand,
+  Anschnitt, Massstab), korrigiert bis zu 8 unsichere Bits, ein Treffer zaehlt
+  nur, wenn die Kennung in der Datenbank steht. Geprueft (27.10.):
+  JPEG 50, 50 % verkleinert, Bildschirmfoto 900 px, 1-2 % verschoben, 5 %
+  angeschnitten, mit Rand: immer 0 Bitfehler; ohne Wasserzeichen kein Treffer.
+  Text traegt kein Wasserzeichen. Echter Test 27.10.: Bildschirmfoto der
+  Seitenansicht (Seite in 632 px, kleine Kachelstufe, Hover-Toenung) ohne
+  Bitfehler gelesen, nachdem Inhaltsrest (Ausgleichsrechnung) und flaechige
+  Stoerungen (Median je 5x5 Zellen) herausgerechnet werden. Raster 64 nicht
+  aendern: bereits eingebettete Zeichen liessen sich sonst nicht mehr lesen.
+* **Reader-Sperren** (`web/src/reader/kopierschutz.ts`): kein Rechtsklick,
+  Markieren, Kopieren, Ziehen, Drucken, Strg+S/U/P, F12. Fokus weg, Tab
+  gewechselt, Maus aus dem Fenster oder Druck-Taste: alles verschwimmt, Klick
+  auf die Abdeckung holt den Text zurueck. Offene DevTools (Pause einer
+  `debugger`-Anweisung, `useDevtoolsWache`): Reader weg, Lesesitzung beendet
+  (`readerSessions.abschluss`, `auditLog` `reader.devtools`),
+  weiter nur nach Neuladen. Umgehbar mit "Haltepunkte deaktivieren".
+* **Absatz-Sprung:** Tipp auf die Druckseite oeffnet den Artikel beim
+  Absatz darunter und hebt ihn kurz hervor (`articles.absatzBeiKlick`,
+  Rechnung in `convex/einstieg.ts`: Spalten aus den Textrahmen,
+  Spaltenwechsel aus `sourceY`).
+* Die Python- und JS-Zufallsfunktionen muessen gleich rechnen;
+  `convex/schutz.test.ts` prueft das.
+* Ausrollen: erst Convex (Abschnitt 1b), dann
+  `docker compose ... up -d --build web tile-service`. Sicherung vorher:
+  `/root/vor-kopierschutz-2026-10-27.tgz`. Gateway und Oberflaeche immer
+  zusammen ausrollen: ein altes Frontend zeigt sonst verwuerfelte Kacheln.
+* **Falle:** Live-Convex lief am 27.10. mit Code, der nur in
+  `/opt/hefte-digital/code/convex` lag (Leser-Abo, `stripeModus`). Ein Deploy
+  aus dem Git-Stand scheiterte an der Schemapruefung und haette sonst diese
+  Funktionen entfernt. Vor jedem Convex-Deploy deshalb
+  `diff -rq convex <server-kopie>/convex` und Server-Dateien zuerst holen.
+* Apache reicht `/api/schrift/` ans Gateway (`deploy/apache/*.vhost_ssl.conf`,
+  jetzt mit dem CrowdSec-Block vom Server). Neue Gateway-Pfade unter `/api`
+  muessen dort eingetragen werden, sonst landen sie bei Convex (404).
+
+## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
+
+Der Leser heisst seit 19.10.2026 **https://digital.lesenundschenken.de**
+(Wunsch der Geschaeftsfuehrung). Was dafuer geaendert wurde:
+
+* Plesk: `digital.lesenundschenken.de` traegt die Direktiven aus
+  `deploy/apache/digital.vhost_ssl.conf` (vorher nur eine Umleitung, Sicherung
+  `/root/digital.vhost_ssl.conf.vor-2026-10-19`).
+* `lesen.lesenundschenken.de` (`deploy/apache/lesen.vhost_ssl.conf`): Seiten
+  leiten mit 301 auf `digital.` um, die Startseite auf `/library`. `/hooks/`,
+  `/convex/`, `/api/` und `/medien/` antworten weiter direkt, weil der
+  Stripe-Webhook und alte Tabs dorthin rufen.
+* `/opt/hefte-digital/.env`: `PUBLIC_WEB_ORIGIN`, `CONVEX_CLOUD_ORIGIN`
+  (`…/convex`), `CONVEX_SITE_ORIGIN` (`…/hooks`), `PUBLIC_UPLOAD_ORIGIN`
+  (`…/medien`) auf `digital.`; Sicherung `.env.vor-dmz-2026-10-19`. Danach
+  Backend neu, `convex-setup` (APP_PUBLIC_URL, SITE_URL, …) und ein neuer
+  Deploy, weil `auth.config.ts` die Adresse beim Deploy liest. Alle Leser
+  mussten sich danach neu anmelden.
+* Shop-Modul `lusdigital`: `LUSDIGITAL_URL` und `LUSDIGITAL_LESER_URL` auf
+  `digital.`, Anmeldemails nehmen Links auf `digital.` und `lesen.` an.
+* `_scratch/verlag-direkt.env`: `CONVEX_SELF_HOSTED_URL=https://digital.lesenundschenken.de`.
+* Offen: Stripe-Webhook zeigt noch auf `lesen.…/hooks/stripe/webhook` (geht,
+  kann bleiben). Apple Pay braucht `digital.lesenundschenken.de` als
+  Zahlungsdomain in Stripe.
+
 ## 2. Verlagsserver und Verkauf über den Shop (Stand 26.09.2026 abends)
 
 **Die Anlage läuft auf https://lesen.lesenundschenken.de**, vor ihr Cloudflare.
@@ -593,6 +713,65 @@ Buchtitel bei den Besprechungen, das Arbeitsamt-Foto in ZUERST!).
   mit fremdem Text oder fremdem Bild; die fünf Bilder, die ein Artikel laut
   Satz noch „zu wenig“ hat, sind Doppelte derselben Vorlage (Aufmacher über
   die Doppelseite, Bücherstapel), die der Import absichtlich nur einmal speichert.
+
+## 4j. Titelseite: Anreißer führen zum Artikel (seit 05.10.2026)
+
+Ein Tipp auf einen Anreißer der Titelseite (Titelthema, Leiste oben, schräger
+Streifen über der Ecke) springt im Seitenmodus zur Seite des Artikels, wie
+eine Zeile im Inhaltsverzeichnis.
+
+* **Erkennung** (`extract-service/extractor/titel_anreisser.py`): die
+  Textebene der Titelseite (U1) wird zu Blöcken gebündelt (Zeilen ähnlicher
+  Höhe, dicht untereinander; schräger Satz bildet eigene Bänder). Jeder Block
+  wird mit Titel und Unterzeile der Verzeichniseinträge verglichen, Wörter
+  gewichtet nach Seltenheit im Heft („ICE“, „Kriegsrat“, „Zayas“ zählen viel,
+  „Deutschland“ wenig). Nur ein klarer Sieger bekommt eine Fläche; Kopf,
+  Preise, Strichcode und senkrechter Randtext nie. Felder einer
+  Anreißerleiste werden auf ihre ganze Zelle gezogen (Text plus Bild).
+* **Schräger Satz:** pdf.js liefert gedrehte Läufe; `normiereTextelemente`
+  nimmt sie mit `gedreht=true` als Rechteck um den ganzen Lauf mit Winkel als
+  siebtem Feld. Nur der Umschlag liest so (`renderUmschlag`,
+  `umschlagTextAusPdf`); `toc_layout._items` überspringt gedrehte Stücke,
+  außer `text_layer_for_cover(..., mit_gedrehtem=True)`.
+* **Speicherung:** als Verzeichnisflächen (`articleRegions` mit
+  `targetPageIndex`) auf U1, im vollen Import (`_build_toc_entries`) und im
+  Auftrag `toc` (`_nur_verzeichnis`). Ein `toc`-Auftrag legt sie also mit neu.
+* **Bestand nachrüsten:** Admin → Heft → Erweitert → „Textebene aus Umschlag
+  (PDF)“ mit dem Umschlag-PDF. Lädt nur die Textebene hoch (Quelle `text`,
+  Rolle `cover`) und stellt einen `toc`-Auftrag ein. Ohne Umschlag-PDF (nur
+  Titelbild als TIF) gibt es keine Anreißer.
+* Tests: `tests/test_titel_anreisser.py` mit der echten Titelseite von
+  ZUERST! 3/2026 (sechs Anreißer → S. 28, 44, 66, 6, 6, 16), Vorlage unter
+  `tests/fixtures/titel/`; `textLayer.test.ts` für den schrägen Lauf.
+  Erzeugen einer Vorlage aus einem Umschlag-PDF ohne Browser:
+  `_scratch/titel-anreisser/umschlag-text.ts` (mit esbuild bündeln, siehe Kopf).
+
+## 4k. Leseansicht: Kopf und festes Inhaltsverzeichnis (seit 05.10.2026)
+
+* Kopfleiste: Schriftzug der Reihe neben „Bibliothek“ (`REIHEN_LOGOS` in
+  `ReaderShell.tsx`, Zuordnung über den Reihennamen, Bilder in
+  `web/public/img/`), Hefttitel in der Titelschrift der Reihe
+  (`.issue-title.reihe-<slug>`). Die Hausschriften der Hefte sind
+  Kaufschriften ohne Weblizenz (Abmahnrisiko), deshalb freie Ersatzschriften
+  (SIL OFL, selbst gehostet): Roboto Condensed (ZUERST!, DMZ kursiv,
+  Zeitgeschichte), Anton statt Impact (Schwerterträger).
+* Ab 64rem Breite steht das Inhaltsverzeichnis fest rechts (unter dem Knopf
+  „Inhalt“, der es ein- und ausblendet; Wahl in `localStorage`
+  `reader-toc-fest`). Schmaler bleibt es die Schublade. Der rechte
+  Blätterknopf rückt neben die Liste.
+* Leseansicht und Heftkarten eckig (`border-radius: 0`): es sind Zeitschriften.
+* Kiosk und „Meine Ausgaben“: oben Reihen-Kacheln mit Schriftzug (wie die
+  Kategorien im Netzladen, `components/ReihenKacheln.tsx`). Ein Tipp öffnet
+  die eigene Seite der Reihe `/zeitschrift/<slug>` (`library/ReihePage.tsx`):
+  Schriftzug groß, Balken in der Hausfarbe, nur ihre Hefte (eigene zuerst,
+  dann alle), ihr Abo, Kontakt (Internet, Mail, Telefon, Netzladen) und
+  Social-Media-Links; die anderen Reihen erst ganz unten unter „Weitere
+  Zeitschriften“. Alles dazu (Logos hell/dunkel, Farbe, Kontakt, Folge) steht
+  in `web/src/lib/reihen.ts`; eine neue Reihe (Der Schlesier) dort eintragen.
+  Kontaktdaten aus den Impressen der Hefte. **Achtung:** dmz-netz.de /
+  deutschemilitaerzeitschrift.de, dmz-zeitgeschichte.de und
+  schwertertraeger.de zeigen fremden Inhalt („Nachtleben“, „Lust am
+  Programmieren“, Stand 05.10.2026), deshalb dort kein Internet-Link.
 
 ---
 

@@ -209,6 +209,15 @@ weicht und das wird protokolliert), Ratenbegrenzung, sichtbares Wasserzeichen
 mit Kontokennung im Reader, getrennte Geheimnisse fuer Kacheldienst, Worker und
 Shop-Schnittstelle.
 
+Seit 27.10.2026 zusaetzlich (HANDOVER 1e): Kacheln und Artikelbilder kommen
+verwuerfelt und werden erst im Browser zusammengesetzt, Artikeltext kommt
+verschluesselt und wird nur mit der Schrift der Sitzung lesbar, Reader
+verschwimmt ohne Fokus, Rechtsklick/Kopieren/Drucken sind gesperrt. Offene
+Entwicklerwerkzeuge erkennt der Reader an der Pause einer `debugger`-Anweisung
+(keine Fenstermasse, also keine Fehlalarme durch Zoom); dann baut er ab,
+beendet die Lesesitzung (`readerSessions.abschluss`, Protokoll
+`reader.devtools`) und verlangt ein Neuladen.
+
 Entfernt: DevTools-Erkennung ueber Fenstermasse, PrintScreen-Erkennung,
 Canvas-Vergiftung, Koederanfragen, kuenstliche Verzoegerungen. Sie haben nichts
 verhindert und den Reader zeitweise unbenutzbar gemacht.

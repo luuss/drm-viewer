@@ -146,30 +146,40 @@ describe("Tabellen", () => {
       await ctx.db.patch(a._id, { reviewStatus: "approved" });
       return a._id;
     });
-    // Text gibt es nur zu einer Lesesitzung, verschluesselt mit ihrem Geheimwert.
-    const SEED = 42;
-    await t.run(async (ctx: any) => {
+    // Ohne Lesesitzung gibt es keinen Text.
+    const ohne = await t
+      .withIdentity({ subject: adminId, email: "admin@example.de" })
+      .query(api.articles.getForReader, { articleId });
+    expect(ohne).toBeNull();
+    const { sessionToken, seed } = await t.run(async (ctx: any) => {
+      const seed = 123456789;
+      const sessionToken = "test-sitzung";
       await ctx.db.insert("readerSessions", {
         userId: adminId,
-        sessionToken: "lese-token",
+        sessionToken,
         issueId,
-        schutzSeed: SEED,
+        schutzSeed: seed,
         createdAt: Date.now(),
         expiresAt: Date.now() + 60_000,
       });
+      return { sessionToken, seed };
     });
     const gelesen = await t
       .withIdentity({ subject: adminId, email: "admin@example.de" })
-      .query(api.articles.getForReader, { articleId, sessionToken: "lese-token" });
+      .query(api.articles.getForReader, { articleId, sessionToken });
     expect(gelesen?.blocks.map((b: any) => b.type)).toEqual(["paragraph", "table"]);
     expect(gelesen?.blocks[0].table).toBeNull();
-    const tabelle = gelesen?.blocks[1].table;
-    expect({
-      ...tabelle,
-      rows: tabelle.rows.map((row: any[]) =>
-        row.map((c) => ({ ...c, text: entschluesseln(SEED, c.text) })),
+    // Der Text kommt verschluesselt, die Zahlen der Tabelle bleiben stehen.
+    expect(gelesen?.blocks[0].text).not.toBe("Davor.");
+    expect(entschluesseln(seed, gelesen!.blocks[0].text)).toBe("Davor.");
+    expect(gelesen?.blocks[1].table?.rows[1][0].text).toBe("1");
+    const tabelle = {
+      ...gelesen!.blocks[1].table!,
+      rows: gelesen!.blocks[1].table!.rows.map((row: any[]) =>
+        row.map((c) => ({ ...c, text: entschluesseln(seed, c.text) })),
       ),
-    }).toEqual(TABELLE);
+    };
+    expect(tabelle).toEqual(TABELLE);
     // Die Zellen sind durchsuchbar.
     const such = await t.run(async (ctx: any) => (await ctx.db.get(articleId)).searchText);
     expect(such).toContain("Robert von Greim");

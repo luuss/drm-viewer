@@ -123,3 +123,31 @@ export function useKopierschutz(): [boolean, () => void] {
     },
   ];
 }
+
+/**
+ * Offene Entwicklerwerkzeuge erkennen.
+ *
+ * Eine `debugger`-Anweisung tut nichts, solange die Werkzeuge zu sind. Sind
+ * sie offen, haelt der Browser dort an, und die Pause ist messbar. Das gibt
+ * keine Fehlalarme durch Zoom, Seitenleisten oder kleine Fenster; die alte
+ * Erkennung ueber Fenstermasse sperrte genau daran zahlende Leser aus
+ * (`docs/PROGRAMMIERPLAN.md`, Abschnitt 10). Wer die Werkzeuge offen hat,
+ * bleibt dazu jede Sekunde im Haltepunkt haengen.
+ */
+export function useDevtoolsWache(aktiv: boolean): boolean {
+  const [erkannt, setErkannt] = useState(false);
+  useEffect(() => {
+    if (!aktiv || erkannt) return;
+    // Zur Laufzeit gebaut: eine woertliche Anweisung entfernt der Minifier
+    // beim Bauen (so geschehen bis 27.10.2026, die Wache war wirkungslos).
+    // eslint-disable-next-line no-new-func
+    const halt = new Function(atob("ZGVidWdnZXI="));
+    const id = window.setInterval(() => {
+      const t0 = performance.now();
+      halt();
+      if (performance.now() - t0 > 100) setErkannt(true);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [aktiv, erkannt]);
+  return erkannt;
+}

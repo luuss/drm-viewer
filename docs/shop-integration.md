@@ -9,13 +9,14 @@ laeuft, und eine Server-zu-Server-Schnittstelle fuer Freischaltungen.
 Eine eigene Subdomain, die Dienste liegen unter Pfaden (siehe HANDOVER.md):
 
 ```
-lesen.lesenundschenken.de/          ->  Weboberflaeche (Kiosk, Bibliothek, Reader)
-lesen.lesenundschenken.de/convex/…  ->  Convex-Anwendung (WebSocket)
-lesen.lesenundschenken.de/hooks/…   ->  Convex-HTTP-Endpunkte (Stripe, Shop)
-lesen.lesenundschenken.de/api/…     ->  Kachel-Gateway
+digital.lesenundschenken.de/          ->  Weboberflaeche (Kiosk, Bibliothek, Reader)
+digital.lesenundschenken.de/convex/…  ->  Convex-Anwendung (WebSocket)
+digital.lesenundschenken.de/hooks/…   ->  Convex-HTTP-Endpunkte (Stripe, Shop)
+digital.lesenundschenken.de/api/…     ->  Kachel-Gateway
 ```
 
-Der alte Host `digital.lesenundschenken.de` leitet dorthin um.
+Bis 19.10.2026 hieß der Leser `lesen.lesenundschenken.de`. Dort leiten Seiten hierher um
+(die Startseite auf `/library`), `/hooks/`, `/convex/`, `/api/` und `/medien/` antworten weiter direkt.
 
 Ein Betrieb unter einem Unterpfad (`lesenundschenken.de/digital/`) ist moeglich:
 `VITE_BASE_PATH` setzen und den Reverse Proxy entsprechend konfigurieren. Die
@@ -34,14 +35,13 @@ Konten und Zugriff, verkauft selbst nichts (Stripe-Checkout aus, siehe unten).
 Ein Ladenmodul meldet jede bezahlte und jede stornierte Bestellung:
 
 ```
-POST https://lesen.lesenundschenken.de/hooks/shop/entitlements
+POST https://digital.lesenundschenken.de/hooks/shop/entitlements
 Header: content-type: application/json
 Header: x-shop-signature: <HMAC-SHA256 des rohen Rumpfes, hex, klein>
 ```
 
-`digital.lesenundschenken.de` leitet mit 301 auf `lesen.` um. Das Modul muss
-direkt `lesen.` ansprechen: viele HTTP-Clients machen aus einem umgeleiteten
-POST ein GET ohne Rumpf.
+Das Modul spricht `digital.` direkt an. Eine Umleitung waere hier falsch: viele
+HTTP-Clients machen aus einem umgeleiteten POST ein GET ohne Rumpf.
 
 ### Rumpf
 
@@ -110,7 +110,7 @@ Es wird kein Konto angelegt. Die Freischaltung haengt an der E-Mail-Adresse
 und greift, sobald sich jemand mit dieser Adresse anmeldet, auch wenn das Konto
 erst nach dem Kauf entsteht. Angemeldet wird nur per Link an diese Adresse
 (Abschnitt "Anmeldung"), die Adresse ist also bewiesen. Der Laden sollte dem
-Kunden sagen: "Mit derselben E-Mail unter lesen.lesenundschenken.de anmelden."
+Kunden sagen: "Mit derselben E-Mail unter digital.lesenundschenken.de anmelden."
 
 ### Idempotenz
 
@@ -218,7 +218,7 @@ aktiv ist. Nach `withdraw_digital` steht `id_product_attribute: null`,
 | `quote` | `{"action":"quote","skus":["ST-36-DIGITAL"],"country_iso":"DE","ts":…}` | `{"ok":true,"total_cents":1380,"tax_cents":90,"items":[{"sku":…,"price_cents":1380,"tax_rate":7}]}`; 409 `sku_unknown` (nur Digitalausgaben) |
 | `create_order` | siehe „Kartenkauf im Leser“ | `{"ok":true,"id_order":291,"reference":"CRGATIWJM","state":2,"paid":true,"total_cents":1380,"repeated":false}` |
 | `refund_order` | `{"action":"refund_order","mode":"live","payment_intent":"pi_…","ts":…}` | `{"ok":true,"state":7,"refunded_cents":1380,"full":true}` |
-| `send_mail` | `{"action":"send_mail","template":"lusdigital_login","to":"kunde@example.de","link":"https://lesen.lesenundschenken.de/anmelden?t=…","ts":…}` | `{"ok":true}`; 400 `bad_template`/`bad_email`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
+| `send_mail` | `{"action":"send_mail","template":"lusdigital_login","to":"kunde@example.de","link":"https://digital.lesenundschenken.de/anmelden?t=…","ts":…}` | `{"ok":true}`; 400 `bad_template`/`bad_email`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
 
 **Suche.** Jedes Wort muss in Name, Referenz, Hersteller, Merkmal „Ausgabe“
 oder einem Kategorienamen vorkommen. Reine Zahlen zaehlen nur als ganze Zahl
@@ -353,6 +353,57 @@ Von Hand:
 npx convex run --env-file _scratch/verlag-direkt.env \
   articleProducts:matchInternal '{"issueId":"<id>"}'
 ```
+
+### Einzelne Buecher auf Bucherseiten (seit 05.10.2026)
+
+Bis dahin war eine Bucherseite ("Buecher gegen den Zeitgeist", ZUERST! S. 79,
+15 Buecher) im Seitenmodus eine einzige Flaeche: der Tipp oeffnete die Auswahl
+"bestellen oder lesen" mit allen Buechern, die der Abgleich zuordnen konnte
+(ZUERST! 3/2026: 6). Ein Buch fuehrte nie direkt zu sich selbst.
+
+Jetzt legt der Import je Buch eine eigene Seitenflaeche (`pageLinks`, `shop`)
+an — `extract-service/extractor/buecher.py`, im Worker `_buchflaechen`:
+
+* **Kachel:** kurzer Satzrahmen (bis 1500 Zeichen) mit ein bis zwei Preisen
+  und Umfang oder Artikelnummer. Verfasser und Titel aus den Absatzformaten
+  (`werbeseite autor/titel`, `Bücherseite Autor/Titel 2023`, `Buchtitel
+  Katalog`), sonst aus den ersten kurzen Absaetzen. Flaeche = Rahmen plus
+  Umschlagbild darueber oder daneben (oder eines, dessen Dateiname den Titel
+  nennt). Mehrere Artikelnummern (Gesamtwerk in Baenden) sind kein Buch.
+* **Besprechung:** Literaturangabe "Verfasser. Titel. 288 S., …, € 18,–".
+  Flaeche = das Umschlagbild, dessen Dateiname den Titel nennt
+  ("verheimlicht 2026.tif"); ohne solches Bild keine Flaeche.
+
+Das Label der Flaeche ist "Titel · Verfasser"; am Trenner erkennt
+`pageLinks.resolveInternal` die Buchflaeche und nimmt `chooseBook`: erst die
+Artikelnummer, sonst nur ein Produkt, dessen Name zum Titel passt (gleich,
+mit Untertitel, oder alle Woerter eines mehrwortigen Titels), bei Gleichstand
+das mit dem Verfasser im Herstellerfeld. "Stasi" fuehrt so zu "STASI", nicht
+zu "Der Stasi-Mythos"; zwei Baende gleichen Namens bleiben offen. Offene
+Flaechen fuehren auf die Suchseite des Titels und werden beim naechsten Lauf
+erneut versucht. Die Flaechen liegen vor der Artikelflaeche; zwischen den
+Buechern oeffnet ein Tipp weiter die Anzeige als Artikel.
+
+Die Ladensuche verlangt jedes Wort der Anfrage im Produkt. Deshalb sucht
+`bookQueries` ohne Satzzeichen ("DDR – CDU – AfD" fand sonst nichts,
+ebenso "„Panther“" oder "Verheimlicht,") und zusaetzlich mit dem Haupttitel
+ohne Jahreszahl, aber nie mit einer einwortigen Gattung vor dem Doppelpunkt
+("Kalender: ..."); dort vergleicht `chooseBook` auch den Teil danach.
+
+Bestand live (05.10.2026, nach `tools/buecher_nachruesten.py`): ZUERST! 3/2026
+21 von 22 Buechern auf der Produktseite ("Tiefflieger" fuehrt der Laden
+nicht), DMZ 170 17 von 21, DMZ-Zeitgeschichte 80 10 von 13. Offen bleiben
+Buecher, die der Laden nicht fuehrt, und Titel mit mehreren Baenden oder
+Ausgaben gleichen Namens ("Unbekannt – April 1945", "Veteranen der Waffen-SS
+berichten", "Militaerflugzeuge des Kalten Krieges"): dort zeigt die
+Suchseite alle. Greim hat keine Buecherseite.
+
+Schon importierte Hefte nachruesten, ohne neuen Import (Artikel und Freigaben
+bleiben): `extract-service/tools/buecher_nachruesten.py <issueId> <idml>`
+(Probelauf), mit `--echt --env-file …` schreibt es ueber
+`pageLinks:replaceBooksInternal` und stoesst die Aufloesung an. Tests:
+`extract-service/tests/test_buecher.py` (echte Seiten aller drei Reihen,
+`tests/fixtures/buecher/`), `convex/pageLinks.test.ts`.
 
 ## Kaufknoepfe im Leser
 
@@ -558,7 +609,7 @@ Stripe-Testkunden. Werkzeuge auf dem Server in `~/lusdigital-tools/`:
 
 ### Erster Livekauf (Betreiber)
 
-1. Unter https://lesen.lesenundschenken.de mit der eigenen Adresse anmelden.
+1. Unter https://digital.lesenundschenken.de mit der eigenen Adresse anmelden.
 2. Heft mit Digitalausgabe oeffnen (z. B. „Greim“), „Jetzt kaufen“,
    Rechnungsadresse, echte Karte, „Karte speichern“ an, Widerrufsverzicht,
    „Jetzt zahlungspflichtig kaufen – 13,80 €“.
@@ -582,7 +633,7 @@ bewiesen. Bestehende Konten (frueher mit Passwort) werden ueber `users.email`
 gefunden und behalten Id, Rollen, Kaeufe und Freischaltungen.
 
 ```
-POST https://lesen.lesenundschenken.de/hooks/auth/link
+POST https://digital.lesenundschenken.de/hooks/auth/link
 Rumpf: {"email":"kunde@example.de","next":"/issue/zuerst-3-2026"}
 200 {"ok":true} · 400 bad_email · 429 rate_limited · 502 mail_failed
 ```
@@ -593,9 +644,9 @@ Rumpf: {"email":"kunde@example.de","next":"/issue/zuerst-3-2026"}
   (signiert wie alle Aktionen). Der Shop verschickt ueber sein Postfix mit
   DKIM, Absender `bestellung-netzladen@lesenundschenken.de`, Vorlage
   `lusdigital/mails/de/lusdigital_login.{html,txt}`. Der Shop nimmt nur diese
-  Vorlage, nur Links auf `https://lesen.lesenundschenken.de/` und hoechstens
+  Vorlage, nur Links auf `https://digital.lesenundschenken.de/` und hoechstens
   5 Mails je Empfaenger und Stunde (Tabelle `ps_lusdigital_mail`).
-* Link: `https://lesen.lesenundschenken.de/anmelden?t=<token>&next=<pfad>`.
+* Link: `https://digital.lesenundschenken.de/anmelden?t=<token>&next=<pfad>`.
   Token: 32 Zufallsbytes, gespeichert nur als SHA-256 (`magicLinks`), gilt
   15 Minuten und einmal. `next` nur als Pfad auf derselben Seite
   (`magicLinkRules.safeNext`), sonst `/library`.

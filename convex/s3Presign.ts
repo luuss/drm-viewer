@@ -11,7 +11,7 @@
  * `getSignedUrl` (siehe s3Presign.test.ts).
  *
  * Ein Pfad im Endpunkt ist ein Vorsatz des Proxys, kein Teil des Speichers:
- * `https://lesen.lesenundschenken.de/medien` heisst, Apache nimmt `/medien`
+ * `https://digital.lesenundschenken.de/medien` heisst, Apache nimmt `/medien`
  * ab und reicht den Rest samt Host an MinIO. Signiert wird deshalb der Pfad,
  * den MinIO sieht; der Vorsatz steht nur in der Adresse fuer den Browser.
  * So braucht der Medienspeicher keinen eigenen Namen — `medien.lesen.…` lag

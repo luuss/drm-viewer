@@ -4115,13 +4115,13 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
    Der Artikeltext kommt verschluesselt; lesbar wird er nur mit den
    Leseschriften der Sitzung. Zeichen, die sie nicht kennen (Ziffern in
    Tabellen, Bestellknoepfe), fallen auf die normalen Schriften zurueck. */
-.article-mode.geschuetzt .article-body {
-  font-family: 'LusLeseSans', var(--sans);
+.article-mode.gx .article-body {
+  font-family: 'F0', var(--sans);
 }
-.article-mode.geschuetzt .article-body h1,
-.article-mode.geschuetzt .article-body h2,
-.article-mode.geschuetzt .article-body .subtitle {
-  font-family: 'LusLeseSerif', var(--serif);
+.article-mode.gx .article-body h1,
+.article-mode.gx .article-body h2,
+.article-mode.gx .article-body .subtitle {
+  font-family: 'F1', var(--serif);
 }
 .reader-screen {
   -webkit-touch-callout: none;
@@ -4130,11 +4130,11 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 .reader-screen img,
 .reader-screen canvas { -webkit-user-drag: none; }
 /* Fenster verlassen, Tab gewechselt, Fokus weg: alles verschwimmt. */
-.reader-screen.verdeckt > :not(.reader-abdeckung) {
+.reader-screen.rv-on > :not(.rv) {
   filter: blur(28px);
   pointer-events: none;
 }
-.reader-abdeckung {
+.rv {
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -4150,17 +4150,17 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   font-weight: 600;
   cursor: pointer;
 }
-.reader-abdeckung svg { flex: none; }
+.rv svg { flex: none; }
 /* Artikelbilder sind Zeichenflaechen, keine <img> (reader/ArticleMode.tsx).
    Wie ein Bild: nie groesser als es ist, mittig, mit Rahmen. */
-.schutz-bild { display: block; margin-inline: auto; }
-.schutz-bild-platz {
+.fb { display: block; margin-inline: auto; }
+.fb-p {
   width: 100%;
   min-height: 6rem;
   background: var(--rule);
   border-radius: var(--radius-sm);
 }
-.article-body canvas.artikel-bild {
+.article-body canvas.fb-c {
   display: block;
   max-width: 100%;
   height: auto;

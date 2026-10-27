@@ -1,0 +1,2297 @@
+{
+"quelle": "zuerst 3-2026.idml",
+"blocks": [
+{
+"page": 77,
+"text": "3/2026 · Deutsches Nachrichtenmagazin",
+"style": "$ID/NormalParagraphStyle",
+"frame": "u3ed28",
+"box": [
+0.5119,
+0.9663,
+0.8714,
+0.9865
+],
+"frameBox": [
+0.5119,
+0.9562,
+0.8714,
+0.9764
+]
+},
+{
+"page": 75,
+"text": "3/2026 · Deutsches Nachrichtenmagazin",
+"style": "$ID/NormalParagraphStyle",
+"frame": "u3ee30",
+"box": [
+0.5119,
+0.9663,
+0.8714,
+0.9865
+],
+"frameBox": [
+0.5119,
+0.9562,
+0.8714,
+0.9764
+]
+},
+{
+"page": 17,
+"text": "3/2026 · Deutsches Nachrichtenmagazin",
+"style": "$ID/NormalParagraphStyle",
+"frame": "u5890e",
+"box": [
+0.5119,
+0.9663,
+0.8714,
+0.9865
+],
+"frameBox": [
+0.5119,
+0.9562,
+0.8714,
+0.9764
+]
+},
+{
+"page": 17,
+"text": "„Man hat die Deutschen nicht nur ‚umerzogen‘, man hat sie indoktriniert und mit Selbst-Haß infiziert.“",
+"style": "Zwischenüberschrift rot",
+"frame": "u589dd",
+"box": [
+0.3571,
+0.4411,
+0.6429,
+0.5017
+],
+"frameBox": [
+0.3571,
+0.4108,
+0.6429,
+0.4714
+]
+},
+{
+"page": 17,
+"text": "Titel",
+"style": "Seitenrubrik",
+"frame": "u58aa4",
+"box": [
+0.0476,
+0.0354,
+0.119,
+0.0589
+],
+"frameBox": [
+0.0476,
+0.0236,
+0.119,
+0.0471
+]
+},
+{
+"page": 17,
+"text": "Alfred de Zayas/",
+"style": "Interviewantwort",
+"frame": "u58de0",
+"box": [
+0.0603,
+0.6536,
+0.4746,
+0.659
+],
+"frameBox": [
+0.0603,
+0.651,
+0.4746,
+0.9671
+]
+},
+{
+"page": 17,
+"text": "Konrad Badenheuer",
+"style": "Interviewantwort",
+"frame": "u58de0",
+"box": [
+0.0603,
+0.6592,
+0.4746,
+0.6649
+],
+"frameBox": [
+0.0603,
+0.651,
+0.4746,
+0.9671
+]
+},
+{
+"page": 17,
+"text": "80 Thesen zur Vertreibung",
+"style": "Interviewantwort",
+"frame": "u58de0",
+"box": [
+0.0603,
+0.6662,
+0.4746,
+0.6746
+],
+"frameBox": [
+0.0603,
+0.651,
+0.4746,
+0.9671
+]
+},
+{
+"page": 17,
+"text": "Aufarbeiten statt verdrängen. – Die Vertreibung von 14 Millionen Ostdeutschen nach 1945 ist eine Zäsur der deutschen Geschichte und hat die Landkarte Europas verändert. Und doch ist es still geworden um dieses Ereignis. Medien und Schulbücher berichten nur noch wenig darüber, Unwissen ist die Folge. Nur noch wenige junge Deutsche können Schlesien, einst ein blühendes deutsches Land von der doppelten Größe Hessens, überhaupt noch auf der Landkarte finden. Die verbesserte 2. Auflage von 2025 enthält neue Literatur zur Bedeutung der UN-Völkermordkonvention, zum Lastenausgleich und zum bis heute rätselhaften Tod des polnischen Ministerpräsidenten Sikorski in Gibraltar 1943. Außerdem erwähnt die Neuauflage aktuelle politische Entwicklungen mit Bezug zur Vertreibung der Deutschen, darunter die polnische Reparationsforderung von 1,3 Billionen Euro. 216 S., s/w. Abb., Pb., € 17,90.",
+"style": "Interviewantwort",
+"frame": "u58de0",
+"box": [
+0.0603,
+0.8187,
+0.4746,
+1.0
+],
+"frameBox": [
+0.0603,
+0.651,
+0.4746,
+0.9671
+]
+},
+{
+"page": 17,
+"text": "BUCHVERSAND DEUTSCHES NACHRICHTENMAGAZIN",
+"style": "Zwischenüberschrift rot",
+"frame": "u58dff",
+"box": [
+0.2168,
+0.9027,
+0.4849,
+0.9168
+],
+"frameBox": [
+0.2168,
+0.8956,
+0.4849,
+0.9098
+]
+},
+{
+"page": 17,
+"text": "Postfach 100 •",
+"style": "Zwischenüberschrift rot",
+"frame": "u58e16",
+"box": [
+0.3707,
+0.9091,
+0.4837,
+0.9181
+],
+"frameBox": [
+0.3707,
+0.9046,
+0.4837,
+0.9334
+]
+},
+{
+"page": 17,
+"text": "24236 Selent •",
+"style": "Zwischenüberschrift rot",
+"frame": "u58e16",
+"box": [
+0.3707,
+0.9181,
+0.4837,
+0.927
+],
+"frameBox": [
+0.3707,
+0.9046,
+0.4837,
+0.9334
+]
+},
+{
+"page": 17,
+"text": "Tel. 04384/5970-0",
+"style": "Zwischenüberschrift rot",
+"frame": "u58e16",
+"box": [
+0.3707,
+0.928,
+0.4837,
+0.9389
+],
+"frameBox": [
+0.3707,
+0.9046,
+0.4837,
+0.9334
+]
+},
+{
+"page": 17,
+"text": "Erhalten die deutschen Heimatvertriebenen aus Ihrer Sicht ausreichend Unterstützung von seiten der Bundesrepublik Deutschland?",
+"style": "Interviewfrage",
+"frame": "u5896d",
+"box": [
+0.0476,
+0.2283,
+0.3333,
+0.2361
+],
+"frameBox": [
+0.0476,
+0.0606,
+0.3333,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Die Bundesregierungen haben total versagt, und zwar seit Jahrzehnten, sowohl die CDU/CSU, die SPD, die FDP wie auch alle anderen Parteien haben nichts getan, was nötig gewesen wäre, um die Menschenwürde der deutschen Vertriebenen zu behaupten, um sie zu rehabilitieren, um die Verbrecher-Staaten Polen, Tschechoslowakei und Jugoslawien für ihre Taten zur Rechenschaft zu ziehen. Dies ist Hohn und Unbarmherzigkeit den Opfern gegenüber. Insbesondere die deutsche Ostpolitik unter Willy Brandt hat versagt. Auch Helmut Kohl hätte zwischen 1989 und 1991 und auch darüber hinaus Gelegenheit gehabt, Gerechtigkeit von Polen, der Tschechoslowakei und Jugoslawien zu verlangen.",
+"style": "Interviewantwort",
+"frame": "u5896d",
+"box": [
+0.0476,
+0.4326,
+0.3333,
+0.4746
+],
+"frameBox": [
+0.0476,
+0.0606,
+0.3333,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Wo müßte die Bundesregierung hier konkret ansetzen?",
+"style": "Interviewfrage",
+"frame": "u5896d",
+"box": [
+0.0476,
+0.6178,
+0.3333,
+0.621
+],
+"frameBox": [
+0.0476,
+0.0606,
+0.3333,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Polen, die Tschechische Republik, die Slowakei, Serbien haben alle den Internationalen Pakt über bürgerliche und politische Rechte ratifiziert. Gemäß Artikel 41 des Paktes könnte die Bundesregierung eine Klage gegen Polen, Tschechien, die Slowakei und Serbien bei dem UNO-Menschenrechtsausschuß einreichen, um Rechenschaft von diesen Staaten zu verlangen. Zumindest eine Erklärung des Bedauerns, eine Anerkennung der Rechte der Vertriebenen beziehungsweise der ihrer Nachkommen, eine Geste der Versöhnung. Heute gibt es allerdings keine Anzeichen, daß Politiker bereit sind, überhaupt etwas in diese Richtung zu unternehmen. Auch viele deutsche Historiker haben sich mit der Vertreibung abgefunden oder betreiben statt dessen eine unerträgliche Geschichtsklitterung und Banalisierung der Verbrechen an den Deutschen. Leider versagen hier nach wie vor die Medien und so gut wie alle deutschen Parteien auf ganzer Linie.",
+"style": "Interviewantwort",
+"frame": "u5896d",
+"box": [
+0.0476,
+0.8659,
+0.3333,
+0.9232
+],
+"frameBox": [
+0.0476,
+0.0606,
+0.3333,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Besteht derzeit Aussicht auf eine Verbesserung der Lage der verbliebenen Deutschen in den Ostgebieten?",
+"style": "Interviewfrage",
+"frame": "u58972",
+"box": [
+0.3571,
+0.2447,
+0.6429,
+0.251
+],
+"frameBox": [
+0.3571,
+0.0606,
+0.6429,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Dies würde den politischen Willen voraussetzen – nicht nur in Polen und Tschechien, sondern und vor allem auch in der Bundesrepublik Deutschland und in Österreich. Mit Hinblick auf den Ukraine-Krieg und wie sich manche Politiker zu diesem Thema äußern, besteht derzeit kein Grund für Optimismus.",
+"style": "Interviewantwort",
+"frame": "u58972",
+"box": [
+0.3571,
+0.3479,
+0.6429,
+0.3667
+],
+"frameBox": [
+0.3571,
+0.0606,
+0.6429,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Wie erklären Sie sich, daß dieses anhaltende Unrecht innerhalb des deutschen Volkes keine größere Abscheu oder gar Widerstand hervorruft?",
+"style": "Interviewfrage",
+"frame": "u58972",
+"box": [
+0.3571,
+0.4599,
+0.6429,
+0.4683
+],
+"frameBox": [
+0.3571,
+0.0606,
+0.6429,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Die „Umerziehung“ nach dem Zweiten Weltkrieg hat langfristigen Schaden hinterlassen. Man hat die Deutschen nicht nur „umerzogen“, man hat sie indoktriniert und mit Selbst-Haß infiziert. Das nennen wir auf Englisch „Gaslighting“. Dies ist aber nichts Neues. Bereits Tacitus schreibt in seinen Buch Agricola, Kapitel 42: „Proprium humani ingenii est odisse quem laeseris.“ – „Es ist eine Eigentümlichkeit des menschlichen Gemüts, den zu hassen, den man verletzt hat.“ Es geht letzlich um eine Gehirnwäsche an den Deutschen. Aber warum haben sich die Deutschen so gründlich indoktrinieren lassen? Das begreife ich selbst nicht.",
+"style": "Interviewantwort",
+"frame": "u58972",
+"box": [
+0.3571,
+0.6552,
+0.6429,
+0.6944
+],
+"frameBox": [
+0.3571,
+0.0606,
+0.6429,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Haben Sie persönlich im Rahmen Ihrer Arbeit für die Vereinten Nationen oder darüber hinaus antideutsche Ressentiments von seiten der polnischen Behörden erlebt?",
+"style": "Interviewfrage",
+"frame": "u58972",
+"box": [
+0.3571,
+0.8564,
+0.6429,
+0.8663
+],
+"frameBox": [
+0.3571,
+0.0606,
+0.6429,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Allzuoft. Und nicht nur von den polnischen und tschechischen Behörden oder Mitarbeitern. Auch innerhalb der Strukturen der Vereinten Nationen – insbesondere von den Beförderungskommissionen. Mein Buch Nemesis at Potsdam wurde von diesen Stellen mehrfach als Waffe gegen mich eingesetzt, um mir beruflich zu schaden.",
+"style": "Interviewantwort",
+"frame": "u58955",
+"box": [
+0.6667,
+0.0972,
+0.9524,
+0.1172
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Wie ließe sich eine Situation herstellen, mit der beide Parteien gut leben können? Ist das überhaupt möglich?",
+"style": "Interviewfrage",
+"frame": "u58955",
+"box": [
+0.6667,
+0.2071,
+0.9524,
+0.2139
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Natürlich wäre das möglich, aber dafür müßte ein Paradigmenwechsel stattfinden. Es besteht kein politischer Wille in Berlin, Warschau oder Wien. Man müßte zunächst die Propaganda und die Geschichtsklitterungen über die Vertreibungsverbrechen abräumen. Leider sind wir aktuell dabei, den Informationskrieg zu verlieren.",
+"style": "Interviewantwort",
+"frame": "u58955",
+"box": [
+0.6667,
+0.3179,
+0.9524,
+0.3381
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Wie stehen Sie zu den anhaltenden Forderungen nach deutschen Reparationen von seiten der polnischen Politik?",
+"style": "Interviewfrage",
+"frame": "u58955",
+"box": [
+0.6667,
+0.4284,
+0.9524,
+0.435
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Es ist absolut surreal. Polen und Tschechien haben einen Völkermord an den deutschen Vertriebenen verübt. Die Staaten schulden den deutschen Opfern Milliarden. Aber die Regierungen in Berlin und Wien stellen keine eigenen Forderungen.",
+"style": "Interviewantwort",
+"frame": "u58955",
+"box": [
+0.6667,
+0.5176,
+0.9524,
+0.5326
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Besonders bei der heutigen Jugend verblaßt das Bewußtsein für den deutschen Osten zunehmend. Wie ließe sich diesem Prozeß aus Ihrer Sicht entgegenwirken?",
+"style": "Interviewfrage",
+"frame": "u58955",
+"box": [
+0.6667,
+0.6182,
+0.9524,
+0.6276
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "De Zayas: Ein guter Anfang wäre es, die richtigen Bücher zu diesem Thema zu lesen. Die Bundeszentrale für politische Bildung vertreibt nach wie vor vor allem antideutsche Literatur, Bücher, die eine menschenverachtende Haltung gegenüber den deutschen Opfern verbreiten. Im Jahre 2008 habe ich meine 50 Thesen zur Vertreibung veröffentlicht, die 2019 zu 80 Thesen angewachsen sind und 2025 noch einmal aktualisiert wurden. Didaktisch wären sie für Gymnasien und für den Unterricht an Universitäten gut geeignet.",
+"style": "Interviewantwort",
+"frame": "u58955",
+"box": [
+0.6667,
+0.7862,
+0.9524,
+0.8177
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 17,
+"text": "Herr Professor de Zayas, vielen Dank für das Gespräch.",
+"style": "Interviewfrage",
+"frame": "u58955",
+"box": [
+0.6667,
+0.9291,
+0.9524,
+0.9324
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 75,
+"text": "Völker umweben ihre Geschichte mit Legenden. Beispiellos in der Weltgeschichte ist, wie der heutige Westen um seine Vergangenheit schwarze Legenden von Schuld und Verbrechen strickt. Stets bemüht um Platz eins bei den Sack-und-Asche-Weltmeisterschaften, schuldstolz wie Bolle ist Deutschland. In diesem Band hat sich ein erlesenes Trüppchen zusammengefunden, um einigen bösen Legenden über unsere Geschichte an den Kragen zu gehen. Peter J. Brenner blickt auf den Fall der Benin-Bronzen zurück, die Deutschland als vermeintliche „koloniale Raubkunst“ an Nigeria gab. Michael Klonovsky beleuchtet den angeblichen Völkermord an den Herero. Mathias Brodkorb schreibt über das „postkoloniale Narrativ“, wonach der weiße Mann die Schuld an allem Weltelend trage. Der Historiker Rainer F. Schmidt untersucht den Kriegsausbruch 1914 und die Finanzierung der NSDAP. Unausrottbar hält sich der Glaube, Schlotbarone und Bankiers hätten die nationalsozialistische Partei großgepäppelt. Doch die Industriemagnaten blieben bis 1933 zurückhaltend. Was die Hitlerbewegung in die Regierung trug, war die außergewöhnliche – auch geldliche – Opferbereitschaft der Mitglieder und Anhänger. „Die nationalsozialistischen Wähler wurden nicht gekauft, sie wurden überzeugt.“ In einem weiteren Beitrag zum britischen „Morale Bombing“ im Zweiten Weltkrieg weist Schmidt auf einen wenig bekannten Zielwechsel der britischen Luftkriegsstrategie im Sommer 1944 hin: Bei den Terrorangriffen ging es nun darum, für die Zeit nach dem Krieg „einen lang andauernden, kollektiven Schockeffekt unter der Bevölkerung auszulösen“. Der Band enthält einige Texte mehr, Beiträge über Entwicklungshilfe-Schwindel und Migrantenkriminalität ziehen die Linie in die Gegenwart. Die Deutschenfeinde stricken leider schon an den Legenden von morgen. R.D.",
+"style": "Mengentext mit Initiale",
+"frame": "u5b981",
+"box": [
+0.3571,
+0.5681,
+0.6429,
+0.9626
+],
+"frameBox": [
+0.3571,
+0.5185,
+0.6429,
+0.9428
+]
+},
+{
+"page": 75,
+"text": "Cora Stephan (Hrsg.). Deutsche Legenden: Wer schreibt unsere Geschichte? 248 S., Pb., € 22,–. Dresden: Edition Buchhaus Loschwitz, 2025.",
+"style": "Mengentext mit Initiale",
+"frame": "u5b981",
+"box": [
+0.3571,
+0.9183,
+0.6429,
+0.9479
+],
+"frameBox": [
+0.3571,
+0.5185,
+0.6429,
+0.9428
+]
+},
+{
+"page": 75,
+"text": "Buchbesprechungen",
+"style": "Seitenrubrik ZUERST",
+"frame": "u5b987",
+"box": [
+0.0476,
+0.0354,
+0.2619,
+0.0589
+],
+"frameBox": [
+0.0476,
+0.0236,
+0.2619,
+0.0471
+]
+},
+{
+"page": 75,
+"text": "Kamen die Indogermanen aus der Steppe? Nach der herrschenden „Kurgan-These“ lag ihre Urheimat nordöstlich des Schwarzen Meers. Die „Nordthese“, die sie im südlichen Ostseeraum verortet, ist heute an den Rand gedrängt. Auch aus politischen Gründen: „Daß blonde Kriegereliten Europa und später die halbe Welt unterwarfen und kulturell überprägten, war in der Nachkriegszeit völlig verkraftbar, sofern diese nur ihren Ursprung bei ‚mongolenhaften‘ Steppenleuten hatten und keine ‚wikingerähnlichen‘ Nordleute waren“, so Linus Ammer. Er prüft die Befunde der Sprachgeschichte, Archäologie und Anthropologie. Der Urwortschatz weist auf eine baum- und wasserreiche Landschaft. Für die Schnurkeramiker im südlichen Ostseeraum, Träger eines Indogermanentums, sei eine Einwanderung nicht nachweisbar. Die Jamnaja-Kultur, aus der die Kurgan-Kultur hervorging, sieht Ammer als frühe Abspaltung aus einem gemeinsamen Vorläufer. Auch Steppenbefürworter verknüpfen mit den Urindogermanen helle Haare und Augen. Diese Merkmale strahlen vom Dichteschwerpunkt um die Ostsee ringförmig ab. Die Summe der Befunde weise auf den südlichen Ostseeraum und die Schnurkeramiker. Ammer folgt dem Werdegang des Indogermanentums bis zur neuzeitlichen europäischen Erdaufschließung – die „größte, letzte und weltenformende indogermanische Expansionsphase“. Über Jahrtausende zeigt sich „ein ungebrochenes Pionier- und Kriegerethos“. Scharfe Auslese im indogermanischen Quellgebiet formte diese Wesenszüge; das eiszeitliche Europa war eine „außergewöhnliche -Charakterschmiede“. Ammer sieht eine nur beschränkte Aussagekraft von Haplogruppen, an die man heute Herkunftsannahmen hängt. „Haplotypen entsprechen nicht Populationen. Sie ringen innerhalb von Völkern. Und das mit starker Zufallsdrift.“ Wer glaubt, die Nordthese sei mausetot? Ammer zeigt: Sie ist schlüssig. E.G.",
+"style": "Mengentext mit Initiale",
+"frame": "u5b99e",
+"box": [
+0.6667,
+0.5656,
+0.9524,
+1.0
+],
+"frameBox": [
+0.6667,
+0.2357,
+0.9524,
+0.9428
+]
+},
+{
+"page": 75,
+"text": "Linus Ammer. Indogermanen: Herkunft, Eigenschaften, Expansionsgeschichte. 192 S., geb., € 24,80. Belt-heim: Lindenbaum Verlag, 2025.",
+"style": "Mengentext mit Initiale",
+"frame": "u5b99e",
+"box": [
+0.6667,
+0.9191,
+0.9524,
+0.9664
+],
+"frameBox": [
+0.6667,
+0.2357,
+0.9524,
+0.9428
+]
+},
+{
+"page": 75,
+"text": "Dauerberieselung 24/7, ununterbrochener Nachrichtenstrom, digitale Reizüberflutung – die Sachen gehen in den Kopf hinein und wieder hinaus; man weiß es. Trotzdem klopft man sich beim Lesen von Gerhard Wisnewskis Jahresrückschau verwundert an den Schädel, wieviel an wundersamen Begebenheiten man glücklich ins Vergessen versenkt hatte. 9. Mai 2025: Kanzler Merz ist mit seinen „Kollegen“ Starmer und Macron im Sonderzug unterwegs nach Kiew. Die drei staatsmännisch in Pulli, Wolljacke und „Hoodie“. Es geht lustig zu. Da schließt Macron rasch ein weißes Irgendwas in seine Faust ein, läßt es danach unauffällig verschwinden. Netter Versuch. Doch dem Internet entgeht nichts, und die Frage des Tages lautet: Taschentuch oder Kokstütchen? Wisnewski will dies nicht entscheiden, verkneift sich aber nicht die Bemerkung, daß die Bundesregierung in Kiew „plötzlich vor Kraft kaum laufen konnte“. Unter den weiteren Stoffen und Ereignissen des vergangenen Jahres, die er vorüberziehen läßt und dabei auf Merkwürdigkeiten und Ungereimtheiten durchschüttelt, sind Selenskyjs Rauswurf aus dem Weißen Haus, Geschlechterverwirrung um Brigitte Macron, Scheingefechte zwischen den USA, Israel und dem Iran und eine Todesserie von AfD-Bewerbern bei den NRW-Gemeindewahlen. Er fragt aber auch, wieviel Gold wirklich in Fort Knox liegt, knöpft sich aufs neue den nun schon bei 20 Grad einsetzenden alljährlichen „Jahrhundertsommer“ vor und widmet sich Dauerbrennern wie soziale Medien und künstliche Intelligenz. In einem längeren Schlußteil beleuchtet er „den wahren ‚Great Reset‘“. A.L.",
+"style": "Mengentext mit Initiale",
+"frame": "u5b9c5",
+"box": [
+0.0476,
+0.5242,
+0.3333,
+1.0
+],
+"frameBox": [
+0.0476,
+0.2357,
+0.3333,
+0.8754
+]
+},
+{
+"page": 75,
+"text": "Gerhard Wisnewski. Verheimlicht, vertuscht, vergessen 2026 – Das andere Jahrbuch: Was 2025 nicht in der Zeitung stand. 288 S., geb., € 18,–. Rottenburg: Kopp Verlag, 2026.",
+"style": "Mengentext mit Initiale",
+"frame": "u5b9c5",
+"box": [
+0.0476,
+0.844,
+0.3333,
+0.9068
+],
+"frameBox": [
+0.0476,
+0.2357,
+0.3333,
+0.8754
+]
+},
+{
+"page": 75,
+"text": "Alle hier besprochenen Bücher liefert Ihnen gerne auf Rechnung der ZUERST!-Versand.",
+"style": "$ID/NormalParagraphStyle",
+"frame": "u5b9e0",
+"box": [
+0.0579,
+0.9063,
+0.3235,
+0.9443
+],
+"frameBox": [
+0.0579,
+0.8873,
+0.3235,
+0.9326
+]
+},
+{
+"page": 75,
+"text": "Tel. 04384/59700",
+"style": "$ID/NormalParagraphStyle",
+"frame": "u5b9e0",
+"box": [
+0.0579,
+0.9289,
+0.3235,
+0.9363
+],
+"frameBox": [
+0.0579,
+0.8873,
+0.3235,
+0.9326
+]
+},
+{
+"page": 76,
+"text": "ALT!",
+"style": "Hauptüberschrift",
+"frame": "u5ba01",
+"box": [
+0.2278,
+0.4983,
+0.7484,
+0.6734
+],
+"frameBox": [
+0.2278,
+0.4108,
+0.7484,
+0.5859
+]
+},
+{
+"page": 76,
+"text": "Postfach 52 • 24236 Selent",
+"style": "Zwischenüberschrift rot ZUERST",
+"frame": "u5ba75",
+"box": [
+0.655,
+0.9538,
+0.9526,
+0.972
+],
+"frameBox": [
+0.655,
+0.9447,
+0.9526,
+0.9747
+]
+},
+{
+"page": 76,
+"text": "Tel. 04384/5970-0",
+"style": "Zwischenüberschrift rot ZUERST",
+"frame": "u5ba75",
+"box": [
+0.655,
+0.9688,
+0.9526,
+0.9807
+],
+"frameBox": [
+0.655,
+0.9447,
+0.9526,
+0.9747
+]
+},
+{
+"page": 76,
+"text": "BUCHVERSAND",
+"style": "Zwischenüberschrift rot ZUERST",
+"frame": "u5ba8c",
+"box": [
+0.0476,
+0.9534,
+0.2219,
+0.9686
+],
+"frameBox": [
+0.0476,
+0.9458,
+0.2219,
+0.961
+]
+},
+{
+"page": 76,
+"text": "DEUTSCHES",
+"style": "Zwischenüberschrift rot ZUERST",
+"frame": "u5baa4",
+"box": [
+0.2941,
+0.9519,
+0.4512,
+0.9599
+],
+"frameBox": [
+0.2941,
+0.9479,
+0.4512,
+0.972
+]
+},
+{
+"page": 76,
+"text": "NACHRICHTENMAGAZIN",
+"style": "Zwischenüberschrift rot ZUERST",
+"frame": "u5baa4",
+"box": [
+0.2941,
+0.9639,
+0.4512,
+0.98
+],
+"frameBox": [
+0.2941,
+0.9479,
+0.4512,
+0.972
+]
+},
+{
+"page": 76,
+"text": "Christian Zeller",
+"style": "werbeseite autor",
+"frame": "u5baf9",
+"box": [
+0.4167,
+0.8104,
+0.5833,
+0.8166
+],
+"frameBox": [
+0.4167,
+0.8072,
+0.5833,
+0.9196
+]
+},
+{
+"page": 76,
+"text": "Zerstörung",
+"style": "werbeseite titel",
+"frame": "u5baf9",
+"box": [
+0.4167,
+0.8154,
+0.5833,
+0.8193
+],
+"frameBox": [
+0.4167,
+0.8072,
+0.5833,
+0.9196
+]
+},
+{
+"page": 76,
+"text": "der Meinungsfreiheit",
+"style": "werbeseite titel",
+"frame": "u5baf9",
+"box": [
+0.4167,
+0.8213,
+0.5833,
+0.8291
+],
+"frameBox": [
+0.4167,
+0.8072,
+0.5833,
+0.9196
+]
+},
+{
+"page": 76,
+"text": "Eine politische Zeitdiagnose. – Journalisten und Aktivisten überziehen die Gesellschaft mit Kampfbegriffen, der „Kampf gegen rechts“ dreht frei. Der Autor analysiert umfassend die stattfindenden Entwicklungen und Kampagnen. 456 S., Pb. € 26,–",
+"style": "werbeseite text",
+"frame": "u5baf9",
+"box": [
+0.4167,
+0.8724,
+0.5833,
+0.9668
+],
+"frameBox": [
+0.4167,
+0.8072,
+0.5833,
+0.9196
+]
+},
+{
+"page": 76,
+"text": "Alexander Marguier/",
+"style": "werbeseite autor",
+"frame": "u5bb10",
+"box": [
+0.6016,
+0.5211,
+0.7683,
+0.5281
+],
+"frameBox": [
+0.6016,
+0.5175,
+0.7683,
+0.6292
+]
+},
+{
+"page": 76,
+"text": "Ben Krischke (Hg.)",
+"style": "werbeseite autor",
+"frame": "u5bb10",
+"box": [
+0.6016,
+0.5279,
+0.7683,
+0.5346
+],
+"frameBox": [
+0.6016,
+0.5175,
+0.7683,
+0.6292
+]
+},
+{
+"page": 76,
+"text": "Die Wokeness-Illusion",
+"style": "werbeseite titel",
+"frame": "u5bb10",
+"box": [
+0.6016,
+0.5352,
+0.7683,
+0.5429
+],
+"frameBox": [
+0.6016,
+0.5175,
+0.7683,
+0.6292
+]
+},
+{
+"page": 76,
+"text": "Wenn Political Correctness die Freiheit gefährdet. – Die Autoren nehmen zentrale Elemente von Wokeness kritisch unter die Lupe, so die „geschlechtergerechte Sprache“, die geschlechtliche „Diversität“ und die Cancel Culture. 128 S., geb. € 16,–",
+"style": "werbeseite text",
+"frame": "u5bb10",
+"box": [
+0.6016,
+0.5841,
+0.7683,
+0.6743
+],
+"frameBox": [
+0.6016,
+0.5175,
+0.7683,
+0.6292
+]
+},
+{
+"page": 76,
+"text": "Jan Solwyn",
+"style": "werbeseite autor",
+"frame": "u5bb27",
+"box": [
+0.4167,
+0.5194,
+0.5833,
+0.5231
+],
+"frameBox": [
+0.4167,
+0.5175,
+0.5833,
+0.6296
+]
+},
+{
+"page": 76,
+"text": "An der Grenze",
+"style": "werbeseite titel",
+"frame": "u5bb27",
+"box": [
+0.4167,
+0.5236,
+0.5833,
+0.5284
+],
+"frameBox": [
+0.4167,
+0.5175,
+0.5833,
+0.6296
+]
+},
+{
+"page": 76,
+"text": "Verfehlte Politik, Überforderung, Flüchtlingselend: Wie ein Bundespolizist die Realität an unseren Grenzen erlebt. – Der schonungslose Bericht gibt einen seltenen Einblick in den Alltag der Bundespolizei und zeigt: Diese Migrationspolitik ist am Ende. 256 S., s/w. Abb., Pb. € 20,–",
+"style": "werbeseite text",
+"frame": "u5bb27",
+"box": [
+0.4167,
+0.5778,
+0.5833,
+0.6814
+],
+"frameBox": [
+0.4167,
+0.5175,
+0.5833,
+0.6296
+]
+},
+{
+"page": 76,
+"text": "Klaus-Rüdiger Mai",
+"style": "werbeseite autor",
+"frame": "u5bb3e",
+"box": [
+0.2321,
+0.5207,
+0.3988,
+0.527
+],
+"frameBox": [
+0.2321,
+0.5175,
+0.3988,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Stasi",
+"style": "werbeseite titel",
+"frame": "u5bb3e",
+"box": [
+0.2321,
+0.5248,
+0.3988,
+0.5267
+],
+"frameBox": [
+0.2321,
+0.5175,
+0.3988,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Die Geschichte des Ministeriums für Staatssicherheit der DDR. – In der ersten umfassenden Darstellung nähert sich der Autor der Stasi anhand der Schicksale von Menschen, die diese Behörde geprägt und gestaltet haben und die selbst von ihr verändert wurden. 496 S., geb. € 35,–",
+"style": "werbeseite text",
+"frame": "u5bb3e",
+"box": [
+0.2321,
+0.5772,
+0.3988,
+0.6801
+],
+"frameBox": [
+0.2321,
+0.5175,
+0.3988,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Hubertus Knabe",
+"style": "werbeseite autor",
+"frame": "u5bb5f",
+"box": [
+0.7857,
+0.8098,
+0.9524,
+0.815
+],
+"frameBox": [
+0.7857,
+0.8072,
+0.9524,
+0.9214
+]
+},
+{
+"page": 76,
+"text": "Tag der Befreiung?",
+"style": "werbeseite titel",
+"frame": "u5bb5f",
+"box": [
+0.7857,
+0.8157,
+0.9524,
+0.8224
+],
+"frameBox": [
+0.7857,
+0.8072,
+0.9524,
+0.9214
+]
+},
+{
+"page": 76,
+"text": "Das Kriegsende in Ostdeutschland. – Erschießungen, Vergewaltigungen, Plünderungen – das war fast immer die erste Erfahrung der deutschen Bevölkerung beim Einmarsch der sowjetischen Truppen 1945. Der Autor schildert eindringlich den Terror der Nachkriegszeit. 352 S., Pb. € 25,–",
+"style": "werbeseite text",
+"frame": "u5bb5f",
+"box": [
+0.7857,
+0.8702,
+0.9524,
+0.9725
+],
+"frameBox": [
+0.7857,
+0.8072,
+0.9524,
+0.9214
+]
+},
+{
+"page": 76,
+"text": "Sophie Liebnitz",
+"style": "werbeseite autor",
+"frame": "u5bb7f",
+"box": [
+0.7857,
+0.2306,
+0.9524,
+0.2363
+],
+"frameBox": [
+0.7857,
+0.2277,
+0.9524,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Halbmondsüchtig",
+"style": "werbeseite titel",
+"frame": "u5bb7f",
+"box": [
+0.7857,
+0.2363,
+0.9524,
+0.2421
+],
+"frameBox": [
+0.7857,
+0.2277,
+0.9524,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Xenomanie in Europa. – Europas Weltoffenheit ist einzigartig. Die fatale Kehrseite: Aus der Fernstenbegeisterung ist eine Selbstvergessenheit geworden, die längst in eine Selbstverachtung gekippt ist – und die die Substanz Europas gefährdet. 208 S., Pb. € 20,–",
+"style": "werbeseite text",
+"frame": "u5bb7f",
+"box": [
+0.7857,
+0.289,
+0.9524,
+0.3886
+],
+"frameBox": [
+0.7857,
+0.2277,
+0.9524,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Harry Lippmann",
+"style": "werbeseite autor",
+"frame": "u5bb9e",
+"box": [
+0.0476,
+0.8098,
+0.2143,
+0.8149
+],
+"frameBox": [
+0.0476,
+0.8072,
+0.2143,
+0.9188
+]
+},
+{
+"page": 76,
+"text": "Militärmuseen",
+"style": "werbeseite titel",
+"frame": "u5bb9e",
+"box": [
+0.0476,
+0.8147,
+0.2143,
+0.8195
+],
+"frameBox": [
+0.0476,
+0.8072,
+0.2143,
+0.9188
+]
+},
+{
+"page": 76,
+"text": "in Deutschland",
+"style": "werbeseite titel",
+"frame": "u5bb9e",
+"box": [
+0.0476,
+0.8197,
+0.2143,
+0.8248
+],
+"frameBox": [
+0.0476,
+0.8072,
+0.2143,
+0.9188
+]
+},
+{
+"page": 76,
+"text": "Informationsgeballt und mit Farbfotos stellt der Band sämtliche rund 700 (!) Militärmuseen Deutschlands, Festungsanlagen und Ausstellungen mit teilweise militärischen oder zur Geschichte der Weltkriege gehörenden Exponaten vor. 400 S., viele farb. Abb., Pb. € 25,–",
+"style": "werbeseite text",
+"frame": "u5bb9e",
+"box": [
+0.0476,
+0.8705,
+0.2143,
+0.967
+],
+"frameBox": [
+0.0476,
+0.8072,
+0.2143,
+0.9188
+]
+},
+{
+"page": 76,
+"text": "Alexander Gauland",
+"style": "werbeseite autor",
+"frame": "u5bbb5",
+"box": [
+0.4167,
+0.231,
+0.5833,
+0.2375
+],
+"frameBox": [
+0.4167,
+0.2277,
+0.5833,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "DDR – CDU – AfD",
+"style": "werbeseite titel",
+"frame": "u5bbb5",
+"box": [
+0.4167,
+0.2371,
+0.5833,
+0.2428
+],
+"frameBox": [
+0.4167,
+0.2277,
+0.5833,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Ein wider Willen politisch bewegtes Leben. – Von seiner Kindheit über die Zeit im Frankfurter Römer und in der hessischen Staatskanzlei bis zur Entfremdung von der CDU und zur Gründung der AfD berichtet Gauland über sein Leben und Wirken. 144 S., geb. € 20,–",
+"style": "werbeseite text",
+"frame": "u5bbb5",
+"box": [
+0.4167,
+0.2894,
+0.5833,
+0.3882
+],
+"frameBox": [
+0.4167,
+0.2277,
+0.5833,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Gerald Grosz",
+"style": "werbeseite autor",
+"frame": "u5bbcc",
+"box": [
+0.2321,
+0.2299,
+0.3988,
+0.2345
+],
+"frameBox": [
+0.2321,
+0.2277,
+0.3988,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Merkels Werk",
+"style": "werbeseite titel",
+"frame": "u5bbcc",
+"box": [
+0.2321,
+0.2345,
+0.3988,
+0.239
+],
+"frameBox": [
+0.2321,
+0.2277,
+0.3988,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Unser Untergang. – Vor zehn Jahren öffnete Angela Merkel die Schleusen. Hunderttausende Migranten stürmten die Grenzen und schrien „Asyl“. Die desaströsen Auswirkungen auf Gesellschaft, Wirtschaft, Bildung und Sicherheit sind mittlerweile unübersehbar. 332 S., geb. € 26,–",
+"style": "werbeseite text",
+"frame": "u5bbcc",
+"box": [
+0.2321,
+0.2878,
+0.3988,
+0.3899
+],
+"frameBox": [
+0.2321,
+0.2277,
+0.3988,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Manuel Ostermann",
+"style": "werbeseite autor",
+"frame": "u5bbe4",
+"box": [
+0.6016,
+0.2306,
+0.7683,
+0.2363
+],
+"frameBox": [
+0.6016,
+0.2277,
+0.7683,
+0.3384
+]
+},
+{
+"page": 76,
+"text": "Deutschland ist",
+"style": "werbeseite titel",
+"frame": "u5bbe4",
+"box": [
+0.6016,
+0.2362,
+0.7683,
+0.2416
+],
+"frameBox": [
+0.6016,
+0.2277,
+0.7683,
+0.3384
+]
+},
+{
+"page": 76,
+"text": "nicht mehr sicher",
+"style": "werbeseite titel",
+"frame": "u5bbe4",
+"box": [
+0.6016,
+0.2419,
+0.7683,
+0.2481
+],
+"frameBox": [
+0.6016,
+0.2277,
+0.7683,
+0.3384
+]
+},
+{
+"page": 76,
+"text": "Wie unsere Polizei zwischen Politik und Straße aufgerieben wird. – Kriminalstatistiken explodieren, zugleich schwindet die Autorität der Polizei. Der Vizechef der Polizeigewerkschaft zeigt schonungslos auf, wie die innere Sicherheit kippt. 208 S., geb. € 22,–",
+"style": "werbeseite text",
+"frame": "u5bbe4",
+"box": [
+0.6016,
+0.2917,
+0.7683,
+0.3851
+],
+"frameBox": [
+0.6016,
+0.2277,
+0.7683,
+0.3384
+]
+},
+{
+"page": 76,
+"text": "Bücher gegen den Zeitgeist",
+"style": "$ID/NormalParagraphStyle",
+"frame": "u5bbfb",
+"box": [
+0.0,
+0.0487,
+0.9984,
+0.0933
+],
+"frameBox": [
+0.0,
+0.0264,
+0.9984,
+0.071
+]
+},
+{
+"page": 76,
+"text": "Michael Klonovsky",
+"style": "werbeseite autor",
+"frame": "u5bc1a",
+"box": [
+0.2321,
+0.8103,
+0.3988,
+0.8165
+],
+"frameBox": [
+0.2321,
+0.8072,
+0.3988,
+0.9184
+]
+},
+{
+"page": 76,
+"text": "Land der Wunder",
+"style": "werbeseite titel",
+"frame": "u5bc1a",
+"box": [
+0.2321,
+0.8161,
+0.3988,
+0.8215
+],
+"frameBox": [
+0.2321,
+0.8072,
+0.3988,
+0.9184
+]
+},
+{
+"page": 76,
+"text": "Roman. – In einer von Alkoholikern, Spaßvögeln und Bonzen bevölkerten DDR sucht Johannes Schönbach Trost im Trunk sowie bei der schönen Katja. Nach 1989 betritt er eine von Selbstdarstellern, Gesinnungshuren und Endverbrauchern bevölkerte Bundesrepublik. 544 S., geb. € 24,80",
+"style": "werbeseite text",
+"frame": "u5bc1a",
+"box": [
+0.2321,
+0.8686,
+0.3988,
+0.9681
+],
+"frameBox": [
+0.2321,
+0.8072,
+0.3988,
+0.9184
+]
+},
+{
+"page": 76,
+"text": "Collin McMahon",
+"style": "werbeseite autor",
+"frame": "u5bc43",
+"box": [
+0.6016,
+0.8098,
+0.7683,
+0.8148
+],
+"frameBox": [
+0.6016,
+0.8072,
+0.7683,
+0.9184
+]
+},
+{
+"page": 76,
+"text": "Die Akte Epstein",
+"style": "werbeseite titel",
+"frame": "u5bc43",
+"box": [
+0.6016,
+0.8152,
+0.7683,
+0.8209
+],
+"frameBox": [
+0.6016,
+0.8072,
+0.7683,
+0.9184
+]
+},
+{
+"page": 76,
+"text": "„Drei können ein Geheimnis wahren, wenn zwei tot sind“. – Der Autor beleuchtet Epsteins Leben und Werdegang, sein Netzwerk, seine Geheimdienst-Verbindungen, die Sex-Verbrechen. Er sprach mit Insidern und enthüllt ein Labyrinth aus Lügen und Rechtfertigungen. 272 S., geb. € 23,–",
+"style": "werbeseite text",
+"frame": "u5bc43",
+"box": [
+0.6016,
+0.8682,
+0.7683,
+0.9685
+],
+"frameBox": [
+0.6016,
+0.8072,
+0.7683,
+0.9184
+]
+},
+{
+"page": 76,
+"text": "Eike Lauterbach",
+"style": "werbeseite autor",
+"frame": "u5bc6a",
+"box": [
+0.7857,
+0.5202,
+0.9524,
+0.5254
+],
+"frameBox": [
+0.7857,
+0.5175,
+0.9524,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Rechtsbankrott",
+"style": "werbeseite titel",
+"frame": "u5bc6a",
+"box": [
+0.7857,
+0.5253,
+0.9524,
+0.5302
+],
+"frameBox": [
+0.7857,
+0.5175,
+0.9524,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "169 Tage unschuldig in Haft. – Auf einer Anti-Corona-Demo wird Eike Lauterbach 2020 von der Polizei eingekesselt. Vier Jahre später wird sie plötzlich festgenommen. In Haft erlebt sie Demütigung, Erniedrigung und den Versuch, sie körperlich und psychisch zu brechen. 200 S., geb. € 24,95",
+"style": "werbeseite text",
+"frame": "u5bc6a",
+"box": [
+0.7857,
+0.5782,
+0.9524,
+0.6791
+],
+"frameBox": [
+0.7857,
+0.5175,
+0.9524,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Gunter Frank/Martina Binnig/Kay Klapproth",
+"style": "werbeseite autor",
+"frame": "u5bc83",
+"box": [
+0.0476,
+0.5261,
+0.2143,
+0.5431
+],
+"frameBox": [
+0.0476,
+0.5175,
+0.2143,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Der Staatsverrat",
+"style": "werbeseite titel",
+"frame": "u5bc83",
+"box": [
+0.0476,
+0.5379,
+0.2143,
+0.5446
+],
+"frameBox": [
+0.0476,
+0.5175,
+0.2143,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Corona als Vorbote des Totalitären: Wie Deutschland aufgelöst wird. – Die Autoren nennen Hintergründe, Methodik, Drahtzieher und Profiteure und zeigen, wie nah der autoritäre „Überstaat“ ist. 224 S., Pb. € 15,–",
+"style": "werbeseite text",
+"frame": "u5bc83",
+"box": [
+0.0476,
+0.585,
+0.2143,
+0.6723
+],
+"frameBox": [
+0.0476,
+0.5175,
+0.2143,
+0.6286
+]
+},
+{
+"page": 76,
+"text": "Peter Hahne",
+"style": "werbeseite autor",
+"frame": "u5bc9a",
+"box": [
+0.0476,
+0.2298,
+0.2143,
+0.234
+],
+"frameBox": [
+0.0476,
+0.2277,
+0.2143,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Warum macht ihr uns kaputt?",
+"style": "werbeseite titel",
+"frame": "u5bc9a",
+"box": [
+0.0476,
+0.237,
+0.2143,
+0.2472
+],
+"frameBox": [
+0.0476,
+0.2277,
+0.2143,
+0.3388
+]
+},
+{
+"page": 76,
+"text": "Wie wir unsere Zukunft verspielen. – 30 Texte über Politik und Zeitgeist, voller Sarkasmus: die Krankheit namens Kontaktverbot, die Dienstwagen-Dreckschleudern der Klima-Ideologen, das Sitzenbleib-Verbot der linken Leistungsverweigerer. 144 S., Pb. € 15,–",
+"style": "werbeseite text",
+"frame": "u5bc9a",
+"box": [
+0.0476,
+0.2905,
+0.2143,
+0.3872
+],
+"frameBox": [
+0.0476,
+0.2277,
+0.2143,
+0.3388
+]
+},
+{
+"page": 77,
+"text": "Buchbesprechungen",
+"style": "Seitenrubrik ZUERST",
+"frame": "u5bcc5",
+"box": [
+0.0476,
+0.0354,
+0.2619,
+0.0589
+],
+"frameBox": [
+0.0476,
+0.0236,
+0.2619,
+0.0471
+]
+},
+{
+"page": 77,
+"text": "Zu „Es ist die Migration,",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.0675,
+0.9524,
+0.072
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Dummkopf“ in ZUERST! 2/2026",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.0819,
+0.9524,
+0.0867
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Leben im Vielvölkerstaat",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.096,
+0.9524,
+0.1003
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Der Vielvölkerstaat ist vollendet. Die „Flüchtlinge“ leben völkerkonzentriert in den Städten. Sie machten zuvor eine Tour d’Europe, kamen dann nach Germany und wurden dort wohnmäßig ihren „Landsleuten“ zugeordnet. Hier haben sie sprachliche Nachbarn, heimatliche Medien, Geschäfte durch Landsleute geführt. Sie sind zu Hause. Deutscher Paß? Warum nicht, ein geldwerter Vorteil. Die wenigen Einheimischen in ihrem Wohnzimmer ziehen nach kurzer Dauer freiwillig aus, wenn sie sich eine Wohnung in anderer Gegend leisten können. Die deutsche Sprache? Rudimentär wichtig, Sozialhilfegeld und bezahlter Doktor, das reicht für die ersten Jahre. Sprachprüfung? Wie gelesen, wie auch geschehen bei Promotionsarbeiten, die läßt man heutzutage schreiben. Deutschland ist wirklich am Ende.",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.3176,
+0.9524,
+0.4571
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Peter Lüdin,",
+"style": "Interviewfrage",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.5358,
+0.9524,
+0.538
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "kommentiert auf zuerst.de",
+"style": "Interviewfrage",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.5461,
+0.9524,
+0.5505
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Zu „Es ist die Migration,",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.5599,
+0.9524,
+0.5644
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Dummkopf“ in ZUERST! 2/2026",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.5742,
+0.9524,
+0.5791
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Warten auf den Wahltag",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.5878,
+0.9524,
+0.5917
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Die Einwanderung muß stark begrenzt werden. Glücklicherweise wird die AfD am 8. März in Baden-Württemberg vor den Grünen landen. Nötig ist eine öko-konservative Politik gemäß Herbert Gruhl.",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.6461,
+0.9524,
+0.68
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "„Lebensreformer“,",
+"style": "Interviewfrage",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.703,
+0.9524,
+0.706
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "kommentiert auf zuerst.de",
+"style": "Interviewfrage",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.7146,
+0.9524,
+0.7191
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Zu „Deutsches Wirtschaftswachstum nur mit Syrern?“ in ZUERST! 2/2026",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.7403,
+0.9524,
+0.7525
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Kaum Fachkräfte",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.7632,
+0.9524,
+0.7659
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "unter den Migranten",
+"style": "Mengentext",
+"frame": "u5bcdf",
+"box": [
+0.6667,
+0.7726,
+0.9524,
+0.776
+],
+"frameBox": [
+0.6667,
+0.0606,
+0.9524,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Der Herausgeber empfiehlt, die „unfaßbaren Fehlzündungen“ bei einem Glas Wein zu genießen. Jede Seite zeigt einen mehr oder weniger bekannten Zeitgenossen – meist in Nahaufnahme das Gesicht – plus einen „intellektuellen Aussetzer“ des Abgebildeten. Dicke Hunde sind darunter. „Die größte Gefahr für die Menschheit sind nicht Klima, Krieg und Katastrophen, sondern der Populismus“, so die „Komikerin“ Sarah Bosetti. Sarah-Lee Heinrich liefert eine Probe grüner Rassenkunde: „Juden und Asiaten sind keine weißen Menschen, und bei Slawen weiß ich’s ehrlich gesagt nicht.“ Zur Aufnahme des Hofburg-Hausherrn heißt es entschuldigend: „Herr Van der Bellen ist Österreicher. Aber dieses Zitat ist einfach zu schön.“ Null Problemo, Ösis sind Deutsche. Einiges paßt nicht wirklich. „Die Fußball-EM in Österreich ist wie Skispringen in Namibia“ ist nicht geistige Tieffliegerei, sondern ein scherzhaft übertreibender Vergleich. Der Landwirtschaftsministerin-Satz „Drei Schweine im Einzelbett sind zuviel, zwei Schweine im Bett sind okay“ ist durch den Doppelsinn unfreiwillig ein Brüller – aber eine „intellektuelle Bankrotterklärung“? Die Personen erhalten Stempel wie „Genderfluider“, „Tiefschürfer“, „Wirtschaftswaise“, „Ethikratende“, „Diskursentschuldiger“, „Pastaspezialist“, die man lustig finden kann oder auch nicht. Hilfreicher gewesen wären Angaben zu Tätigkeit oder Amt. Weiß jeder, wer Margarete -Stokowski, Helge Lindh oder Ulrike -Winkelmann ist? Die Zitatnachweise am Buch-Ende werfen auf die Hintergründe nur wenig mehr Licht. Unterm Strich bekommt man eine Galerie von 130 Vögeln mit je einem Ausspruch. Dafür 28 Euro zu verlangen, ist sportlich. Aber gewiß ergötzt man sich in heiterer Runde mit Behagen an der Blütenlese, die zudem zu physiognomischen Fachsimpeleien einlädt. Die Fotos sind gestochen scharf. R.D.",
+"style": "Mengentext mit Initiale",
+"frame": "u5bcf9",
+"box": [
+0.0476,
+0.5608,
+0.3333,
+1.0
+],
+"frameBox": [
+0.0476,
+0.2347,
+0.3333,
+0.9418
+]
+},
+{
+"page": 77,
+"text": "André Lecloux. Tiefflieger: Die schönsten intellektuellen Bankrotterklärungen prominenter Deutscher. 144 S., geb., € 28,–. Münster: Solibri Verlag, 2025.",
+"style": "Mengentext mit Initiale",
+"frame": "u5bcf9",
+"box": [
+0.0476,
+0.9144,
+0.3333,
+0.9691
+],
+"frameBox": [
+0.0476,
+0.2347,
+0.3333,
+0.9418
+]
+},
+{
+"page": 77,
+"text": "Wer weiß heute schon noch, wer Antonio Gramsci war? Selbst in der europäischen Linken, zu deren Säulenheiligen er jahrzehntelang gehörte, kennen auch die belesenen Vertreter ihrer Zunft meist kaum mehr als seinen Namen. Ihnen fehlt die Geduld, sich mit Gramscis ausuferndem Werk über den integralen Staat und die Erlangung der kulturellen Hegemonie zu beschäftigen. Benedikt Kaiser hat es getan. Nun läßt sich mit gutem Recht die Frage aufwerfen, warum man sich ausgerechnet in die Thesen eines italienischen Kommunisten hineindenken sollte, der seit bald 90 Jahren tot ist. Kaiser gibt Antworten. Messerscharf seziert er die Lage des deutschen Rechtspopulismus am Beispiel der AfD. Der von der linken „Zivilgesellschaft“ bejammerte Rechtsruck ist vollzogen, doch um von der punktuellen Diskursverschiebung ausgehend eine echte politische Wende zu gestalten, braucht es nun einen soliden ideologischen Unterbau. Der Zeitpunkt ist denkbar günstig: Die Selbstentzauberung der CDU/CSU hinterläßt ein Vakuum, das es von rechts zu füllen gilt. Hier kommt Gramscis Vorstellung der Hegemonie ins Spiel: Kaiser zeigt eindrucksvoll, daß politischer Erfolg sich nicht in Wahlergebnissen erschöpft. Erst wenn die eigenen Ideen einen merklichen Eindruck im alltäglichen Leben oder im „Alltagsverstand“ der Menschen hinterlassen, dann schafft man es, sich dauerhaft die Lufthoheit im politischen Betrieb zu sichern. Der Autor macht es einem nicht-akademischen Publikum durch seine Wortwahl nicht immer leicht. Doch im Gegensatz zu anderen nimmt er die Mühe auf sich, dem Leser seine Grundbegriffe verständlich zu machen. Kaiser macht deutlich, daß sich Politik nicht aus dem Elfenbeinturm heraus betreiben läßt, sondern stets das alltägliche Erleben der Normalbürger mitzudenken hat. Ohne sie gibt es keine Mehrheiten und ohne sie keine echte Hegemonie. A.K.",
+"style": "Mengentext mit Initiale",
+"frame": "u5bda7",
+"box": [
+0.3571,
+0.569,
+0.6429,
+0.9648
+],
+"frameBox": [
+0.3571,
+0.5185,
+0.6429,
+0.9428
+]
+},
+{
+"page": 77,
+"text": "Benedikt Kaiser. Der Hegemonie entgegen: Gramsci, Metapolitik und Neue Rechte. 276 S., Pb., € 24,–. Dresden: Jungeuropa Verlag, 2025.",
+"style": "Mengentext mit Initiale",
+"frame": "u5bda7",
+"box": [
+0.3571,
+0.9192,
+0.6429,
+0.9477
+],
+"frameBox": [
+0.3571,
+0.5185,
+0.6429,
+0.9428
+]
+}
+],
+"images": [
+{
+"page": 17,
+"box": [
+0.0607,
+0.6537,
+0.2322,
+0.826
+],
+"link": "80 thesen zur vertreibung.tif"
+},
+{
+"page": 75,
+"box": [
+0.1139,
+0.0712,
+0.2594,
+0.2277
+],
+"link": "verheimlicht 2026.tif"
+},
+{
+"page": 75,
+"box": [
+0.7247,
+0.0723,
+0.8859,
+0.2289
+],
+"link": "indogermanen, herkunft.tif"
+},
+{
+"page": 75,
+"box": [
+0.4208,
+0.3538,
+0.5713,
+0.514
+],
+"link": "deutsche legenden.tif"
+},
+{
+"page": 76,
+"box": [
+0.0685,
+0.0744,
+0.1934,
+0.2202
+],
+"link": "warum macht ihr uns kaputt.tif"
+},
+{
+"page": 76,
+"box": [
+0.255,
+0.0744,
+0.376,
+0.2202
+],
+"link": "Merkels Werk Unser Untergang .tif"
+},
+{
+"page": 76,
+"box": [
+0.4353,
+0.0744,
+0.5647,
+0.2202
+],
+"link": "ddr, cdu, afd.tif"
+},
+{
+"page": 76,
+"box": [
+0.6139,
+0.0744,
+0.756,
+0.2202
+],
+"link": "deutschland ist nicht.tif"
+},
+{
+"page": 76,
+"box": [
+0.8118,
+0.0744,
+0.9263,
+0.2202
+],
+"link": "halbmondsüchtig.tif"
+},
+{
+"page": 76,
+"box": [
+0.0594,
+0.3634,
+0.2025,
+0.5092
+],
+"link": "der staatsverrat.tif"
+},
+{
+"page": 76,
+"box": [
+0.2507,
+0.3634,
+0.3803,
+0.5092
+],
+"link": "stasi, die geschichte.tif"
+},
+{
+"page": 76,
+"box": [
+0.432,
+0.3634,
+0.568,
+0.5092
+],
+"link": "an der grenze.tif"
+},
+{
+"page": 76,
+"box": [
+0.6191,
+0.3634,
+0.7507,
+0.5092
+],
+"link": "die wokeness-illusion.tif"
+},
+{
+"page": 76,
+"box": [
+0.7996,
+0.3635,
+0.9385,
+0.5093
+],
+"link": "rechtsbankrott.tif"
+},
+{
+"page": 76,
+"box": [
+0.0587,
+0.6546,
+0.2032,
+0.8003
+],
+"link": "militärmuseen.tif"
+},
+{
+"page": 76,
+"box": [
+0.2514,
+0.6547,
+0.3795,
+0.8004
+],
+"link": "land der wunder.tif"
+},
+{
+"page": 76,
+"box": [
+0.4347,
+0.6547,
+0.5653,
+0.8004
+],
+"link": "Zerstörung der Meinungsfreiheit.tif"
+},
+{
+"page": 76,
+"box": [
+0.619,
+0.6547,
+0.7509,
+0.8004
+],
+"link": "die akte epstein.tif"
+},
+{
+"page": 76,
+"box": [
+0.8044,
+0.6547,
+0.9337,
+0.8002
+],
+"link": "tag der befreiung.tif"
+},
+{
+"page": 77,
+"box": [
+0.0627,
+0.0715,
+0.3051,
+0.2278
+],
+"link": "739_Cover-Tiefflieger-9783960791300.tif"
+},
+{
+"page": 77,
+"box": [
+0.6667,
+0.0999,
+0.8214,
+0.2548
+],
+"link": "zuerst 2-2026.tif"
+},
+{
+"page": 77,
+"box": [
+0.4227,
+0.3538,
+0.5698,
+0.514
+],
+"link": "der hegemonie entgegen.tif"
+}
+]
+}

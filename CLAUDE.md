@@ -7,6 +7,23 @@ Convex agent skills for common tasks can be installed by running `npx convex ai-
 <!-- convex-ai-end -->
 
 
+## Git: Branch `claude/digital` (strikte Regel, seit 27.10.2026)
+
+Auf zwei Rechnern arbeitet je ein Claude an diesem Repo. Damit beide immer
+denselben Stand haben:
+
+* **Dieser Claude arbeitet nur im Branch `claude/digital`.** Nie direkt auf
+  `main` committen.
+* **Nach jeder Aenderung committen und pushen** (`git push origin claude/digital`).
+  Kein Stand bleibt nur lokal oder nur auf dem Server liegen.
+* **Vor jeder Arbeit** `git fetch` und `origin/main` in den Branch holen
+  (`git rebase origin/main` oder `git merge origin/main`), damit Arbeit des
+  anderen Rechners nicht verloren geht.
+* **Ausrollen ist erlaubt** (Convex, Oberflaeche, Gateway, Apache), aber nur
+  aus einem Stand, der committet und gepusht ist. Vor einem Convex-Deploy
+  mit dem Server abgleichen (HANDOVER 1e, Falle `stripeModus`).
+* Commits ohne Session-Links oder Co-Authored-By-Zeilen.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 

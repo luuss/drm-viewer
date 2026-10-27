@@ -4,6 +4,7 @@ import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { hasIssueAccess } from "./access";
 import { Doc, Id } from "./_generated/dataModel";
 import { fnv1a32, kachelSchluessel } from "./schutz";
+import { audit } from "./roles";
 
 /** Geheimwert der Sitzung fuer den Kopierschutz. */
 export function schutzSeedVon(row: Doc<"readerSessions">): number {
@@ -83,8 +84,31 @@ export const issue = mutation({
     const token = randomToken();
     const seed = new Uint32Array(1);
     crypto.getRandomValues(seed);
+    // Wasserzeichen-Kennung: 32 Bit, eindeutig.
+    let code = 0;
+    for (let versuch = 0; versuch < 5; versuch++) {
+      const z = new Uint32Array(1);
+      crypto.getRandomValues(z);
+      const belegt = await ctx.db
+        .query("wasserzeichen")
+        .withIndex("by_code", (q) => q.eq("code", z[0]))
+        .first();
+      if (!belegt) {
+        code = z[0];
+        break;
+      }
+    }
+    if (code) {
+      await ctx.db.insert("wasserzeichen", {
+        code,
+        userId: userId as Id<"users">,
+        issueId,
+        createdAt: now,
+      });
+    }
     await ctx.db.insert("readerSessions", {
       schutzSeed: seed[0],
+      ...(code ? { wasserzeichenCode: code } : {}),
       userId: userId as Id<"users">,
       authSessionId,
       sessionToken: token,
@@ -127,6 +151,8 @@ export const verifyInternal = internalQuery({
       // Nur fuer das Gateway: Schrift bauen, Kacheln verwuerfeln.
       schutzSeed: schutzSeedVon(row),
       kachelSchluessel: kachelSchluessel(schutzSeedVon(row)),
+      wasserzeichenCode: row.wasserzeichenCode ?? null,
+      sitzungSeit: row.createdAt,
     };
   },
 });
@@ -182,5 +208,48 @@ export const revokeAllMine = mutation({
       .collect();
     for (const r of rows) await ctx.db.delete(r._id);
     return rows.length;
+  },
+});
+
+/**
+ * Der Reader hat offene Entwicklerwerkzeuge erkannt
+ * (`web/src/reader/kopierschutz.ts`). Die Lesesitzung endet sofort, damit
+ * auch keine Kachel und keine Schrift mehr kommt, und der Vorfall steht im
+ * Protokoll.
+ */
+export const abschluss = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    const row = await ctx.db
+      .query("readerSessions")
+      .withIndex("by_token", (q) => q.eq("sessionToken", sessionToken))
+      .unique();
+    if (!row || row.userId !== userId) return null;
+    await ctx.db.delete(row._id);
+    await audit(ctx, "reader.devtools", String(row.issueId), "Lesesitzung beendet");
+    return null;
+  },
+});
+
+/** Fuer das Wasserzeichen-Werkzeug im Gateway: wer steht hinter der Kennung? */
+export const wasserzeichenAufloesenInternal = internalQuery({
+  args: { code: v.number() },
+  handler: async (ctx, { code }) => {
+    const row = await ctx.db
+      .query("wasserzeichen")
+      .withIndex("by_code", (q) => q.eq("code", code))
+      .first();
+    if (!row) return null;
+    const user = await ctx.db.get(row.userId);
+    const issue = await ctx.db.get(row.issueId);
+    return {
+      userId: row.userId,
+      email: (user as any)?.email ?? null,
+      issueId: row.issueId,
+      heft: issue?.title ?? null,
+      gelesenAm: new Date(row.createdAt).toISOString(),
+    };
   },
 });
