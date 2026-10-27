@@ -220,7 +220,7 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
           "Lesen & Schenken GmbH",
           "Voßkumsberg 4",
           "24238 Martensrade",
-          "E-Post: datenschutz@lesenundschenken.de",
+          "E-Post: info@lesenundschenken.de",
           "Telefon: 04384/5970-0",
           "Telefax: 04384/5970-40",
         ],
