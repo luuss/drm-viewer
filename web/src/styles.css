@@ -1100,10 +1100,9 @@ button.small, .btn.small {
    Kiosk, Bibliothek
    ============================================================ */
 
-/* Reihen als Kacheln: links der Schriftzug, rechts die neuesten Umschlaege,
-   die von unten ins Bild ragen wie im Zeitschriftenregal. Die Buehne ist zur
-   Seite der Umschlaege hin zart in der Hausfarbe getoent. Unten eine leichte
-   Fusszeile mit Anzahl und Weiter-Pfeil in der Hausfarbe. */
+/* Reihen als Kacheln: der Schriftzug mittig auf einer neutral beige
+   getoenten Buehne, fuer alle Reihen dieselbe Farbe. Unten eine leichte
+   Fusszeile mit Anzahl und Weiter-Pfeil. */
 .reihen-kacheln {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1115,7 +1114,6 @@ button.small, .btn.small {
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-top: 3px solid var(--reihe, var(--ink));
   box-shadow: var(--shadow);
   overflow: hidden;
   color: var(--ink);
@@ -1130,16 +1128,12 @@ button.small, .btn.small {
 a.reihen-kachel { text-decoration: none; }
 .reihen-buehne {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  display: flex;
   align-items: center;
+  justify-content: center;
   height: 13rem;
   overflow: hidden;
-  background: linear-gradient(
-    105deg,
-    var(--surface) 40%,
-    color-mix(in srgb, var(--reihe, var(--ink)) 13%, var(--surface)) 100%
-  );
+  background: #e9e0c6;
 }
 .reihen-kachel .reihen-logo {
   display: flex;
@@ -1158,32 +1152,6 @@ a.reihen-kachel { text-decoration: none; }
 }
 .reihen-kachel.reihe-dmz .reihen-logo img { max-height: 5.5rem; }
 .reihen-kachel.reihe-schwertertraeger .reihen-logo img { max-height: 3.5rem; }
-/* Umschlaege: unten angeschnitten, das vordere gerade, das hintere schraeg. */
-.reihen-umschlaege {
-  position: relative;
-  align-self: stretch;
-}
-.reihen-umschlaege img {
-  position: absolute;
-  bottom: -2.5rem;
-  width: 8.75rem;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
-  object-position: top;
-  background: var(--surface);
-  box-shadow: 0 6px 18px rgba(20, 14, 10, 0.22), 0 1px 3px rgba(20, 14, 10, 0.15);
-  transition: transform 0.25s ease;
-}
-.reihen-umschlaege img.vorn { right: 1.5rem; transform: rotate(2deg); }
-.reihen-umschlaege img.hinten {
-  right: 6rem;
-  bottom: -1.75rem;
-  transform: rotate(-7deg);
-  filter: brightness(0.94);
-}
-.reihen-umschlaege img:only-child { right: 2.5rem; }
-.reihen-kachel:hover .reihen-umschlaege img.vorn { transform: translateY(-0.6rem) rotate(0deg); }
-.reihen-kachel:hover .reihen-umschlaege img.hinten { transform: translateY(-0.3rem) rotate(-10deg); }
 .reihen-fuss {
   display: flex;
   align-items: center;
@@ -1208,15 +1176,14 @@ a.reihen-kachel { text-decoration: none; }
   flex: 0 0 auto;
   font-size: var(--fs-sub);
   font-weight: 700;
-  color: var(--reihe, var(--accent));
+  color: var(--ink);
 }
 .reihen-weiter .icon { transition: transform 0.15s ease; }
 .reihen-kachel:hover .reihen-weiter .icon { transform: translateX(var(--s1)); }
 
-/* Kleine Fassung: nur Schriftzug, ohne Umschlaege. */
+/* Kleine Fassung: niedriger, ohne Buehnenfarbe. */
 .reihen-kacheln.klein { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--s3); margin: 0; }
 .reihen-kacheln.klein .reihen-buehne { display: flex; height: 6rem; background: var(--surface); }
-.reihen-kacheln.klein .reihen-umschlaege { display: none; }
 .reihen-kacheln.klein .reihen-logo { width: 100%; padding: var(--s3) var(--s4); }
 .reihen-kacheln.klein .reihen-logo img { max-height: 3rem; }
 .reihen-kacheln.klein .reihen-fuss { padding: var(--s2) var(--s3); }
@@ -1485,9 +1452,6 @@ body:has(.reihe-seite) { overflow-x: clip; }
   .reihen-kachel .reihen-logo img { max-height: 3rem; }
   .reihen-kachel.reihe-dmz .reihen-logo img { max-height: 3.75rem; }
   .reihen-kachel.reihe-schwertertraeger .reihen-logo img { max-height: 2.5rem; }
-  .reihen-umschlaege img { width: 5.5rem; bottom: -1.75rem; }
-  .reihen-umschlaege img.vorn { right: 1rem; }
-  .reihen-umschlaege img.hinten { right: 3rem; bottom: -1.25rem; }
   .reihen-umschlaege img:only-child { right: 1.5rem; }
   .reihen-fuss { padding: var(--s2) var(--s4); }
 }
