@@ -146,8 +146,7 @@ danach `account:purgeByEmailInternal`).
   `fnv1a32("k:heft:seite:stufe:spalte:zeile")`.
 * **Artikeltext kommt verschluesselt.** `articles.getForReader` verlangt
   `sessionToken` und legt jedes Zeichen auf einen von zwei Plaetzen im
-  Unicode-Privatbereich (`convex/schutz.ts`). `GET /api/schrift/{sans,serif,
-  serif-kursiv}` (ohne `.woff2`: Cloudflare cacht nach Endung) baut zur Sitzung die passende Schrift (fontTools,
+  Unicode-Privatbereich (`convex/schutz.ts`). `GET /api/issue/<id>/f/{0,1,2}` (ohne Dateiendung: Cloudflare cacht nach Endung) baut zur Sitzung die passende Schrift (fontTools,
   Glyphennamen entfernt, ~1,7 s, danach im Speicher). Im DOM und beim
   Kopieren steht Zeichensalat. Geheimwert `readerSessions.schutzSeed`, der
   Browser bekommt ihn nie. Zahlen in Tabellen bleiben stehen (Zahlenspalten).
@@ -157,12 +156,19 @@ danach `account:purgeByEmailInternal`).
   Im Browser exakt umkehrbar (RMS wie ein normales JPEG), solange das JPEG
   4:4:4 ist. Falle beim Testen: ein mit Pillow-Standard neu gespeichertes
   JPEG ist 4:2:0, dann entstehen Farbfehler an den Zellkanten.
-* **Einmal-Tickets:** Jede Kachel und jedes Artikelbild braucht `X-Ticket`,
-  vom Gateway signiert (`/api/issue/<id>/tickets`, Buendel zu 64) und nur
+* **Einmal-Tickets:** Jede Kachel und jedes Artikelbild braucht `X-Req`,
+  vom Gateway signiert (`/api/issue/<id>/n`, Buendel zu 64) und nur
   einmal angenommen. Nachgeschickte Anfragen (Bildlupen, cURL) bekommen 403.
   Dazu nimmt das Gateway nur `fetch` von der eigenen Seite an
   (`Sec-Fetch-Site: same-origin`, `Sec-Fetch-Dest: empty`).
 * **Artikelbilder sind `<canvas>`**, kein `<img>` und kein `blob:`.
+* **Namen nach aussen nichtssagend** (seit 27.10.): Kopf `X-Req` (Ticket),
+  Antwortkopf `X-V` (verwuerfelt), Schriften `F0`/`F1` unter
+  `/api/issue/<id>/f/<n>`, Klassen `gx`, `fb`, `rv`, Mutation `abschluss`.
+  Kommentare und Funktionsnamen entfernt der Minifier. Eine woertliche
+  `debugger`-Anweisung entfernt er ebenfalls; deshalb wird sie zur Laufzeit
+  gebaut (`kopierschutz.ts`). Pruefen nach jedem Bau:
+  `grep -c ZGVidWdnZXI dist/assets/index-*.js` muss 1 sein.
 * **Unsichtbares Wasserzeichen** (`tile-service/wasserzeichen.py`): jede
   Lesesitzung bekommt eine 32-Bit-Kennung (`readerSessions.wasserzeichenCode`,
   dauerhaft in der Tabelle `wasserzeichen`). Mit Tag und Pruefsumme werden
@@ -186,7 +192,7 @@ danach `account:purgeByEmailInternal`).
   gewechselt, Maus aus dem Fenster oder Druck-Taste: alles verschwimmt, Klick
   auf die Abdeckung holt den Text zurueck. Offene DevTools (Pause einer
   `debugger`-Anweisung, `useDevtoolsWache`): Reader weg, Lesesitzung beendet
-  (`readerSessions.sperrenWegenDevtools`, `auditLog` `reader.devtools`),
+  (`readerSessions.abschluss`, `auditLog` `reader.devtools`),
   weiter nur nach Neuladen. Umgehbar mit "Haltepunkte deaktivieren".
 * **Absatz-Sprung:** Tipp auf die Druckseite oeffnet den Artikel beim
   Absatz darunter und hebt ihn kurz hervor (`articles.absatzBeiKlick`,

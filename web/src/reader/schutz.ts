@@ -98,7 +98,7 @@ export function kachelSeed(
 
 /**
  * Einmal-Tickets fuer Kacheln und Bilder. Das Gateway nimmt jedes Ticket nur
- * einmal an (`tile-service/main.py`, `require_ticket`); eine nachgeschickte
+ * einmal an (`tile-service/main.py`, `require_ticket`, Kopf `X-Req`); eine nachgeschickte
  * Anfrage mit demselben Ticket bekommt 403. Der Vorrat wird in Buendeln
  * nachgefuellt, bevor er leer ist.
  */
@@ -112,7 +112,7 @@ export class TicketVorrat {
   ) {}
 
   private nachfuellen(): Promise<void> {
-    this.laden ??= fetch(`${TILE_SERVICE_URL}/api/issue/${this.issueId}/tickets`, {
+    this.laden ??= fetch(`${TILE_SERVICE_URL}/api/issue/${this.issueId}/n`, {
       headers: { "X-Tile-Session": this.sessionToken },
     })
       .then(async (res) => {
@@ -154,7 +154,7 @@ export async function mitTicket(
 ): Promise<Response> {
   const ticket = await ticketVorrat(sessionToken, issueId).ticket();
   return fetch(url, {
-    headers: { "X-Tile-Session": sessionToken, "X-Ticket": ticket },
+    headers: { "X-Tile-Session": sessionToken, "X-Req": ticket },
     signal,
   });
 }
@@ -175,7 +175,7 @@ export async function bildAlsCanvas(
   if (!res.ok) throw new Error(`Bild ${res.status}`);
   const bild = await createImageBitmap(await res.blob());
   const assetId = /\/api\/asset\/([^/?.]+)\.jpg/.exec(url)?.[1];
-  if (res.headers.get("X-Seg") === "1" && assetId) {
+  if (res.headers.get("X-V") === "1" && assetId) {
     return zusammensetzen(bild, fnv1a32(`${k}:asset:${assetId}`));
   }
   const canvas = document.createElement("canvas");
@@ -188,18 +188,19 @@ export async function bildAlsCanvas(
 
 /** Leseschriften der Sitzung. Ihre Zeichentabelle passt nur zu deren Text. */
 export const SCHUTZ_SCHRIFTEN = [
-  { datei: "sans", familie: "LusLeseSans", style: "normal", weight: "300 800" },
-  { datei: "serif", familie: "LusLeseSerif", style: "normal", weight: "400 900" },
-  { datei: "serif-kursiv", familie: "LusLeseSerif", style: "italic", weight: "400 900" },
+  { datei: "0", familie: "F0", style: "normal", weight: "300 800" },
+  { datei: "1", familie: "F1", style: "normal", weight: "400 900" },
+  { datei: "2", familie: "F1", style: "italic", weight: "400 900" },
 ] as const;
 
 export async function schriftenLaden(
   sessionToken: string,
+  issueId: string,
   signal: AbortSignal,
 ): Promise<FontFace[]> {
   return Promise.all(
     SCHUTZ_SCHRIFTEN.map(async (s) => {
-      const res = await fetch(`${TILE_SERVICE_URL}/api/schrift/${s.datei}`, {
+      const res = await fetch(`${TILE_SERVICE_URL}/api/issue/${issueId}/f/${s.datei}`, {
         headers: { "X-Tile-Session": sessionToken },
         signal,
       });

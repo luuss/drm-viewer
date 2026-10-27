@@ -65,7 +65,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Seg"],
+    expose_headers=["X-V"],
 )
 
 _client = httpx.AsyncClient(timeout=60.0, follow_redirects=False)
@@ -120,7 +120,7 @@ async def service_call(path: str, body: dict) -> Any:
 # signiert hat und genau einmal annimmt. Eine nachgeschickte Anfrage (Bildlupe
 # wie Imagus, "Copy as cURL", ein zweites Laden) bekommt 403, auch wenn das
 # Bild schon da ist. Der Reader holt Tickets in Buendeln
-# (`web/src/reader/schutz.ts`).
+# (`web/src/reader/schutz.ts`), Kopf `X-Req`.
 TICKET_TTL = 600
 TICKETS_JE_BUENDEL = 64
 _tickets_benutzt: dict[str, float] = {}
@@ -322,21 +322,28 @@ async def session_info(
     }
 
 
-@app.get("/api/schrift/{familie}")
+# Namen nach aussen absichtlich nichtssagend (`f/<n>`, `n`, `X-Req`, `X-V`):
+# wer den Reader zerlegt, soll am Namen nicht ablesen, was dahinter steckt.
+_SCHRIFT_NR = {"0": "sans", "1": "serif", "2": "serif-kursiv"}
+
+
+@app.get("/api/issue/{issue_id}/f/{nr}")
 async def schrift(
-    familie: str,
+    issue_id: str,
+    nr: str,
     request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> Response:
     """Leseschrift dieser Sitzung: kennt nur ihre verschluesselten Zeichen.
 
-    Absichtlich ohne `.woff2` in der Adresse: Cloudflare cacht nach Endung
-    und lieferte sonst eine Schrift (oder einen 404) an fremde Sitzungen.
+    Ohne Dateiendung in der Adresse: Cloudflare cacht nach Endung und
+    lieferte sonst eine Schrift (oder einen 404) an fremde Sitzungen.
     """
-    if familie not in schutz.SCHRIFTEN:
-        raise HTTPException(404, "Unbekannte Schrift")
+    familie = _SCHRIFT_NR.get(nr)
+    if familie is None:
+        raise HTTPException(404, "Nicht gefunden")
     require_fetch(request)
-    session = await require_session(x_tile_session)
+    session = await require_session(x_tile_session, issue_id)
     daten = await asyncio.to_thread(
         schutz.schrift, int(session.get("schutzSeed", 0)), familie
     )
@@ -352,7 +359,7 @@ async def asset(
     asset_id: str,
     request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
-    x_ticket: str | None = Header(default=None, alias="X-Ticket"),
+    x_ticket: str | None = Header(default=None, alias="X-Req"),
 ) -> Response:
     """Ein Bild aus dem Medienspeicher ausliefern.
 
@@ -362,8 +369,8 @@ async def asset(
 
     Ein Titelbild ist oeffentlich: es steht im Kiosk, auch ohne Anmeldung. Alles
     andere gehoert zum bezahlten Inhalt und braucht eine gueltige Lesesitzung
-    fuer genau dieses Heft. Es kommt verwuerfelt (`X-Seg: 1`); der Reader holt
-    es mit der Sitzung im Kopf, setzt es zusammen und zeigt es als `blob:`.
+    fuer genau dieses Heft. Es kommt verwuerfelt (`X-V: 1`); der Reader holt
+    es mit der Sitzung im Kopf, setzt es zusammen und malt es auf eine Flaeche.
     Die Sitzung in der Adresse (`?s=`) gibt es nicht mehr.
     """
     info = await service_call("/service/asset/resolve", {"assetId": asset_id})
@@ -398,11 +405,11 @@ async def asset(
     return Response(
         content=await asyncio.to_thread(verwuerfelt),
         media_type="image/jpeg",
-        headers={"Cache-Control": "private, no-store", "X-Seg": "1"},
+        headers={"Cache-Control": "private, no-store", "X-V": "1"},
     )
 
 
-@app.get("/api/issue/{issue_id}/tickets")
+@app.get("/api/issue/{issue_id}/n")
 async def tickets(
     issue_id: str,
     request: Request,
@@ -458,7 +465,7 @@ async def tile(
     row: int,
     request: Request,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
-    x_ticket: str | None = Header(default=None, alias="X-Ticket"),
+    x_ticket: str | None = Header(default=None, alias="X-Req"),
 ) -> Response:
     require_fetch(request)
     session = await require_session(x_tile_session, issue_id)

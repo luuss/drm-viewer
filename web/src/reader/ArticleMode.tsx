@@ -36,7 +36,7 @@ function SchutzBild({
     bildAlsCanvas(url, sessionToken, issueId, schutzKey, abbruch.signal)
       .then((canvas) => {
         if (abbruch.signal.aborted || !halter.current) return;
-        canvas.className = "artikel-bild";
+        canvas.className = "fb-c";
         canvas.setAttribute("aria-hidden", "true");
         halter.current.replaceChildren(canvas);
         setFertig(true);
@@ -52,7 +52,7 @@ function SchutzBild({
   return (
     <span
       ref={halter}
-      className={fertig ? "schutz-bild" : "schutz-bild schutz-bild-platz"}
+      className={fertig ? "fb" : "fb fb-p"}
       style={
         !fertig && width && height
           ? { aspectRatio: `${width} / ${height}`, maxWidth: `${width}px` }
@@ -66,15 +66,15 @@ function SchutzBild({
  * Leseschriften der Sitzung. Der Artikeltext kommt verschluesselt
  * (`convex/schutz.ts`); erst mit diesen Schriften wird er lesbar.
  */
-function useSchutzSchrift(sessionToken: string | null | undefined) {
+function useSchutzSchrift(sessionToken: string | null | undefined, issueId: string | null) {
   const [stand, setStand] = useState<"laedt" | "bereit" | "fehler">("laedt");
   const [versuch, setVersuch] = useState(0);
   useEffect(() => {
-    if (!sessionToken) return;
+    if (!sessionToken || !issueId) return;
     const abbruch = new AbortController();
     let faces: FontFace[] = [];
     setStand("laedt");
-    schriftenLaden(sessionToken, abbruch.signal)
+    schriftenLaden(sessionToken, issueId, abbruch.signal)
       .then((geladen) => {
         if (abbruch.signal.aborted) return;
         faces = geladen;
@@ -89,7 +89,7 @@ function useSchutzSchrift(sessionToken: string | null | undefined) {
       abbruch.abort();
       for (const f of faces) document.fonts.delete(f);
     };
-  }, [sessionToken, versuch]);
+  }, [sessionToken, issueId, versuch]);
   return { stand, nochmal: () => setVersuch((v) => v + 1) };
 }
 
@@ -138,7 +138,7 @@ export default function ArticleMode({
     api.articles.getForReader,
     articleId && sessionToken ? { articleId, sessionToken } : "skip",
   );
-  const schrift = useSchutzSchrift(sessionToken);
+  const schrift = useSchutzSchrift(sessionToken, article?.issueId ?? null);
   const schriftBereit = schrift.stand === "bereit";
   const koerper = useRef<HTMLElement>(null);
   const zielAbsatz = useQuery(
@@ -286,7 +286,7 @@ export default function ArticleMode({
   const productsAtEnd = products.filter((product) => !shownOrders.has(product.blockOrder));
 
   return (
-    <div className="article-mode geschuetzt">
+    <div className="article-mode gx">
       <ReaderTurnButton
         direction="previous"
         label="Vorheriger Artikel"

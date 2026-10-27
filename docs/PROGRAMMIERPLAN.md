@@ -215,7 +215,7 @@ verschluesselt und wird nur mit der Schrift der Sitzung lesbar, Reader
 verschwimmt ohne Fokus, Rechtsklick/Kopieren/Drucken sind gesperrt. Offene
 Entwicklerwerkzeuge erkennt der Reader an der Pause einer `debugger`-Anweisung
 (keine Fenstermasse, also keine Fehlalarme durch Zoom); dann baut er ab,
-beendet die Lesesitzung (`readerSessions.sperrenWegenDevtools`, Protokoll
+beendet die Lesesitzung (`readerSessions.abschluss`, Protokoll
 `reader.devtools`) und verlangt ein Neuladen.
 
 Entfernt: DevTools-Erkennung ueber Fenstermasse, PrintScreen-Erkennung,

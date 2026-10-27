@@ -217,7 +217,7 @@ export const revokeAllMine = mutation({
  * auch keine Kachel und keine Schrift mehr kommt, und der Vorfall steht im
  * Protokoll.
  */
-export const sperrenWegenDevtools = mutation({
+export const abschluss = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     const userId = await getAuthUserId(ctx);

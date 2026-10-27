@@ -138,10 +138,13 @@ export function useDevtoolsWache(aktiv: boolean): boolean {
   const [erkannt, setErkannt] = useState(false);
   useEffect(() => {
     if (!aktiv || erkannt) return;
+    // Zur Laufzeit gebaut: eine woertliche Anweisung entfernt der Minifier
+    // beim Bauen (so geschehen bis 27.10.2026, die Wache war wirkungslos).
+    // eslint-disable-next-line no-new-func
+    const halt = new Function(atob("ZGVidWdnZXI="));
     const id = window.setInterval(() => {
       const t0 = performance.now();
-      // eslint-disable-next-line no-debugger
-      debugger;
+      halt();
       if (performance.now() - t0 > 100) setErkannt(true);
     }, 1000);
     return () => window.clearInterval(id);

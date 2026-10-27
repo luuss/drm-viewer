@@ -64,7 +64,7 @@ export default function ReaderShell() {
   const progress = useQuery(api.progress.get, { issueId });
   const openSession = useMutation(api.readerSessions.issue);
   const saveProgress = useMutation(api.progress.save);
-  const sperrenWegenDevtools = useMutation(api.readerSessions.sperrenWegenDevtools);
+  const sperrenWegenDevtools = useMutation(api.readerSessions.abschluss);
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   // Schluessel zum Zusammensetzen der verwuerfelten Kacheln und Bilder.
@@ -424,8 +424,7 @@ export default function ReaderShell() {
     return (
       <div className="centered reader-gesperrt" role="alert">
         <p>
-          <strong>Entwicklerwerkzeuge erkannt.</strong> Die Lesesitzung wurde beendet.
-          Bitte schließen Sie die Entwicklerwerkzeuge und laden Sie die Seite neu.
+          <strong>Die Lesesitzung wurde beendet.</strong> Bitte laden Sie die Seite neu.
         </p>
         <button type="button" className="btn" onClick={() => window.location.reload()}>
           Neu laden
@@ -461,7 +460,7 @@ export default function ReaderShell() {
 
   return (
     <div
-      className={verdeckt ? "reader-screen verdeckt" : "reader-screen"}
+      className={verdeckt ? "reader-screen rv-on" : "reader-screen"}
       onTouchStart={(e) => {
         // Im Seitenmodus gehoert die Geste dem gemeinsamen Zoom-/Pan-Viewport.
         // Geblaettert wird dort ueber die Randtasten; sonst loest horizontales
@@ -635,7 +634,7 @@ export default function ReaderShell() {
       />
 
       {verdeckt && (
-        <button type="button" className="reader-abdeckung" onClick={aufdecken}>
+        <button type="button" className="rv" onClick={aufdecken}>
           <Icon name="book-open" />
           <span>Zum Weiterlesen hier klicken</span>
         </button>
