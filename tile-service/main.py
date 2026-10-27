@@ -171,10 +171,14 @@ def wasserzeichen_feld(session: dict) -> Image.Image | None:
     """Feld der Lesesitzung fuer das unsichtbare Wasserzeichen, oder None."""
     code = session.get("wasserzeichenCode")
     if not code:
+        if not session.get("_ohne_wz_gemeldet"):
+            session["_ohne_wz_gemeldet"] = True
+            print("Wasserzeichen: Sitzung ohne Kennung")
         return None
     tag = int((float(session.get("sitzungSeit") or 0) / 1000 - 1577836800) // 86400) & 0xFFFF
     schluessel = (int(code), tag)
     if schluessel not in _felder:
+        print(f"Wasserzeichen: Feld fuer Kennung {code}, Tag {tag}")
         _felder[schluessel] = wasserzeichen.feld(wasserzeichen.verschluesseln(int(code), tag))
         while len(_felder) > 256:
             _felder.popitem(last=False)
