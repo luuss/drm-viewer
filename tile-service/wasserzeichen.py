@@ -299,7 +299,7 @@ async def _werkzeug(argv: list[str]) -> int:
         ap.error("--heft und --seite oder --asset angeben")
 
     wert, sicherheit, korr = lesen(Image.open(a.bild), original)
-    print(f"Sicherheit {sicherheit:.2f} (ohne Wasserzeichen etwa 1, sicher ab etwa 3)")
+    print(f"Sicherheit {sicherheit:.2f} (ohne Wasserzeichen unter 1, mit meist ab 2)")
     gefunden = 0
     for w, gekippt in kandidaten(wert, korr):
         code, tag = entschluesseln(w)
