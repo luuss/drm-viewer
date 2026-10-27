@@ -154,7 +154,10 @@ danach `account:purgeByEmailInternal`).
 * **Reader-Sperren** (`web/src/reader/kopierschutz.ts`): kein Rechtsklick,
   Markieren, Kopieren, Ziehen, Drucken, Strg+S/U/P, F12. Fokus weg, Tab
   gewechselt, Maus aus dem Fenster oder Druck-Taste: alles verschwimmt, Klick
-  auf die Abdeckung holt den Text zurueck.
+  auf die Abdeckung holt den Text zurueck. Offene DevTools (Pause einer
+  `debugger`-Anweisung, `useDevtoolsWache`): Reader weg, Lesesitzung beendet
+  (`readerSessions.sperrenWegenDevtools`, `auditLog` `reader.devtools`),
+  weiter nur nach Neuladen. Umgehbar mit "Haltepunkte deaktivieren".
 * **Absatz-Sprung:** Tipp auf die Druckseite oeffnet den Artikel beim
   Absatz darunter und hebt ihn kurz hervor (`articles.absatzBeiKlick`,
   Rechnung in `convex/einstieg.ts`: Spalten aus den Textrahmen,

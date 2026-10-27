@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api, TILE_SERVICE_URL, type Id } from "../lib/api";
 import PageMode, { type Klickpunkt } from "./PageMode";
-import { useKopierschutz } from "./kopierschutz";
+import { useDevtoolsWache, useKopierschutz } from "./kopierschutz";
 import ArticleMode from "./ArticleMode";
 import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
@@ -64,12 +64,26 @@ export default function ReaderShell() {
   const progress = useQuery(api.progress.get, { issueId });
   const openSession = useMutation(api.readerSessions.issue);
   const saveProgress = useMutation(api.progress.save);
+  const sperrenWegenDevtools = useMutation(api.readerSessions.sperrenWegenDevtools);
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   // Schluessel zum Zusammensetzen der verwuerfelten Kacheln und Bilder.
   const [schutzKey, setSchutzKey] = useState<number | null>(null);
   const [sitzungFehler, setSitzungFehler] = useState(false);
   const [verdeckt, aufdecken] = useKopierschutz();
+  // Offene Entwicklerwerkzeuge: Reader abbauen, Lesesitzung serverseitig
+  // beenden. Weiter geht es erst nach dem Neuladen mit geschlossenen Werkzeugen.
+  const devtools = useDevtoolsWache(access === true);
+  useEffect(() => {
+    if (!devtools) return;
+    try {
+      void navigator.clipboard?.writeText(" ");
+    } catch {
+      // ohne Rechte keine Zwischenablage
+    }
+    if (sessionToken) void sperrenWegenDevtools({ sessionToken }).catch(() => undefined);
+    setSessionToken(null);
+  }, [devtools, sessionToken, sperrenWegenDevtools]);
   const [watermark, setWatermark] = useState("");
   const [mode, setMode] = useState<Mode>("page");
   const [pageLayout, setPageLayout] = useState<PageLayout>(() =>
@@ -406,6 +420,19 @@ export default function ReaderShell() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [prev, next, canPrev, canNext, adChoice]);
 
+  if (devtools) {
+    return (
+      <div className="centered reader-gesperrt" role="alert">
+        <p>
+          <strong>Entwicklerwerkzeuge erkannt.</strong> Die Lesesitzung wurde beendet.
+          Bitte schließen Sie die Entwicklerwerkzeuge und laden Sie die Seite neu.
+        </p>
+        <button type="button" className="btn" onClick={() => window.location.reload()}>
+          Neu laden
+        </button>
+      </div>
+    );
+  }
   if (access === undefined || issue === undefined) {
     return <div className="centered">Laden...</div>;
   }

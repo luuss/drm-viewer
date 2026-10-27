@@ -4,6 +4,7 @@ import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { hasIssueAccess } from "./access";
 import { Doc, Id } from "./_generated/dataModel";
 import { fnv1a32, kachelSchluessel } from "./schutz";
+import { audit } from "./roles";
 
 /** Geheimwert der Sitzung fuer den Kopierschutz. */
 export function schutzSeedVon(row: Doc<"readerSessions">): number {
@@ -182,5 +183,27 @@ export const revokeAllMine = mutation({
       .collect();
     for (const r of rows) await ctx.db.delete(r._id);
     return rows.length;
+  },
+});
+
+/**
+ * Der Reader hat offene Entwicklerwerkzeuge erkannt
+ * (`web/src/reader/kopierschutz.ts`). Die Lesesitzung endet sofort, damit
+ * auch keine Kachel und keine Schrift mehr kommt, und der Vorfall steht im
+ * Protokoll.
+ */
+export const sperrenWegenDevtools = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    const row = await ctx.db
+      .query("readerSessions")
+      .withIndex("by_token", (q) => q.eq("sessionToken", sessionToken))
+      .unique();
+    if (!row || row.userId !== userId) return null;
+    await ctx.db.delete(row._id);
+    await audit(ctx, "reader.devtools", String(row.issueId), "Lesesitzung beendet");
+    return null;
   },
 });
