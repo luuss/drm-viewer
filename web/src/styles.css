@@ -1361,14 +1361,15 @@ body:has(.reihe-seite) { overflow-x: clip; }
   justify-content: space-between;
   gap: var(--s5);
   padding: var(--s5) var(--s6);
-  background: var(--reihe);
-  color: #fff;
+  background: #efe6d6;
+  border-left: 4px solid var(--reihe);
+  color: var(--ink);
   text-decoration: none;
 }
-.reihe-abo-karte:hover { color: #fff; filter: brightness(1.06); }
-.reihe-abo-titel { font-family: var(--serif); font-size: var(--fs-h3); font-weight: 700; }
-.reihe-abo-text { opacity: 0.9; }
-.reihe-abo-karte .btn { background: #fff; color: var(--reihe); border-color: #fff; border-radius: 0; flex: 0 0 auto; }
+.reihe-abo-karte:hover { color: var(--ink); background: #ebe0cd; }
+.reihe-abo-titel { font-family: var(--serif); font-size: var(--fs-h3); font-weight: 700; color: var(--reihe); }
+.reihe-abo-text { color: var(--ink-soft, #4a4a4a); }
+.reihe-abo-karte .btn { background: var(--reihe); color: #fff; border-color: var(--reihe); border-radius: 0; flex: 0 0 auto; }
 /* Zwei grosse Kacheln: Netzladen und Internetseite, oben Bild, unten Band in der Hausfarbe. */
 .page > section.reihe-wege {
   display: grid;
