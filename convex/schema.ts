@@ -608,6 +608,9 @@ export default defineSchema(
     issueId: v.id("issues"),
     lastSeenAt: v.optional(v.number()),
     tileCount: v.optional(v.number()),
+    // Geheimwert fuer den Kopierschutz (`schutz.ts`). Der Browser bekommt ihn
+    // nie. Fehlt bei Sitzungen von vor dem 27.10.2026.
+    schutzSeed: v.optional(v.number()),
     createdAt: v.number(),
     expiresAt: v.number(),
   })

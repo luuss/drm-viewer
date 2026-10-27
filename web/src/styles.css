@@ -4136,3 +4136,63 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 .toc-docked .toc-entry.current .label,
 .toc-docked .toc-entry.current:hover:not(:disabled) .label,
 .toc-docked .toc-entry.current .page-num { color: var(--accent-deep, #a00006); }
+
+/* Kopierschutz im Reader (reader/kopierschutz.ts, reader/schutz.ts).
+   Der Artikeltext kommt verschluesselt; lesbar wird er nur mit den
+   Leseschriften der Sitzung. Zeichen, die sie nicht kennen (Ziffern in
+   Tabellen, Bestellknoepfe), fallen auf die normalen Schriften zurueck. */
+.article-mode.geschuetzt .article-body {
+  font-family: 'LusLeseSans', var(--sans);
+}
+.article-mode.geschuetzt .article-body h1,
+.article-mode.geschuetzt .article-body h2,
+.article-mode.geschuetzt .article-body .subtitle {
+  font-family: 'LusLeseSerif', var(--serif);
+}
+.reader-screen {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+.reader-screen img,
+.reader-screen canvas { -webkit-user-drag: none; }
+/* Fenster verlassen, Tab gewechselt, Fokus weg: alles verschwimmt. */
+.reader-screen.verdeckt > :not(.reader-abdeckung) {
+  filter: blur(28px);
+  pointer-events: none;
+}
+.reader-abdeckung {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  border: 0;
+  background: rgba(250, 247, 242, 0.55);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  cursor: pointer;
+}
+.reader-abdeckung svg { flex: none; }
+.schutz-bild-platz {
+  display: block;
+  width: 100%;
+  min-height: 6rem;
+  background: var(--rule);
+  border-radius: var(--radius-sm);
+}
+/* Angetippter Absatz aus der Seitenansicht: kurz hervorgehoben. */
+@keyframes einstieg-blink {
+  from { background: rgba(196, 160, 82, 0.32); }
+  to { background: transparent; }
+}
+.article-body .einstieg {
+  animation: einstieg-blink 2.4s ease-out;
+  border-radius: var(--radius-sm);
+}
+@media print {
+  .reader-screen { display: none !important; }
+}

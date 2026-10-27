@@ -2,7 +2,13 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { hasIssueAccess } from "./access";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
+import { fnv1a32, kachelSchluessel } from "./schutz";
+
+/** Geheimwert der Sitzung fuer den Kopierschutz. */
+export function schutzSeedVon(row: Doc<"readerSessions">): number {
+  return row.schutzSeed ?? fnv1a32(`alt:${row.sessionToken}`);
+}
 
 const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -75,7 +81,10 @@ export const issue = mutation({
     }
 
     const token = randomToken();
+    const seed = new Uint32Array(1);
+    crypto.getRandomValues(seed);
     await ctx.db.insert("readerSessions", {
+      schutzSeed: seed[0],
       userId: userId as Id<"users">,
       authSessionId,
       sessionToken: token,
@@ -115,6 +124,9 @@ export const verifyInternal = internalQuery({
       issueId: row.issueId,
       // Kurzkennung fuer das Wasserzeichen im Reader.
       watermark: ((user as any)?.email ?? String(row.userId)).slice(0, 24),
+      // Nur fuer das Gateway: Schrift bauen, Kacheln verwuerfeln.
+      schutzSeed: schutzSeedVon(row),
+      kachelSchluessel: kachelSchluessel(schutzSeedVon(row)),
     };
   },
 });

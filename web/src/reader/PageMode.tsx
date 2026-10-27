@@ -3,6 +3,10 @@ import { createPortal } from "react-dom";
 import OpenSeadragon from "openseadragon";
 import { TILE_SERVICE_URL, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
+import { kachelSeed, zusammensetzen } from "./schutz";
+
+/** Wo auf der Seite getippt wurde, normiert auf 0..1. */
+export type Klickpunkt = { pageIndex: number; x: number; y: number };
 
 type Region = {
   articleId: Id<"articles">;
@@ -30,10 +34,16 @@ type Props = {
   pageIndexes: number[];
   spread: boolean;
   sessionToken: string;
+  /** Schluessel zum Zusammensetzen der verwuerfelten Kacheln. */
+  schutzKey: number;
   regions: Region[];
   links: PageLink[];
   watermark: string;
-  onOpenArticle: (articleId: Id<"articles">, fromPageIndex?: number) => void;
+  onOpenArticle: (
+    articleId: Id<"articles">,
+    fromPageIndex?: number,
+    punkt?: Klickpunkt,
+  ) => void;
   onNavigatePage: (pageIndex: number) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -64,6 +74,7 @@ export default function PageMode({
   pageIndexes,
   spread,
   sessionToken,
+  schutzKey,
   regions,
   links,
   watermark,
@@ -140,10 +151,8 @@ export default function PageMode({
       maxZoomPixelRatio: 2.5,
       animationTime: 0.4,
       springStiffness: 8,
-      loadTilesWithAjax: true,
       tileRetryMax: 3,
       tileRetryDelay: 1000,
-      ajaxHeaders: { "X-Tile-Session": sessionToken },
     });
     viewerRef.current = viewer;
     setOverlayHost(viewer.canvas as HTMLElement);
@@ -167,6 +176,7 @@ export default function PageMode({
       const viewportPoint = viewer.viewport.pointFromPixel(event.position, true);
       let best: Region | null = null;
       let bestArea = Infinity;
+      let bestPunkt: Klickpunkt | undefined;
 
       for (let slot = 0; slot < viewer.world.getItemCount(); slot += 1) {
         const item = viewer.world.getItemAt(slot);
@@ -200,13 +210,15 @@ export default function PageMode({
           if (area < bestArea) {
             best = region;
             bestArea = area;
+            bestPunkt = { pageIndex, x: nx, y: ny };
           }
         }
       }
 
       if (best) {
         if (best.targetPageIndex !== null) navigatePageRef.current(best.targetPageIndex);
-        else openArticleRef.current(best.articleId);
+        // Mit Seite und Punkt: der Artikel oeffnet beim angetippten Absatz.
+        else openArticleRef.current(best.articleId, best.pageIndex, bestPunkt);
       }
     });
     viewer.addHandler("tile-load-failed", (event: any) => {
@@ -228,6 +240,9 @@ export default function PageMode({
       viewerRef.current = null;
     };
   }, [sessionToken, syncLayers, nachDraussen]);
+
+  const schutzKeyRef = useRef(schutzKey);
+  schutzKeyRef.current = schutzKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -287,20 +302,42 @@ export default function PageMode({
           // Gleiche Welthoehe, reale Seitenbreite: dadurch beruehren sich die
           // Seiten exakt bei worldX, ohne kuenstlichen Zwischenraum.
           const worldWidth = info.width / info.height;
-          const spec = {
-            x: worldX,
-            y: 0,
-            width: worldWidth,
-            tileSource: {
-              width: info.width,
-              height: info.height,
-              tileSize: info.tileSize,
-              minLevel: 0,
-              maxLevel: info.maxLevel,
-              getTileUrl: (level: number, x: number, y: number) =>
-                `${base}/tile/${info.maxLevel - level}/${x}/${y}.jpg`,
-            },
+          const tileSource: any = new (OpenSeadragon as any).TileSource({
+            width: info.width,
+            height: info.height,
+            tileSize: info.tileSize,
+            tileOverlap: 0,
+            minLevel: 0,
+            maxLevel: info.maxLevel,
+          });
+          tileSource.getTileUrl = (level: number, x: number, y: number) =>
+            `${base}/tile/${info.maxLevel - level}/${x}/${y}.jpg`;
+          // Kacheln kommen verwuerfelt (`tile-service/schutz.py`) und werden
+          // erst hier auf einer Zeichenflaeche zusammengesetzt.
+          tileSource.downloadTileStart = (job: any) => {
+            const abbruch = new AbortController();
+            job.userData.abbruch = abbruch;
+            const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(job.src);
+            fetch(job.src, {
+              headers: { "X-Tile-Session": sessionToken },
+              signal: abbruch.signal,
+            })
+              .then((res) => {
+                if (!res.ok) throw new Error(`Kachel ${res.status}`);
+                return res.blob();
+              })
+              .then((blob) => createImageBitmap(blob))
+              .then((bild) => {
+                const canvas = zusammensetzen(
+                  bild,
+                  kachelSeed(schutzKeyRef.current, issueId, teile![1], teile![2], teile![3], teile![4]),
+                );
+                job.finish(canvas.getContext("2d"), null, "context2d");
+              })
+              .catch((error) => job.fail(String(error), null));
           };
+          tileSource.downloadTileAbort = (job: any) => job.userData.abbruch?.abort();
+          const spec = { x: worldX, y: 0, width: worldWidth, tileSource };
           worldX += worldWidth;
           return spec;
         });

@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
+import { entschluesseln } from "./schutz";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -145,12 +146,40 @@ describe("Tabellen", () => {
       await ctx.db.patch(a._id, { reviewStatus: "approved" });
       return a._id;
     });
-    const gelesen = await t
+    // Ohne Lesesitzung gibt es keinen Text.
+    const ohne = await t
       .withIdentity({ subject: adminId, email: "admin@example.de" })
       .query(api.articles.getForReader, { articleId });
+    expect(ohne).toBeNull();
+    const { sessionToken, seed } = await t.run(async (ctx: any) => {
+      const seed = 123456789;
+      const sessionToken = "test-sitzung";
+      await ctx.db.insert("readerSessions", {
+        userId: adminId,
+        sessionToken,
+        issueId,
+        schutzSeed: seed,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+      });
+      return { sessionToken, seed };
+    });
+    const gelesen = await t
+      .withIdentity({ subject: adminId, email: "admin@example.de" })
+      .query(api.articles.getForReader, { articleId, sessionToken });
     expect(gelesen?.blocks.map((b: any) => b.type)).toEqual(["paragraph", "table"]);
     expect(gelesen?.blocks[0].table).toBeNull();
-    expect(gelesen?.blocks[1].table).toEqual(TABELLE);
+    // Der Text kommt verschluesselt, die Zahlen der Tabelle bleiben stehen.
+    expect(gelesen?.blocks[0].text).not.toBe("Davor.");
+    expect(entschluesseln(seed, gelesen!.blocks[0].text)).toBe("Davor.");
+    expect(gelesen?.blocks[1].table?.rows[1][0].text).toBe("1");
+    const tabelle = {
+      ...gelesen!.blocks[1].table!,
+      rows: gelesen!.blocks[1].table!.rows.map((row: any[]) =>
+        row.map((c) => ({ ...c, text: entschluesseln(seed, c.text) })),
+      ),
+    };
+    expect(tabelle).toEqual(TABELLE);
     // Die Zellen sind durchsuchbar.
     const such = await t.run(async (ctx: any) => (await ctx.db.get(articleId)).searchText);
     expect(such).toContain("Robert von Greim");

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api, TILE_SERVICE_URL, type Id } from "../lib/api";
-import PageMode from "./PageMode";
+import PageMode, { type Klickpunkt } from "./PageMode";
+import { useKopierschutz } from "./kopierschutz";
 import ArticleMode from "./ArticleMode";
 import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
@@ -65,6 +66,10 @@ export default function ReaderShell() {
   const saveProgress = useMutation(api.progress.save);
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  // Schluessel zum Zusammensetzen der verwuerfelten Kacheln und Bilder.
+  const [schutzKey, setSchutzKey] = useState<number | null>(null);
+  const [sitzungFehler, setSitzungFehler] = useState(false);
+  const [verdeckt, aufdecken] = useKopierschutz();
   const [watermark, setWatermark] = useState("");
   const [mode, setMode] = useState<Mode>("page");
   const [pageLayout, setPageLayout] = useState<PageLayout>(() =>
@@ -75,6 +80,11 @@ export default function ReaderShell() {
   // Seite, von der aus der Artikel geoeffnet wurde — der Einstieg in den
   // Lesetext. Null heisst: am Anfang des Artikels.
   const [artikelEinstieg, setArtikelEinstieg] = useState<number | null>(null);
+  // Angetippter Punkt der Druckseite: die Artikelansicht springt zum Absatz
+  // darunter. `n` macht einen zweiten Tipp auf dieselbe Stelle neu.
+  const [einstiegPunkt, setEinstiegPunkt] = useState<
+    (Klickpunkt & { articleId: Id<"articles">; n: number }) | null
+  >(null);
   const [tocOpen, setTocOpen] = useState(false);
   // Auf breiten Schirmen steht das Verzeichnis fest links; der Knopf "Inhalt"
   // blendet es aus und wieder ein. Die Wahl bleibt ueber Hefte hinweg.
@@ -87,6 +97,7 @@ export default function ReaderShell() {
   const [adChoice, setAdChoice] = useState<{
     articleId: Id<"articles">;
     fromPageIndex?: number;
+    punkt?: Klickpunkt;
   } | null>(null);
   const [restored, setRestored] = useState(false);
   const saveTimer = useRef<number | null>(null);
@@ -107,15 +118,25 @@ export default function ReaderShell() {
     (async () => {
       const s = await openSession({ issueId });
       if (cancelled) return;
-      setSessionToken(s.token);
-      try {
-        const res = await fetch(`${TILE_SERVICE_URL}/api/session`, {
-          headers: { "X-Tile-Session": s.token },
-        });
-        if (res.ok) setWatermark((await res.json()).watermark ?? "");
-      } catch {
-        // Wasserzeichen ist Beiwerk, kein Grund den Reader zu blockieren.
+      // Ohne den Schluessel aus der Sitzung bleiben Kacheln und Bilder
+      // verwuerfelt; der Reader wartet also auf ihn.
+      for (let versuch = 0; versuch < 3 && !cancelled; versuch++) {
+        try {
+          const res = await fetch(`${TILE_SERVICE_URL}/api/session`, {
+            headers: { "X-Tile-Session": s.token },
+          });
+          if (!res.ok) throw new Error(String(res.status));
+          const info = await res.json();
+          if (cancelled) return;
+          setWatermark(info.watermark ?? "");
+          setSchutzKey(Number(info.k ?? 0));
+          setSessionToken(s.token);
+          return;
+        } catch {
+          await new Promise((ok) => window.setTimeout(ok, 1500));
+        }
       }
+      if (!cancelled) setSitzungFehler(true);
     })();
     return () => {
       cancelled = true;
@@ -215,9 +236,10 @@ export default function ReaderShell() {
   );
 
   const openArticle = useCallback(
-    (id: Id<"articles"> | null, fromPageIndex?: number) => {
+    (id: Id<"articles"> | null, fromPageIndex?: number, punkt?: Klickpunkt) => {
       setArticleId(id);
       setArtikelEinstieg(fromPageIndex ?? null);
+      setEinstiegPunkt(id && punkt ? { ...punkt, articleId: id, n: Date.now() } : null);
       setMode("article");
       const hit = articleList.find((a) => a._id === id);
       // Laeuft der Artikel ueber die Seite, auf der der Leser gerade steht,
@@ -247,9 +269,9 @@ export default function ReaderShell() {
    * Laden oeffnet nicht gleich ihren Text, sondern fragt erst.
    */
   const openFromPage = useCallback(
-    (id: Id<"articles">, fromPageIndex?: number) => {
+    (id: Id<"articles">, fromPageIndex?: number, punkt?: Klickpunkt) => {
       if (!productsByArticle.get(id)?.isAd) {
-        openArticle(id, fromPageIndex);
+        openArticle(id, fromPageIndex, punkt);
         return;
       }
       // Ein Tipp erreicht die Seite auf zwei Wegen (Flaeche und Zeichenflaeche);
@@ -259,8 +281,9 @@ export default function ReaderShell() {
           ? {
               articleId: id,
               fromPageIndex: current.fromPageIndex ?? fromPageIndex,
+              punkt: current.punkt ?? punkt,
             }
-          : { articleId: id, fromPageIndex },
+          : { articleId: id, fromPageIndex, punkt },
       );
     },
     [productsByArticle, openArticle],
@@ -411,7 +434,7 @@ export default function ReaderShell() {
 
   return (
     <div
-      className="reader-screen"
+      className={verdeckt ? "reader-screen verdeckt" : "reader-screen"}
       onTouchStart={(e) => {
         // Im Seitenmodus gehoert die Geste dem gemeinsamen Zoom-/Pan-Viewport.
         // Geblaettert wird dort ueber die Randtasten; sonst loest horizontales
@@ -508,12 +531,13 @@ export default function ReaderShell() {
       <div className={tocDocked ? "reader-body toc-fest" : "reader-body"}>
         <main className="reader-main">
           {mode === "page" ? (
-            sessionToken ? (
+            sessionToken && schutzKey !== null ? (
               <PageMode
                 issueId={issueId}
                 pageIndexes={visiblePageIndexes}
                 spread={pageLayout === "spread"}
                 sessionToken={sessionToken}
+                schutzKey={schutzKey}
                 regions={regions ?? []}
                 links={links ?? []}
                 watermark={watermark}
@@ -524,6 +548,10 @@ export default function ReaderShell() {
                 canPrev={canPrev}
                 canNext={canNext}
               />
+            ) : sitzungFehler ? (
+              <div className="page-hint error" role="alert">
+                Lesesitzung konnte nicht geöffnet werden. Bitte Seite neu laden.
+              </div>
             ) : (
               <div className="page-hint">Lesesitzung wird geöffnet...</div>
             )
@@ -536,6 +564,12 @@ export default function ReaderShell() {
                 )?.products ?? []
               }
               fromPageIndex={artikelEinstieg}
+              einstiegPunkt={
+                einstiegPunkt && einstiegPunkt.articleId === (articleId ?? articleList[0]?._id)
+                  ? einstiegPunkt
+                  : null
+              }
+              schutzKey={schutzKey}
               watermark={watermark}
               pageLabel={pageLabel}
               onPrev={prev}
@@ -573,12 +607,19 @@ export default function ReaderShell() {
         onSeek={(p) => (mode === "page" ? goPage(p) : goArticle(p))}
       />
 
+      {verdeckt && (
+        <button type="button" className="reader-abdeckung" onClick={aufdecken}>
+          <Icon name="book-open" />
+          <span>Zum Weiterlesen hier klicken</span>
+        </button>
+      )}
+
       {adChoice && mode === "page" && (
         <ProductChoice
           products={productsByArticle.get(adChoice.articleId)?.products ?? []}
           onRead={() => {
             setAdChoice(null);
-            openArticle(adChoice.articleId, adChoice.fromPageIndex);
+            openArticle(adChoice.articleId, adChoice.fromPageIndex, adChoice.punkt);
           }}
           onClose={() => setAdChoice(null)}
         />

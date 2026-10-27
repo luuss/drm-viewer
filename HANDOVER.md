@@ -133,6 +133,47 @@ danach `account:purgeByEmailInternal`).
 * Lokal testen ohne `.env`: `VITE_CONVEX_URL=https://digital.lesenundschenken.de/convex node node_modules/vite/bin/vite.js --port 5199`
   in `web/` (abgemeldete Ansicht; angemeldete Leiste per DOM nachgestellt).
 
+## 1e. Kopierschutz und Absatz-Sprung (27.10.2026)
+
+* **Kacheln und Artikelbilder kommen verwuerfelt.** Das Gateway teilt jedes
+  Bild in 64-px-Bloecke und vertauscht die vollen Bloecke
+  (`tile-service/schutz.py`, JPEG 4:4:4, darum keine Naehte). Der Reader setzt
+  sie auf einer Zeichenflaeche zusammen (`web/src/reader/schutz.ts`):
+  Kacheln ueber ein eigenes `downloadTileStart` in `PageMode.tsx`,
+  Artikelbilder als `blob:`-Adresse. Im HTML steht kein Serverpfad mehr, die
+  Sitzung geht nur im Kopf `X-Tile-Session` mit (`?s=` gibt es nicht mehr).
+  Schluessel: `/api/session` liefert `k`, je Kachel
+  `fnv1a32("k:heft:seite:stufe:spalte:zeile")`.
+* **Artikeltext kommt verschluesselt.** `articles.getForReader` verlangt
+  `sessionToken` und legt jedes Zeichen auf einen von zwei Plaetzen im
+  Unicode-Privatbereich (`convex/schutz.ts`). `GET /api/schrift/{sans,serif,
+  serif-kursiv}` (ohne `.woff2`: Cloudflare cacht nach Endung) baut zur Sitzung die passende Schrift (fontTools,
+  Glyphennamen entfernt, ~1,7 s, danach im Speicher). Im DOM und beim
+  Kopieren steht Zeichensalat. Geheimwert `readerSessions.schutzSeed`, der
+  Browser bekommt ihn nie. Zahlen in Tabellen bleiben stehen (Zahlenspalten).
+* **Reader-Sperren** (`web/src/reader/kopierschutz.ts`): kein Rechtsklick,
+  Markieren, Kopieren, Ziehen, Drucken, Strg+S/U/P, F12. Fokus weg, Tab
+  gewechselt, Maus aus dem Fenster oder Druck-Taste: alles verschwimmt, Klick
+  auf die Abdeckung holt den Text zurueck.
+* **Absatz-Sprung:** Tipp auf die Druckseite oeffnet den Artikel beim
+  Absatz darunter und hebt ihn kurz hervor (`articles.absatzBeiKlick`,
+  Rechnung in `convex/einstieg.ts`: Spalten aus den Textrahmen,
+  Spaltenwechsel aus `sourceY`).
+* Die Python- und JS-Zufallsfunktionen muessen gleich rechnen;
+  `convex/schutz.test.ts` prueft das.
+* Ausrollen: erst Convex (Abschnitt 1b), dann
+  `docker compose ... up -d --build web tile-service`. Sicherung vorher:
+  `/root/vor-kopierschutz-2026-10-27.tgz`. Gateway und Oberflaeche immer
+  zusammen ausrollen: ein altes Frontend zeigt sonst verwuerfelte Kacheln.
+* **Falle:** Live-Convex lief am 27.10. mit Code, der nur in
+  `/opt/hefte-digital/code/convex` lag (Leser-Abo, `stripeModus`). Ein Deploy
+  aus dem Git-Stand scheiterte an der Schemapruefung und haette sonst diese
+  Funktionen entfernt. Vor jedem Convex-Deploy deshalb
+  `diff -rq convex <server-kopie>/convex` und Server-Dateien zuerst holen.
+* Apache reicht `/api/schrift/` ans Gateway (`deploy/apache/*.vhost_ssl.conf`,
+  jetzt mit dem CrowdSec-Block vom Server). Neue Gateway-Pfade unter `/api`
+  muessen dort eingetragen werden, sonst landen sie bei Convex (404).
+
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 
 Der Leser heisst seit 19.10.2026 **https://digital.lesenundschenken.de**
