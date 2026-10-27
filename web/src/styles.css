@@ -1443,6 +1443,59 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .reihe-weg:hover { color: #fff; transform: translateY(-3px); box-shadow: var(--shadow); }
 .reihe-weg:hover .icon { transform: translateX(var(--s1)); }
 .reihe-weg:hover .reihe-weg-seite img { transform: scale(1.03); }
+/* Mit Netzen: drei Spalten, aussen gleich schmal, die Internetseite in der
+   Mitte breit. Alle drei gleich hoch; die Bilder fuellen den Platz. */
+.page > section.reihe-wege.mit-netzen { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); }
+.reihe-wege.mit-netzen .reihe-weg-bild { flex: 1; aspect-ratio: auto; min-height: 15rem; }
+.reihe-wege.mit-netzen .reihe-weg-web .reihe-weg-bild { aspect-ratio: 16 / 9; }
+.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img { height: 70%; }
+.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(2) { margin-right: -2.5rem; }
+.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(3) { margin-left: -2.5rem; }
+.reihe-netze {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow-sm);
+}
+.reihe-inhalt .reihe-netze h3 { margin: 0; padding: 0; border: 0; font-size: var(--fs-h4); }
+.reihe-netze-raster {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: var(--s2);
+}
+.reihe-netz {
+  --netz: var(--reihe);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 5.5rem;
+  background: var(--netz);
+  color: #fff;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  text-decoration: none;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.reihe-netz:hover { color: #fff; filter: brightness(1.1); transform: translateY(-2px); }
+.reihe-netz[data-netz="telegram"] { --netz: #26a5e4; }
+.reihe-netz[data-netz="facebook"] { --netz: #0866ff; }
+.reihe-netz[data-netz="instagram"] { background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }
+.reihe-netz[data-netz="x"] { --netz: #000; }
+/* Mittelbreit: Internetseite oben ueber die ganze Breite, darunter Laden und Netze. */
+@media (max-width: 62rem) {
+  .page > section.reihe-wege.mit-netzen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reihe-wege.mit-netzen .reihe-weg-web { grid-column: 1 / -1; order: -1; }
+}
+@media (max-width: 40rem) {
+  .page > section.reihe-wege.mit-netzen { grid-template-columns: minmax(0, 1fr); }
+}
 /* Kontakt: eine kompakte Karte, Eintraege untereinander, jeder klickbar. */
 /* Kontakt: eine flache Leiste ueber die ganze Breite. Links "Kontakt", dann die
    Eintraege nebeneinander, rechts die Netze; schmal bricht sie in Zeilen um. */

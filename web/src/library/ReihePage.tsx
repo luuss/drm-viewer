@@ -214,10 +214,10 @@ export default function ReihePage() {
           </section>
         )}
 
-        {/* Zwei grosse Kacheln: Druckausgabe im Netzladen und die eigene
-            Internetseite, jede mit Bild (Werbegrafik, Umschlaege, Screenshot). */}
-        <section className="reihe-wege">
-          <a href={reihe.laden} target="_blank" rel="noopener" className="reihe-weg">
+        {/* Eine Zeile: links schmal die Druckausgabe im Netzladen, in der Mitte
+            breit die eigene Internetseite, rechts schmal die Netze als 2x2. */}
+        <section className={`reihe-wege${k.social.length > 0 ? " mit-netzen" : ""}`}>
+          <a href={reihe.laden} target="_blank" rel="noopener" className="reihe-weg reihe-weg-laden">
             <div className="reihe-weg-bild reihe-weg-hefte">
               {reihe.ladenBild ? (
                 <img src={reihe.ladenBild} alt="" loading="lazy" />
@@ -236,7 +236,7 @@ export default function ReihePage() {
             </div>
           </a>
           {k.web && (
-            <a href={k.web} target="_blank" rel="noopener" className="reihe-weg">
+            <a href={k.web} target="_blank" rel="noopener" className="reihe-weg reihe-weg-web">
               <div className="reihe-weg-bild reihe-weg-seite">
                 {k.webBild && <img src={k.webBild} alt="" loading="lazy" />}
               </div>
@@ -248,6 +248,27 @@ export default function ReihePage() {
                 <Icon name="arrow-right" />
               </div>
             </a>
+          )}
+          {k.social.length > 0 && (
+            <div className="reihe-netze">
+              <h3>Folgen Sie uns auf</h3>
+              <div className="reihe-netze-raster">
+                {k.social.map((s) => (
+                  <a
+                    key={s.url}
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener"
+                    className="reihe-netz"
+                    data-netz={s.name.toLowerCase()}
+                    aria-label={`${reihe.name} bei ${s.name}`}
+                  >
+                    <SocialIcon name={s.name} size={28} />
+                    <span>{s.name}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
           )}
         </section>
 
@@ -276,24 +297,6 @@ export default function ReihePage() {
                 </a>
               </li>
             </ul>
-            {k.social.length > 0 && (
-              <div className="reihe-social">
-                {k.social.map((s) => (
-                  <a
-                    key={s.url}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener"
-                    className="reihe-social-link"
-                    data-netz={s.name.toLowerCase()}
-                    aria-label={`${reihe.name} bei ${s.name}`}
-                    title={s.name}
-                  >
-                    <SocialIcon name={s.name} />
-                  </a>
-                ))}
-              </div>
-            )}
           </div>
         </section>
 
