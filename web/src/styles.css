@@ -4231,3 +4231,113 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 }
 .jahrgang-balken span { display: block; height: 100%; background: var(--accent); }
 .jahrgang-zahl { font-size: var(--fs-mini); color: var(--muted); white-space: nowrap; }
+
+/* Meine Ausgaben: Kopf mit Ansichtsumschalter rechts. */
+.bibliothek-kopf {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+.bibliothek-kopf > div:first-child { display: flex; flex-direction: column; gap: var(--s2); }
+
+/* Kompakt: kleine Umschlaege in einem Raster; jede Zeitschrift beginnt mit
+   einem schmalen Feld in ihrer Farbe. */
+.kompakt-raster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.75rem, 1fr));
+  gap: var(--s4) var(--s3);
+  margin-top: var(--s5);
+}
+.kompakt-trenner {
+  display: flex;
+  align-items: flex-end;
+  padding: var(--s3);
+  background: var(--reihe, var(--ink-soft));
+  color: #fff;
+  aspect-ratio: 3 / 4;
+}
+.kompakt-trenner span {
+  font-weight: 700;
+  font-size: var(--fs-sub);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.kompakt-heft {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+.kompakt-umschlag {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.kompakt-umschlag img,
+.kompakt-umschlag .cover-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 0;
+}
+.kompakt-heft:hover .kompakt-umschlag { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.kompakt-titel,
+.kompakt-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kompakt-titel { font-size: var(--fs-mini); font-weight: 600; }
+.kompakt-meta { font-size: var(--fs-mini); color: var(--muted); }
+
+/* Liste: eine Zeile je Heft mit kleinem Umschlag. */
+.heft-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+.heft-liste li + li { border-top: 1px solid var(--rule-soft); }
+.heft-liste a {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s2) var(--s4);
+  text-decoration: none;
+  color: inherit;
+}
+.heft-liste a:hover { background: var(--paper); }
+.heft-liste-umschlag { flex: 0 0 2.75rem; border: 1px solid var(--rule); }
+.heft-liste-umschlag img,
+.heft-liste-umschlag .cover-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 0;
+}
+.heft-liste-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.heft-liste-titel { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heft-liste-meta { font-size: var(--fs-mini); color: var(--muted); }
+.heft-liste-stand { font-size: var(--fs-mini); color: var(--muted); white-space: nowrap; }
+.heft-liste-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: var(--fs-sub);
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .heft-liste a { gap: var(--s3); padding: var(--s2) var(--s3); }
+  .heft-liste-stand, .heft-liste-go span { display: none; }
+}

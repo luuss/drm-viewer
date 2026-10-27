@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
+import { useState, type CSSProperties } from "react";
 import { api } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
@@ -48,6 +49,23 @@ function einordnen(h: Heftdaten): { jahr: number | null; rang: number } {
   return { jahr, rang: monat * 100000 + laufend };
 }
 
+type Ansicht = "detail" | "kompakt" | "liste";
+const ANSICHTEN: [Ansicht, string][] = [
+  ["detail", "Detail"],
+  ["kompakt", "Kompakt"],
+  ["liste", "Liste"],
+];
+const ANSICHT_KEY = "bibliothek-ansicht";
+
+function gemerkteAnsicht(): Ansicht {
+  try {
+    const wert = window.localStorage.getItem(ANSICHT_KEY);
+    return ANSICHTEN.some(([a]) => a === wert) ? (wert as Ansicht) : "detail";
+  } catch {
+    return "detail";
+  }
+}
+
 function rangDerReihe(key: string) {
   const i = REIHENFOLGE.indexOf(key);
   return i < 0 ? REIHENFOLGE.length : i;
@@ -57,11 +75,21 @@ function rangDerReihe(key: string) {
  * Nur Ausgaben, auf die der angemeldete Leser Zugriff hat, ohne Umweg ueber
  * Kacheln: je Zeitschrift eine Ueberschrift, darunter die Jahrgaenge, neuester
  * zuerst. Jeder Jahrgang zeigt, wie viele seiner im Kiosk veroeffentlichten
- * Hefte der Leser hat.
+ * Hefte der Leser hat. Drei Ansichten: Detail (Karten), Kompakt (kleine
+ * Umschlaege in einem Raster, Zeitschriften nur als Trenner) und Liste.
  */
 export default function LibraryPage() {
   const issues = useQuery(api.issues.myLibrary, {});
   const kiosk = useQuery(api.issues.listPublished, {});
+  const [ansicht, setAnsicht] = useState<Ansicht>(gemerkteAnsicht);
+  const waehle = (a: Ansicht) => {
+    setAnsicht(a);
+    try {
+      window.localStorage.setItem(ANSICHT_KEY, a);
+    } catch {
+      // Ohne Speicher gilt die Wahl nur bis zum Neuladen.
+    }
+  };
   if (issues === undefined || kiosk === undefined) {
     return <div className="centered">Laden...</div>;
   }
@@ -94,16 +122,19 @@ export default function LibraryPage() {
     imKiosk.set(key, (imKiosk.get(key) ?? 0) + 1);
   }
 
+  type Heft = (typeof issues)[number] & { rang: number };
   const reihen = new Map<
     string,
-    { name: string; jahrgaenge: Map<number | null, (typeof issues[number] & { rang: number })[]> }
+    { name: string; farbe: string | null; jahrgaenge: Map<number | null, Heft[]> }
   >();
   for (const i of issues) {
     const key = reihenSchluessel(i.publicationName);
     const { jahr, rang } = einordnen({ ...i, publicationDate: datumVon.get(i._id) });
     if (!reihen.has(key)) {
+      const reihe = reiheVon(i.publicationName);
       reihen.set(key, {
-        name: reiheVon(i.publicationName)?.name ?? i.publicationName ?? i.displayTitle,
+        name: reihe?.name ?? i.publicationName ?? i.displayTitle,
+        farbe: reihe?.farbe ?? null,
         jahrgaenge: new Map(),
       });
     }
@@ -111,83 +142,160 @@ export default function LibraryPage() {
     if (!jahrgaenge.has(jahr)) jahrgaenge.set(jahr, []);
     jahrgaenge.get(jahr)!.push({ ...i, rang });
   }
+  // Reihen wie im Kiosk, Jahrgaenge und Hefte neueste zuerst.
+  const gruppen = [...reihen]
+    .sort(([a, ra], [b, rb]) => rangDerReihe(a) - rangDerReihe(b) || ra.name.localeCompare(rb.name))
+    .map(([key, r]) => ({
+      key,
+      name: r.name,
+      farbe: r.farbe,
+      jahrgaenge: [...r.jahrgaenge]
+        .sort(([a], [b]) => (b ?? 0) - (a ?? 0))
+        .map(([jahr, hefte]) => ({
+          jahr,
+          gesamt: Math.max(imKiosk.get(`${key}|${jahr}`) ?? 0, hefte.length),
+          hefte: hefte.sort((a, b) => b.rang - a.rang),
+        })),
+    }));
+
+  const stand = (i: Heft) =>
+    i.progress
+      ? i.progress.mode === "article"
+        ? "Artikel"
+        : `Seite ${i.progress.pageIndex + 1} von ${i.pageCount}`
+      : null;
+
+  const umschlag = (i: Heft) =>
+    i.coverUrl ? (
+      <img src={i.coverUrl} alt={i.displayTitle} loading="lazy" />
+    ) : (
+      <div className="cover-placeholder">{i.displayTitle[0]}</div>
+    );
+
+  const jahrgangKopf = (jahr: number | null, anzahl: number, gesamt: number) =>
+    jahr !== null && (
+      <div className="jahrgang-kopf">
+        <h4>Jahrgang {jahr}</h4>
+        <div
+          className="jahrgang-balken"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={gesamt}
+          aria-valuenow={anzahl}
+          aria-label={`Jahrgang ${jahr}: ${anzahl} von ${gesamt}`}
+        >
+          <span style={{ width: `${(anzahl / gesamt) * 100}%` }} />
+        </div>
+        <span className="jahrgang-zahl">
+          {anzahl} von {gesamt}
+        </span>
+      </div>
+    );
 
   return (
     <div className="page">
-      <div className="page-head">
-        <h2>Meine Ausgaben</h2>
-        <p className="hint">Freigeschaltete Hefte, dauerhaft lesbar.</p>
+      <div className="page-head bibliothek-kopf">
+        <div>
+          <h2>Meine Ausgaben</h2>
+          <p className="hint">Freigeschaltete Hefte, dauerhaft lesbar.</p>
+        </div>
+        <div className="segment" role="group" aria-label="Ansicht">
+          {ANSICHTEN.map(([wert, text]) => (
+            <button
+              key={wert}
+              type="button"
+              aria-pressed={ansicht === wert}
+              onClick={() => waehle(wert)}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
       </div>
-      {[...reihen]
-        .sort(([a, ra], [b, rb]) => rangDerReihe(a) - rangDerReihe(b) || ra.name.localeCompare(rb.name))
-        .map(([key, reihe]) => (
-          <section key={key} className="bibliothek-reihe">
-            <h3>{reihe.name}</h3>
-            {[...reihe.jahrgaenge]
-              .sort(([a], [b]) => (b ?? 0) - (a ?? 0))
-              .map(([jahr, hefte]) => {
-                const gesamt = Math.max(imKiosk.get(`${key}|${jahr}`) ?? 0, hefte.length);
-                return (
-                  <div key={jahr ?? "ohne"} className="bibliothek-jahrgang">
-                    {jahr !== null && (
-                      <div className="jahrgang-kopf">
-                        <h4>Jahrgang {jahr}</h4>
-                        <div
-                          className="jahrgang-balken"
-                          role="progressbar"
-                          aria-valuemin={0}
-                          aria-valuemax={gesamt}
-                          aria-valuenow={hefte.length}
-                          aria-label={`Jahrgang ${jahr}: ${hefte.length} von ${gesamt}`}
-                        >
-                          <span style={{ width: `${(hefte.length / gesamt) * 100}%` }} />
+
+      {ansicht === "kompakt" ? (
+        // Alle Hefte in einem Raster; die Zeitschriften trennen nur schmale
+        // Felder in ihrer Farbe.
+        <div className="kompakt-raster">
+          {gruppen.map((g) => [
+            <div
+              key={g.key}
+              className="kompakt-trenner"
+              style={g.farbe ? ({ "--reihe": g.farbe } as CSSProperties) : undefined}
+            >
+              <span>{g.name}</span>
+            </div>,
+            ...g.jahrgaenge.flatMap((j) =>
+              j.hefte.map((i) => (
+                <Link key={i._id} to={`/reader/${i._id}`} className="kompakt-heft">
+                  <div className="kompakt-umschlag">{umschlag(i)}</div>
+                  <div className="kompakt-titel">{i.displayTitle}</div>
+                  {i.edition && <div className="kompakt-meta">{i.edition}</div>}
+                </Link>
+              )),
+            ),
+          ])}
+        </div>
+      ) : (
+        gruppen.map((g) => (
+          <section key={g.key} className="bibliothek-reihe">
+            <h3>{g.name}</h3>
+            {g.jahrgaenge.map(({ jahr, gesamt, hefte }) => (
+              <div key={jahr ?? "ohne"} className="bibliothek-jahrgang">
+                {jahrgangKopf(jahr, hefte.length, gesamt)}
+                {ansicht === "liste" ? (
+                  <ul className="heft-liste">
+                    {hefte.map((i) => (
+                      <li key={i._id}>
+                        <Link to={`/reader/${i._id}`}>
+                          <span className="heft-liste-umschlag">{umschlag(i)}</span>
+                          <span className="heft-liste-text">
+                            <span className="heft-liste-titel">{i.displayTitle}</span>
+                            <span className="heft-liste-meta">
+                              {i.edition ? `${i.edition} · ` : ""}
+                              {i.pageCount} Seiten
+                            </span>
+                          </span>
+                          {stand(i) && <span className="heft-liste-stand">{stand(i)}</span>}
+                          <span className="heft-liste-go">
+                            <span>{i.progress ? "Weiterlesen" : "Lesen"}</span>
+                            <Icon name="arrow-right" />
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="issue-grid">
+                    {hefte.map((i) => (
+                      <Link key={i._id} to={`/reader/${i._id}`} className="issue-card">
+                        <div className="issue-cover-preview">{umschlag(i)}</div>
+                        <div className="issue-card-body">
+                          <div className="title">{i.displayTitle}</div>
+                          <div className="meta">
+                            {i.edition ? `${i.edition} · ` : ""}
+                            {i.pageCount} Seiten
+                          </div>
+                          <div className="cta">
+                            {i.progress ? (
+                              <>
+                                <span className="go">Weiterlesen <Icon name="arrow-right" /></span>
+                                <span className="where">{stand(i)}</span>
+                              </>
+                            ) : (
+                              <span className="go">Lesen <Icon name="arrow-right" /></span>
+                            )}
+                          </div>
                         </div>
-                        <span className="jahrgang-zahl">
-                          {hefte.length} von {gesamt}
-                        </span>
-                      </div>
-                    )}
-                    <div className="issue-grid">
-                      {hefte
-                        .sort((a, b) => b.rang - a.rang)
-                        .map((i) => (
-                          <Link key={i._id} to={`/reader/${i._id}`} className="issue-card">
-                            <div className="issue-cover-preview">
-                              {i.coverUrl ? (
-                                <img src={i.coverUrl} alt={i.displayTitle} loading="lazy" />
-                              ) : (
-                                <div className="cover-placeholder">{i.displayTitle[0]}</div>
-                              )}
-                            </div>
-                            <div className="issue-card-body">
-                              <div className="title">{i.displayTitle}</div>
-                              <div className="meta">
-                                {i.edition ? `${i.edition} · ` : ""}
-                                {i.pageCount} Seiten
-                              </div>
-                              <div className="cta">
-                                {i.progress ? (
-                                  <>
-                                    <span className="go">Weiterlesen <Icon name="arrow-right" /></span>
-                                    <span className="where">
-                                      {i.progress.mode === "article"
-                                        ? "Artikel"
-                                        : `Seite ${i.progress.pageIndex + 1} von ${i.pageCount}`}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className="go">Lesen <Icon name="arrow-right" /></span>
-                                )}
-                              </div>
-                            </div>
-                          </Link>
-                        ))}
-                    </div>
+                      </Link>
+                    ))}
                   </div>
-                );
-              })}
+                )}
+              </div>
+            ))}
           </section>
-        ))}
+        ))
+      )}
     </div>
   );
 }
