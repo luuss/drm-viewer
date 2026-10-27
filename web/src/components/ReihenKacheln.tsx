@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import type { CSSProperties } from "react";
 import Icon from "./Icon";
 import { REIHENFOLGE, reiheVon, reihenSchluessel } from "../lib/reihen";
 
@@ -8,24 +9,28 @@ function rang(key: string) {
 }
 
 type Props = {
-  /** Die Hefte der Seite; je Reihe entsteht eine Kachel. */
-  hefte: { publicationName: string | null }[];
+  /** Die Hefte der Seite, neueste zuerst; je Reihe entsteht eine Kachel. */
+  hefte: { publicationName: string | null; coverUrl?: string | null }[];
   /** Diese Reihe nicht zeigen (auf ihrer eigenen Seite). */
   ohne?: string;
   klein?: boolean;
 };
 
 /**
- * Die Reihen als Kacheln: der Schriftzug auf einer neutral getoenten Flaeche,
- * fuer alle Reihen gleich. Ein Tipp oeffnet die eigene Seite der Reihe.
+ * Die Reihen als Kacheln: links der Schriftzug, rechts die neuesten Umschlaege,
+ * die wie im Zeitschriftenregal von unten ins Bild ragen. Die Flaeche dahinter
+ * ist zart in der Hausfarbe getoent. Ein Tipp oeffnet die eigene Seite der Reihe.
  */
 export default function ReihenKacheln({ hefte, ohne, klein }: Props) {
-  const reihen = new Map<string, number>();
+  const reihen = new Map<string, { anzahl: number; umschlaege: string[] }>();
   for (const h of hefte) {
     if (!reiheVon(h.publicationName)) continue;
     const key = reihenSchluessel(h.publicationName);
     if (key === ohne) continue;
-    reihen.set(key, (reihen.get(key) ?? 0) + 1);
+    const r = reihen.get(key) ?? { anzahl: 0, umschlaege: [] };
+    r.anzahl += 1;
+    if (h.coverUrl && r.umschlaege.length < 2) r.umschlaege.push(h.coverUrl);
+    reihen.set(key, r);
   }
   if (reihen.size === 0) return null;
 
@@ -36,7 +41,7 @@ export default function ReihenKacheln({ hefte, ohne, klein }: Props) {
     >
       {[...reihen]
         .sort(([a], [b]) => rang(a) - rang(b))
-        .map(([key, anzahl]) => {
+        .map(([key, { anzahl, umschlaege }]) => {
           const reihe = reiheVon(
             hefte.find((h) => reihenSchluessel(h.publicationName) === key)
               ?.publicationName,
@@ -46,6 +51,7 @@ export default function ReihenKacheln({ hefte, ohne, klein }: Props) {
               key={key}
               to={`/zeitschrift/${key}`}
               className={`reihen-kachel reihe-${key}`}
+              style={{ "--reihe": reihe.farbe } as CSSProperties}
             >
               <span className="reihen-buehne">
                 <span className="reihen-logo">
@@ -55,6 +61,20 @@ export default function ReihenKacheln({ hefte, ohne, klein }: Props) {
                     className={reihe.kasten ? "kasten" : undefined}
                   />
                 </span>
+                {umschlaege.length > 0 && (
+                  <span className="reihen-umschlaege" aria-hidden="true">
+                    {/* Das neueste Heft vorn, das vorige schraeg dahinter. */}
+                    {[...umschlaege].reverse().map((url, i, alle) => (
+                      <img
+                        key={url}
+                        src={url}
+                        alt=""
+                        loading="lazy"
+                        className={i === alle.length - 1 ? "vorn" : "hinten"}
+                      />
+                    ))}
+                  </span>
+                )}
               </span>
               <span className="reihen-fuss">
                 <span className="reihen-anzahl">
