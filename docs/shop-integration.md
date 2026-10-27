@@ -489,10 +489,11 @@ Zeit, Quelle `netzladen`|`leser`, `id_order`).
 * Die Vorlagen `mails/de/{order_conf,payment,preparation,bankwire,cheque}`
   enthalten fest den Satz „Sie haben das Recht, binnen vierzehn Tagen ab
   Erhalt der Ware …“. Bei erteiltem Verzicht ersetzt ihn
-  `hookActionEmailAddAfterContent` (`WIDERRUF_SATZ`) durch „Fuer die
-  Digitalausgabe „…“ haben Sie ausdruecklich zugestimmt … erlischt daher mit
-  der Freischaltung.“, bei weiteren Artikeln ergaenzt um das Widerrufsrecht
-  fuer diese. Ohne Verzicht bleibt der Satz der Vorlage.
+  `hookActionEmailAddAfterContent` (`WIDERRUF_SATZ`): bei reinen
+  Digitalbestellungen faellt er ersatzlos weg, bei weiteren Artikeln wird er
+  zu „Fuer die uebrigen Artikel dieser Bestellung haben Sie das Recht …“.
+  Keinen eigenen Satz zum Erloeschen des Widerrufsrechts ausgeben (Wunsch
+  des Betreibers). Ohne Verzicht bleibt der Satz der Vorlage.
 * `LusdigitalVerzicht::speichern` fuegt ohne `null_values` ein. Bis
   27.10.2026 machte `null_values` aus der leeren IP der Leser-Kaeufe NULL,
   das Einfuegen scheiterte (Spalte NOT NULL), und fuer Leser-Kaeufe fehlten
