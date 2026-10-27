@@ -4,6 +4,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { Authenticated, Unauthenticated, useQuery } from "convex/react";
 import { api } from "../lib/api";
 import Icon from "./Icon";
+import HandyQr from "./HandyQr";
 import { useWarenkorb } from "../lib/warenkorb";
 
 const NETZLADEN = "https://lesenundschenken.de/";
@@ -126,6 +127,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               , gelesen wird hier auf jedem Gerät.
             </p>
           </div>
+          <HandyQr />
         </div>
         <div className="copyright">
           <div className="shell-inner">
