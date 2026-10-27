@@ -189,6 +189,7 @@
   --danger-soft: #f8dcdc;
 
   /* Kopf- und Fusszeile: dunkle Leiste, grauer Fuss, schwarze Copyright-Zeile. */
+  --shop-max: 1240px;      /* Blattbreite von Kopf und Fuss im Netzladen */
   --bar: #111318;
   --bar-gradient: linear-gradient(180deg, #17191f 0%, #0c0d11 100%);
   --bar-text: rgba(255, 255, 255, 0.92);
@@ -304,10 +305,13 @@ p { color: var(--ink-soft); }
    Rahmen: Kopf, Inhalt, Fuss auf einer Flucht
    ============================================================ */
 
+/* Mindestens fensterhoch: auf kurzen Seiten steht der Fuss ganz unten,
+   darueber bleibt Leerraum (wie im Netzladen). */
 .app-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .app-header {
@@ -425,6 +429,135 @@ p { color: var(--ink-soft); }
 }
 .user-badge::after { display: none; }
 
+/* Kopf: links Menueknopf und Marke, rechts die Navigation. Der Menueknopf
+   erscheint erst, wenn die Navigation nicht mehr in eine Zeile passt —
+   genau wie im Netzladen, nie beide zugleich. */
+.app-header .head-left { display: flex; align-items: center; gap: var(--s5); min-width: 0; }
+.app-header .head-compact { display: none; align-items: center; }
+.menu-toggle {
+  display: none;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 15px;
+  border: 1px solid var(--bar-line);
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.menu-toggle:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.3); }
+.app-header nav a.netzladen .icon { opacity: 0.7; }
+.app-header .cart-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  min-height: 2.5rem;
+  color: #fff;
+}
+
+/* Seitenmenue (wie .lus-offcanvas im Netzladen) */
+.nav-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+.nav-drawer.is-open { opacity: 1; visibility: visible; }
+.nav-drawer-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 320px;
+  max-width: 88vw;
+  background: var(--surface);
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.25s;
+}
+.nav-drawer.is-open .nav-drawer-panel { transform: none; }
+.nav-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--bar);
+  color: #fff;
+  font-weight: 700;
+}
+.nav-drawer-head button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+}
+.nav-drawer-links { display: flex; flex-direction: column; padding: var(--s2) 0; }
+.nav-drawer-links > a,
+.nav-drawer-links > button {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 3rem;
+  padding: 0 18px;
+  border: 0;
+  border-bottom: 1px solid var(--rule-soft);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-drawer-links > a.here { color: var(--accent); }
+.nav-drawer-links > a:hover,
+.nav-drawer-links > button:hover { background: var(--paper); }
+.nav-drawer-links > .user-badge {
+  max-width: none;
+  margin: 0;
+  padding: 0 18px !important;
+  border-left: 0;
+  color: var(--muted) !important;
+}
+
+/* Im Kopf steht die Kennung nur als Zeichen (Adresse im Seitenmenue und im
+   Konto), damit die Zeile mit allen Punkten der Redaktion nicht umbricht. */
+.app-header .head-nav { flex-wrap: nowrap; }
+.app-header .head-nav .user-badge { font-size: 0 !important; gap: 0; max-width: none; }
+@media (max-width: 68.75rem) {
+  .menu-toggle { display: inline-flex; }
+  .app-header .head-nav { display: none; }
+  .app-header .head-compact { display: flex; }
+}
+@media (max-width: 56.25rem) {
+  .app-header .shell-inner { min-height: 3.5rem; }
+  .footer-main { grid-template-columns: 1fr; gap: 28px; }
+  .app-header .brand-logo { height: 2.125rem; }
+}
+@media (max-width: 37.5rem) {
+  .menu-toggle span { display: none; }
+  .menu-toggle { gap: 0; padding: 8px; }
+  .app-header .head-left { gap: var(--s3); }
+  .app-header .shell-inner { padding: 0 12px; gap: var(--s2); }
+}
+
 main {
   flex: 1;
   width: 100%;
@@ -452,31 +585,39 @@ main {
 
 /* Fuss wie im Verlagsshop: grauer Block mit Wortmarke, Kontakt und
    Hinweisen, darunter die schwarze Copyright-Zeile. */
+/* Masse 1:1 aus .lus-footer / .lus-copyright (custom-theme-v60.css): Blatt
+   1240 px mit 18 px Rand, Text 13,5 px, Ueberschrift 15 px, Logo 60 px. */
 .app-footer {
   margin-top: auto;
   background: var(--footer);
   color: var(--footer-text);
-  font-size: 1rem;
-  line-height: 1.7;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.app-header .shell-inner,
+.app-footer .shell-inner {
+  max-width: var(--shop-max);
+  padding-left: 18px;
+  padding-right: 18px;
 }
 .footer-main {
   display: grid;
   grid-template-columns: 1.4fr 1fr 1.2fr;
-  gap: var(--s8, 4rem);
+  gap: 40px;
   align-items: start;
-  padding-top: var(--s8, 4rem);
-  padding-bottom: var(--s8, 4rem);
+  padding-top: 44px;
+  padding-bottom: 30px;
 }
-.footer-logo { height: 4.75rem; width: auto; display: block; margin-bottom: var(--s4); }
+.footer-logo { height: 60px; width: auto; display: block; margin-bottom: 16px; }
 .app-footer h4 {
   font-family: var(--sans);
-  font-size: 1.0625rem;
+  font-size: 15px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   line-height: 1.2;
   color: #fff;
-  margin: 0 0 var(--s5);
+  margin: 0 0 16px;
 }
 .app-footer p { color: var(--footer-text); margin: 0; }
 .app-footer a { color: var(--footer-text); }
@@ -487,31 +628,35 @@ main {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--s3);
+  gap: 8px;
 }
 .footer-contact li {
   display: grid;
-  grid-template-columns: 5.5rem 1fr;
-  gap: var(--s3);
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
   align-items: baseline;
+  line-height: 1.5;
 }
 .footer-contact .label {
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.5);
 }
 .footer-contact a { text-decoration: underline; }
-.footer-links { display: flex; flex-direction: column; gap: var(--s3); }
+.footer-links { display: flex; flex-direction: column; gap: 9px; }
+.footer-links h4 { margin-bottom: 7px; }
+.footer-col p { line-height: 1.7; }
 .copyright {
   background: var(--copyright);
   color: var(--copyright-text);
-  font-size: 0.875rem;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 .copyright .shell-inner {
-  padding-top: var(--s5);
-  padding-bottom: var(--s5);
+  padding-top: 14px;
+  padding-bottom: 14px;
   flex-wrap: wrap;
   gap: var(--s2) var(--s4);
 }
@@ -3011,19 +3156,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
   }
   main { padding-top: var(--s5); padding-bottom: var(--s6); }
   .page { gap: var(--s6); }
-  .app-header .shell-inner {
-    min-height: 0;
-    padding-top: var(--s3);
-    padding-bottom: var(--s3);
-    flex-wrap: wrap;
-    gap: var(--s3);
-  }
-  .app-header nav { gap: var(--s1); width: 100%; justify-content: flex-start; }
-  .app-header nav a { padding: 0 var(--s2); }
   .app-footer .shell-inner { flex-direction: column; align-items: flex-start; }
-  /* Auf dem Telefon steht die Kennung in der Reihe, nicht abgesetzt: eine
-     senkrechte Linie mitten im Umbruch sieht nach Fehler aus. */
-  .user-badge { padding-left: 0; border-left: 0; }
   .issue-grid { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--s4); }
   .article-body {
     width: 100%;
@@ -3070,8 +3203,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
 
 @media (max-width: 46rem) {
   .brand-logo { height: 2.125rem; }
-  .footer-main { grid-template-columns: 1fr; gap: var(--s5); }
-  .footer-logo { height: 3rem; }
+  .footer-main { grid-template-columns: 1fr; gap: 28px; }
 }
 
 /* --- Heftordner einlesen -------------------------------------------------- */
@@ -4004,3 +4136,63 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 .toc-docked .toc-entry.current .label,
 .toc-docked .toc-entry.current:hover:not(:disabled) .label,
 .toc-docked .toc-entry.current .page-num { color: var(--accent-deep, #a00006); }
+
+/* Kopierschutz im Reader (reader/kopierschutz.ts, reader/schutz.ts).
+   Der Artikeltext kommt verschluesselt; lesbar wird er nur mit den
+   Leseschriften der Sitzung. Zeichen, die sie nicht kennen (Ziffern in
+   Tabellen, Bestellknoepfe), fallen auf die normalen Schriften zurueck. */
+.article-mode.geschuetzt .article-body {
+  font-family: 'LusLeseSans', var(--sans);
+}
+.article-mode.geschuetzt .article-body h1,
+.article-mode.geschuetzt .article-body h2,
+.article-mode.geschuetzt .article-body .subtitle {
+  font-family: 'LusLeseSerif', var(--serif);
+}
+.reader-screen {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+.reader-screen img,
+.reader-screen canvas { -webkit-user-drag: none; }
+/* Fenster verlassen, Tab gewechselt, Fokus weg: alles verschwimmt. */
+.reader-screen.verdeckt > :not(.reader-abdeckung) {
+  filter: blur(28px);
+  pointer-events: none;
+}
+.reader-abdeckung {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  border: 0;
+  background: rgba(250, 247, 242, 0.55);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  cursor: pointer;
+}
+.reader-abdeckung svg { flex: none; }
+.schutz-bild-platz {
+  display: block;
+  width: 100%;
+  min-height: 6rem;
+  background: var(--rule);
+  border-radius: var(--radius-sm);
+}
+/* Angetippter Absatz aus der Seitenansicht: kurz hervorgehoben. */
+@keyframes einstieg-blink {
+  from { background: rgba(196, 160, 82, 0.32); }
+  to { background: transparent; }
+}
+.article-body .einstieg {
+  animation: einstieg-blink 2.4s ease-out;
+  border-radius: var(--radius-sm);
+}
+@media print {
+  .reader-screen { display: none !important; }
+}

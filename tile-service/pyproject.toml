@@ -11,6 +11,8 @@ dependencies = [
     # Liegen die Seitenbilder im Eimer statt in der Convex-Ablage, holt dieser
     # Dienst sie selbst — Convex hat dafuer keine Adresse.
     "boto3>=1.35",
+    # Leseschrift je Sitzung mit eigener Zeichentabelle (schutz.py).
+    "fonttools[woff]>=4.50",
 ]
 
 [build-system]
@@ -20,5 +22,5 @@ build-backend = "hatchling.build"
 # Der Dienst ist eine einzelne Datei, kein Paketbaum. Ohne diesen Hinweis
 # findet Hatch nichts zum Einpacken und das Abbild laesst sich nicht bauen.
 [tool.hatch.build.targets.wheel]
-only-include = ["main.py"]
+only-include = ["main.py", "schutz.py"]
 sources = ["."]

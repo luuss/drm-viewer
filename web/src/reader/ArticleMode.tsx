@@ -1,10 +1,90 @@
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import ArtikelTabelle from "../components/ArtikelTabelle";
 import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
 import { meldungsfolge } from "./meldungsfolge";
+import { bildAlsBlob, schriftenLaden } from "./schutz";
+import type { Klickpunkt } from "./PageMode";
+
+/**
+ * Artikelbild ohne Serverpfad im HTML: ueber die Sitzung geholt, im Browser
+ * zusammengesetzt, als `blob:` gezeigt.
+ */
+function SchutzBild({
+  url,
+  sessionToken,
+  schutzKey,
+  ...rest
+}: {
+  url: string;
+  sessionToken: string | null | undefined;
+  schutzKey: number | null;
+  alt: string;
+  width?: number;
+  height?: number;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!url || !sessionToken || schutzKey === null) return;
+    const abbruch = new AbortController();
+    let adresse: string | null = null;
+    bildAlsBlob(url, sessionToken, schutzKey, abbruch.signal)
+      .then((blob) => {
+        adresse = blob;
+        if (abbruch.signal.aborted) URL.revokeObjectURL(blob);
+        else setSrc(blob);
+      })
+      .catch(() => undefined);
+    return () => {
+      abbruch.abort();
+      if (adresse) URL.revokeObjectURL(adresse);
+      setSrc(null);
+    };
+  }, [url, sessionToken, schutzKey]);
+  // Ohne Bild haelt ein leerer Rahmen in Bildgroesse den Platz.
+  if (!src) {
+    return (
+      <span
+        className="schutz-bild-platz"
+        style={rest.width && rest.height ? { aspectRatio: `${rest.width} / ${rest.height}` } : undefined}
+      />
+    );
+  }
+  return <img src={src} draggable={false} {...rest} />;
+}
+
+/**
+ * Leseschriften der Sitzung. Der Artikeltext kommt verschluesselt
+ * (`convex/schutz.ts`); erst mit diesen Schriften wird er lesbar.
+ */
+function useSchutzSchrift(sessionToken: string | null | undefined) {
+  const [stand, setStand] = useState<"laedt" | "bereit" | "fehler">("laedt");
+  const [versuch, setVersuch] = useState(0);
+  useEffect(() => {
+    if (!sessionToken) return;
+    const abbruch = new AbortController();
+    let faces: FontFace[] = [];
+    setStand("laedt");
+    schriftenLaden(sessionToken, abbruch.signal)
+      .then((geladen) => {
+        if (abbruch.signal.aborted) return;
+        faces = geladen;
+        for (const f of faces) document.fonts.add(f);
+        setStand("bereit");
+      })
+      .catch(() => {
+        // Ohne Schrift ist der Text unlesbar; nicht ewig "Laden..." zeigen.
+        if (!abbruch.signal.aborted) setStand("fehler");
+      });
+    return () => {
+      abbruch.abort();
+      for (const f of faces) document.fonts.delete(f);
+    };
+  }, [sessionToken, versuch]);
+  return { stand, nochmal: () => setVersuch((v) => v + 1) };
+}
 
 type Props = {
   articleId: Id<"articles"> | null;
@@ -25,6 +105,10 @@ type Props = {
    * am Anfang landen.
    */
   fromPageIndex?: number | null;
+  /** Angetippter Punkt der Druckseite: dorthin springt der Lesetext. */
+  einstiegPunkt?: (Klickpunkt & { n: number }) | null;
+  /** Schluessel zum Zusammensetzen der Artikelbilder. */
+  schutzKey: number | null;
 };
 
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
@@ -39,28 +123,49 @@ export default function ArticleMode({
   canNext,
   sessionToken,
   fromPageIndex,
+  einstiegPunkt,
+  schutzKey,
 }: Props) {
-  /**
-   * Bilder aus dem Medienspeicher kommen ueber das Kachel-Gateway, und das
-   * prueft die Lesesitzung. Ein `img`-Element kann keinen eigenen Kopf
-   * mitschicken, deshalb steht das Sitzungsmerkmal in der Adresse.
-   */
-  const mitSitzung = (url: string) =>
-    sessionToken && url.includes("/api/asset/")
-      ? `${url}${url.includes("?") ? "&" : "?"}s=${encodeURIComponent(sessionToken)}`
-      : url;
+  // Text gibt es nur zu einer Lesesitzung, und nur verschluesselt.
   const article = useQuery(
     api.articles.getForReader,
-    articleId ? { articleId } : "skip",
+    articleId && sessionToken ? { articleId, sessionToken } : "skip",
   );
+  const schrift = useSchutzSchrift(sessionToken);
+  const schriftBereit = schrift.stand === "bereit";
   const koerper = useRef<HTMLElement>(null);
+  const zielAbsatz = useQuery(
+    api.articles.absatzBeiKlick,
+    articleId && einstiegPunkt
+      ? {
+          articleId,
+          pageIndex: einstiegPunkt.pageIndex,
+          x: einstiegPunkt.x,
+          y: einstiegPunkt.y,
+        }
+      : "skip",
+  );
 
   // An die Stelle springen, die zur angetippten Seite gehoert. Jeder Absatz
   // und jedes Bild traegt seine Druckseite; die erste Marke der Seite ist der
-  // Einstieg. Auf der Anfangsseite bleibt es beim Artikelkopf.
+  // Einstieg. Auf der Anfangsseite bleibt es beim Artikelkopf. Mit einem
+  // Tipppunkt geht es genauer: zum Absatz unter dem Finger.
   const geladen = article ?? null;
+  const punktOffen = einstiegPunkt != null && zielAbsatz === undefined;
   useEffect(() => {
-    if (!geladen || fromPageIndex == null) return;
+    if (!geladen || !schriftBereit || punktOffen) return;
+    const absatz =
+      zielAbsatz && einstiegPunkt
+        ? koerper.current?.querySelector<HTMLElement>(`[data-order="${zielAbsatz.order}"]`)
+        : null;
+    if (absatz) {
+      absatz.scrollIntoView({ block: "center" });
+      absatz.classList.remove("einstieg");
+      void absatz.offsetWidth;
+      absatz.classList.add("einstieg");
+      return;
+    }
+    if (fromPageIndex == null) return;
     const ziel =
       fromPageIndex <= geladen.pageStart
         ? null
@@ -69,7 +174,7 @@ export default function ArticleMode({
           );
     if (ziel) ziel.scrollIntoView({ block: "start" });
     else koerper.current?.scrollIntoView({ block: "start" });
-  }, [geladen, fromPageIndex, articleId]);
+  }, [geladen, fromPageIndex, articleId, schriftBereit, punktOffen, zielAbsatz, einstiegPunkt?.n]);
 
   if (!articleId) {
     return (
@@ -78,7 +183,19 @@ export default function ArticleMode({
       </div>
     );
   }
-  if (article === undefined) {
+  if (article && schrift.stand === "fehler") {
+    return (
+      <div className="article-mode">
+        <p className="page-hint err">
+          Der Artikel konnte nicht geladen werden.{" "}
+          <button type="button" className="btn quiet small" onClick={schrift.nochmal}>
+            Erneut versuchen
+          </button>
+        </p>
+      </div>
+    );
+  }
+  if (article === undefined || (article && !schriftBereit)) {
     return <div className="article-mode"><p className="page-hint">Laden...</p></div>;
   }
   if (article === null) {
@@ -162,7 +279,7 @@ export default function ArticleMode({
   const productsAtEnd = products.filter((product) => !shownOrders.has(product.blockOrder));
 
   return (
-    <div className="article-mode">
+    <div className="article-mode geschuetzt">
       <ReaderTurnButton
         direction="previous"
         label="Vorheriger Artikel"
@@ -190,10 +307,11 @@ export default function ArticleMode({
             const img = item.image;
             return (
               <figure key={`image-${item.index}`} data-source-page={item.page}>
-                <img
-                  src={mitSitzung(img.url ?? "")}
-                  alt={img.caption ?? ""}
-                  loading="lazy"
+                <SchutzBild
+                  url={img.url ?? ""}
+                  sessionToken={sessionToken}
+                  schutzKey={schutzKey}
+                  alt=""
                   // Die eigene Groesse haelt das Bild davon ab, auf
                   // Spaltenbreite hochgezogen zu werden, und haelt waehrend
                   // des Ladens den Platz frei.
@@ -209,17 +327,17 @@ export default function ArticleMode({
           const key = `block-${item.index}`;
           const block =
             b.type === "heading" || b.type === "subheading" ? (
-              <h2 data-source-page={item.page}>{b.text}</h2>
+              <h2 data-source-page={item.page} data-order={b.order}>{b.text}</h2>
             ) : b.type === "quote" ? (
-              <blockquote data-source-page={item.page}>{b.text}</blockquote>
+              <blockquote data-source-page={item.page} data-order={b.order}>{b.text}</blockquote>
             ) : b.type === "lead" ? (
-              <p className="lead" data-source-page={item.page}>{b.text}</p>
+              <p className="lead" data-source-page={item.page} data-order={b.order}>{b.text}</p>
             ) : b.type === "table" && b.table ? (
               <ArtikelTabelle table={b.table} sourcePage={item.page} />
             ) : b.type === "caption" ? (
-              <p className="caption" data-source-page={item.page}>{b.text}</p>
+              <p className="caption" data-source-page={item.page} data-order={b.order}>{b.text}</p>
             ) : (
-              <p data-source-page={item.page}>{b.text}</p>
+              <p data-source-page={item.page} data-order={b.order}>{b.text}</p>
             );
           return (
             <Fragment key={key}>

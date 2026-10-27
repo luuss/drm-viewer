@@ -1,4 +1,7 @@
 import { v } from "convex/values";
+import { verschluesseler } from "./schutz";
+import { schutzSeedVon } from "./readerSessions";
+import { absatzBeiPunkt } from "./einstieg";
 import {
   internalMutation,
   MutationCtx,
@@ -186,6 +189,52 @@ function verschmelzen<T extends { x0: number; y0: number; x1: number; y1: number
   return fertig;
 }
 
+/**
+ * Der Absatz unter einem Tipp im Seitenmodus. Die Artikelansicht springt
+ * dorthin, statt am Anfang des Artikels zu oeffnen (`einstieg.ts`).
+ */
+export const absatzBeiKlick = query({
+  args: {
+    articleId: v.id("articles"),
+    pageIndex: v.number(),
+    x: v.number(),
+    y: v.number(),
+  },
+  handler: async (ctx, { articleId, pageIndex, x, y }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    const article = await ctx.db.get(articleId);
+    if (!article || article.reviewStatus !== "approved") return null;
+    if (!(await hasIssueAccess(ctx, userId as Id<"users">, article.issueId))) {
+      return null;
+    }
+    const bloecke = (
+      await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_article_order", (q) => q.eq("articleId", articleId))
+        .collect()
+    ).filter((b) => b.sourcePageIndex === pageIndex);
+    const rahmen = (
+      await ctx.db
+        .query("articleRegions")
+        .withIndex("by_article", (q) => q.eq("articleId", articleId))
+        .collect()
+    ).filter(
+      (r) =>
+        r.pageIndex === pageIndex &&
+        r.targetPageIndex === undefined &&
+        (r.kind === "body" || r.kind === "title"),
+    );
+    const order = absatzBeiPunkt(
+      bloecke.map((b) => ({ order: b.order, text: b.text, sourceY: b.sourceY })),
+      rahmen,
+      x,
+      y,
+    );
+    return order === null ? null : { order };
+  },
+});
+
 /** Klickflaechen im Seitenmodus, nur von freigegebenen Artikeln. */
 export const regionsForReader = query({
   args: { issueId: v.id("issues") },
@@ -262,12 +311,29 @@ export const regionsForReader = query({
 });
 
 export const getForReader = query({
-  args: { articleId: v.id("articles") },
-  handler: async (ctx, { articleId }) => {
+  args: { articleId: v.id("articles"), sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { articleId, sessionToken }) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    if (!userId || !sessionToken) return null;
     const article = await ctx.db.get(articleId);
     if (!article) return null;
+    // Text nur zu einer gueltigen Lesesitzung dieses Lesers und Hefts. Ihr
+    // Geheimwert bestimmt die Verschluesselung (`schutz.ts`); ohne Sitzung
+    // gibt es keinen Klartext.
+    const sitzung = await ctx.db
+      .query("readerSessions")
+      .withIndex("by_token", (q) => q.eq("sessionToken", sessionToken))
+      .unique();
+    if (
+      !sitzung ||
+      sitzung.userId !== userId ||
+      sitzung.issueId !== article.issueId ||
+      sitzung.expiresAt < Date.now()
+    ) {
+      return null;
+    }
+    const enc = verschluesseler(schutzSeedVon(sitzung), articleId);
+    const encOpt = (text: string | null | undefined) => (text ? enc(text) : null);
     if (!(await hasIssueAccess(ctx, userId as Id<"users">, article.issueId))) {
       return null;
     }
@@ -295,7 +361,7 @@ export const getForReader = query({
         const asset = await ctx.db.get(img.assetId);
         withUrls.push({
           url,
-          caption: img.caption ?? null,
+          caption: encOpt(img.caption),
           page: img.sourcePageIndex ?? null,
           sourceY: img.sourceY ?? null,
           afterBlockOrder: img.afterBlockOrder ?? null,
@@ -308,10 +374,10 @@ export const getForReader = query({
       _id: article._id,
       issueId: article.issueId,
       order: article.order,
-      title: article.title,
-      subtitle: article.subtitle ?? null,
-      author: article.author ?? null,
-      teaser: article.teaser ?? null,
+      title: enc(article.title),
+      subtitle: encOpt(article.subtitle),
+      author: encOpt(article.author),
+      teaser: encOpt(article.teaser),
       primaryPageIndex: article.primaryPageIndex,
       pageStart: article.pageStart,
       pageEnd: article.pageEnd,
@@ -319,10 +385,20 @@ export const getForReader = query({
         // Anker fuer Bestellknoepfe (articleProducts.forReader: `blockOrder`).
         order: b.order,
         type: b.type,
-        text: b.text,
+        text: enc(b.text),
         page: b.sourcePageIndex ?? null,
         sourceY: b.sourceY ?? null,
-        table: b.type === "table" ? (b.table ?? null) : null,
+        // Zahlen bleiben in Tabellen lesbar: daran erkennt der Reader
+        // Zahlenspalten und richtet sie rechts aus.
+        table:
+          b.type === "table" && b.table
+            ? {
+                ...b.table,
+                rows: b.table.rows.map((row) =>
+                  row.map((c) => ({ ...c, text: enc(c.text, { zahlenLassen: true }) })),
+                ),
+              }
+            : null,
       })),
       images: withUrls,
     };

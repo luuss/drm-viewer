@@ -25,6 +25,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from PIL import Image
 
+import schutz
+
 CONVEX_SITE_URL = os.environ.get("CONVEX_SITE_URL", "").rstrip("/")
 if not CONVEX_SITE_URL:
     CONVEX_SITE_URL = (
@@ -60,6 +62,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Seg"],
 )
 
 _client = httpx.AsyncClient(timeout=60.0, follow_redirects=False)
@@ -223,13 +226,38 @@ async def session_info(
         "issueId": session["issueId"],
         # Kurzkennung fuers Wasserzeichen im Reader.
         "watermark": session.get("watermark", ""),
+        # Schluessel zum Zusammensetzen der verwuerfelten Kacheln und Bilder.
+        # Der Geheimwert fuer die Schrift bleibt hier.
+        "k": session.get("kachelSchluessel", 0),
     }
+
+
+@app.get("/api/schrift/{familie}")
+async def schrift(
+    familie: str,
+    x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
+) -> Response:
+    """Leseschrift dieser Sitzung: kennt nur ihre verschluesselten Zeichen.
+
+    Absichtlich ohne `.woff2` in der Adresse: Cloudflare cacht nach Endung
+    und lieferte sonst eine Schrift (oder einen 404) an fremde Sitzungen.
+    """
+    if familie not in schutz.SCHRIFTEN:
+        raise HTTPException(404, "Unbekannte Schrift")
+    session = await require_session(x_tile_session)
+    daten = await asyncio.to_thread(
+        schutz.schrift, int(session.get("schutzSeed", 0)), familie
+    )
+    return Response(
+        content=daten,
+        media_type="font/woff2",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @app.get("/api/asset/{asset_id}.jpg")
 async def asset(
     asset_id: str,
-    s: str | None = None,
     x_tile_session: str | None = Header(default=None, alias="X-Tile-Session"),
 ) -> Response:
     """Ein Bild aus dem Medienspeicher ausliefern.
@@ -240,26 +268,37 @@ async def asset(
 
     Ein Titelbild ist oeffentlich: es steht im Kiosk, auch ohne Anmeldung. Alles
     andere gehoert zum bezahlten Inhalt und braucht eine gueltige Lesesitzung
-    fuer genau dieses Heft.
+    fuer genau dieses Heft. Es kommt verwuerfelt (`X-Seg: 1`); der Reader holt
+    es mit der Sitzung im Kopf, setzt es zusammen und zeigt es als `blob:`.
+    Die Sitzung in der Adresse (`?s=`) gibt es nicht mehr.
     """
     info = await service_call("/service/asset/resolve", {"assetId": asset_id})
     if not info:
         raise HTTPException(404, "Unbekanntes Bild")
-    if not info.get("public"):
-        # Ein Bild steht in einem `img`-Element, und das kann keinen eigenen
-        # Kopf mitschicken. Deshalb darf die Lesesitzung hier auch in der
-        # Adresse stehen.
-        session = await require_session(x_tile_session or s, info.get("issueId"))
-        check_rate(
-            f'assets:{session.get("userId")}:{info.get("issueId")}',
-            MAX_TILES_PER_MIN,
-            "Bilder",
+    if info.get("public"):
+        daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+        return Response(
+            content=daten,
+            media_type=info.get("contentType") or "image/jpeg",
+            headers={"Cache-Control": "private, max-age=3600"},
         )
+    session = await require_session(x_tile_session, info.get("issueId"))
+    check_rate(
+        f'assets:{session.get("userId")}:{info.get("issueId")}',
+        MAX_TILES_PER_MIN,
+        "Bilder",
+    )
     daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    seed = schutz.fnv1a32(f'{session.get("kachelSchluessel", 0)}:asset:{asset_id}')
+
+    def verwuerfelt() -> bytes:
+        bild = Image.open(io.BytesIO(daten)).convert("RGB")
+        return schutz.als_jpeg(schutz.verwuerfeln(bild, seed), quality=88)
+
     return Response(
-        content=daten,
-        media_type=info.get("contentType") or "image/jpeg",
-        headers={"Cache-Control": "private, max-age=3600"},
+        content=await asyncio.to_thread(verwuerfelt),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store", "X-Seg": "1"},
     )
 
 
@@ -334,13 +373,16 @@ async def tile(
     if cropped.size != target:
         cropped = cropped.resize(target, Image.LANCZOS)
 
-    buf = io.BytesIO()
-    cropped.save(buf, format="JPEG", quality=82, optimize=True)
+    # Verwuerfelt ausliefern; zusammengesetzt wird erst im Reader
+    # (`web/src/reader/schutz.ts`). Wer die Kachel speichert, hat Bloecke.
+    seed = schutz.fnv1a32(
+        f'{session.get("kachelSchluessel", 0)}:{issue_id}:{index}:{level}:{col}:{row}'
+    )
     return Response(
-        content=buf.getvalue(),
+        content=schutz.als_jpeg(schutz.verwuerfeln(cropped, seed), quality=82),
         media_type="image/jpeg",
-        # Unveraenderlich, aber nur hinter der Sitzung erreichbar.
-        headers={"Cache-Control": "private, max-age=600"},
+        # Haengt an der Sitzung: eine neue Sitzung verwuerfelt anders.
+        headers={"Cache-Control": "private, no-store"},
     )
 
 

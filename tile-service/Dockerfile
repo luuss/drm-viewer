@@ -7,7 +7,8 @@ WORKDIR /app
 # fehlte, obwohl der Dienst die Seitenbilder inzwischen selbst aus dem Eimer
 # holt, und pymupdf wurde weiter installiert, obwohl es laengst draussen ist.
 COPY pyproject.toml /app/
-COPY main.py /app/
+COPY main.py schutz.py /app/
+COPY fonts /app/fonts
 RUN pip install --no-cache-dir /app
 
 EXPOSE 8000
