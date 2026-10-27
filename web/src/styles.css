@@ -1439,32 +1439,43 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .reihe-weg:hover .icon { transform: translateX(var(--s1)); }
 .reihe-weg:hover .reihe-weg-seite img { transform: scale(1.03); }
 /* Kontakt: eine kompakte Karte, Eintraege untereinander, jeder klickbar. */
+/* Kontakt: eine flache Leiste ueber die ganze Breite. Links "Kontakt", dann die
+   Eintraege nebeneinander, rechts die Netze; schmal bricht sie in Zeilen um. */
 .reihe-kontakt-karte {
-  max-width: 24rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3) var(--s5);
   padding: var(--s3) var(--s4);
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-top: 4px solid var(--reihe);
+  border-left: 4px solid var(--reihe);
 }
-.reihe-kontakt-karte h3 { margin: 0 0 var(--s1); padding-bottom: var(--s1); font-size: var(--fs-h4); }
-.reihe-kontakt-liste { list-style: none; margin: 0; padding: 0; }
-.reihe-kontakt-liste li + li { border-top: 1px solid var(--rule); }
+.reihe-inhalt .reihe-kontakt-karte h3 { margin: 0; padding: 0; border: 0; font-size: var(--fs-h4); }
+.reihe-kontakt-liste { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); list-style: none; margin: 0; padding: 0; }
 .reihe-kontakt-liste a {
   display: flex;
   align-items: center;
-  gap: var(--s3);
-  padding: var(--s2) 0;
+  gap: var(--s2);
   color: var(--ink);
   font-size: var(--fs-sub);
   font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
 }
-.reihe-kontakt-liste a > span { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--s3); min-width: 0; }
-.reihe-kontakt-liste .reihe-kontakt-art { flex: 0 0 5.5rem; }
-/* Adresse und Nummer nie mitten im Wort trennen; zu eng -> ganze Zeile unter die Bezeichnung. */
-.reihe-kontakt-wert { white-space: nowrap; }
+.reihe-kontakt-liste a > span { display: flex; align-items: baseline; gap: var(--s2); }
 .reihe-kontakt-liste .icon { flex: 0 0 auto; color: var(--reihe); }
 .reihe-kontakt-liste a:hover { color: var(--reihe); }
+.reihe-kontakt-karte .reihe-social { margin: 0 0 0 auto; }
+/* Passt die Leiste nicht in eine Zeile, stehen die Netze links unter den Eintraegen. */
+@media (max-width: 72rem) {
+  .reihe-kontakt-karte .reihe-social { margin-left: 0; }
+}
+@media (max-width: 40rem) {
+  .reihe-kontakt-karte { flex-direction: column; align-items: flex-start; }
+  .reihe-kontakt-liste { flex-direction: column; }
+  .reihe-kontakt-liste .reihe-kontakt-art { width: 5.5rem; }
+}
 .reihe-kontakt-art {
   font-size: var(--fs-mini);
   font-weight: 700;
@@ -1472,7 +1483,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
   text-transform: uppercase;
   color: var(--muted);
 }
-.reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
+.reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .reihe-social-link {
   display: inline-flex;
   align-items: center;
