@@ -163,6 +163,20 @@ danach `account:purgeByEmailInternal`).
   Dazu nimmt das Gateway nur `fetch` von der eigenen Seite an
   (`Sec-Fetch-Site: same-origin`, `Sec-Fetch-Dest: empty`).
 * **Artikelbilder sind `<canvas>`**, kein `<img>` und kein `blob:`.
+* **Unsichtbares Wasserzeichen** (`tile-service/wasserzeichen.py`): jede
+  Lesesitzung bekommt eine 32-Bit-Kennung (`readerSessions.wasserzeichenCode`,
+  dauerhaft in der Tabelle `wasserzeichen`). Mit Tag und Pruefsumme werden
+  daraus 64 Bit, verschluesselt (Feistel, Schluessel `WASSERZEICHEN_KEY`, sonst
+  aus `TILE_SERVICE_SECRET` abgeleitet). Eingebettet als Spreizspektrum in
+  Seitenkoordinaten in jede Kachel und jedes Artikelbild, Staerke 2
+  (unsichtbar, mittlere Abweichung 0,9 Graustufen, nur wo Inhalt ist).
+  Auslesen mit Original: `tools/wasserzeichen-lesen.sh fund.jpg --heft <id>
+  --seite <index>` bzw. `--asset <id>`; richtet das Fundbild selbst aus (Rand,
+  Anschnitt, Massstab), korrigiert bis zu 8 unsichere Bits, ein Treffer zaehlt
+  nur, wenn die Kennung in der Datenbank steht. Geprueft (27.10.):
+  JPEG 50, 50 % verkleinert, Bildschirmfoto 900 px, 1-2 % verschoben, 5 %
+  angeschnitten, mit Rand: immer 0 Bitfehler; ohne Wasserzeichen kein Treffer.
+  Text traegt kein Wasserzeichen.
 * **Reader-Sperren** (`web/src/reader/kopierschutz.ts`): kein Rechtsklick,
   Markieren, Kopieren, Ziehen, Drucken, Strg+S/U/P, F12. Fokus weg, Tab
   gewechselt, Maus aus dem Fenster oder Druck-Taste: alles verschwimmt, Klick

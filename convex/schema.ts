@@ -617,6 +617,9 @@ export default defineSchema(
     // Geheimwert fuer den Kopierschutz (`schutz.ts`). Der Browser bekommt ihn
     // nie. Fehlt bei Sitzungen von vor dem 27.10.2026.
     schutzSeed: v.optional(v.number()),
+    // Kennung im unsichtbaren Wasserzeichen (`tile-service/wasserzeichen.py`),
+    // Zuordnung in `wasserzeichen`. Fehlt bei Sitzungen von vor dem 27.10.2026.
+    wasserzeichenCode: v.optional(v.number()),
     createdAt: v.number(),
     expiresAt: v.number(),
   })
@@ -811,6 +814,15 @@ export default defineSchema(
     .index("by_payment_intent", ["paymentIntentId"])
     .index("by_user", ["userId"])
     .index("by_status", ["status"]),
+
+  // Wer hinter einer Wasserzeichen-Kennung steht. Bleibt, wenn die
+  // Lesesitzung laengst abgelaufen ist; nur das Gateway-Werkzeug fragt hier.
+  wasserzeichen: defineTable({
+    code: v.number(),
+    userId: v.id("users"),
+    issueId: v.id("issues"),
+    createdAt: v.number(),
+  }).index("by_code", ["code"]),
 
   auditLog: defineTable({
     actorUserId: v.optional(v.id("users")),

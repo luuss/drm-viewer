@@ -186,6 +186,12 @@ tileRoute("/service/session/verify", (ctx, body) =>
   }),
 );
 
+tileRoute("/service/wasserzeichen/resolve", (ctx, body) =>
+  ctx.runQuery(internal.readerSessions.wasserzeichenAufloesenInternal, {
+    code: Number(body.code ?? 0),
+  }),
+);
+
 tileRoute("/service/session/usage", (ctx, body) =>
   ctx.runMutation(internal.readerSessions.reportUsageInternal, {
     sessionToken: String(body.sessionToken ?? ""),

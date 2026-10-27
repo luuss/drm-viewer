@@ -28,6 +28,7 @@ from fastapi.responses import Response
 from PIL import Image
 
 import schutz
+import wasserzeichen
 
 CONVEX_SITE_URL = os.environ.get("CONVEX_SITE_URL", "").rstrip("/")
 if not CONVEX_SITE_URL:
@@ -161,6 +162,23 @@ def require_ticket(token: str, ticket: str | None) -> None:
         for k, ablauf in list(_tickets_benutzt.items()):
             if ablauf < jetzt:
                 _tickets_benutzt.pop(k, None)
+
+
+_felder: "OrderedDict[tuple[int, int], Image.Image]" = OrderedDict()
+
+
+def wasserzeichen_feld(session: dict) -> Image.Image | None:
+    """Feld der Lesesitzung fuer das unsichtbare Wasserzeichen, oder None."""
+    code = session.get("wasserzeichenCode")
+    if not code:
+        return None
+    tag = int((float(session.get("sitzungSeit") or 0) / 1000 - 1577836800) // 86400) & 0xFFFF
+    schluessel = (int(code), tag)
+    if schluessel not in _felder:
+        _felder[schluessel] = wasserzeichen.feld(wasserzeichen.verschluesseln(int(code), tag))
+        while len(_felder) > 256:
+            _felder.popitem(last=False)
+    return _felder[schluessel]
 
 
 def require_fetch(request: Request) -> None:
@@ -365,8 +383,12 @@ async def asset(
     daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
     seed = schutz.fnv1a32(f'{session.get("kachelSchluessel", 0)}:asset:{asset_id}')
 
+    feld = wasserzeichen_feld(session)
+
     def verwuerfelt() -> bytes:
         bild = Image.open(io.BytesIO(daten)).convert("RGB")
+        if feld is not None:
+            bild = wasserzeichen.einbetten(bild, feld, (0.0, 0.0, 1.0, 1.0))
         return schutz.als_jpeg(schutz.verwuerfeln(bild, seed), quality=88)
 
     return Response(
@@ -470,6 +492,20 @@ async def tile(
     if cropped.size != target:
         cropped = cropped.resize(target, Image.LANCZOS)
 
+    # Unsichtbares Wasserzeichen der Sitzung, in Seitenkoordinaten: alle
+    # Kacheln aller Stufen ergeben zusammen dasselbe Feld ueber der Seite.
+    feld = wasserzeichen_feld(session)
+    if feld is not None:
+        cropped = wasserzeichen.einbetten(
+            cropped,
+            feld,
+            (
+                box[0] / meta["width"],
+                box[1] / meta["height"],
+                box[2] / meta["width"],
+                box[3] / meta["height"],
+            ),
+        )
     # Verwuerfelt ausliefern; zusammengesetzt wird erst im Reader
     # (`web/src/reader/schutz.ts`). Wer die Kachel speichert, hat Bloecke.
     seed = schutz.fnv1a32(
