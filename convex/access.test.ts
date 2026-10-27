@@ -269,3 +269,25 @@ describe("Rollen vergeben", () => {
     expect(leser.roles).toEqual(["reader"]);
   });
 });
+
+describe("Konten loeschen", () => {
+  test("Konto mit Freischaltung verschwindet, fremde bleiben", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, publicationId } = await setup(t);
+    const issueId = await addIssue(t, publicationId);
+    await t.mutation(internal.entitlements.grantInternal, { userId, issueId, source: "purchase" });
+    const andere = await t.run(async (ctx: any) => ctx.db.insert("users", { email: "bleibt@example.de" }));
+    const r = await t.mutation(internal.users.loeschenInternal, {
+      emails: ["Leser@example.de", "gibtsnicht@example.de"],
+    });
+    expect(r.map((x: any) => x.geloescht)).toEqual([true, false]);
+    const rest = await t.run(async (ctx: any) => ({
+      user: await ctx.db.get(userId),
+      ents: (await ctx.db.query("entitlements").collect()).length,
+      andere: await ctx.db.get(andere),
+    }));
+    expect(rest.user).toBeNull();
+    expect(rest.ents).toBe(0);
+    expect(rest.andere).not.toBeNull();
+  });
+});
