@@ -247,3 +247,25 @@ describe("Admins", () => {
     expect(r).toEqual({ alt: true, neu: true, entwurf: false, liste: [true, true, false] });
   });
 });
+
+describe("Rollen vergeben", () => {
+  test("nur die ausgewaehlten Konten, nicht jeder Admin", async () => {
+    const t = convexTest(schema, modules);
+    const { api } = await import("./_generated/api");
+    const ids = await t.run(async (ctx: any) => ({
+      erlaubt: await ctx.db.insert("users", { email: "an@ammerlin.de", roles: ["admin"] }),
+      admin: await ctx.db.insert("users", { email: "admin@example.de", roles: ["admin"] }),
+      leser: await ctx.db.insert("users", { email: "leser@example.de" }),
+    }));
+    await expect(
+      t
+        .withIdentity({ subject: ids.admin })
+        .mutation(api.users.setRoles, { userId: ids.leser, roles: ["reader"] }),
+    ).rejects.toThrow();
+    await t
+      .withIdentity({ subject: ids.erlaubt })
+      .mutation(api.users.setRoles, { userId: ids.leser, roles: ["reader"] });
+    const leser = await t.run(async (ctx: any) => ctx.db.get(ids.leser));
+    expect(leser.roles).toEqual(["reader"]);
+  });
+});

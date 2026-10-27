@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { rolesOf, hasRole, requireAdmin, audit, Role } from "./roles";
+import { rolesOf, hasRole, requireAdmin, audit, Role, darfRollenVergeben } from "./roles";
 import { Id } from "./_generated/dataModel";
 
 export const me = query({
@@ -21,6 +21,7 @@ export const me = query({
       isEditor: roles.includes("editor"),
       isPublisher: roles.includes("publisher"),
       isAdmin: roles.includes("admin"),
+      darfRollenVergeben: darfRollenVergeben(user),
     };
   },
 });
@@ -56,7 +57,10 @@ export const listForAdmin = query({
 export const setRoles = mutation({
   args: { userId: v.id("users"), roles: v.array(v.string()) },
   handler: async (ctx, { userId, roles }) => {
-    await requireAdmin(ctx);
+    const adminId = await requireAdmin(ctx);
+    if (!darfRollenVergeben(await ctx.db.get(adminId))) {
+      throw new Error("Rollen vergeben duerfen nur ausgewaehlte Konten");
+    }
     const allowed = ["customer", "reader", "editor", "publisher", "admin"];
     const clean = roles.filter((r) => allowed.includes(r));
     await ctx.db.patch(userId, { roles: clean } as any);

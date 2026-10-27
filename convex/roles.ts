@@ -41,6 +41,18 @@ export function rolesOf(user: any): Role[] {
   return Array.from(expanded);
 }
 
+/**
+ * Rollen vergeben duerfen nur diese Konten, auch wenn andere Admin sind.
+ * Bewusst im Code und nicht in der Datenbank: kein Admin kann sich das Recht
+ * selbst geben.
+ */
+const ROLLEN_VERGEBER = ["chuk@chuk.dev", "an@ammerlin.de"];
+
+export function darfRollenVergeben(user: any): boolean {
+  const email = (user?.email ?? "").trim().toLowerCase();
+  return !!email && ROLLEN_VERGEBER.includes(email);
+}
+
 export function hasRole(user: any, role: Role): boolean {
   return rolesOf(user).includes(role);
 }

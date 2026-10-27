@@ -372,6 +372,9 @@ export function Personen() {
             ? "Laden..."
             : `${gezeigt.length} Konten`}
       </p>
+      {!me.darfRollenVergeben && (
+        <p className="hint small">Rollen ändern dürfen nur ausgewählte Konten.</p>
+      )}
       <MeldungZeile meldung={meldung} />
       {gezeigt.length > 0 && (
         <table className="personen-tabelle">
@@ -393,7 +396,11 @@ export function Personen() {
                     <select
                       value={rolle}
                       aria-label={`Rolle von ${u.email ?? "Konto"}`}
-                      disabled={busy !== null || (u._id === me._id && rolle === "admin")}
+                      disabled={
+                        !me.darfRollenVergeben ||
+                        busy !== null ||
+                        (u._id === me._id && rolle === "admin")
+                      }
                       onChange={(e) =>
                         tue(
                           () => setRoles({ userId: u._id, roles: [e.target.value] }),
