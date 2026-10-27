@@ -1528,7 +1528,17 @@ body:has(.reihe-seite) { overflow-x: clip; }
   border-left: 4px solid var(--reihe);
 }
 .reihe-inhalt .reihe-kontakt-karte h3 { margin: 0; padding: 0; border: 0; font-size: var(--fs-h4); }
-.reihe-kontakt-liste { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); list-style: none; margin: 0; padding: 0; }
+/* Die Eintraege teilen sich die ganze Breite der Leiste gleichmaessig. */
+.reihe-kontakt-liste {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  gap: var(--s2) var(--s5);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 .reihe-kontakt-liste a {
   display: flex;
   align-items: center;
