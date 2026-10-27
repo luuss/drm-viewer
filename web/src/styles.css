@@ -1100,8 +1100,10 @@ button.small, .btn.small {
    Kiosk, Bibliothek
    ============================================================ */
 
-/* Reihen als Kacheln mit Schriftzug, wie die Kategorien im Netzladen:
-   weisse Karten, eckig. Unten eine Fusszeile mit Anzahl und Weiter-Pfeil. */
+/* Reihen als Kacheln: links der Schriftzug, rechts die neuesten Umschlaege,
+   die von unten ins Bild ragen wie im Zeitschriftenregal. Die Buehne ist zur
+   Seite der Umschlaege hin zart in der Hausfarbe getoent. Unten eine leichte
+   Fusszeile mit Anzahl und Weiter-Pfeil in der Hausfarbe. */
 .reihen-kacheln {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1113,12 +1115,12 @@ button.small, .btn.small {
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-radius: 0;
+  border-top: 3px solid var(--reihe, var(--ink));
   box-shadow: var(--shadow);
   overflow: hidden;
   color: var(--ink);
   cursor: pointer;
-  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 .reihen-kachel:hover {
   color: var(--ink);
@@ -1126,29 +1128,62 @@ button.small, .btn.small {
   transform: translateY(-3px);
 }
 a.reihen-kachel { text-decoration: none; }
+.reihen-buehne {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: center;
+  height: 13rem;
+  overflow: hidden;
+  background: linear-gradient(
+    105deg,
+    var(--surface) 40%,
+    color-mix(in srgb, var(--reihe, var(--ink)) 13%, var(--surface)) 100%
+  );
+}
 .reihen-kachel .reihen-logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 11rem;
-  padding: var(--s5) var(--s6);
+  height: 100%;
+  padding: var(--s5);
 }
-.reihen-kachel img {
+.reihen-kachel .reihen-logo img {
   display: block;
   max-width: 100%;
+  max-height: 4.25rem;
   width: auto;
-  height: 5.25rem;
+  height: auto;
   object-fit: contain;
 }
-/* Die Schriftzuege haben sehr verschiedene Seitenverhaeltnisse. Gleiche Hoehe
-   liesse ZUERST! riesig und die DMZ winzig wirken; diese Hoehen geben allen
-   etwa dieselbe Flaeche. */
-.reihen-kachel.reihe-zuerst img { height: 5.5rem; }
-.reihen-kachel.reihe-dmz img { height: 7rem; }
-.reihen-kachel.reihe-dmz-zeitgeschichte img { height: 5rem; }
-.reihen-kachel.reihe-schwertertraeger img { height: 4.5rem; }
-/* Fussleiste schwarz fuer alle Reihen, wie ein Balken auf dem Heftruecken.
-   Bunte Hausfarben (Rot, einmal Blau) wirkten nebeneinander unruhig. */
+.reihen-kachel.reihe-dmz .reihen-logo img { max-height: 5.5rem; }
+.reihen-kachel.reihe-schwertertraeger .reihen-logo img { max-height: 3.5rem; }
+/* Umschlaege: unten angeschnitten, das vordere gerade, das hintere schraeg. */
+.reihen-umschlaege {
+  position: relative;
+  align-self: stretch;
+}
+.reihen-umschlaege img {
+  position: absolute;
+  bottom: -2.5rem;
+  width: 8.75rem;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: top;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgba(20, 14, 10, 0.22), 0 1px 3px rgba(20, 14, 10, 0.15);
+  transition: transform 0.25s ease;
+}
+.reihen-umschlaege img.vorn { right: 1.5rem; transform: rotate(2deg); }
+.reihen-umschlaege img.hinten {
+  right: 6rem;
+  bottom: -1.75rem;
+  transform: rotate(-7deg);
+  filter: brightness(0.94);
+}
+.reihen-umschlaege img:only-child { right: 2.5rem; }
+.reihen-kachel:hover .reihen-umschlaege img.vorn { transform: translateY(-0.6rem) rotate(0deg); }
+.reihen-kachel:hover .reihen-umschlaege img.hinten { transform: translateY(-0.3rem) rotate(-10deg); }
 .reihen-fuss {
   display: flex;
   align-items: center;
@@ -1156,15 +1191,15 @@ a.reihen-kachel { text-decoration: none; }
   gap: var(--s3);
   margin-top: auto;
   padding: var(--s3) var(--s5);
-  background: #1c1c1c;
-  color: #fff;
+  border-top: 1px solid var(--rule);
+  background: var(--surface);
 }
 .reihen-kachel .reihen-anzahl {
   font-size: var(--fs-mini);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--muted);
 }
 .reihen-weiter {
   display: inline-flex;
@@ -1173,16 +1208,17 @@ a.reihen-kachel { text-decoration: none; }
   flex: 0 0 auto;
   font-size: var(--fs-sub);
   font-weight: 700;
-  color: #fff;
+  color: var(--reihe, var(--accent));
 }
 .reihen-weiter .icon { transition: transform 0.15s ease; }
 .reihen-kachel:hover .reihen-weiter .icon { transform: translateX(var(--s1)); }
 
-/* Kleine Fassung unten auf der Seite einer Zeitschrift. */
+/* Kleine Fassung: nur Schriftzug, ohne Umschlaege. */
 .reihen-kacheln.klein { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--s3); margin: 0; }
-.reihen-kacheln.klein .reihen-logo { height: 6rem; padding: var(--s3) var(--s4); }
-.reihen-kacheln.klein img { height: 3rem; }
-.reihen-kacheln.klein .reihe-dmz img { height: 4rem; }
+.reihen-kacheln.klein .reihen-buehne { display: flex; height: 6rem; background: var(--surface); }
+.reihen-kacheln.klein .reihen-umschlaege { display: none; }
+.reihen-kacheln.klein .reihen-logo { width: 100%; padding: var(--s3) var(--s4); }
+.reihen-kacheln.klein .reihen-logo img { max-height: 3rem; }
 .reihen-kacheln.klein .reihen-fuss { padding: var(--s2) var(--s3); }
 .reihen-kacheln.klein .reihen-weiter-text { display: none; }
 
@@ -1440,16 +1476,20 @@ body:has(.reihe-seite) { overflow-x: clip; }
   .reihe-kopf-info { align-items: flex-start; text-align: left; }
   .reihe-abo-karte { flex-direction: column; align-items: flex-start; padding: var(--s4); }
 }
+@media (max-width: 48rem) {
+  .reihen-kacheln { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+}
 @media (max-width: 32rem) {
-  .reihen-kacheln { gap: var(--s3); }
-  .reihen-kachel .reihen-logo { height: 6.5rem; padding: var(--s3); }
-  .reihen-kachel img { height: 2.6rem; }
-  .reihen-kachel.reihe-zuerst img { height: 2.75rem; }
-  .reihen-kachel.reihe-dmz img { height: 3.6rem; }
-  .reihen-kachel.reihe-dmz-zeitgeschichte img { height: 2.6rem; }
-  .reihen-kachel.reihe-schwertertraeger img { height: 2.1rem; }
-  .reihen-fuss { padding: var(--s2) var(--s3); }
-  .reihen-weiter-text { display: none; }
+  .reihen-buehne { height: 9.5rem; }
+  .reihen-kachel .reihen-logo { padding: var(--s3) var(--s4); }
+  .reihen-kachel .reihen-logo img { max-height: 3rem; }
+  .reihen-kachel.reihe-dmz .reihen-logo img { max-height: 3.75rem; }
+  .reihen-kachel.reihe-schwertertraeger .reihen-logo img { max-height: 2.5rem; }
+  .reihen-umschlaege img { width: 5.5rem; bottom: -1.75rem; }
+  .reihen-umschlaege img.vorn { right: 1rem; }
+  .reihen-umschlaege img.hinten { right: 3rem; bottom: -1.25rem; }
+  .reihen-umschlaege img:only-child { right: 1.5rem; }
+  .reihen-fuss { padding: var(--s2) var(--s4); }
 }
 
 .issue-grid {
