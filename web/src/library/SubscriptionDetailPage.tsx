@@ -39,7 +39,6 @@ export default function SubscriptionDetailPage() {
   const kombi = useQuery(api.leserAbo.kombiAngebot, { slug });
   const [params] = useSearchParams();
   const [chosen, setChosen] = useState<Id<"subscriptionPlans"> | null>(null);
-  const [kombiWahl, setKombiWahl] = useState<"zusammen" | "vorhanden" | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -61,9 +60,8 @@ export default function SubscriptionDetailPage() {
   );
   const selected = plans.find((p) => p._id === chosen) ?? vorgewaehlt ?? offer.headline;
   const kombiStufe = kombi?.stufen.find((s) => s.planId === selected?._id) ?? null;
-  const kombiArt =
-    kombiWahl ??
-    (kombiStufe?.vorhanden ? "vorhanden" : kombiStufe?.zusammenCents != null ? "zusammen" : null);
+  // Kombi: mit eigenem Abo der Partnerreihe nur der Kombipreis, sonst beide zusammen.
+  const kombiZusammen = kombiStufe !== null && !kombiStufe.vorhanden;
   // Checkout nur mit kaeuflicher Preisstufe; sonst fuehrt der Knopf in den Laden.
   const stripeMode = (storefront.stripeAbo || storefront.stripeCheckout) && selected !== null;
   const perInterval = selected?.interval === "year" ? "pro Jahr" : "pro Monat";
@@ -80,7 +78,6 @@ export default function SubscriptionDetailPage() {
         ? await abschliessen({
             planId: selected._id,
             widerrufsverzicht: accepted,
-            ...(kombiStufe && kombiArt ? { kombi: kombiArt } : {}),
             ...ziele,
           })
         : await subscribeAlt({ planId: selected._id, withdrawalWaiver: accepted, ...ziele });
@@ -173,49 +170,24 @@ export default function SubscriptionDetailPage() {
             )}
 
             {kombiStufe && (
-              <fieldset className="subscription-choice">
-                <legend>Kombi-Abonnement mit {kombiStufe.partnerName}</legend>
-                <label className="consent">
-                  <input
-                    type="radio"
-                    name="kombi"
-                    checked={kombiArt === "zusammen"}
-                    disabled={kombiStufe.zusammenCents === null}
-                    onChange={() => setKombiWahl("zusammen")}
-                  />
-                  <span>
-                    {kombiStufe.partnerName} gleich mit abonnieren
-                    {kombiStufe.partnerStufe ? ` (${kombiStufe.partnerStufe})` : ""}: ein gemeinsames
-                    Abo für beide Hefte, gemeinsam verlängert und nur gemeinsam kündbar.
-                  </span>
-                </label>
-                <label className="consent">
-                  <input
-                    type="radio"
-                    name="kombi"
-                    checked={kombiArt === "vorhanden"}
-                    disabled={!kombiStufe.vorhanden}
-                    onChange={() => setKombiWahl("vorhanden")}
-                  />
-                  <span>
-                    Ich habe bereits ein Digital-Abo von {kombiStufe.partnerName}
-                    {kombiStufe.vorhanden
-                      ? `. Endet es, verlängert sich dieses Abo zum Preis des Normalabonnements.`
-                      : ` – in diesem Konto ist keines aktiv.`}
-                  </span>
-                </label>
-              </fieldset>
+              <p className="hint">
+                {kombiStufe.vorhanden
+                  ? `Ihr Digital-Abo von ${kombiStufe.partnerName} ist erkannt; ${offer.publicationName} kommt zum Kombipreis dazu. Endet das Abo von ${kombiStufe.partnerName}, verlängert sich dieses zum Preis des Normalabonnements.`
+                  : kombiStufe.zusammenCents !== null
+                    ? `Das Kombi-Abonnement schließt ${kombiStufe.partnerName} (${kombiStufe.partnerStufe}) mit ein: ein gemeinsames Abo für beide Hefte, gemeinsam verlängert und nur gemeinsam kündbar.`
+                    : `Das Kombi-Abonnement gibt es in diesem Liefergebiet nur zu einem laufenden Digital-Abo von ${kombiStufe.partnerName}.`}
+              </p>
             )}
 
             <div className="price">
               {formatEuro(
-                kombiStufe && kombiArt === "zusammen" && kombiStufe.zusammenCents !== null
+                kombiZusammen && kombiStufe.zusammenCents !== null
                   ? kombiStufe.zusammenCents
                   : selected!.priceAmountCents,
               )}
               <span className="hint">
                 {" "}{perInterval} · {selected!.name}
-                {kombiStufe && kombiArt === "zusammen" ? ` und ${kombiStufe.partnerName}` : ""}
+                {kombiZusammen ? ` und ${kombiStufe.partnerName}` : ""}
               </span>
             </div>
             <p className="hint">
@@ -239,7 +211,7 @@ export default function SubscriptionDetailPage() {
               <button
                 className="btn"
                 onClick={startAbo}
-                disabled={busy || !accepted || (kombiStufe !== null && kombiArt === null)}
+                disabled={busy || !accepted || (kombiZusammen && kombiStufe.zusammenCents === null)}
                 aria-busy={busy}
               >
                 {busy ? "Wird geöffnet..." : <><Icon name="arrow-right" /> Abo abschließen</>}

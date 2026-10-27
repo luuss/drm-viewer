@@ -581,8 +581,6 @@ export const abschliessen = action({
   args: {
     planId: v.id("subscriptionPlans"),
     widerrufsverzicht: v.boolean(),
-    // Nur bei einer Kombi-Stufe: Partnerabo mit abschliessen oder schon vorhanden.
-    kombi: v.optional(v.union(v.literal("zusammen"), v.literal("vorhanden"))),
     successUrl: v.string(),
     cancelUrl: v.string(),
   },
@@ -604,9 +602,13 @@ export const abschliessen = action({
     ];
     const kombiMerkmale: Record<string, string> = {};
     let beschreibung = `${vb.reihe} Digital-Jahresabo, ${vb.plan.name}`;
+    // Kombi: mit laufendem Abo der Partnerreihe nur die eigene Stufe zum
+    // Kombipreis, sonst beide Reihen zusammen in einem Abo.
     if (vb.kombi) {
       const { partnerId, partnerName, partnerPreis, vorhanden } = vb.kombi;
-      if (args.kombi === "zusammen") {
+      if (vorhanden) {
+        kombiMerkmale.kombi = "vorhanden";
+      } else {
         if (!partnerId || !partnerPreis?.taxRateId) {
           throw new Error(`Das Kombi-Abo zusammen mit ${partnerName} gibt es in diesem Liefergebiet nicht.`);
         }
@@ -614,15 +616,6 @@ export const abschliessen = action({
         kombiMerkmale.kombi = "zusammen";
         kombiMerkmale.weitereReihen = partnerId;
         beschreibung = `${vb.reihe} und ${partnerName} Digital-Jahresabo, ${vb.plan.name}`;
-      } else if (args.kombi === "vorhanden") {
-        if (!vorhanden) {
-          throw new Error(
-            `Das Kombi-Abo setzt ein laufendes Digital-Abo von ${partnerName} voraus. Schließen Sie beide zusammen ab.`,
-          );
-        }
-        kombiMerkmale.kombi = "vorhanden";
-      } else {
-        throw new Error(`Bitte wählen, ob ${partnerName} mit abonniert wird.`);
       }
     }
     const stripe = stripeClient(konfig.secretKey);
