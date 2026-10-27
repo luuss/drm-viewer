@@ -263,7 +263,7 @@ export default function ReihePage() {
                     data-netz={s.name.toLowerCase()}
                     aria-label={`${reihe.name} bei ${s.name}`}
                   >
-                    <SocialIcon name={s.name} size={28} />
+                    <SocialIcon name={s.name} size={20} />
                     <span>{s.name}</span>
                   </a>
                 ))}

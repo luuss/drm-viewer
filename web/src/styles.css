@@ -1454,6 +1454,21 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img[style] { height: 11rem; }
 .reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(2) { margin-right: -2.5rem; }
 .reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(3) { margin-left: -2.5rem; }
+/* Baender unten im Beige der Abo-Karte statt in der Hausfarbe, Schrift dunkel. */
+.reihe-wege.mit-netzen .reihe-weg { background: #efe6d6; color: var(--ink); }
+.reihe-wege.mit-netzen .reihe-weg:hover { color: var(--ink); }
+.reihe-wege.mit-netzen .reihe-weg-art { color: var(--muted); }
+.reihe-wege.mit-netzen .reihe-weg .icon { color: var(--reihe); }
+.reihe-wege.mit-netzen .reihe-weg-bild { background: #f7f2e9; }
+/* Die Internetseite als Bildschirmbild mit Rahmen, nicht randlos. */
+.reihe-wege.mit-netzen .reihe-weg-seite img {
+  inset: var(--s4);
+  width: calc(100% - 2 * var(--s4));
+  height: calc(100% - 2 * var(--s4));
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow-sm);
+  background: #fff;
+}
 .reihe-netze {
   display: flex;
   flex-direction: column;
@@ -1468,8 +1483,8 @@ body:has(.reihe-seite) { overflow-x: clip; }
   flex: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 1fr;
-  gap: var(--s2);
+  align-content: center;
+  gap: var(--s3);
 }
 .reihe-netz {
   --netz: var(--reihe);
@@ -1477,12 +1492,12 @@ body:has(.reihe-seite) { overflow-x: clip; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--s2);
-  min-height: 5.5rem;
+  gap: var(--s1);
+  height: 4.25rem;
   background: var(--netz);
   color: #fff;
-  font-size: var(--fs-sub);
-  font-weight: 700;
+  font-size: var(--fs-mini);
+  font-weight: 600;
   text-decoration: none;
   transition: filter 0.15s ease, transform 0.15s ease;
 }
