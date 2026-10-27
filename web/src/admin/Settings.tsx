@@ -6,7 +6,7 @@ import { MeldungZeile, useMeldung } from "./adminUi";
 
 type Reihe = FunctionReturnType<typeof api.publications.listAll>[number];
 
-/** Einstellungen der Verwaltung: Reihen, Netzladen, Personen. */
+/** Einstellungen der Verwaltung: Reihen, Netzladen. Personen haben eine eigene Seite. */
 export default function Settings() {
   const me = useQuery(api.users.me, {});
   if (me === undefined) return <p className="hint">Laden...</p>;
@@ -21,7 +21,6 @@ export default function Settings() {
     <div className="einstellungen">
       <Reihen />
       <Netzladen />
-      <Personen meId={me._id} />
     </div>
   );
 }
@@ -322,8 +321,13 @@ function hoechste(roles: string[]): Rolle {
   return "customer";
 }
 
-function Personen({ meId }: { meId: Id<"users"> }) {
-  const users = useQuery(api.users.listForAdmin, {});
+/**
+ * Personen und ihre Rolle, als eigene Seite der Verwaltung. Ohne Suche stehen
+ * alle mit Rechten ueber das Lesen hinaus da; die Suche findet jedes Konto.
+ */
+export function Personen() {
+  const me = useQuery(api.users.me, {});
+  const users = useQuery(api.users.listForAdmin, me?.isAdmin ? {} : "skip");
   const setRoles = useMutation(api.users.setRoles);
   const [suche, setSuche] = useState("");
   const [meldung, tue, busy] = useMeldung();
@@ -340,55 +344,82 @@ function Personen({ meId }: { meId: Id<"users"> }) {
       .slice(0, 100);
   }, [users, suche]);
 
-  return (
-    <section className="einstellungen-abschnitt">
-      <h2>Personen</h2>
-      <div className="karte stack-form breit">
-        <label>
-          Konto suchen
-          <input
-            type="search"
-            value={suche}
-            onChange={(e) => setSuche(e.target.value)}
-            placeholder="E-Mail-Adresse oder Name"
-          />
-        </label>
-        <p className="hint small">
-          {suche.trim() ? `${gezeigt.length} Treffer` : "Ohne Suche stehen hier alle mit Rechten über das Lesen hinaus."}
-        </p>
-        <MeldungZeile meldung={meldung} />
-        <ul className="personen">
-          {gezeigt.map((u) => {
-            const rolle = hoechste(u.roles);
-            return (
-              <li key={u._id}>
-                <span className="wer">
-                  <strong>{u.email ?? "(ohne Adresse)"}</strong>
-                  {u.name ? <span className="hint small"> {u.name}</span> : null}
-                </span>
-                <select
-                  value={rolle}
-                  aria-label={`Rolle von ${u.email ?? "Konto"}`}
-                  disabled={busy !== null || (u._id === meId && rolle === "admin")}
-                  title={ROLLE_HINWEIS[rolle]}
-                  onChange={(e) =>
-                    tue(
-                      () => setRoles({ userId: u._id, roles: [e.target.value] }),
-                      `${u.email}: ${ROLLEN.find(([k]) => k === e.target.value)?.[1]}`,
-                    )
-                  }
-                >
-                  {ROLLEN.map(([k, text]) => (
-                    <option key={k} value={k}>
-                      {text} — {ROLLE_HINWEIS[k]}
-                    </option>
-                  ))}
-                </select>
-              </li>
-            );
-          })}
-        </ul>
+  if (me === undefined) return <p className="hint">Laden...</p>;
+  if (!me?.isAdmin) {
+    return (
+      <div className="empty">
+        <p>Personen verwaltet nur die Verwaltung.</p>
       </div>
+    );
+  }
+
+  return (
+    <section className="personen-seite">
+      <div className="personen-kopf">
+        <h2>Personen</h2>
+        <input
+          type="search"
+          value={suche}
+          onChange={(e) => setSuche(e.target.value)}
+          placeholder="E-Mail-Adresse oder Name suchen"
+          aria-label="Konto suchen"
+        />
+      </div>
+      <p className="hint small">
+        {suche.trim()
+          ? `${gezeigt.length} Treffer`
+          : "Ohne Suche stehen hier alle mit Rechten über das Lesen hinaus."}
+      </p>
+      <MeldungZeile meldung={meldung} />
+      {gezeigt.length > 0 && (
+        <table className="personen-tabelle">
+          <thead>
+            <tr>
+              <th>E-Mail</th>
+              <th>Name</th>
+              <th>Rolle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gezeigt.map((u) => {
+              const rolle = hoechste(u.roles);
+              return (
+                <tr key={u._id}>
+                  <td className="mail">{u.email ?? "(ohne Adresse)"}</td>
+                  <td>{u.name ?? ""}</td>
+                  <td>
+                    <select
+                      value={rolle}
+                      aria-label={`Rolle von ${u.email ?? "Konto"}`}
+                      disabled={busy !== null || (u._id === me._id && rolle === "admin")}
+                      onChange={(e) =>
+                        tue(
+                          () => setRoles({ userId: u._id, roles: [e.target.value] }),
+                          `${u.email}: ${ROLLEN.find(([k]) => k === e.target.value)?.[1]}`,
+                        )
+                      }
+                    >
+                      {ROLLEN.map(([k, text]) => (
+                        <option key={k} value={k}>
+                          {text}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <dl className="rollen-legende">
+        {ROLLEN.map(([k, text]) => (
+          <div key={k}>
+            <dt>{text}</dt>
+            <dd>{ROLLE_HINWEIS[k]}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }

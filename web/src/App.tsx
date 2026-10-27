@@ -16,6 +16,7 @@ import AdminPage from "./admin/AdminPage";
 import AdminLayout from "./admin/AdminLayout";
 import IssueWorkspace from "./admin/IssueWorkspace";
 import Settings from "./admin/Settings";
+import { Personen } from "./admin/Settings";
 import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
 import LegalPage from "./pages/LegalPage";
@@ -74,6 +75,7 @@ export default function App() {
             <Route path="heft/:issueId" element={<IssueWorkspace />} />
             <Route path="heft/:issueId/:reiter" element={<IssueWorkspace />} />
             <Route path="einstellungen" element={<Settings />} />
+            <Route path="personen" element={<Personen />} />
           </Route>
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />

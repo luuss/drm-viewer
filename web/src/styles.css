@@ -3628,22 +3628,48 @@ body:has(.reihe-seite) { overflow-x: clip; }
 
 .page.admin { gap: var(--s6); }
 
-/* Unternavigation der Redaktion: wie die Reiter, nur als Links. */
+/* Die Redaktion: Navigation links neben dem Inhalt, auf schmalen Schirmen
+   oben als Reiter. Text ist hier markierbar (sonst gilt user-select: none). */
+.page.admin {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  align-items: start;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.admin-inhalt { display: flex; flex-direction: column; gap: var(--s6); min-width: 0; }
 .admin-nav {
+  position: sticky;
+  top: var(--s5);
   display: flex;
-  gap: var(--s5);
-  border-bottom: 1px solid var(--rule);
+  flex-direction: column;
+  gap: 2px;
+  padding-right: var(--s4);
+  border-right: 1px solid var(--rule);
 }
 .admin-nav a {
-  padding: var(--s2) 0;
-  margin-bottom: -1px;
-  border-bottom: 2px solid transparent;
+  padding: var(--s2) var(--s3);
+  border-left: 3px solid transparent;
   font-size: var(--fs-sub);
   font-weight: 600;
   color: var(--ink-soft);
 }
-.admin-nav a:hover { color: var(--ink); }
-.admin-nav a.active { color: var(--ink); border-bottom-color: var(--accent); }
+.admin-nav a:hover { color: var(--ink); background: var(--paper-sunk); }
+.admin-nav a.active { color: var(--ink); border-left-color: var(--accent); background: var(--paper-sunk); }
+@media (max-width: 62rem) {
+  .page.admin { grid-template-columns: minmax(0, 1fr); }
+  .admin-nav {
+    position: static;
+    flex-direction: row;
+    gap: var(--s5);
+    padding-right: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .admin-nav a { padding: var(--s2) 0; margin-bottom: -1px; border-left: 0; border-bottom: 2px solid transparent; background: none; }
+  .admin-nav a:hover { background: none; }
+  .admin-nav a.active { border-bottom-color: var(--accent); background: none; }
+}
 
 /* Zuklappbares: Optionen, Protokoll, Werkzeuge. */
 .aufklapp > summary {
@@ -4005,18 +4031,34 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 .karte-kopf { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s3); align-self: stretch; }
 .karte-kopf .schalter { margin-left: auto; font-size: var(--fs-sub); }
 .karte h4 { font-family: var(--sans); font-size: var(--fs-sub); color: var(--ink-soft); }
-.personen { list-style: none; padding: 0; margin: 0; align-self: stretch; display: flex; flex-direction: column; }
-.personen li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2) var(--s4);
-  padding: var(--s2) 0;
-  border-bottom: 1px solid var(--rule-soft);
+.personen-seite { display: flex; flex-direction: column; gap: var(--s3); }
+.personen-kopf { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); }
+.personen-kopf input { flex: 0 1 22rem; min-width: 0; }
+.personen-tabelle { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); background: var(--surface); border: 1px solid var(--rule); }
+.personen-tabelle th {
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule);
 }
-.personen li:last-child { border-bottom: 0; }
-.personen .wer { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-sub); }
-.personen select { width: auto; max-width: 100%; min-height: var(--ctl-h-sm); font-size: var(--fs-sub); }
+.personen-tabelle td { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--rule-soft); vertical-align: middle; }
+.personen-tabelle tr:last-child td { border-bottom: 0; }
+.personen-tabelle td.mail { font-weight: 600; overflow-wrap: anywhere; }
+.personen-tabelle select { width: auto; min-height: var(--ctl-h-sm); font-size: var(--fs-sub); }
+.rollen-legende { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--s2) var(--s4); margin: var(--s3) 0 0; font-size: var(--fs-mini); color: var(--muted); }
+.rollen-legende dt { font-weight: 700; color: var(--ink-soft); }
+.rollen-legende dd { margin: 0; }
+@media (max-width: 40rem) {
+  .personen-tabelle thead { display: none; }
+  .personen-tabelle tr { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--s3); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--rule-soft); }
+  .personen-tabelle td { padding: 0; border: 0; }
+  .personen-tabelle td:nth-child(2) { grid-row: 2; color: var(--muted); }
+  .personen-tabelle td:nth-child(3) { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+}
 
 @media (max-width: 62rem) {
   .heft-uebersicht, .heft-angaben, .links-split { grid-template-columns: 1fr; }
