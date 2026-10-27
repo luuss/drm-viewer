@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
 
 /**
  * Rechtstexte des Lesers. Wo die Lage dieselbe ist wie im Netzladen
@@ -13,8 +11,6 @@ import { api } from "../../../convex/_generated/api";
  */
 
 const SHOP = "https://lesenundschenken.de";
-/** Nimmt Widerrufe entgegen und bestaetigt dem Kunden den Eingang per Mail. */
-const WIDERRUF_ZIEL = `${SHOP}/widerruf-senden.php`;
 
 type Section = { h?: string; p?: ReactNode; lines?: string[]; list?: ReactNode[] };
 
@@ -30,7 +26,7 @@ const ANBIETER = [
   "D-24238 Martensrade",
 ];
 
-const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }> = {
+const DOCS: Record<string, { title: string; body: Section[] }> = {
   impressum: {
     title: "Impressum",
     body: [
@@ -161,8 +157,18 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
 
   widerruf: {
     title: "Widerrufsbelehrung",
-    form: "widerruf",
     body: [
+      {
+        p: (
+          <>
+            Digitalausgaben und Digital-Abos verkaufen wir im Leser nur, wenn Sie in der Kasse
+            ausdrücklich zustimmen, dass wir sofort mit der Bereitstellung beginnen. Mit der
+            Freischaltung erlischt Ihr Widerrufsrecht (siehe „Vorzeitiges Erlöschen des
+            Widerrufsrechts“). Für Bestellungen im Netzladen gilt die{" "}
+            {ext(`${SHOP}/content/7-widerrufsbelehrung`, "Widerrufsbelehrung des Netzladens")}.
+          </>
+        ),
+      },
       {
         h: "Widerrufsrecht",
         p: "Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses. Um Ihr Widerrufsrecht auszuüben, müssen Sie uns",
@@ -175,7 +181,7 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
         ],
       },
       {
-        p: "mittels einer eindeutigen Erklärung (z. B. ein mit der Post versandter Brief, Telefax oder E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren. Sie können dafür das nachstehende Formular verwenden, das jedoch nicht vorgeschrieben ist. Zur Wahrung der Widerrufsfrist reicht es aus, dass Sie die Mitteilung über die Ausübung des Widerrufsrechts vor Ablauf der Widerrufsfrist absenden.",
+        p: "mittels einer eindeutigen Erklärung (z. B. ein mit der Post versandter Brief, Telefax oder E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren. Zur Wahrung der Widerrufsfrist reicht es aus, dass Sie die Mitteilung über die Ausübung des Widerrufsrechts vor Ablauf der Widerrufsfrist absenden.",
       },
       {
         h: "Widerrufsfolgen",
@@ -329,71 +335,6 @@ const DOCS: Record<string, { title: string; body: Section[]; form?: "widerruf" }
   },
 };
 
-/**
- * Widerrufsfunktion (§ 356a BGB). Geht an dasselbe Skript wie das Formular im
- * Netzladen; es leitet den Widerruf an den Verlag und bestaetigt dem Kunden den
- * Eingang per E-Mail.
- */
-function WiderrufFormular() {
-  const me = useQuery(api.users.me, {});
-  return (
-    <div className="legal-section">
-      <h3>Vertrag widerrufen</h3>
-      <p>
-        Wenn Sie den Vertrag widerrufen wollen, füllen Sie bitte dieses Formular aus und senden Sie
-        es ab. Den Eingang bestätigen wir Ihnen umgehend per E-Mail. Eine Angabe von Gründen ist
-        nicht erforderlich; Ihre Angaben verwenden wir ausschließlich zur Bearbeitung des
-        Widerrufs.
-      </p>
-      <form className="stack-form" method="post" action={WIDERRUF_ZIEL}>
-        <input
-          type="text"
-          name="website"
-          tabIndex={-1}
-          autoComplete="off"
-          aria-hidden="true"
-          style={{ position: "absolute", left: "-9999px", width: 1, height: 1 }}
-        />
-        <label>
-          Name *
-          <input name="name" autoComplete="name" required maxLength={120} />
-        </label>
-        <label>
-          E-Mail-Adresse *
-          <input
-            type="email"
-            name="email"
-            autoComplete="email"
-            required
-            maxLength={160}
-            defaultValue={me?.email ?? ""}
-            key={me?.email ?? ""}
-          />
-        </label>
-        <label>
-          Anschrift
-          <textarea name="anschrift" rows={3} autoComplete="street-address" maxLength={400} />
-        </label>
-        <label>
-          Bestell- oder Rechnungsnummer
-          <input name="rechnungsnummer" maxLength={60} />
-        </label>
-        <label>
-          Bestellt am
-          <input name="bestellt_am" placeholder="TT.MM.JJJJ" maxLength={60} />
-        </label>
-        <label>
-          Hiermit widerrufe(n) ich/wir den abgeschlossenen Vertrag über folgende digitale Ausgaben *
-          <textarea name="waren" rows={4} required maxLength={1500} />
-        </label>
-        <button type="submit" className="btn">
-          Widerruf bestätigen
-        </button>
-      </form>
-    </div>
-  );
-}
-
 export default function LegalPage({ doc }: { doc?: string }) {
   const params = useParams();
   const key = doc ?? params.doc ?? window.location.pathname.replace(/^\//, "");
@@ -428,7 +369,6 @@ export default function LegalPage({ doc }: { doc?: string }) {
           )}
         </div>
       ))}
-      {entry.form === "widerruf" && <WiderrufFormular />}
     </div>
   );
 }
