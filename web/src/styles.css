@@ -169,6 +169,9 @@
 }
 
 :root {
+  /* Die Seite ist nur hell. Ohne das malt ein dunkles System die offenen
+     Auswahllisten dunkel, die Schrift bleibt aber dunkel: unlesbar. */
+  color-scheme: light;
   /* Farben des Verlagsshops lesenundschenken.de. */
   --paper: #f4f4f4;         /* Seitengrund, helles Grau */
   --paper-sunk: #ececec;    /* abgesetzte Flaechen */
@@ -753,6 +756,7 @@ label {
   text-transform: uppercase;
 }
 
+option { background: var(--surface); color: var(--ink); }
 input, select, textarea {
   padding: 0 var(--s3);
   min-height: var(--ctl-h);
