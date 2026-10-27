@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
+import { entschluesseln } from "./schutz";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -145,12 +146,30 @@ describe("Tabellen", () => {
       await ctx.db.patch(a._id, { reviewStatus: "approved" });
       return a._id;
     });
+    // Text gibt es nur zu einer Lesesitzung, verschluesselt mit ihrem Geheimwert.
+    const SEED = 42;
+    await t.run(async (ctx: any) => {
+      await ctx.db.insert("readerSessions", {
+        userId: adminId,
+        sessionToken: "lese-token",
+        issueId,
+        schutzSeed: SEED,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+      });
+    });
     const gelesen = await t
       .withIdentity({ subject: adminId, email: "admin@example.de" })
-      .query(api.articles.getForReader, { articleId });
+      .query(api.articles.getForReader, { articleId, sessionToken: "lese-token" });
     expect(gelesen?.blocks.map((b: any) => b.type)).toEqual(["paragraph", "table"]);
     expect(gelesen?.blocks[0].table).toBeNull();
-    expect(gelesen?.blocks[1].table).toEqual(TABELLE);
+    const tabelle = gelesen?.blocks[1].table;
+    expect({
+      ...tabelle,
+      rows: tabelle.rows.map((row: any[]) =>
+        row.map((c) => ({ ...c, text: entschluesseln(SEED, c.text) })),
+      ),
+    }).toEqual(TABELLE);
     // Die Zellen sind durchsuchbar.
     const such = await t.run(async (ctx: any) => (await ctx.db.get(articleId)).searchText);
     expect(such).toContain("Robert von Greim");
