@@ -176,7 +176,11 @@ danach `account:purgeByEmailInternal`).
   nur, wenn die Kennung in der Datenbank steht. Geprueft (27.10.):
   JPEG 50, 50 % verkleinert, Bildschirmfoto 900 px, 1-2 % verschoben, 5 %
   angeschnitten, mit Rand: immer 0 Bitfehler; ohne Wasserzeichen kein Treffer.
-  Text traegt kein Wasserzeichen.
+  Text traegt kein Wasserzeichen. Echter Test 27.10.: Bildschirmfoto der
+  Seitenansicht (Seite in 632 px, kleine Kachelstufe, Hover-Toenung) ohne
+  Bitfehler gelesen, nachdem Inhaltsrest (Ausgleichsrechnung) und flaechige
+  Stoerungen (Median je 5x5 Zellen) herausgerechnet werden. Raster 64 nicht
+  aendern: bereits eingebettete Zeichen liessen sich sonst nicht mehr lesen.
 * **Reader-Sperren** (`web/src/reader/kopierschutz.ts`): kein Rechtsklick,
   Markieren, Kopieren, Ziehen, Drucken, Strg+S/U/P, F12. Fokus weg, Tab
   gewechselt, Maus aus dem Fenster oder Druck-Taste: alles verschwimmt, Klick

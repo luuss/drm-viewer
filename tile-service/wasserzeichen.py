@@ -30,9 +30,11 @@ import zlib
 import numpy as np
 from PIL import Image, ImageFilter
 
-RASTER = 64
+RASTER = int(os.environ.get("WASSERZEICHEN_RASTER", "64"))
 BITS = 64
 STAERKE = float(os.environ.get("WASSERZEICHEN_STAERKE", "2.0"))
+# Grundanteil auch auf ruhigen Flaechen (0..1).
+BODEN = float(os.environ.get("WASSERZEICHEN_BODEN", "0.15"))
 
 
 def _schluessel() -> bytes:
@@ -122,7 +124,7 @@ def einbetten(bild: Image.Image, f: Image.Image, box: tuple[float, float, float,
     grau = rgb.mean(axis=2)
     # Nur wo Inhalt ist: lokale Unruhe (Abweichung vom weichgezeichneten Bild).
     unruhe = _weich(np.abs(grau - _weich(grau, 3)), 6)
-    maske = np.clip(unruhe / 12.0, 0.15, 1.0)
+    maske = np.clip(unruhe / 12.0, BODEN, 1.0)
     neu = rgb + (STAERKE * teil * maske)[:, :, None]
     return Image.fromarray(np.clip(neu + 0.5, 0, 255).astype(np.uint8), "RGB")
 
@@ -200,7 +202,8 @@ def lesen(bild: Image.Image, original: Image.Image | None = None) -> tuple[int, 
     Original abgezogen, uebrig bleibt fast nur das Wasserzeichen. Ohne
     Original nur ein grober Versuch.
     """
-    groesse = RASTER * 8
+    groesse = 512
+    z = groesse // RASTER
 
     def grau(b: Image.Image) -> np.ndarray:
         return np.asarray(b.convert("L").resize((groesse, groesse), Image.Resampling.BICUBIC), np.float32)
@@ -209,15 +212,33 @@ def lesen(bild: Image.Image, original: Image.Image | None = None) -> tuple[int, 
     if original is not None:
         zurueck, maske = ausrichten(bild, original)
         gueltig = (grau(maske) > 250).astype(np.float32)
-        rest = (grau(zurueck) - grau(original)) * gueltig
+        o = grau(original)
+        rest = grau(zurueck) - o
+        # Inhaltsrest herausrechnen: Anzeige und Bildschirmfoto glaetten die
+        # Schrift anders als unser Verkleinern. Dieser Rest haengt am Inhalt,
+        # das Wasserzeichen nicht; eine Ausgleichsrechnung gegen das Original
+        # und weichgezeichnete Varianten davon nimmt ihn heraus.
+        merkmale = [o, _weich(o, 1), _weich(o, 2), _weich(o, 4), np.ones_like(o)]
+        A = np.stack([mm[gueltig > 0] for mm in merkmale], axis=1)
+        koeff, *_ = np.linalg.lstsq(A, rest[gueltig > 0], rcond=None)
+        if os.environ.get("WZ_OHNE_AUSGLEICH") != "1":
+            rest = rest - sum(k * mm for k, mm in zip(koeff, merkmale))
+        rest = rest * gueltig
     else:
         g = grau(bild)
         rest = g - _weich(g, 24)
     # Je Rasterzelle mitteln: das Feld ist innerhalb einer Zelle fast gleich.
-    summe = rest.reshape(RASTER, 8, RASTER, 8).sum(axis=(1, 3))
-    anzahl = gueltig.reshape(RASTER, 8, RASTER, 8).sum(axis=(1, 3))
+    # (Keine Gewichtung nach Unruhe: das Feld sitzt gerade dort, wo Inhalt ist.)
+    summe = rest.reshape(RASTER, z, RASTER, z).sum(axis=(1, 3))
+    anzahl = gueltig.reshape(RASTER, z, RASTER, z).sum(axis=(1, 3))
     zellen = np.where(anzahl > 0, summe / np.maximum(anzahl, 1), 0.0)
     da = anzahl > 0
+    # Flaechige Stoerungen (Hover-Toenung, Helligkeit, Farbprofil) sind ueber
+    # viele Zellen gleich, das Feld wechselt von Zelle zu Zelle: Median der
+    # 5x5-Nachbarschaft abziehen.
+    rand = np.pad(zellen, 2, mode="edge")
+    fenster = np.lib.stride_tricks.sliding_window_view(rand, (5, 5))
+    zellen = np.where(da, zellen - np.median(fenster, axis=(2, 3)), 0.0)
     zellen[da] = (zellen[da] - zellen[da].mean()) / (zellen[da].std() + 1e-6)
     m = muster()
     korr = np.tensordot(m, zellen, axes=([1, 2], [0, 1])) / (RASTER * RASTER)
@@ -227,13 +248,14 @@ def lesen(bild: Image.Image, original: Image.Image | None = None) -> tuple[int, 
     return wert, float(np.abs(korr).mean() * RASTER), korr
 
 
-def kandidaten(wert: int, korr: np.ndarray, schwache: int = 8):
+def kandidaten(wert: int, korr: np.ndarray, schwache: int = 12):
     """Gelesener Wert, dann Varianten mit gekippten unsicheren Bits.
 
     Liefert (wert, gekippte Bits) fuer jede Variante, deren Pruefsumme passt.
-    Bei 8 unsicheren Bits sind es 256 Versuche; die 16-Bit-Pruefsumme laesst
-    dabei selten einen Zufallstreffer durch, darum zaehlt ein Treffer erst,
-    wenn die Kennung auch in der Datenbank steht.
+    Bei 12 unsicheren Bits sind es 4096 Versuche; die 16-Bit-Pruefsumme laesst
+    dabei gelegentlich einen Zufallstreffer durch, darum zaehlt ein Treffer
+    erst, wenn die Kennung auch in der Datenbank steht (Zufall: weniger als
+    1 zu 10.000.000 bei 100.000 Kennungen).
     """
     unsicher = np.argsort(np.abs(korr))[:schwache]
     for maske in range(1 << schwache):
