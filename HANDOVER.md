@@ -118,6 +118,21 @@ danach `account:purgeByEmailInternal`).
 
 ---
 
+## 1d. Kopf und Fuss wie im Netzladen (26.10.2026)
+
+* `web/src/components/AppShell.tsx` + `styles.css`: Kopf immer eine Zeile
+  (62 px, unter 900 px 56 px, Logo 40/34 px), unter 1100 px Burger-Menue mit
+  Seitenpanel (`.nav-drawer`, wie `.lus-offcanvas` im Shop) statt Umbruch auf
+  2-3 Zeilen. Konto im Kopf nur als Symbol. Neuer Menuepunkt „Netzladen“.
+* Fuss 1:1 mit Shop-Massen (`--shop-max: 1240px`, 18 px Rand, Logo 60 px,
+  Text 13,5 px, Copyright 48 px), steht auf kurzen Seiten ganz unten
+  (`.app-shell` mindestens `100dvh`).
+* Ausgerollt per rsync der drei Dateien + `up -d --build web`. Sicherung
+  `/root/web-vor-nav-2026-10-26.tgz`. Achtung: der Server hatte Aenderungen,
+  die nicht im Git stehen (Abo-Kachel, Bead offen).
+* Lokal testen ohne `.env`: `VITE_CONVEX_URL=https://digital.lesenundschenken.de/convex node node_modules/vite/bin/vite.js --port 5199`
+  in `web/` (abgemeldete Ansicht; angemeldete Leiste per DOM nachgestellt).
+
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 
 Der Leser heisst seit 19.10.2026 **https://digital.lesenundschenken.de**

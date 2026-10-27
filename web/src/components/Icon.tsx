@@ -6,11 +6,13 @@ export type IconName =
   | "check"
   | "close"
   | "edit"
+  | "external"
   | "kiosk"
   | "library"
   | "list"
   | "login"
   | "logout"
+  | "menu"
   | "pages"
   | "search"
   | "spread"
@@ -66,6 +68,9 @@ export default function Icon({ name, className = "", size = 18 }: Props) {
       {name === "edit" && (
         <><path d="M4 20h4l11-11-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>
       )}
+      {name === "external" && (
+        <><path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></>
+      )}
       {name === "kiosk" && (
         <><path d="M4 10v10h16V10" /><path d="M3 4h18l-1 6a3 3 0 0 1-4 0 3 3 0 0 1-4 0 3 3 0 0 1-4 0 3 3 0 0 1-4 0z" /><path d="M9 20v-5h6v5" /></>
       )}
@@ -81,6 +86,7 @@ export default function Icon({ name, className = "", size = 18 }: Props) {
       {name === "logout" && (
         <><path d="M10 4H5v16h5" /><path d="M21 12H9" /><path d="m16 7 5 5-5 5" /></>
       )}
+      {name === "menu" && <path d="M3 6h18M3 12h18M3 18h18" />}
       {name === "pages" && (
         <><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 7h6M9 11h6M9 15h4" /></>
       )}
