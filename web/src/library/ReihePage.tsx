@@ -253,6 +253,7 @@ export default function ReihePage() {
                   target="_blank"
                   rel="noopener"
                   className="reihe-social-link"
+                  data-netz={s.name.toLowerCase()}
                   aria-label={`${reihe.name} bei ${s.name}`}
                 >
                   <SocialIcon name={s.name} />

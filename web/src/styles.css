@@ -1430,6 +1430,14 @@ body:has(.reihe-seite) { overflow-x: clip; }
   text-decoration: none;
 }
 .reihe-social-link:hover { background: var(--reihe); color: #fff; }
+/* Markenfarben der Netze: gefuellte Flaeche, Zeichen und Schrift weiss */
+.reihe-social-link[data-netz] { --netz: var(--reihe); border-color: transparent; background: var(--netz); color: #fff; }
+.reihe-social-link[data-netz="telegram"] { --netz: #26a5e4; }
+.reihe-social-link[data-netz="facebook"] { --netz: #0866ff; }
+.reihe-social-link[data-netz="instagram"] { --netz: #e4405f; background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }
+.reihe-social-link[data-netz="x"] { --netz: #000; }
+.reihe-social-link[data-netz]:hover { background: var(--netz); filter: brightness(1.1); }
+.reihe-social-link[data-netz="instagram"]:hover { background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }
 .reihe-seite .issue-card-body .card-action,
 .reihe-seite .issue-card-body .cta .go,
 .reihe-seite .issue-card-body .price { color: var(--reihe); }
