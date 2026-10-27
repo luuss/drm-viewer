@@ -1451,7 +1451,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .reihe-wege.mit-netzen .reihe-weg-seite img,
 .reihe-wege.mit-netzen .reihe-weg-hefte img:not([style]) { position: absolute; inset: 0; }
 .reihe-wege.mit-netzen .reihe-weg-web .reihe-weg-bild { aspect-ratio: 16 / 9; }
-.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img { height: 70%; }
+.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img[style] { height: 11rem; }
 .reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(2) { margin-right: -2.5rem; }
 .reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(3) { margin-left: -2.5rem; }
 .reihe-netze {
