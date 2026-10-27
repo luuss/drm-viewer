@@ -535,6 +535,11 @@ export default defineSchema(
     lastSyncedAt: v.optional(v.number()),
     // Abo im Stripe-Konto des Ladens (leserAbo.ts); ohne: alter Checkout.
     stripeModus: v.optional(v.union(v.literal("test"), v.literal("live"))),
+    // Kombi-Abo: "zusammen" schaltet auch die Partnerreihe frei
+    // (`weitereReihen`), "vorhanden" setzt deren laufendes Abo voraus,
+    // "entfallen": ohne Partnerabo auf den Normalpreis umgestellt.
+    weitereReihen: v.optional(v.array(v.id("publications"))),
+    kombi: v.optional(v.union(v.literal("zusammen"), v.literal("vorhanden"), v.literal("entfallen"))),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])

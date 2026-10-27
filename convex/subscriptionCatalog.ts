@@ -9,6 +9,9 @@
  * Alle Preise sind Jahrespreise in Cent, inklusive Mehrwertsteuer.
  * Quellen, Stand September 2026: zuerst.de/abo und die Bestellformulare fuer
  * DMZ, DMZ Zeitgeschichte und Schwertertraeger auf lesenundschenken.de.
+ * Digital gilt nur der Inlandspreis: ohne Versand gibt es keine
+ * Auslandspreise (27.10.2026). Die Stufen tragen deshalb nur die Abo-Art
+ * als Namen.
  */
 
 export type DeliveryRegion = "inland" | "ausland" | "luftpost";
@@ -29,6 +32,13 @@ export type CatalogTier = {
   note?: string;
   /** Jahrespreis je Liefergebiet. Fehlt ein Gebiet, gibt es die Stufe dort nicht. */
   prices: Partial<Record<DeliveryRegion, number>>;
+  /**
+   * Kombi-Abo: gilt nur zusammen mit einem Abo der Reihe `mit`. Abgeschlossen
+   * wird es entweder mit deren Stufe `mitStufe` im selben Liefergebiet in
+   * einem gemeinsamen Abo oder zu einem schon laufenden Digital-Abo dieser
+   * Reihe; endet jenes, verlaengert es sich als `sonst` (leserAbo.ts).
+   */
+  kombi?: { mit: string; mitStufe: string; sonst: string };
 };
 
 export type CatalogEntry = {
@@ -43,22 +53,23 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 10440, ausland: 13320, luftpost: 15360 },
+        prices: { inland: 10440 },
       },
       {
         name: "Schüler- und Studentenabonnement",
         note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 9000, ausland: 11880, luftpost: 14160 },
+        prices: { inland: 9000 },
       },
       {
         name: "Kombi-Abonnement",
         note: "Zusammen mit einem Abonnement der Deutschen Militärzeitschrift",
-        prices: { inland: 9600, ausland: 12480 },
+        prices: { inland: 9600 },
+        kombi: { mit: "dmz", mitStufe: "Normalabonnement", sonst: "Normalabonnement" },
       },
       {
         name: "Förderabonnement",
         note: "Der Förderbetrag fließt in die Werbung von ZUERST!",
-        prices: { inland: 12600, ausland: 15300, luftpost: 17700 },
+        prices: { inland: 12600 },
       },
     ],
   },
@@ -67,17 +78,17 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 5880, ausland: 7500 },
+        prices: { inland: 5880 },
       },
       {
         name: "Schüler- und Studentenabonnement",
         note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 5280, ausland: 6900 },
+        prices: { inland: 5280 },
       },
       {
         name: "Förderabonnement",
         note: "Der Förderbetrag fließt in die Werbung der DMZ",
-        prices: { inland: 6900, ausland: 8520 },
+        prices: { inland: 6900 },
       },
     ],
   },
@@ -86,17 +97,17 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 6480, ausland: 8160 },
+        prices: { inland: 6480 },
       },
       {
         name: "Schüler- und Studentenabonnement",
         note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 5880, ausland: 7560 },
+        prices: { inland: 5880 },
       },
       {
         name: "Förderabonnement",
         note: "Der Förderbetrag fließt in die Werbung der DMZ Zeitgeschichte",
-        prices: { inland: 7500, ausland: 9180 },
+        prices: { inland: 7500 },
       },
     ],
   },
@@ -105,17 +116,17 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 5520, ausland: 6560 },
+        prices: { inland: 5520 },
       },
       {
         name: "Schüler- und Studentenabonnement",
         note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 4920, ausland: 5920 },
+        prices: { inland: 4920 },
       },
       {
         name: "Förderabonnement",
         note: "Der Förderbetrag fließt in die Werbung des Schwerterträgers",
-        prices: { inland: 6380, ausland: 7540 },
+        prices: { inland: 6380 },
       },
     ],
   },
@@ -132,6 +143,22 @@ export type PlanVariant = {
   sortOrder: number;
 };
 
+/** Kombi-Regel einer Abo-Art, sofern sie eine ist. */
+export function kombiRegel(slug: string, tier: string | undefined): CatalogTier["kombi"] | null {
+  return SUBSCRIPTION_CATALOG[slug]?.tiers.find((t) => t.name === tier)?.kombi ?? null;
+}
+
+/** Kombi-Abos anderer Reihen, die ein Abo der Reihe `slug` voraussetzen. */
+export function kombisMit(slug: string): { reihe: string; tier: string }[] {
+  const out: { reihe: string; tier: string }[] = [];
+  for (const [reihe, entry] of Object.entries(SUBSCRIPTION_CATALOG)) {
+    for (const tier of entry.tiers) {
+      if (tier.kombi?.mit === slug) out.push({ reihe, tier: tier.name });
+    }
+  }
+  return out;
+}
+
 /** Alle Preisstufen eines Katalogeintrags in Anzeigereihenfolge. */
 export function catalogVariants(entry: CatalogEntry): PlanVariant[] {
   const out: PlanVariant[] = [];
@@ -143,7 +170,7 @@ export function catalogVariants(entry: CatalogEntry): PlanVariant[] {
         tier: tier.name,
         tierNote: tier.note,
         region,
-        name: `${tier.name} ${REGION_LABEL[region]}`,
+        name: tier.name,
         priceAmountCents: cents,
         sortOrder: tierIndex * 10 + regionIndex,
       });

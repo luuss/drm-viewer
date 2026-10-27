@@ -23,6 +23,16 @@ denselben Stand haben:
   aus einem Stand, der committet und gepusht ist. Vor einem Convex-Deploy
   mit dem Server abgleichen (HANDOVER 1e, Falle `stripeModus`).
 * Commits ohne Session-Links oder Co-Authored-By-Zeilen.
+* **Vor jedem Push und jedem Deploy alles holen und zusammenfuehren**
+  (Anweisung 27.10.2026): `git fetch --all`, dann `origin/main` und jeden
+  anderen Arbeitsbranch des zweiten Rechners in `claude/digital` mergen,
+  Konflikte loesen, Tests + `vite build` laufen lassen, erst dann pushen
+  und ausrollen. Live steht immer der **gemeinsame** Stand beider Rechner,
+  nie nur der eigene, sonst ueberschreibt ein Deploy die Arbeit
+  (Design, Seiten) des anderen.
+* Bei CSS-Konflikten: Klassennamen des Readers bleiben die kurzen
+  (`rv`, `fb`, `fb-c`, `gx`, siehe Kopierschutz in HANDOVER), neue Regeln
+  von `main` werden angehaengt, nicht verworfen.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker

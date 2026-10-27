@@ -141,7 +141,7 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
       },
       {
         h: "§ 7 Digital-Abos",
-        p: "(1) Das Digital-Jahresabo einer Reihe wird im Leser auf der Abo-Seite der Reihe abgeschlossen: Auswahl des Abos, ausdrückliche Zustimmung zum Beginn der Vertragsausführung vor Ablauf der Widerrufsfrist (siehe § 6), Anklicken von „Abo abschließen“, dann auf der Bezahlseite des Zahlungsdienstleisters Stripe Eingabe von Rechnungsadresse und Zahlungsdaten und verbindliche Absendung. (2) Das Abo läuft ein Jahr und verlängert sich jeweils um ein weiteres Jahr, wenn der Verbraucher es nicht vorher kündigt. Gekündigt werden kann jederzeit zum Ende der laufenden Laufzeit im Profil. Der Jahrespreis wird zu Beginn jeder Laufzeit belastet. (3) Das Abo schaltet die bei Abschluss aktuelle Ausgabe und alle während der Laufzeit erscheinenden Ausgaben der Reihe frei; sie bleiben auch nach Ende des Abos lesbar. (4) Für Digital-Abos, die im Netzladen abgeschlossen werden, richten sich Laufzeit, Verlängerung und Kündigung nach den dort bei der Bestellung genannten Bedingungen.",
+        p: "(1) Das Digital-Jahresabo einer Reihe wird im Leser auf der Abo-Seite der Reihe abgeschlossen: Auswahl des Abos, ausdrückliche Zustimmung zum Beginn der Vertragsausführung vor Ablauf der Widerrufsfrist (siehe § 6), Anklicken von „Abo abschließen“, dann auf der Bezahlseite des Zahlungsdienstleisters Stripe Eingabe von Rechnungsadresse und Zahlungsdaten und verbindliche Absendung. (2) Das Abo läuft ein Jahr und verlängert sich jeweils um ein weiteres Jahr, wenn der Verbraucher es nicht vorher kündigt. Gekündigt werden kann jederzeit zum Ende der laufenden Laufzeit im Profil. Der Jahrespreis wird zu Beginn jeder Laufzeit belastet. (3) Das Abo schaltet die bei Abschluss aktuelle Ausgabe und alle während der Laufzeit erscheinenden Ausgaben der Reihe frei; sie bleiben auch nach Ende des Abos lesbar. (4) Für Digital-Abos, die im Netzladen abgeschlossen werden, richten sich Laufzeit, Verlängerung und Kündigung nach den dort bei der Bestellung genannten Bedingungen. (5) Ein Kombi-Abonnement gilt nur zusammen mit einem Digital-Abo der dort genannten Partnerreihe. Der Verbraucher schließt entweder beide Reihen zusammen in einem gemeinsamen Abo ab, das sich gemeinsam verlängert und nur gemeinsam gekündigt werden kann, oder er schließt das Kombi-Abonnement zu einem bereits laufenden Digital-Abo der Partnerreihe in seinem Konto ab. Endet im zweiten Fall das Abo der Partnerreihe, verlängert sich das Kombi-Abonnement zur nächsten Laufzeit zum Preis des Normalabonnements; die Kündigung zum Ende der laufenden Laufzeit bleibt jederzeit möglich.",
       },
       {
         h: "§ 8 Gewährleistung",
@@ -220,7 +220,7 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
           "Lesen & Schenken GmbH",
           "Voßkumsberg 4",
           "24238 Martensrade",
-          "E-Post: datenschutz@lesenundschenken.de",
+          "E-Post: info@lesenundschenken.de",
           "Telefon: 04384/5970-0",
           "Telefax: 04384/5970-40",
         ],

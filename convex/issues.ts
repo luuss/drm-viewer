@@ -11,7 +11,7 @@ import { requireEditor, requireAdmin, requirePublisher, audit } from "./roles";
 import { accessibleIssueIds, hasIssueAccess } from "./access";
 import { assetUrl } from "./assets";
 import { slugify } from "./publications";
-import { syncSubscription } from "./subscriptions";
+import { reihenDesAbos, syncSubscription } from "./subscriptions";
 import { subscriptionIsActive } from "./access";
 import { Id } from "./_generated/dataModel";
 import { assertSkuFree } from "./shopIntegration";
@@ -651,7 +651,7 @@ export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
   // Neue Ausgabe: laufende Abos der Publikation bekommen sie dauerhaft.
   const subs = await ctx.db.query("subscriptions").collect();
   for (const sub of subs) {
-    if (sub.publicationId !== issue.publicationId) continue;
+    if (!reihenDesAbos(sub).includes(issue.publicationId)) continue;
     if (!subscriptionIsActive(sub)) continue;
     await syncSubscription(ctx, sub._id);
   }

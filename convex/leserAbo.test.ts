@@ -99,25 +99,42 @@ describe("leserAbo", () => {
     });
   });
 
-  test("ein neuer Preis loest den alten ab; im Angebot nur im Modus der Kasse", async () => {
+  test("ein neuer Preis loest den alten seiner Stufe ab; im Angebot nur im Modus der Kasse", async () => {
     const t = convexTest(schema, modules);
     const s = await aufbau(t);
-    const setzen = (cents: number, modus: "test" | "live") =>
+    const setzen = (
+      cents: number,
+      modus: "test" | "live",
+      tier = "Normalabonnement",
+      region: "inland" | "ausland" | null = "inland",
+      sortOrder = 0,
+    ) =>
       t.mutation(internal.leserAbo.planSetzen, {
         publicationId: s.publicationId,
         modus,
+        tier,
+        region: region ?? undefined,
+        name: `${tier} ${region ?? ""}`.trim(),
+        sortOrder,
         priceAmountCents: cents,
         stripePriceId: `price_${cents}_${modus}`,
         stripeProductId: "prod_1",
         stripeTaxRateId: "txr_1",
       });
-    await setzen(4900, "live");
-    await setzen(5900, "live");
+    // Der fruehere Einzelpreis ohne Gebiet geht mit der ersten Katalogstufe.
+    await setzen(4900, "live", "Jahresabo", null);
+    await setzen(10440, "live");
+    await setzen(10900, "live");
+    await setzen(13320, "live", "Normalabonnement", "ausland", 1);
+    await setzen(9000, "live", "Schüler- und Studentenabonnement", "inland", 10);
     await setzen(100, "test");
     const offers = await t.query(api.plans.offers, {});
     expect(offers).toHaveLength(1);
-    expect(offers[0].headline).toMatchObject({ priceAmountCents: 5900, interval: "year" });
-    expect(offers[0].tiers.flatMap((x: any) => x.plans)).toHaveLength(1);
+    expect(offers[0].headline).toMatchObject({ priceAmountCents: 10900, interval: "year" });
+    expect(offers[0].tiers.map((x: any) => [x.tier, x.plans.map((p: any) => p.priceAmountCents)])).toEqual([
+      ["Normalabonnement", [10900, 13320]],
+      ["Schüler- und Studentenabonnement", [9000]],
+    ]);
 
     delete process.env.LESER_STRIPE_MODE;
     expect(await t.query(api.plans.offers, {})).toEqual([]);
@@ -171,5 +188,169 @@ describe("leserAbo", () => {
     const kaeufe = await t.run(async (ctx: any) => await ctx.db.query("purchases").collect());
     expect(kaeufe).toHaveLength(1);
     expect(kaeufe[0]).toMatchObject({ amountCents: 4900, status: "paid" });
+  });
+
+  // --- Kombi-Abo ---
+
+  async function kombiAufbau(t: any) {
+    const s = await aufbau(t);
+    return await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const dmz = await ctx.db.insert("publications", { name: "DMZ", slug: "dmz", isActive: true, createdAt: now });
+      const dmzHeft = await ctx.db.insert("issues", {
+        publicationId: dmz,
+        title: "DMZ 1/2026",
+        slug: "dmz-1-2026",
+        pageCount: 4,
+        priceAmountCents: 690,
+        isPublished: true,
+        publishedAt: now - 1000,
+        includedInSubscription: true,
+        createdAt: now - 1000,
+        updatedAt: now,
+      });
+      const plan = (publicationId: any, tier: string, cents: number, sortOrder: number) =>
+        ctx.db.insert("subscriptionPlans", {
+          name: tier,
+          tier,
+          region: "inland",
+          publicationId,
+          stripePriceId: `price_${tier}_${cents}`,
+          stripeTaxRateId: "txr_1",
+          stripeModus: "live",
+          priceAmountCents: cents,
+          interval: "year",
+          isActive: true,
+          sortOrder,
+          createdAt: now,
+        });
+      await plan(s.publicationId, "Normalabonnement", 10440, 0);
+      const kombi = await plan(s.publicationId, "Kombi-Abonnement", 9600, 20);
+      await plan(dmz, "Normalabonnement", 5880, 0);
+      return { ...s, dmz, dmzHeft, kombi };
+    });
+  }
+
+  test("aboAusStripe: gemeinsames Kombi-Abo traegt die Partnerreihe aus den Posten", () => {
+    const a = aboAusStripe(
+      abo(
+        { userId: "u", publicationId: "p_zuerst" },
+        {
+          items: {
+            data: [
+              { price: { id: "price_k", metadata: { publicationId: "p_zuerst" } } },
+              { price: { id: "price_d", metadata: { publicationId: "p_dmz" } } },
+            ],
+          },
+          metadata: { source: ABO_HERKUNFT, userId: "u", publicationId: "p_zuerst", kombi: "zusammen" },
+        },
+      ),
+      "live",
+    );
+    expect(a).toMatchObject({ publicationId: "p_zuerst", weitereReihen: ["p_dmz"], kombi: "zusammen", stripePriceId: "price_k" });
+  });
+
+  test("gemeinsames Kombi-Abo schaltet beide Reihen frei", async () => {
+    const t = convexTest(schema, modules);
+    const s = await kombiAufbau(t);
+    await t.mutation(internal.subscriptions.upsertFromStripe, {
+      userId: s.userId,
+      stripeCustomerId: "cus_1",
+      stripeSubscriptionId: "sub_k",
+      status: "active",
+      startedAt: Date.now() - 60_000,
+      currentPeriodEnd: Date.now() + 365 * 86400_000,
+      publicationId: s.publicationId,
+      weitereReihen: [s.dmz],
+      kombi: "zusammen",
+      stripeModus: "live",
+    });
+    const freigeschaltet = await t.run(async (ctx: any) =>
+      (await ctx.db.query("entitlements").collect()).map((e: any) => e.issueId),
+    );
+    expect(freigeschaltet.sort()).toEqual([s.heft, s.dmzHeft].sort());
+    const als = t.withIdentity({ subject: `${s.userId}|sitzung` });
+    expect((await als.query(api.subscriptions.myStatus, {})).subscriptions[0].publication).toBe("ZUERST! und DMZ");
+  });
+
+  test("Kombi-Angebot: Preis zusammen, eigenes DMZ-Abo erkannt, Hinweis auf der DMZ-Seite", async () => {
+    const t = convexTest(schema, modules);
+    const s = await kombiAufbau(t);
+    const als = t.withIdentity({ subject: `${s.userId}|sitzung` });
+    const ohne = await als.query(api.leserAbo.kombiAngebot, { slug: "zuerst" });
+    expect(ohne.stufen).toEqual([
+      expect.objectContaining({ planId: s.kombi, partnerName: "DMZ", zusammenCents: 9600 + 5880, vorhanden: false }),
+    ]);
+    // Auf der DMZ-Seite: Kombi mit ZUERST!, beide zusammen.
+    expect((await als.query(api.leserAbo.kombiAngebot, { slug: "dmz" })).alsPartner).toEqual([
+      {
+        reiheName: "ZUERST!",
+        reiheSlug: "zuerst",
+        tier: "Kombi-Abonnement",
+        planId: s.kombi,
+        kombiCents: 9600,
+        zusammenCents: 9600 + 5880,
+        vorhanden: false,
+        eigenesAbo: false,
+      },
+    ]);
+
+    // Digital-Abo der DMZ aus dem Netzladen genuegt.
+    await t.run(async (ctx: any) => {
+      await ctx.db.insert("shopAccess", {
+        email: "leser@example.de",
+        externalOrderId: "1",
+        lineId: "1",
+        sku: "dmz-abo",
+        kind: "subscription",
+        publicationId: s.dmz,
+        validFrom: Date.now() - 1000,
+        validUntil: Date.now() + 86400_000,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+    const mit = await als.query(api.leserAbo.kombiAngebot, { slug: "zuerst" });
+    expect(mit.stufen[0].vorhanden).toBe(true);
+    expect((await als.query(api.leserAbo.kombiAngebot, { slug: "dmz" })).alsPartner[0]).toMatchObject({
+      vorhanden: true,
+      eigenesAbo: false,
+    });
+  });
+
+  test("Kombi ohne DMZ-Abo wird vor der Verlaengerung auf den Normalpreis gestellt", async () => {
+    const t = convexTest(schema, modules);
+    const s = await kombiAufbau(t);
+    const anlegen = (periodenEnde: number) =>
+      t.mutation(internal.subscriptions.upsertFromStripe, {
+        userId: s.userId,
+        stripeCustomerId: "cus_1",
+        stripeSubscriptionId: "sub_v",
+        stripePriceId: "price_Kombi-Abonnement_9600",
+        status: "active",
+        startedAt: Date.now() - 300 * 86400_000,
+        currentPeriodEnd: periodenEnde,
+        publicationId: s.publicationId,
+        kombi: "vorhanden",
+        stripeModus: "live",
+      });
+    await anlegen(Date.now() + 30 * 86400_000);
+    expect(await t.query(internal.leserAbo.kombiFaellig, { modus: "live" })).toEqual([]);
+    await anlegen(Date.now() + 2 * 86400_000);
+    expect(await t.query(internal.leserAbo.kombiFaellig, { modus: "live" })).toEqual([
+      { stripeSubscriptionId: "sub_v", preisId: "price_Normalabonnement_10440", steuerId: "txr_1", name: "Normalabonnement" },
+    ]);
+    // Mit laufendem DMZ-Abo im Leser bleibt der Kombipreis.
+    await t.mutation(internal.subscriptions.upsertFromStripe, {
+      userId: s.userId,
+      stripeCustomerId: "cus_1",
+      stripeSubscriptionId: "sub_dmz",
+      status: "active",
+      startedAt: Date.now() - 60_000,
+      currentPeriodEnd: Date.now() + 365 * 86400_000,
+      publicationId: s.dmz,
+      stripeModus: "live",
+    });
+    expect(await t.query(internal.leserAbo.kombiFaellig, { modus: "live" })).toEqual([]);
   });
 });

@@ -1584,40 +1584,9 @@ body:has(.reihe-seite) { overflow-x: clip; }
   font-size: var(--fs-h4);
   font-weight: 600;
 }
-.subscription-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s3);
-}
-.subscription-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s4);
-  min-width: 0;
-  padding: var(--s4);
-  border: 1px solid var(--rule-soft);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface) 92%, var(--paper));
-  transition: border-color 0.15s ease;
-}
-/* Die Karte mit der gewaehlten Stufe traegt den Akzent, damit die Wahl auch
-   ohne Blick auf den Radioknopf sichtbar ist. */
-.subscription-card.selected { border-color: var(--accent); }
-.subscription-card h4 {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: var(--fs-h4);
-}
-.subscription-card p {
-  margin: var(--s1) 0 0;
-  color: var(--muted);
-  font-size: var(--fs-mini);
-  line-height: 1.45;
-}
 .subscription-prices {
   display: grid;
   gap: var(--s1);
-  margin: auto 0 0;
 }
 .subscription-prices > label {
   display: grid;
@@ -1637,6 +1606,12 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .subscription-prices > label:hover { color: var(--ink); }
 .subscription-prices > label.selected { color: var(--ink); font-weight: 600; }
 .subscription-prices > label > input { margin: 0; cursor: pointer; }
+.subscription-prices > label small {
+  display: block;
+  font-size: var(--fs-mini);
+  font-weight: 400;
+  color: var(--muted);
+}
 .subscription-prices > label > strong {
   color: var(--accent);
   font-weight: 700;
@@ -1676,7 +1651,6 @@ body:has(.reihe-seite) { overflow-x: clip; }
   vertical-align: -0.2em;
 }
 @media (max-width: 46rem) {
-  .subscription-grid { grid-template-columns: 1fr; }
   .sample-copy { max-width: none; }
 }
 
@@ -4207,3 +4181,168 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   .reader-screen { display: none !important; }
 }
 .reader-gesperrt { flex-direction: column; gap: var(--s4); max-width: 36rem; margin: 0 auto; text-align: center; }
+
+/* Meine Ausgaben: je Zeitschrift eine Ueberschrift, darunter die Jahrgaenge
+   mit Balken, wie viele Hefte des Jahrgangs der Leser hat. */
+.bibliothek-reihe { margin-top: var(--s6); }
+.bibliothek-reihe h3 {
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--rule);
+}
+.bibliothek-jahrgang + .bibliothek-jahrgang { margin-top: var(--s5); }
+.jahrgang-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+.jahrgang-kopf h4 { margin: 0; font-size: var(--fs-body); white-space: nowrap; }
+.jahrgang-balken {
+  flex: 0 1 10rem;
+  height: 0.375rem;
+  background: var(--paper-sunk);
+  overflow: hidden;
+}
+.jahrgang-balken span { display: block; height: 100%; background: var(--accent); }
+.jahrgang-zahl { font-size: var(--fs-mini); color: var(--muted); white-space: nowrap; }
+
+/* Meine Ausgaben: Kopf mit Ansichtsumschalter rechts. */
+.bibliothek-kopf {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+.bibliothek-kopf > div:first-child { display: flex; flex-direction: column; gap: var(--s2); }
+
+/* Kompakt: kleine Umschlaege in einer fliessenden Reihe. Vor den Heften
+   einer Zeitschrift steht ein schmaler grauer Streifen mit ihrem Namen,
+   senkrecht gesetzt, so hoch wie ein Umschlag. */
+.kompakt-raster {
+  --heft-b: 6.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s4) var(--s3);
+  margin-top: var(--s5);
+}
+.kompakt-trenner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  padding: var(--s2) var(--s1);
+  height: calc(var(--heft-b) * 4 / 3);
+  margin-left: var(--s3);
+  background: var(--paper-sunk);
+  border-left: 2px solid var(--ink-soft);
+  color: var(--ink-soft);
+  text-decoration: none;
+  overflow: hidden;
+}
+.kompakt-trenner:first-child { margin-left: 0; }
+.kompakt-trenner:hover { color: var(--ink); background: var(--rule); }
+.kompakt-trenner span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+@media (max-width: 600px) {
+  .kompakt-raster { --heft-b: 5.75rem; gap: var(--s3) var(--s2); }
+  .kompakt-trenner span { font-size: 0.6875rem; }
+}
+.kompakt-heft {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  width: var(--heft-b);
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+.kompakt-umschlag {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.kompakt-umschlag img,
+.kompakt-umschlag .cover-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 0;
+}
+.kompakt-heft:hover .kompakt-umschlag { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.kompakt-titel,
+.kompakt-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kompakt-titel { font-size: var(--fs-mini); font-weight: 600; }
+.kompakt-meta { font-size: var(--fs-mini); color: var(--muted); }
+
+/* Liste: eine Zeile je Heft mit kleinem Umschlag. */
+.heft-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+.heft-liste li + li { border-top: 1px solid var(--rule-soft); }
+.heft-liste a {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s2) var(--s4);
+  text-decoration: none;
+  color: inherit;
+}
+.heft-liste a:hover { background: var(--paper); }
+.heft-liste-umschlag { flex: 0 0 2.75rem; border: 1px solid var(--rule); }
+.heft-liste-umschlag img,
+.heft-liste-umschlag .cover-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 0;
+}
+.heft-liste-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.heft-liste-titel { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heft-liste-meta { font-size: var(--fs-mini); color: var(--muted); }
+.heft-liste-stand { font-size: var(--fs-mini); color: var(--muted); white-space: nowrap; }
+.heft-liste-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: var(--fs-sub);
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .heft-liste a { gap: var(--s3); padding: var(--s2) var(--s3); }
+  .heft-liste-stand, .heft-liste-go span { display: none; }
+}
+
+/* Liste: dicht, kleine Ueberschriften, ohne Balken. */
+.bibliothek-reihe.liste { margin-top: var(--s5); }
+.bibliothek-reihe.liste h3 {
+  font-size: var(--fs-sub);
+  margin-bottom: var(--s2);
+  padding-bottom: var(--s1);
+}
+.bibliothek-reihe.liste .bibliothek-jahrgang + .bibliothek-jahrgang { margin-top: var(--s3); }
+.bibliothek-reihe.liste .jahrgang-kopf { gap: var(--s2); margin-bottom: var(--s1); }
+.bibliothek-reihe.liste .jahrgang-kopf h4 { font-size: var(--fs-mini); color: var(--ink-soft); }
+.bibliothek-reihe.liste .heft-liste a { gap: var(--s3); padding: var(--s1) var(--s3); }
+.bibliothek-reihe.liste .heft-liste-umschlag { flex-basis: 2.25rem; }

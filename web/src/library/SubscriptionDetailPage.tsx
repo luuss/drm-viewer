@@ -1,15 +1,9 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/react";
 import { api, formatEuro, type Id, cleanError } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
-
-const REGION_LABEL: Record<string, string> = {
-  inland: "Inland",
-  ausland: "Ausland",
-  luftpost: "Ausland Luftpost",
-};
 
 /** Kostenloses Leseexemplar beim Verlag, je Titel. */
 const SAMPLE_COPY_URL: Record<string, string> = {
@@ -36,6 +30,8 @@ export default function SubscriptionDetailPage() {
   const storefront = useQuery(api.shopIntegration.storefront, {});
   const subscribeAlt = useAction(api.billing.createSubscriptionCheckout);
   const abschliessen = useAction(api.leserAbo.abschliessen);
+  const kombi = useQuery(api.leserAbo.kombiAngebot, { slug });
+  const [params] = useSearchParams();
   const [chosen, setChosen] = useState<Id<"subscriptionPlans"> | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,7 +48,32 @@ export default function SubscriptionDetailPage() {
   }
 
   const plans = offer.tiers.flatMap((t) => t.plans);
-  const selected = plans.find((p) => p._id === chosen) ?? offer.headline;
+  // Kombi-Abos anderer Reihen, die diese einschliessen (DMZ: Kombi mit
+  // ZUERST!). Abgeschlossen wird deren Kombi-Stufe; diese Reihe kommt mit
+  // ins Abo, sofern das Konto sie nicht schon hat.
+  const fremdeKombis = (kombi?.alsPartner ?? []).filter((k) => k.vorhanden || k.zusammenCents !== null);
+  const fremdeKombi = fremdeKombis.find((k) => k.planId === chosen) ?? null;
+  // `?stufe=` waehlt eine Abo-Art vor.
+  const vorgewaehlt = plans.find((p) => p.tier === params.get("stufe"));
+  const selected = fremdeKombi
+    ? {
+        _id: fremdeKombi.planId,
+        name: `Kombi-Abonnement mit ${fremdeKombi.reiheName}`,
+        priceAmountCents: fremdeKombi.kombiCents,
+        interval: "year" as const,
+      }
+    : (plans.find((p) => p._id === chosen) ?? vorgewaehlt ?? offer.headline);
+  const kombiStufe = kombi?.stufen.find((s) => s.planId === selected?._id) ?? null;
+  // Kombi: mit eigenem Abo der Partnerreihe nur der Kombipreis, sonst beide zusammen.
+  const kombiZusammen = kombiStufe !== null && !kombiStufe.vorhanden;
+  const schonAbo = kombiStufe?.eigenesAbo || fremdeKombi?.eigenesAbo || false;
+  const preisCents = fremdeKombi
+    ? fremdeKombi.vorhanden
+      ? fremdeKombi.kombiCents
+      : fremdeKombi.zusammenCents!
+    : kombiZusammen && kombiStufe.zusammenCents !== null
+      ? kombiStufe.zusammenCents
+      : (selected?.priceAmountCents ?? 0);
   // Checkout nur mit kaeuflicher Preisstufe; sonst fuehrt der Knopf in den Laden.
   const stripeMode = (storefront.stripeAbo || storefront.stripeCheckout) && selected !== null;
   const perInterval = selected?.interval === "year" ? "pro Jahr" : "pro Monat";
@@ -66,7 +87,11 @@ export default function SubscriptionDetailPage() {
       const origin = window.location.origin;
       const ziele = { successUrl: `${origin}/library?abo=1`, cancelUrl: `${origin}/abo/${slug}` };
       const { url } = storefront!.stripeAbo
-        ? await abschliessen({ planId: selected._id, widerrufsverzicht: accepted, ...ziele })
+        ? await abschliessen({
+            planId: selected._id,
+            widerrufsverzicht: accepted,
+            ...ziele,
+          })
         : await subscribeAlt({ planId: selected._id, withdrawalWaiver: accepted, ...ziele });
       window.location.href = url;
     } catch (e: any) {
@@ -116,50 +141,80 @@ export default function SubscriptionDetailPage() {
 
         {stripeMode ? (
           <>
-            {plans.length > 1 && (
-            <fieldset className="subscription-choice">
-              <legend>Abo-Art und Liefergebiet wählen</legend>
-              <div className="subscription-grid">
-                {offer.tiers.map((tier) => {
-                  const holdsSelection = tier.plans.some((p) => p._id === selected!._id);
-                  return (
-                    <article
-                      className={holdsSelection ? "subscription-card selected" : "subscription-card"}
-                      key={tier.tier}
-                    >
-                      <div>
-                        <h4>{tier.tier}</h4>
-                        {tier.note && <p>{tier.note}</p>}
-                      </div>
-                      <div className="subscription-prices" aria-label={`Preise ${tier.tier}`}>
-                        {tier.plans.map((p) => (
-                          <label
-                            key={p._id}
-                            className={p._id === selected!._id ? "selected" : undefined}
-                          >
-                            <input
-                              type="radio"
-                              name="plan"
-                              value={p._id}
-                              checked={p._id === selected!._id}
-                              onChange={() => setChosen(p._id)}
-                            />
-                            <span>{p.region ? REGION_LABEL[p.region] : p.name}</span>
-                            <strong>{formatEuro(p.priceAmountCents)}</strong>
-                          </label>
-                        ))}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </fieldset>
+            {offer.tiers.length + fremdeKombis.length > 1 && (
+              <fieldset className="subscription-choice">
+                <legend>Abo-Art wählen</legend>
+                <div className="subscription-prices">
+                  {offer.tiers.map((tier) => {
+                    const p = tier.plans[0];
+                    return (
+                      <label key={p._id} className={p._id === selected!._id ? "selected" : undefined}>
+                        <input
+                          type="radio"
+                          name="plan"
+                          value={p._id}
+                          checked={p._id === selected!._id}
+                          onChange={() => setChosen(p._id)}
+                        />
+                        <span>
+                          {tier.tier}
+                          {tier.note && <small>{tier.note}</small>}
+                        </span>
+                        <strong>{formatEuro(p.priceAmountCents)}</strong>
+                      </label>
+                    );
+                  })}
+                  {fremdeKombis.map((k) => (
+                    <label key={k.planId} className={k.planId === selected!._id ? "selected" : undefined}>
+                      <input
+                        type="radio"
+                        name="plan"
+                        value={k.planId}
+                        checked={k.planId === selected!._id}
+                        onChange={() => setChosen(k.planId)}
+                      />
+                      <span>
+                        Kombi-Abonnement mit {k.reiheName}
+                        <small>
+                          {k.vorhanden
+                            ? `${k.reiheName} zum Kombipreis zu Ihrem Abo`
+                            : `${offer.publicationName} und ${k.reiheName} in einem Abo`}
+                        </small>
+                      </span>
+                      <strong>{formatEuro(k.vorhanden ? k.kombiCents : k.zusammenCents!)}</strong>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            {fremdeKombi && (
+              <p className="hint">
+                {fremdeKombi.eigenesAbo
+                  ? `Für ${fremdeKombi.reiheName} läuft in Ihrem Konto schon ein Abo.`
+                  : fremdeKombi.vorhanden
+                    ? `Ihr Digital-Abo von ${offer.publicationName} ist erkannt; ${fremdeKombi.reiheName} kommt zum Kombipreis dazu. Endet das Abo von ${offer.publicationName}, verlängert sich ${fremdeKombi.reiheName} zum Preis des Normalabonnements.`
+                    : `Ein gemeinsames Abo für ${offer.publicationName} und ${fremdeKombi.reiheName} zum Kombipreis, gemeinsam verlängert und nur gemeinsam kündbar.`}
+              </p>
+            )}
+
+            {kombiStufe && (
+              <p className="hint">
+                {kombiStufe.eigenesAbo
+                  ? `Für ${offer.publicationName} läuft in Ihrem Konto schon ein Abo.`
+                  : kombiStufe.vorhanden
+                  ? `Ihr Digital-Abo von ${kombiStufe.partnerName} ist erkannt; ${offer.publicationName} kommt zum Kombipreis dazu. Endet das Abo von ${kombiStufe.partnerName}, verlängert sich dieses zum Preis des Normalabonnements.`
+                  : kombiStufe.zusammenCents !== null
+                    ? `Das Kombi-Abonnement schließt ${kombiStufe.partnerName} (${kombiStufe.partnerStufe}) mit ein: ein gemeinsames Abo für beide Hefte, gemeinsam verlängert und nur gemeinsam kündbar.`
+                    : `Das Kombi-Abonnement gibt es zurzeit nur zu einem laufenden Digital-Abo von ${kombiStufe.partnerName}.`}
+              </p>
             )}
 
             <div className="price">
-              {formatEuro(selected!.priceAmountCents)}
+              {formatEuro(preisCents)}
               <span className="hint">
                 {" "}{perInterval} · {selected!.name}
+                {kombiZusammen ? ` und ${kombiStufe.partnerName}` : ""}
               </span>
             </div>
             <p className="hint">
@@ -183,7 +238,9 @@ export default function SubscriptionDetailPage() {
               <button
                 className="btn"
                 onClick={startAbo}
-                disabled={busy || !accepted}
+                disabled={
+                  busy || !accepted || schonAbo || (kombiZusammen && kombiStufe.zusammenCents === null)
+                }
                 aria-busy={busy}
               >
                 {busy ? "Wird geöffnet..." : <><Icon name="arrow-right" /> Abo abschließen</>}

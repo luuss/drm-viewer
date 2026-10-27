@@ -21,7 +21,8 @@ export async function issuesCoveredBySubscription(
   ctx: MutationCtx,
   sub: any,
 ): Promise<Id<"issues">[]> {
-  if (!sub.publicationId) return [];
+  const reihen = reihenDesAbos(sub);
+  if (reihen.length === 0) return [];
   const now = Date.now();
   const until = Math.min(
     now,
@@ -35,26 +36,35 @@ export async function issuesCoveredBySubscription(
     .query("issues")
     .withIndex("by_published", (q) => q.eq("isPublished", true))
     .collect();
-  const ofPublication = published.filter(
-    (i) => i.publicationId === sub.publicationId && i.includedInSubscription,
-  );
-
   const covered: Id<"issues">[] = [];
-  for (const issue of ofPublication) {
-    const at = issue.publishedAt ?? issue.publicationDate ?? issue.createdAt;
-    if (at >= sub.startedAt && at <= until) covered.push(issue._id);
-  }
-
-  // Das zum Abschluss aktuelle Heft gehoert dazu, auch wenn es aelter ist.
-  const beforeStart = ofPublication
-    .filter((i) => (i.publishedAt ?? i.createdAt) < sub.startedAt)
-    .sort(
-      (a, b) => (b.publishedAt ?? b.createdAt) - (a.publishedAt ?? a.createdAt),
+  for (const publicationId of reihen) {
+    const ofPublication = published.filter(
+      (i) => i.publicationId === publicationId && i.includedInSubscription,
     );
-  if (beforeStart.length > 0 && !covered.includes(beforeStart[0]._id)) {
-    covered.push(beforeStart[0]._id);
+    for (const issue of ofPublication) {
+      const at = issue.publishedAt ?? issue.publicationDate ?? issue.createdAt;
+      if (at >= sub.startedAt && at <= until) covered.push(issue._id);
+    }
+
+    // Das zum Abschluss aktuelle Heft gehoert dazu, auch wenn es aelter ist.
+    const beforeStart = ofPublication
+      .filter((i) => (i.publishedAt ?? i.createdAt) < sub.startedAt)
+      .sort(
+        (a, b) => (b.publishedAt ?? b.createdAt) - (a.publishedAt ?? a.createdAt),
+      );
+    if (beforeStart.length > 0 && !covered.includes(beforeStart[0]._id)) {
+      covered.push(beforeStart[0]._id);
+    }
   }
   return covered;
+}
+
+/** Reihen, die ein Abo freischaltet: die eigene und beim Kombi-Abo die Partnerreihe. */
+export function reihenDesAbos(sub: {
+  publicationId?: Id<"publications">;
+  weitereReihen?: Id<"publications">[];
+}): Id<"publications">[] {
+  return [...(sub.publicationId ? [sub.publicationId] : []), ...(sub.weitereReihen ?? [])];
 }
 
 /** Idempotent: legt fehlende Freischaltungen an, entzieht nie etwas. */
@@ -108,6 +118,8 @@ export const upsertFromStripe = internalMutation({
     cancelAtPeriodEnd: v.optional(v.boolean()),
     endedAt: v.optional(v.number()),
     publicationId: v.optional(v.id("publications")),
+    weitereReihen: v.optional(v.array(v.id("publications"))),
+    kombi: v.optional(v.union(v.literal("zusammen"), v.literal("vorhanden"), v.literal("entfallen"))),
     stripeModus: v.optional(v.union(v.literal("test"), v.literal("live"))),
   },
   handler: async (ctx, args) => {
@@ -155,6 +167,8 @@ export const upsertFromStripe = internalMutation({
       cancelAtPeriodEnd: args.cancelAtPeriodEnd,
       endedAt: args.endedAt,
       stripeModus: args.stripeModus ?? existing?.stripeModus,
+      weitereReihen: args.weitereReihen ?? existing?.weitereReihen,
+      kombi: args.kombi ?? existing?.kombi,
       updatedAt: Date.now(),
     };
 
@@ -178,7 +192,7 @@ export const syncForIssueInternal = internalMutation({
     const subs = await ctx.db.query("subscriptions").collect();
     let granted = 0;
     for (const sub of subs) {
-      if (sub.publicationId !== issue.publicationId) continue;
+      if (!reihenDesAbos(sub).includes(issue.publicationId)) continue;
       if (!subscriptionIsActive(sub)) continue;
       granted += await syncSubscription(ctx, sub._id);
     }
@@ -216,9 +230,12 @@ export const myStatus = query({
           _id: s._id,
           stripeSubscriptionId: s.stripeSubscriptionId,
           status: s.status,
-          publication: s.publicationId
-            ? (await ctx.db.get(s.publicationId))?.name ?? null
-            : null,
+          publication:
+            (
+              await Promise.all(reihenDesAbos(s).map(async (id) => (await ctx.db.get(id))?.name))
+            )
+              .filter(Boolean)
+              .join(" und ") || null,
           startedAt: s.startedAt,
           currentPeriodEnd: s.currentPeriodEnd ?? null,
           cancelAtPeriodEnd: s.cancelAtPeriodEnd ?? false,

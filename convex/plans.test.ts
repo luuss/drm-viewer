@@ -89,27 +89,27 @@ describe("Abos im Kiosk", () => {
     expect(offer!.tiers[1].note).toBe(
       "Kopie des Schüler- oder Studentenausweises erforderlich",
     );
-    // Das Kombi-Abo gibt es nicht per Luftpost.
-    expect(offer!.tiers[2].plans.map((p) => p.region)).toEqual(["inland", "ausland"]);
-    expect(offer!.tiers[3].plans.map((p) => [p.region, p.priceAmountCents])).toEqual([
-      ["inland", 12600],
-      ["ausland", 15300],
-      ["luftpost", 17700],
+    // Digital gibt es je Abo-Art nur einen Preis, ohne Auslandspreise.
+    expect(offer!.tiers.map((tier) => tier.plans.map((p) => [p.name, p.priceAmountCents]))).toEqual([
+      [["Normalabonnement", 10440]],
+      [["Schüler- und Studentenabonnement", 9000]],
+      [["Kombi-Abonnement", 9600]],
+      [["Förderabonnement", 12600]],
     ]);
     expect(offer!.headline!._id).toBe(offer!.tiers[0].plans[0]._id);
   });
 
   test("abgeschaltete Stufen und Titel ohne Abo erscheinen nicht", async () => {
     const t = convexTest(schema, modules);
-    await seed(t);
+    const { zuerst } = await seed(t);
     await t.run(async (ctx) => {
-      const luftpost = (await ctx.db.query("subscriptionPlans").collect()).find(
-        (p) => p.tier === "Förderabonnement" && p.region === "luftpost",
+      const foerder = (await ctx.db.query("subscriptionPlans").collect()).find(
+        (p) => p.tier === "Förderabonnement" && p.publicationId === zuerst,
       );
-      await ctx.db.patch(luftpost!._id, { isActive: false });
+      await ctx.db.patch(foerder!._id, { isActive: false });
     });
     const offer = await t.query(api.plans.offerBySlug, { slug: "zuerst" });
-    expect(offer!.tiers[3].plans.map((p) => p.region)).toEqual(["inland", "ausland"]);
+    expect(offer!.tiers.map((tier) => tier.tier)).not.toContain("Förderabonnement");
     expect(await t.query(api.plans.offerBySlug, { slug: "archiv" })).toBeNull();
     expect(await t.query(api.plans.offerBySlug, { slug: "gibt-es-nicht" })).toBeNull();
     const offers = await t.query(api.plans.offers, {});
@@ -198,28 +198,25 @@ describe("Titelbild der Reihe", () => {
 });
 
 describe("Abo-Katalog", () => {
-  test("die Stufen folgen der Reihenfolge Abo-Art, dann Liefergebiet", () => {
+  test("digital je Abo-Art eine Stufe, ohne Auslandspreise", () => {
     const dmz = catalogVariants(SUBSCRIPTION_CATALOG.dmz);
-    expect(dmz.map((v) => v.name)).toEqual([
-      "Normalabonnement Inland",
-      "Normalabonnement Ausland",
-      "Schüler- und Studentenabonnement Inland",
-      "Schüler- und Studentenabonnement Ausland",
-      "Förderabonnement Inland",
-      "Förderabonnement Ausland",
+    expect(dmz.map((v) => [v.name, v.region, v.sortOrder])).toEqual([
+      ["Normalabonnement", "inland", 0],
+      ["Schüler- und Studentenabonnement", "inland", 10],
+      ["Förderabonnement", "inland", 20],
     ]);
-    expect(dmz.map((v) => v.sortOrder)).toEqual([0, 1, 10, 11, 20, 21]);
   });
 
   test("ein wiederholter Lauf legt vorhandene Stufen nicht noch einmal an", () => {
     const missing = missingVariants(SUBSCRIPTION_CATALOG.zuerst, [
       { tier: "Normalabonnement", region: "inland" },
-      { tier: "Kombi-Abonnement", region: "ausland" },
       // Ein Plan ohne Abo-Art (etwa aus der Verwaltung) blockiert nichts.
       { tier: undefined, region: undefined },
     ]);
-    expect(missing).toHaveLength(9);
-    expect(missing.map((v) => v.name)).not.toContain("Normalabonnement Inland");
-    expect(missing.map((v) => v.name)).not.toContain("Kombi-Abonnement Ausland");
+    expect(missing.map((v) => v.name)).toEqual([
+      "Schüler- und Studentenabonnement",
+      "Kombi-Abonnement",
+      "Förderabonnement",
+    ]);
   });
 });
