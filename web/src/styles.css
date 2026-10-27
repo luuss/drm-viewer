@@ -1447,6 +1447,9 @@ body:has(.reihe-seite) { overflow-x: clip; }
    Mitte breit. Alle drei gleich hoch; die Bilder fuellen den Platz. */
 .page > section.reihe-wege.mit-netzen { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); }
 .reihe-wege.mit-netzen .reihe-weg-bild { flex: 1; aspect-ratio: auto; min-height: 15rem; }
+/* Fuellende Bilder liegen absolut, sonst bestimmt ihre eigene Hoehe die Zeile. */
+.reihe-wege.mit-netzen .reihe-weg-seite img,
+.reihe-wege.mit-netzen .reihe-weg-hefte img:not([style]) { position: absolute; inset: 0; }
 .reihe-wege.mit-netzen .reihe-weg-web .reihe-weg-bild { aspect-ratio: 16 / 9; }
 .reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img { height: 70%; }
 .reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(2) { margin-right: -2.5rem; }
