@@ -322,8 +322,8 @@ function hoechste(roles: string[]): Rolle {
 }
 
 /**
- * Personen und ihre Rolle, als eigene Seite der Verwaltung. Ohne Suche stehen
- * alle mit Rechten ueber das Lesen hinaus da; die Suche findet jedes Konto.
+ * Personen und ihre Rolle, als eigene Seite der Verwaltung. Es stehen alle
+ * Konten da; die Suche grenzt nach Adresse oder Name ein.
  */
 export function Personen() {
   const me = useQuery(api.users.me, {});
@@ -335,13 +335,13 @@ export function Personen() {
   const gezeigt = useMemo(() => {
     const q = suche.trim().toLowerCase();
     return (users ?? [])
-      .filter((u) =>
-        q
-          ? (u.email ?? "").toLowerCase().includes(q) || (u.name ?? "").toLowerCase().includes(q)
-          : hoechste(u.roles) !== "customer",
+      .filter(
+        (u) =>
+          !q ||
+          (u.email ?? "").toLowerCase().includes(q) ||
+          (u.name ?? "").toLowerCase().includes(q),
       )
-      .sort((a, b) => (a.email ?? "").localeCompare(b.email ?? ""))
-      .slice(0, 100);
+      .sort((a, b) => (a.email ?? "").localeCompare(b.email ?? ""));
   }, [users, suche]);
 
   if (me === undefined) return <p className="hint">Laden...</p>;
@@ -368,7 +368,9 @@ export function Personen() {
       <p className="hint small">
         {suche.trim()
           ? `${gezeigt.length} Treffer`
-          : "Ohne Suche stehen hier alle mit Rechten über das Lesen hinaus."}
+          : users === undefined
+            ? "Laden..."
+            : `${gezeigt.length} Konten`}
       </p>
       <MeldungZeile meldung={meldung} />
       {gezeigt.length > 0 && (
