@@ -10,6 +10,8 @@
 export type Kontakt = {
   /** Eigene Internetseite; nur wenn sie die Zeitschrift auch zeigt. */
   web?: string;
+  /** Ueberschrift ueber der Internetseite, sonst "Internet". */
+  webLabel?: string;
   mails: { label: string; adresse: string }[];
   tel: string;
   social: { name: string; url: string }[];
@@ -43,6 +45,7 @@ export const REIHEN: Reihe[] = [
     laden: "https://lesenundschenken.de/1327-zuerst",
     kontakt: {
       web: "https://zuerst.de",
+      webLabel: "Nachrichtenseite",
       mails: [
         { label: "Redaktion", adresse: "redaktion@zuerst.de" },
         { label: "Verlag", adresse: "verlag@zuerst.de" },

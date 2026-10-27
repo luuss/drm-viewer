@@ -225,7 +225,7 @@ export default function ReihePage() {
             {k.web && (
               <a href={k.web} target="_blank" rel="noopener" className="reihe-weg">
                 <span>
-                  <span className="reihe-kontakt-art">Internet</span>
+                  <span className="reihe-kontakt-art">{k.webLabel ?? "Internet"}</span>
                   <span className="reihe-weg-ziel">{k.web.replace(/^https?:\/\//, "")}</span>
                 </span>
                 <Icon name="arrow-right" />
