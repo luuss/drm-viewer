@@ -141,7 +141,7 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
       },
       {
         h: "§ 7 Digital-Abos",
-        p: "Digital-Abos werden im Netzladen abgeschlossen. Laufzeit, Verlängerung und Kündigung richten sich nach den dort bei der Bestellung genannten Bedingungen.",
+        p: "(1) Das Digital-Jahresabo einer Reihe wird im Leser auf der Abo-Seite der Reihe abgeschlossen: Auswahl des Abos, ausdrückliche Zustimmung zum Beginn der Vertragsausführung vor Ablauf der Widerrufsfrist (siehe § 6), Anklicken von „Abo abschließen“, dann auf der Bezahlseite des Zahlungsdienstleisters Stripe Eingabe von Rechnungsadresse und Zahlungsdaten und verbindliche Absendung. (2) Das Abo läuft ein Jahr und verlängert sich jeweils um ein weiteres Jahr, wenn der Verbraucher es nicht vorher kündigt. Gekündigt werden kann jederzeit zum Ende der laufenden Laufzeit im Profil. Der Jahrespreis wird zu Beginn jeder Laufzeit belastet. (3) Das Abo schaltet die bei Abschluss aktuelle Ausgabe und alle während der Laufzeit erscheinenden Ausgaben der Reihe frei; sie bleiben auch nach Ende des Abos lesbar. (4) Für Digital-Abos, die im Netzladen abgeschlossen werden, richten sich Laufzeit, Verlängerung und Kündigung nach den dort bei der Bestellung genannten Bedingungen.",
       },
       {
         h: "§ 8 Gewährleistung",
@@ -279,7 +279,7 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
       },
       {
         h: "5. Kauf im Leser",
-        p: "Wenn Sie im Leser eine Ausgabe kaufen, verarbeiten wir Ihre Rechnungsadresse (Name, ggf. Firma, Anschrift, Land), Ihre E-Mail-Adresse, die gekauften Ausgaben und den Zeitpunkt Ihrer Zustimmung zum vorzeitigen Beginn der Vertragsausführung (Widerrufsverzicht) mit deren Wortlaut. Mit diesen Angaben legen wir die Bestellung im Netzladen an, der die Rechnung erstellt und Ihnen Bestellbestätigung und Rechnung per E-Mail schickt. Käufe aus dem Netzladen meldet uns dieser mit Bestellnummer, Kundennummer, E-Mail-Adresse und Artikeln, damit wir die Ausgaben in Ihrem Konto freischalten. Rechtsgrundlage ist Art. 6 Abs. 1 S. 1 lit. b DSGVO, für die Aufbewahrung der Belege Art. 6 Abs. 1 S. 1 lit. c DSGVO.",
+        p: "Wenn Sie im Leser eine Ausgabe kaufen, verarbeiten wir Ihre Rechnungsadresse (Name, ggf. Firma, Anschrift, Land), Ihre E-Mail-Adresse, die gekauften Ausgaben und den Zeitpunkt Ihrer Zustimmung zum vorzeitigen Beginn der Vertragsausführung (Widerrufsverzicht) mit deren Wortlaut. Mit diesen Angaben legen wir die Bestellung im Netzladen an, der die Rechnung erstellt und Ihnen Bestellbestätigung und Rechnung per E-Mail schickt. Käufe aus dem Netzladen meldet uns dieser mit Bestellnummer, Kundennummer, E-Mail-Adresse und Artikeln, damit wir die Ausgaben in Ihrem Konto freischalten. Die Freischaltung speichern wir zu Ihrer E-Mail-Adresse, auch wenn Sie im Leser noch kein Konto haben; sobald Sie sich mit dieser Adresse anmelden, stehen die Ausgaben in Ihrer Bibliothek. Schließen Sie im Leser ein Digital-Jahresabo ab, speichern wir zum Abo die Reihe, den Status, die Laufzeit und die Kennungen bei Stripe sowie Ihre Zustimmung zum vorzeitigen Beginn mit Wortlaut und Zeitpunkt; die Abo-Rechnungen stellt Stripe in unserem Auftrag aus. Rechtsgrundlage ist Art. 6 Abs. 1 S. 1 lit. b DSGVO, für die Aufbewahrung der Belege Art. 6 Abs. 1 S. 1 lit. c DSGVO.",
       },
       {
         h: "Kartenzahlung über Stripe",
@@ -293,6 +293,12 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
             Zahlung. Speichern Sie Ihre Karte für spätere Käufe, legt Stripe für Sie ein
             Kundenprofil an; wir speichern davon nur Kartenmarke, die letzten vier Ziffern und das
             Ablaufdatum. Die Karte können Sie im Konto unter „Zahlungsdaten“ jederzeit entfernen.
+            <br />
+            Das Digital-Jahresabo schließen Sie auf einer Bezahlseite von Stripe ab. Dort geben Sie
+            Rechnungsadresse und Zahlungsdaten direkt bei Stripe ein. Stripe bucht den Jahrespreis
+            zu jeder Laufzeit ab, stellt die Rechnungen aus und meldet uns Beginn, Verlängerung,
+            Kündigung und Ende des Abos. Rechnungen und Zahlungsmittel des Abos verwalten Sie über
+            das Kundenportal von Stripe, das Sie aus dem Profil erreichen.
             <br />
             In der Kasse lädt Ihr Browser ein Skript von js.stripe.com. Stripe setzt dabei Cookies
             (u. a. „__stripe_mid“, Laufzeit ein Jahr, und „__stripe_sid“, Laufzeit 30 Minuten) und
@@ -321,7 +327,7 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
       },
       {
         h: "8. Datenlöschung und Speicherdauer",
-        p: "Sofern nicht anders gekennzeichnet, werden Ihre personenbezogenen Daten gelöscht oder gesperrt, sobald der Zweck der Speicherung entfällt. Ihr Konto können Sie im Profil selbst löschen; Rechnungsadresse und gespeicherte Karte werden dabei mit entfernt. Aufbewahrungspflichten ergeben sich aus Vorschriften der Rechnungslegung (§ 257 HGB) und aus steuerrechtlichen Vorschriften (§ 147 AO sowie § 14b UStG). Gemäß diesen Vorschriften sind geschäftliche Kommunikation, geschlossene Verträge und Buchungsbelege bis zu 10 Jahren aufzubewahren. Soweit wir diese Daten nicht mehr zur Durchführung der Dienstleistungen für Sie benötigen, werden sie gesperrt und nur noch für Zwecke der Rechnungslegung und für Steuerzwecke verwendet.",
+        p: "Sofern nicht anders gekennzeichnet, werden Ihre personenbezogenen Daten gelöscht oder gesperrt, sobald der Zweck der Speicherung entfällt. Ihr Konto können Sie im Profil selbst löschen; Rechnungsadresse und gespeicherte Karte werden dabei mit entfernt, ein laufendes Abo wird vorher gekündigt. Freischaltungen aus Käufen im Netzladen hängen an Ihrer E-Mail-Adresse und bleiben nach der Kontolöschung bestehen, damit Sie Ihre gekauften Ausgaben bei einer erneuten Anmeldung wieder lesen können. Wünschen Sie auch deren Löschung, genügt eine E-Mail an datenschutz@lesenundschenken.de. Aufbewahrungspflichten ergeben sich aus Vorschriften der Rechnungslegung (§ 257 HGB) und aus steuerrechtlichen Vorschriften (§ 147 AO sowie § 14b UStG). Gemäß diesen Vorschriften sind geschäftliche Kommunikation, geschlossene Verträge und Buchungsbelege bis zu 10 Jahren aufzubewahren. Soweit wir diese Daten nicht mehr zur Durchführung der Dienstleistungen für Sie benötigen, werden sie gesperrt und nur noch für Zwecke der Rechnungslegung und für Steuerzwecke verwendet.",
       },
       {
         h: "9. Ihre Rechte als betroffene Person",
