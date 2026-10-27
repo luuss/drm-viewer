@@ -5,12 +5,6 @@ import { api, formatEuro, type Id, cleanError } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 
-const REGION_LABEL: Record<string, string> = {
-  inland: "Inland",
-  ausland: "Ausland",
-  luftpost: "Ausland Luftpost",
-};
-
 /** Kostenloses Leseexemplar beim Verlag, je Titel. */
 const SAMPLE_COPY_URL: Record<string, string> = {
   zuerst: "https://zuerst.de/probeexemplar/",
@@ -55,9 +49,7 @@ export default function SubscriptionDetailPage() {
 
   const plans = offer.tiers.flatMap((t) => t.plans);
   // `?stufe=` waehlt eine Abo-Art vor, etwa vom Kombi-Hinweis der Partnerreihe.
-  const vorgewaehlt = plans.find(
-    (p) => p.tier === params.get("stufe") && (p.region ?? "inland") === "inland",
-  );
+  const vorgewaehlt = plans.find((p) => p.tier === params.get("stufe"));
   const selected = plans.find((p) => p._id === chosen) ?? vorgewaehlt ?? offer.headline;
   const kombiStufe = kombi?.stufen.find((s) => s.planId === selected?._id) ?? null;
   // Kombi: mit eigenem Abo der Partnerreihe nur der Kombipreis, sonst beide zusammen.
@@ -129,44 +121,31 @@ export default function SubscriptionDetailPage() {
 
         {stripeMode ? (
           <>
-            {plans.length > 1 && (
-            <fieldset className="subscription-choice">
-              <legend>Abo-Art und Liefergebiet wählen</legend>
-              <div className="subscription-grid">
-                {offer.tiers.map((tier) => {
-                  const holdsSelection = tier.plans.some((p) => p._id === selected!._id);
-                  return (
-                    <article
-                      className={holdsSelection ? "subscription-card selected" : "subscription-card"}
-                      key={tier.tier}
-                    >
-                      <div>
-                        <h4>{tier.tier}</h4>
-                        {tier.note && <p>{tier.note}</p>}
-                      </div>
-                      <div className="subscription-prices" aria-label={`Preise ${tier.tier}`}>
-                        {tier.plans.map((p) => (
-                          <label
-                            key={p._id}
-                            className={p._id === selected!._id ? "selected" : undefined}
-                          >
-                            <input
-                              type="radio"
-                              name="plan"
-                              value={p._id}
-                              checked={p._id === selected!._id}
-                              onChange={() => setChosen(p._id)}
-                            />
-                            <span>{p.region ? REGION_LABEL[p.region] : p.name}</span>
-                            <strong>{formatEuro(p.priceAmountCents)}</strong>
-                          </label>
-                        ))}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </fieldset>
+            {offer.tiers.length > 1 && (
+              <fieldset className="subscription-choice">
+                <legend>Abo-Art wählen</legend>
+                <div className="subscription-prices">
+                  {offer.tiers.map((tier) => {
+                    const p = tier.plans[0];
+                    return (
+                      <label key={p._id} className={p._id === selected!._id ? "selected" : undefined}>
+                        <input
+                          type="radio"
+                          name="plan"
+                          value={p._id}
+                          checked={p._id === selected!._id}
+                          onChange={() => setChosen(p._id)}
+                        />
+                        <span>
+                          {tier.tier}
+                          {tier.note && <small>{tier.note}</small>}
+                        </span>
+                        <strong>{formatEuro(p.priceAmountCents)}</strong>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
             )}
 
             {kombiStufe && (
@@ -175,7 +154,7 @@ export default function SubscriptionDetailPage() {
                   ? `Ihr Digital-Abo von ${kombiStufe.partnerName} ist erkannt; ${offer.publicationName} kommt zum Kombipreis dazu. Endet das Abo von ${kombiStufe.partnerName}, verlängert sich dieses zum Preis des Normalabonnements.`
                   : kombiStufe.zusammenCents !== null
                     ? `Das Kombi-Abonnement schließt ${kombiStufe.partnerName} (${kombiStufe.partnerStufe}) mit ein: ein gemeinsames Abo für beide Hefte, gemeinsam verlängert und nur gemeinsam kündbar.`
-                    : `Das Kombi-Abonnement gibt es in diesem Liefergebiet nur zu einem laufenden Digital-Abo von ${kombiStufe.partnerName}.`}
+                    : `Das Kombi-Abonnement gibt es zurzeit nur zu einem laufenden Digital-Abo von ${kombiStufe.partnerName}.`}
               </p>
             )}
 

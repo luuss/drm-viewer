@@ -6,18 +6,12 @@ import { heraus, hinein, useWarenkorb } from "../lib/warenkorb";
 import ReihenKacheln from "../components/ReihenKacheln";
 import { reiheVon } from "../lib/reihen";
 
-const REGION_LABEL: Record<string, string> = {
-  inland: "Inland",
-  ausland: "Ausland",
-  luftpost: "Ausland Luftpost",
-};
-
 /**
  * Kiosk: nur die Zeitschriften als Kacheln mit ihrem Schriftzug. Die Hefte
  * und das Abo stehen erst auf der Seite der Zeitschrift. Hefte ohne bekannte
  * Reihe haetten dort keine Seite; sie stehen deshalb hier als Karten. Das Abo
- * zeigt nur den Inlandspreis des Normalabonnements — die Abo-Art und das
- * Liefergebiet waehlt der Kunde auf der Abo-Seite.
+ * zeigt nur den Preis des Normalabonnements — die Abo-Art waehlt der Kunde
+ * auf der Abo-Seite.
  */
 export default function KioskPage() {
   const issues = useQuery(api.issues.listPublished, {});
@@ -86,12 +80,7 @@ export default function KioskPage() {
                         {o.headline.interval === "year" ? " / Jahr" : " / Monat"}
                       </div>
                       <div className="price-note">
-                        {[
-                          o.headline.tier,
-                          o.headline.region ? REGION_LABEL[o.headline.region] : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
+                        {o.headline.tier}
                       </div>
                     </>
                   ) : (

@@ -211,7 +211,7 @@ describe("leserAbo", () => {
       });
       const plan = (publicationId: any, tier: string, cents: number, sortOrder: number) =>
         ctx.db.insert("subscriptionPlans", {
-          name: `${tier} Inland`,
+          name: tier,
           tier,
           region: "inland",
           publicationId,
@@ -324,7 +324,7 @@ describe("leserAbo", () => {
     expect(await t.query(internal.leserAbo.kombiFaellig, { modus: "live" })).toEqual([]);
     await anlegen(Date.now() + 2 * 86400_000);
     expect(await t.query(internal.leserAbo.kombiFaellig, { modus: "live" })).toEqual([
-      { stripeSubscriptionId: "sub_v", preisId: "price_Normalabonnement_10440", steuerId: "txr_1", name: "Normalabonnement Inland" },
+      { stripeSubscriptionId: "sub_v", preisId: "price_Normalabonnement_10440", steuerId: "txr_1", name: "Normalabonnement" },
     ]);
     // Mit laufendem DMZ-Abo im Leser bleibt der Kombipreis.
     await t.mutation(internal.subscriptions.upsertFromStripe, {

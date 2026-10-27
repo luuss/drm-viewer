@@ -610,7 +610,7 @@ export const abschliessen = action({
         kombiMerkmale.kombi = "vorhanden";
       } else {
         if (!partnerId || !partnerPreis?.taxRateId) {
-          throw new Error(`Das Kombi-Abo zusammen mit ${partnerName} gibt es in diesem Liefergebiet nicht.`);
+          throw new Error(`Das Kombi-Abo zusammen mit ${partnerName} ist zurzeit nicht im Verkauf.`);
         }
         posten.push({ price: partnerPreis.priceId, quantity: 1, tax_rates: [partnerPreis.taxRateId] });
         kombiMerkmale.kombi = "zusammen";
@@ -873,5 +873,29 @@ export const kombiPruefen = internalAction({
       console.log(JSON.stringify({ event: "abo.kombiEntfallen", abo: f.stripeSubscriptionId, neu: f.name }));
     }
     return faellig.length;
+  },
+});
+
+/**
+ * Einmalig am 27.10.2026: Digital-Abos haben keine Auslandspreise. Nimmt
+ * Ausland- und Luftpost-Stufen aus dem Verkauf (laufende Abos laufen weiter)
+ * und kuerzt "… Inland" auf die Abo-Art. Mit `probelauf` nur zaehlen.
+ */
+export const nurInlandsstufen = internalMutation({
+  args: { probelauf: v.boolean() },
+  handler: async (ctx, { probelauf }) => {
+    let abgeschaltet = 0;
+    let umbenannt = 0;
+    for (const p of await ctx.db.query("subscriptionPlans").collect()) {
+      if (!p.stripeModus) continue;
+      if (p.isActive && p.region && p.region !== "inland") {
+        abgeschaltet++;
+        if (!probelauf) await ctx.db.patch(p._id, { isActive: false });
+      } else if (p.name.endsWith(" Inland")) {
+        umbenannt++;
+        if (!probelauf) await ctx.db.patch(p._id, { name: p.name.slice(0, -" Inland".length) });
+      }
+    }
+    return { abgeschaltet, umbenannt };
   },
 });

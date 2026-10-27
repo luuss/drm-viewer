@@ -65,7 +65,7 @@ const euroText = (cents: number | null) => (cents === null ? "" : (cents / 100).
 
 /**
  * Preisstufen des Digital-Jahresabos (Stripe Checkout im Ladenkonto): Abo-Art
- * mal Liefergebiet wie im Abo-Katalog. Speichern legt bei Stripe den Preis
+ * wie im Abo-Katalog (digital ohne Auslandspreise). Speichern legt bei Stripe den Preis
  * an; ein neuer Preis gilt fuer neue Abschluesse. Leer speichern nimmt die
  * Stufe aus dem Verkauf.
  */
