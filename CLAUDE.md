@@ -30,6 +30,11 @@ denselben Stand haben:
   und ausrollen. Live steht immer der **gemeinsame** Stand beider Rechner,
   nie nur der eigene, sonst ueberschreibt ein Deploy die Arbeit
   (Design, Seiten) des anderen.
+* **Convex-Deploy darf Claude selbst ausfuehren** (Freigabe 28.10.2026):
+  `npx convex deploy|run --env-file _scratch/verlag-direkt.env`. Der Hook
+  `~/.claude/hooks/no-env-read.py` laesst genau diese Form durch (nur dieser
+  Dateiname, nur `--env-file`, nur deploy/run). Auf einem Rechner ohne diese
+  Hook-Ausnahme den Befehl per `!` vom User ausfuehren lassen.
 * Bei CSS-Konflikten: Klassennamen des Readers bleiben die kurzen
   (`rv`, `fb`, `fb-c`, `gx`, siehe Kopierschutz in HANDOVER), neue Regeln
   von `main` werden angehaengt, nicht verworfen.
