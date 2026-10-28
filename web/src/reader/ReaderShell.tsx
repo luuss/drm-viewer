@@ -13,7 +13,7 @@ import AppShell from "../components/AppShell";
 import NichtGefunden from "../components/NichtGefunden";
 import { reiheVon } from "../lib/reihen";
 import { ProductChoice } from "./ShopProduct";
-import { wischachse, wischziel, type Wischachse } from "./wischen";
+import { wischachse, wischbar, wischziel, type Wischachse } from "./wischen";
 import { artikelAufSeite } from "./artikelAufSeite";
 
 type Mode = "page" | "article";
@@ -511,10 +511,9 @@ export default function ReaderShell() {
     const beginn = (e: TouchEvent) => {
       start = null;
       if (wischRef.current.mode === "page" || e.touches.length !== 1) return;
-      // Tabellen rollen seitlich; dort gehoert die Geste ihnen.
-      const ziel = e.target instanceof Element ? e.target : null;
-      const rolle = ziel?.closest<HTMLElement>(".article-table");
-      if (rolle && rolle.scrollWidth > rolle.clientWidth) return;
+      // Nur auf dem Lesetext; Regler, Leisten, Verzeichnis, Knoepfe und
+      // seitlich rollende Tabellen behalten ihre Geste (wischen.ts).
+      if (!wischbar(e.target instanceof Element ? e.target : null)) return;
       start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       achse = null;
     };

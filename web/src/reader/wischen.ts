@@ -17,6 +17,26 @@ export function wischachse(dx: number, dy: number): Wischachse | null {
   return Math.abs(dx) > Math.abs(dy) * VORRANG ? "quer" : "hoch";
 }
 
+/** Bedienelemente: dort gehoert eine Bewegung ihnen, nicht dem Blaettern. */
+const BEDIENUNG =
+  "button, a, input, select, textarea, label, summary, [role='slider'], [role='dialog'], [contenteditable='true']";
+
+/** Was `wischbar` von einem Element braucht (im Test ohne DOM nachgebaut). */
+type Ziel = { closest(selector: string): { scrollWidth: number; clientWidth: number } | null };
+
+/**
+ * Darf eine Beruehrung hier zum Blaettern werden? Nur auf dem Lesetext
+ * selbst. Leiste und Regler unten, Kopfleiste, Inhaltsverzeichnis und jedes
+ * Bedienelement sind ausgenommen: ein Zug am Regler blaetterte sonst nach dem
+ * Sprung noch einen Artikel weiter. Eine Tabelle, die seitlich rollt, auch.
+ */
+export function wischbar(ziel: Ziel | null): boolean {
+  if (!ziel || !ziel.closest(".article-mode")) return false;
+  if (ziel.closest(BEDIENUNG)) return false;
+  const tabelle = ziel.closest(".article-table");
+  return !(tabelle && tabelle.scrollWidth > tabelle.clientWidth);
+}
+
 /** Wohin eine fertige Geste blaettert; nach rechts gewischt heisst zurueck. */
 export function wischziel(dx: number, dy: number): "zurueck" | "weiter" | null {
   if (Math.abs(dx) <= BLAETTERN || Math.abs(dx) <= Math.abs(dy) * VORRANG) return null;
