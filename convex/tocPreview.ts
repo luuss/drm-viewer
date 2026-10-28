@@ -9,9 +9,28 @@ import { Doc, Id } from "./_generated/dataModel";
 import { passt, suchwoerter } from "./suche";
 
 /**
+ * Ist die Leserseite ein Umschlag (U1 oder U4)? Die erste Leserseite ist
+ * immer der Titel (`spreadStart` im Reader), auch wenn ein alter Import ihr
+ * keine Rolle mitgab.
+ */
+export function istUmschlag(page: Pick<Doc<"issuePages">, "index" | "role" | "printedLabel">) {
+  return (
+    page.index === 0 ||
+    page.role === "front_cover" ||
+    page.role === "back_cover" ||
+    /^U\s*[14]$/i.test(page.printedLabel?.trim() ?? "")
+  );
+}
+
+/**
  * Leserseiten, auf denen das gedruckte Inhaltsverzeichnis steht. Erkennbar an
  * den Klickflaechen des Verzeichnisses: nur sie tragen eine Zielseite. Ein
  * Heft ohne gedrucktes Verzeichnis (eine Monographie) hat keine.
+ *
+ * Der Umschlag zaehlt nicht mit, auch wenn er Sprungflaechen hat: die
+ * Anreisser auf dem Titel von ZUERST! fuehren zu ihren Artikeln. Mit ihnen
+ * zeigte die Heftseite von ZUERST! 1/2025 bis 6/2025 den Titel ein zweites
+ * Mal als "Inhaltsverzeichnis, Seite 1".
  */
 export async function tocPageIndices(
   ctx: QueryCtx,
@@ -25,7 +44,15 @@ export async function tocPageIndices(
   for (const r of regions) {
     if (r.targetPageIndex !== undefined) seiten.add(r.pageIndex);
   }
-  return [...seiten].sort((a, b) => a - b);
+  const out = [];
+  for (const index of [...seiten].sort((a, b) => a - b)) {
+    const page = await ctx.db
+      .query("issuePages")
+      .withIndex("by_issue_index", (q) => q.eq("issueId", issueId).eq("index", index))
+      .unique();
+    if (!istUmschlag(page ?? { index, role: "content" })) out.push(index);
+  }
+  return out;
 }
 
 /** Gerenderte Bilder der Verzeichnisseiten, wie sie das Kachel-Gateway auch hat. */
