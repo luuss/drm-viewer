@@ -49,6 +49,8 @@ export default function IssueWorkspace() {
     isPublished: issue.isPublished,
     pageCount: issue.pageCount,
     pendingArticles: issue.pendingArticles,
+    approvedArticles: issue.approvedArticles,
+    hasToc: issue.tocCount > 0,
     lastJob: lastJob ? { status: lastJob.status, progress: lastJob.progress } : null,
   });
   const basis = `/admin/heft/${id}`;

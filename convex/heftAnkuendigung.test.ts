@@ -207,6 +207,32 @@ async function anlegen(t: T) {
   });
 }
 
+/** Ein freigegebener Artikel mit Verzeichniseintrag, falls das Heft noch keinen hat. */
+async function inhaltAnlegen(t: T, issueId: Id<"issues">) {
+  await t.run(async (ctx: any) => {
+    const da = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+      .first();
+    if (da) return;
+    const now = Date.now();
+    const articleId = await ctx.db.insert("articles", {
+      issueId,
+      order: 1,
+      title: "Editorial",
+      source: "idml",
+      reviewStatus: "approved",
+      primaryPageIndex: 0,
+      pageStart: 0,
+      pageEnd: 0,
+      searchText: "Editorial",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("tocEntries", { issueId, order: 1, label: "Editorial", pageIndex: 0, articleId, level: 1 });
+  });
+}
+
 async function zeilen(t: T) {
   return await t.run(async (ctx: any) => ({
     ankuendigungen: await ctx.db.query("heftAnkuendigungen").collect(),
@@ -241,6 +267,8 @@ describe("Ablauf", () => {
   });
 
   async function veroeffentlichen(t: T, redaktionId: Id<"users">, issueId: Id<"issues">, an = true) {
+    // Veroeffentlicht wird nur ein Heft mit freigegebenem Artikel und Verzeichnis.
+    if (an) await inhaltAnlegen(t, issueId);
     await t.withIdentity({ subject: `${redaktionId}|s` }).mutation(api.issues.setPublished, { issueId, isPublished: an });
   }
 

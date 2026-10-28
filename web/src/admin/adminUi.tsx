@@ -108,7 +108,7 @@ export const jobLaeuft = (status: string | undefined | null) =>
 export type HeftStatus = {
   text: string;
   ton: "live" | "pending" | "excluded" | "";
-  schritt: "fehler" | "aufbereitung" | "seiten" | "pruefen" | "bereit" | "live";
+  schritt: "fehler" | "aufbereitung" | "seiten" | "pruefen" | "unvollstaendig" | "bereit" | "live";
 };
 
 /** Der eine Satz, der sagt, wo ein Heft steht und was als Naechstes kommt. */
@@ -116,6 +116,9 @@ export function heftStatus(i: {
   isPublished: boolean;
   pageCount: number;
   pendingArticles: number;
+  /** Fehlen beide Angaben, bleibt es bei der Pruefung offener Artikel. */
+  approvedArticles?: number;
+  hasToc?: boolean;
   lastJob: { status: string; progress: number | null } | null;
 }): HeftStatus {
   if (i.lastJob?.status === "error") {
@@ -137,6 +140,13 @@ export function heftStatus(i: {
       ton: "pending",
       schritt: "pruefen",
     };
+  }
+  // Wie `publishIssue`: ohne freigegebenen Artikel und Verzeichnis kein Heft.
+  if (i.approvedArticles === 0) {
+    return { text: "Kein Artikel freigegeben", ton: "pending", schritt: "unvollstaendig" };
+  }
+  if (i.hasToc === false) {
+    return { text: "Ohne Inhaltsverzeichnis", ton: "pending", schritt: "unvollstaendig" };
   }
   return { text: "Bereit zum Veröffentlichen", ton: "", schritt: "bereit" };
 }

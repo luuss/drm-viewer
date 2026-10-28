@@ -607,8 +607,57 @@ describe("Artikeloperationen", () => {
     ).rejects.toThrow(/ohne Entscheidung/i);
 
     await asPublisher.mutation(api.articles.approveAllPending, { issueId });
+    // Freigegeben, aber ohne Inhaltsverzeichnis: noch gesperrt.
+    await expect(
+      asPublisher.mutation(api.issues.setPublished, { issueId, isPublished: true }),
+    ).rejects.toThrow(/Kein Inhaltsverzeichnis/);
+    await t.run(async (ctx: any) => {
+      const [artikel] = await ctx.db
+        .query("articles")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect();
+      await ctx.db.insert("tocEntries", {
+        issueId,
+        order: 1,
+        label: "Offen",
+        pageIndex: 0,
+        articleId: artikel._id,
+        level: 1,
+      });
+    });
     await asPublisher.mutation(api.issues.setPublished, { issueId, isPublished: true });
     const issue = await t.run(async (ctx: any) => await ctx.db.get(issueId));
     expect(issue.isPublished).toBe(true);
+  });
+
+  test("ein Heft ohne freigegebenen Artikel wird nicht veroeffentlicht", async () => {
+    // ZUERST! 12/2025 stand mit null Artikeln im Kiosk: nur Seitenbilder,
+    // keine Artikelansicht, keine Suche.
+    const t = convexTest(schema, modules);
+    const { issueId, editorId } = await base(t);
+    await t.run(async (ctx: any) => {
+      const now = Date.now();
+      await ctx.db.insert("articles", {
+        issueId,
+        order: 1,
+        title: "Ausgeschlossen",
+        source: "pdf",
+        reviewStatus: "excluded",
+        primaryPageIndex: 0,
+        pageStart: 0,
+        pageEnd: 0,
+        searchText: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("tocEntries", { issueId, order: 1, label: "Editorial", level: 1 });
+    });
+    const { api } = await import("./_generated/api");
+    const asPublisher = t.withIdentity({ subject: editorId, email: "redaktion@example.de" });
+    await expect(
+      asPublisher.mutation(api.issues.setPublished, { issueId, isPublished: true }),
+    ).rejects.toThrow(/Kein Artikel freigegeben/);
+    const issue = await t.run(async (ctx: any) => await ctx.db.get(issueId));
+    expect(issue.isPublished).toBe(false);
   });
 });

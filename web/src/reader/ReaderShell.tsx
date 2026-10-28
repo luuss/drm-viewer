@@ -35,6 +35,9 @@ function useBreit() {
   return breit;
 }
 
+/** Erklaerung am Knopf "Artikelansicht", wenn ein Heft keine Artikel hat. */
+const OHNE_ARTIKEL = "Für diese Ausgabe gibt es keine Artikelansicht, nur die Seiten.";
+
 /** Umschlag allein, danach echte linke/rechte Magazinpaare. */
 function spreadStart(index: number) {
   if (index <= 0) return 0;
@@ -113,6 +116,10 @@ export default function ReaderShell() {
     fromPageIndex?: number;
     punkt?: Klickpunkt;
   } | null>(null);
+  // Auf dem Telefon gibt es keinen Hinweis beim Zeigen; ein Tipp auf die
+  // gesperrte Artikelansicht blendet die Erklaerung kurz ein.
+  const [ohneArtikelHinweis, setOhneArtikelHinweis] = useState(false);
+  const ohneArtikelTimer = useRef<number | null>(null);
   const [restored, setRestored] = useState(false);
   const saveTimer = useRef<number | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -175,6 +182,18 @@ export default function ReaderShell() {
   }, [restored, progress, articles, searchParams]);
 
   const articleList = articles ?? [];
+  const ohneArtikel = articles !== undefined && articles.length === 0;
+  const zeigeOhneArtikel = useCallback(() => {
+    setOhneArtikelHinweis(true);
+    if (ohneArtikelTimer.current) window.clearTimeout(ohneArtikelTimer.current);
+    ohneArtikelTimer.current = window.setTimeout(() => setOhneArtikelHinweis(false), 4000);
+  }, []);
+  useEffect(
+    () => () => {
+      if (ohneArtikelTimer.current) window.clearTimeout(ohneArtikelTimer.current);
+    },
+    [],
+  );
 
   /**
    * Die gedruckte Seitenzahl zu einer Leseseite. Sie ist nicht die laufende
@@ -509,8 +528,14 @@ export default function ReaderShell() {
           </button>
           <button
             className={mode === "article" ? "active" : ""}
-            onClick={switchToArticles}
-            disabled={articleList.length === 0}
+            onClick={ohneArtikel ? zeigeOhneArtikel : switchToArticles}
+            // Solange die Liste laedt, ist der Knopf einfach gesperrt. Steht
+            // fest, dass es keine Artikel gibt, bleibt er erreichbar und sagt
+            // warum; ein gesperrter Knopf zeigt keinen Hinweis und nimmt
+            // keinen Fokus.
+            disabled={articles === undefined}
+            aria-disabled={ohneArtikel || undefined}
+            title={ohneArtikel ? OHNE_ARTIKEL : undefined}
           >
             <Icon name="book-open" />
             Artikelansicht
@@ -556,6 +581,11 @@ export default function ReaderShell() {
 
       <div className={tocDocked ? "reader-body toc-fest" : "reader-body"}>
         <main className="reader-main">
+          {ohneArtikelHinweis && (
+            <div className="page-hint retry" role="status">
+              {OHNE_ARTIKEL}
+            </div>
+          )}
           {mode === "page" ? (
             sessionToken && schutzKey !== null ? (
               <PageMode

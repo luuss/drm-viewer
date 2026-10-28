@@ -2752,9 +2752,10 @@ body:has(.reihe-seite) { overflow-x: clip; }
   font-size: var(--fs-sub);
   font-weight: 500;
 }
-.mode-switch button:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.mode-switch button:hover:not(:disabled):not([aria-disabled="true"]):not(.active) { background: rgba(255, 255, 255, 0.07); color: #fff; }
 .mode-switch button.active { background: var(--accent); color: #fff; }
-.mode-switch button:disabled { background: transparent; border: 0; color: var(--night-muted); opacity: 0.35; cursor: not-allowed; }
+.mode-switch button:disabled,
+.mode-switch button[aria-disabled="true"] { background: transparent; border: 0; color: var(--night-muted); opacity: 0.35; cursor: not-allowed; }
 .page-layout-switch button {
   display: inline-flex;
   align-items: center;
@@ -4233,12 +4234,13 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   background: rgba(255, 252, 240, 0.45);
 }
 .reader-screen .mode-switch button { color: var(--papier-leise); }
-.reader-screen .mode-switch button:hover:not(:disabled):not(.active) {
+.reader-screen .mode-switch button:hover:not(:disabled):not([aria-disabled="true"]):not(.active) {
   background: rgba(60, 45, 20, 0.07);
   color: var(--papier-tinte);
 }
 .reader-screen .mode-switch button.active { background: var(--accent); color: #fff; }
-.reader-screen .mode-switch button:disabled { color: var(--papier-leise); }
+.reader-screen .mode-switch button:disabled,
+.reader-screen .mode-switch button[aria-disabled="true"] { color: var(--papier-leise); }
 
 /* Hinweise und Wasserzeichen auf hellem Grund */
 .reader-screen .page-hint { color: var(--papier-leise); }
