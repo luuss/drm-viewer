@@ -14,6 +14,7 @@ import NichtGefunden from "../components/NichtGefunden";
 import { reiheVon } from "../lib/reihen";
 import { ProductChoice } from "./ShopProduct";
 import { wischachse, wischziel, type Wischachse } from "./wischen";
+import { artikelAufSeite } from "./artikelAufSeite";
 
 type Mode = "page" | "article";
 type PageLayout = "single" | "spread";
@@ -361,9 +362,20 @@ export default function ReaderShell() {
     openArticle(nearest._id, pageIndex);
   }, [articleList, pageIndex, openArticle]);
 
+  // Im Seitenmodus gehoert kein Artikel in die Adresse; sonst oeffnete ein
+  // Neuladen wieder den alten Artikel.
+  const adresseOhneArtikel = useCallback(() => {
+    if (!searchParams.has("article") && !searchParams.has("stelle")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("article");
+    next.delete("stelle");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const switchToPages = useCallback(() => {
     const current = articleList.find((a) => a._id === articleId);
     setMode("page");
+    adresseOhneArtikel();
     // Steht der Leser schon auf einer Seite des Artikels, bleibt er dort.
     // Nur wenn die gemerkte Seite nicht zum Artikel gehoert, wird auf seinen
     // Anfang gesprungen.
@@ -372,7 +384,26 @@ export default function ReaderShell() {
     const target = covers ? pageIndex : (current?.primaryPageIndex ?? pageIndex);
     setPageIndex(target);
     persist({ mode: "page", pageIndex: target, articleId });
-  }, [articleList, articleId, pageIndex, persist]);
+  }, [articleList, articleId, pageIndex, persist, adresseOhneArtikel]);
+
+  /**
+   * Ein Eintrag im Inhaltsverzeichnis, der nur eine Seite kennt. Im
+   * Artikelmodus bleibt der Leser dort und bekommt den Artikel dieser Seite;
+   * nur wenn keiner sie abdeckt, geht es in den Seitenmodus.
+   */
+  const zuVerzeichnisSeite = useCallback(
+    (p: number) => {
+      const deckt = mode === "article" ? artikelAufSeite(articleList, p) : null;
+      if (deckt) {
+        openArticle(deckt._id, p);
+        return;
+      }
+      setMode("page");
+      adresseOhneArtikel();
+      goPage(p);
+    },
+    [mode, articleList, openArticle, adresseOhneArtikel, goPage],
+  );
 
   const prev = useCallback(() => {
     if (mode === "article") {
@@ -718,10 +749,7 @@ export default function ReaderShell() {
           currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
           pageLabel={pageLabel}
           onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
-          onPage={(p) => {
-            setMode("page");
-            goPage(p);
-          }}
+          onPage={zuVerzeichnisSeite}
           onArticle={openArticle}
         />
       </div>
