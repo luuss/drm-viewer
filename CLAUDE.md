@@ -39,6 +39,23 @@ denselben Stand haben:
   (`rv`, `fb`, `fb-c`, `gx`, siehe Kopierschutz in HANDOVER), neue Regeln
   von `main` werden angehaengt, nicht verworfen.
 
+## Import: keine Ausnahmen fuer ein einzelnes Heft (Anweisung 28.10.2026)
+
+Jede Regel im Import (`extract-service`, vor allem `publication_profiles.py`)
+laeuft bei **jedem** Heft der Reihe mit, auch wenn sie an einem Musterheft
+gemessen ist.
+
+* **Nichts erfinden, was nicht im Heft steht:** kein fester Bildrahmen,
+  keine feste Bildunterschrift, kein fester Titel. Eine Regel, die etwas aus
+  der Seite ausschneidet oder benennt, prueft vorher einen Beleg aus genau
+  diesem Heft (Text auf der Seite, Absatzformat, Bilddatei).
+* **Zwei Tests je Regel:** sie greift im Heft, fuer das sie gedacht ist, und
+  sie greift **nicht** in einem anderen Heft derselben Reihe.
+* Nach einem Import mit neuer Regel ein zweites Heft der Reihe ansehen.
+* Warnendes Beispiel: der feste Kartenrahmen "Deutsche Gebietsverluste
+  1919/1945" fuer ZUERST! 3/2026 schnitt in sechs anderen Heften ein Stueck
+  Text aus Seite 9 und stellte es als Karte in den Titelartikel (f85f3dd).
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 
