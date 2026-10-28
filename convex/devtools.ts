@@ -648,3 +648,16 @@ export const requeueJob = internalMutation({
     return { ok: true };
   },
 });
+
+/** Konten mit Rollen auflisten, wahlweise nach einem Teil der Adresse. */
+export const usersWithRolesInternal = internalQuery({
+  args: { suche: v.optional(v.string()) },
+  handler: async (ctx, { suche }) => {
+    const teil = (suche ?? "").trim().toLowerCase();
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter((u) => !teil || (u.email ?? "").toLowerCase().includes(teil) || ((u as any).name ?? "").toLowerCase().includes(teil))
+      .map((u) => ({ email: u.email ?? null, name: (u as any).name ?? null, roles: rolesOf(u) }))
+      .filter((u) => !!teil || u.roles.some((r) => r !== "customer"));
+  },
+});
