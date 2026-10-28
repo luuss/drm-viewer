@@ -328,6 +328,31 @@ export function istListenzeile(text: string): boolean {
   return /^\s*[–—•·▪■●◦‣\-*]\s/u.test(text);
 }
 
+/** Text fuer den Vergleich von Kasten und Fliesstext: ohne Anfuehrungszeichen,
+ * weiche Trennstriche und doppelte Leerzeichen, klein geschrieben. */
+function vergleichstext(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/\u00ad/g, "")
+    .replace(/[„“”"‚‘’'«»‹›]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Kuerzere Kaesten ("Info", "Zur Person") stehen zufaellig auch im Text. */
+const ZITAT_MIN = 30;
+
+/**
+ * Steht der Text eines Zitatkastens vollstaendig in einem Absatz desselben
+ * Artikels? Dann ist er ein herausgestelltes Zitat, und der Leser zeigt es
+ * nicht noch einmal. In Greim stand so jedes Randzitat doppelt da.
+ */
+export function zitatDoppelt(kasten: string, absaetze: string[]): boolean {
+  const k = vergleichstext(kasten).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  if (k.length < ZITAT_MIN) return false;
+  return absaetze.some((a) => vergleichstext(a).includes(k));
+}
+
 export const getForReader = query({
   args: { articleId: v.id("articles"), sessionToken: v.optional(v.string()) },
   handler: async (ctx, { articleId, sessionToken }) => {
@@ -393,6 +418,9 @@ export const getForReader = query({
         });
       }
     }
+    const fliesstext = blocks
+      .filter((b) => b.type === "paragraph" || b.type === "lead")
+      .map((b) => b.text);
     return {
       _id: article._id,
       issueId: article.issueId,
@@ -410,6 +438,8 @@ export const getForReader = query({
         type: b.type,
         text: enc(b.text),
         liste: istListenzeile(b.text),
+        // Kasten oder Zitat, das schon im Fliesstext steht: nicht noch einmal.
+        doppelt: (b.type === "box" || b.type === "quote") && zitatDoppelt(b.text, fliesstext),
         page: b.sourcePageIndex ?? null,
         sourceY: b.sourceY ?? null,
         // Zahlen bleiben in Tabellen lesbar: daran erkennt der Reader

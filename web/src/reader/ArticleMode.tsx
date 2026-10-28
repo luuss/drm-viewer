@@ -403,9 +403,16 @@ export default function ArticleMode({
           }
           const b = item.block;
           const key = `block-${item.index}`;
-          const block =
-            b.type === "heading" || b.type === "subheading" ? (
+          // Ein Kasten oder Zitat, das schon im Fliesstext steht, faellt weg
+          // (`zitatDoppelt`); Bilder und Bestellknoepfe dahinter bleiben.
+          const block = b.doppelt ? null : b.type === "heading" || b.type === "subheading" ? (
               <h2 data-source-page={item.page} data-order={b.order}>{b.text}</h2>
+            ) : b.type === "box" ? (
+              // Kasten aus dem Heft (Info-, Zitatkasten): abgesetzt vom
+              // Fliesstext. Mehrere Absaetze eines Kastens stehen beisammen.
+              <aside className="kasten" data-source-page={item.page} data-order={b.order}>
+                {b.text}
+              </aside>
             ) : b.type === "quote" ? (
               <blockquote data-source-page={item.page} data-order={b.order}>{b.text}</blockquote>
             ) : b.type === "lead" ? (

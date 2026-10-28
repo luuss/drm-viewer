@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
-import { istListenzeile } from "./articles";
+import { istListenzeile, zitatDoppelt } from "./articles";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -673,5 +673,22 @@ describe("istListenzeile", () => {
     expect(istListenzeile("Die Division kämpfte – wie schon 1943 – an der Narwa.")).toBe(false);
     expect(istListenzeile("-Direktor")).toBe(false);
     expect(istListenzeile("1944 begann der Aufstand.")).toBe(false);
+  });
+});
+
+describe("zitatDoppelt", () => {
+  const absaetze = [
+    "Hanna Reitsch erinnerte sich später: „Greim war der einzige, der bis zuletzt an seinem Platz blieb.“ Dann verstummte sie.",
+    "Ein anderer Absatz.",
+  ];
+  test("ein Zitatkasten, der wortgleich im Text steht, ist doppelt", () => {
+    expect(zitatDoppelt("„Greim war der einzige, der bis zuletzt an seinem Platz blieb.“", absaetze)).toBe(true);
+    // Weiche Trennstriche und Zeilenumbrueche aus dem Satz stoeren nicht.
+    expect(zitatDoppelt("Greim war der ein\u00adzige, der bis zuletzt\nan seinem Platz blieb", absaetze)).toBe(true);
+  });
+  test("gekuerzt, abweichend oder zu kurz: der Kasten bleibt", () => {
+    expect(zitatDoppelt("„Greim war der einzige […] an seinem Platz.“", absaetze)).toBe(false);
+    expect(zitatDoppelt("Ritterkreuz mit Eichenlaub und Schwertern, verliehen 1944", absaetze)).toBe(false);
+    expect(zitatDoppelt("Ein anderer Absatz.", absaetze)).toBe(false);
   });
 });

@@ -2967,6 +2967,19 @@ body:has(.reihe-seite) { overflow-x: clip; }
   color: var(--ink-soft);
   font-style: italic;
 }
+/* Kasten aus dem Heft (Info-, Zitatkasten): ruhig abgesetzt, etwas kleiner.
+   Folgen mehrere Absaetze eines Kastens aufeinander, stehen sie in einer
+   Flaeche. Vorher sahen Kaesten aus wie Fliesstext. */
+.article-body .kasten {
+  display: block;
+  margin: var(--s5) 0;
+  padding: var(--s3) var(--s4);
+  background: rgba(60, 45, 20, 0.05);
+  border-left: 3px solid var(--rule);
+  font-size: 0.95em;
+  line-height: 1.55;
+}
+.article-body .kasten + .kasten { margin-top: calc(-1 * var(--s5)); padding-top: 0; }
 .article-body figure {
   width: 100%;
   margin: clamp(1.5rem, 4vw, 2.5rem) 0;
