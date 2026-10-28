@@ -46,8 +46,14 @@ TILE_SIZE = int(os.environ.get("TILE_SIZE", "512"))
 PAGE_CACHE = int(os.environ.get("PAGE_CACHE", "24"))
 SESSION_CACHE_TTL = 60
 USAGE_FLUSH_SECONDS = int(os.environ.get("USAGE_FLUSH_SECONDS", "30"))
-MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "80"))
-MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "1200"))
+# Bremse je Leser und Heft. Zuegiges Blaettern eines Menschen bleibt
+# darunter: Doppelseiten im Sekundentakt sind 120 Seiten und einige tausend
+# Kacheln in der Minute (scharfe Schirme laden je Seite bis 35 Kacheln). Mit
+# 80 Seiten und 1200 Kacheln blieben beim Blaettern Seiten bis zu einer
+# Minute leer (Pruefung 28.10.2026). Wer ein Heft maschinell abzieht, wird
+# weiter gebremst; der Leser wartet bei 429 und fragt selbst nach.
+MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "300"))
+MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "6000"))
 
 # Medienspeicher. Liegen die Bilder in einem Eimer statt in der Convex-Ablage,
 # hat Convex keine Adresse fuer den Browser — dieser Dienst hat den Zugang und
@@ -65,7 +71,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-V"],
+    expose_headers=["X-V", "Retry-After"],
 )
 
 _client = httpx.AsyncClient(timeout=60.0, follow_redirects=False)
@@ -228,7 +234,12 @@ def check_rate(key: str, limit: int, what: str) -> None:
     while hits and now - hits[0] > 60:
         hits.popleft()
     if len(hits) >= limit:
-        raise HTTPException(429, f"Zu viele {what} pro Minute")
+        # Wann der aelteste Zugriff aus dem Fenster faellt: so lange wartet
+        # der Leser, bevor er von selbst nachfragt (`web/src/reader/nachladen.ts`).
+        frei = max(1, int(60 - (now - hits[0])) + 1)
+        raise HTTPException(
+            429, f"Zu viele {what} pro Minute", headers={"Retry-After": str(frei)}
+        )
     hits.append(now)
 
 

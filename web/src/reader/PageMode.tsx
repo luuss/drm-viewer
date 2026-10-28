@@ -4,6 +4,7 @@ import OpenSeadragon from "openseadragon";
 import { TILE_SERVICE_URL, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import { kachelSeed, mitTicket, zusammensetzen } from "./schutz";
+import { mitWiederholung } from "./nachladen";
 
 /** Wo auf der Seite getippt wurde, normiert auf 0..1. */
 export type Klickpunkt = { pageIndex: number; x: number; y: number };
@@ -51,7 +52,8 @@ type Props = {
   canNext: boolean;
 };
 
-type PageNotice = { text: string; tone: "retry" | "error" };
+/** `nochmal`: der Hinweis traegt den Knopf "Erneut versuchen". */
+type PageNotice = { text: string; tone: "retry" | "error"; nochmal?: boolean };
 type PageInfo = {
   width: number;
   height: number;
@@ -61,8 +63,11 @@ type PageInfo = {
 
 /** Schnell ueberblaetterte Seiten sollen keine unnoetigen Anfragen ausloesen. */
 const SETTLE_MS = 180;
-const RETRY_MS = 2500;
-const MAX_RETRIES = 4;
+const NICHT_GELADEN: PageNotice = {
+  text: "Seite konnte nicht geladen werden.",
+  tone: "error",
+  nochmal: true,
+};
 
 /**
  * Originalgetreue Einzel- oder Doppelseite. Eine Doppelseite lebt in genau
@@ -93,6 +98,8 @@ export default function PageMode({
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<PageNotice | null>(null);
   const [ready, setReady] = useState(false);
+  // Zaehlt "Erneut versuchen": jeder Druck laedt die Seite neu.
+  const [nochmal, setNochmal] = useState(0);
   const readyRef = useRef(false);
   const openedPagesRef = useRef<number[]>([]);
   const regionsRef = useRef(regions);
@@ -166,7 +173,7 @@ export default function PageMode({
     viewer.addHandler("open-failed", () => {
       readyRef.current = false;
       setReady(false);
-      setNotice({ text: "Seite konnte nicht geladen werden.", tone: "error" });
+      setNotice(NICHT_GELADEN);
     });
     viewer.addHandler("update-viewport", syncLayers);
     viewer.addHandler("resize", syncLayers);
@@ -230,7 +237,7 @@ export default function PageMode({
         event.tiledImage &&
         viewer.world.getIndexOfItem(event.tiledImage) !== -1
       ) {
-        setNotice({ text: "Seite konnte nicht geladen werden.", tone: "error" });
+        setNotice(NICHT_GELADEN);
       }
     });
 
@@ -247,7 +254,6 @@ export default function PageMode({
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
-    let attempt = 0;
     const abortController = new AbortController();
     readyRef.current = false;
     openedPagesRef.current = [];
@@ -260,33 +266,32 @@ export default function PageMode({
 
     async function load() {
       try {
+        // Gebremst (429) wartet der Leser und fragt selbst nach; bei einem
+        // Netz- oder Serverfehler einmal (nachladen.ts).
         const responses = await Promise.all(
           shown.map((pageIndex) =>
-            fetch(`${TILE_SERVICE_URL}/api/issue/${issueId}/page/${pageIndex}/info`, {
-              headers: { "X-Tile-Session": sessionToken },
-              signal: abortController.signal,
-            }),
+            mitWiederholung(
+              () =>
+                fetch(`${TILE_SERVICE_URL}/api/issue/${issueId}/page/${pageIndex}/info`, {
+                  headers: { "X-Tile-Session": sessionToken },
+                  signal: abortController.signal,
+                }),
+              abortController.signal,
+              () => {
+                if (!cancelled) setNotice({ text: "Seite wird gleich geladen …", tone: "retry" });
+              },
+            ),
           ),
         );
         if (cancelled) return;
 
-        if (responses.some((response) => response.status === 429) && attempt < MAX_RETRIES) {
-          attempt += 1;
-          setNotice({ text: "Seite wird gleich geladen …", tone: "retry" });
-          timer = window.setTimeout(() => void load(), RETRY_MS);
-          return;
-        }
         const failed = responses.find((response) => !response.ok);
         if (failed) {
-          setNotice({
-            text:
-              failed.status === 409
-                ? "Diese Seite ist noch nicht aufbereitet."
-                : failed.status === 429
-                  ? "Die Seite braucht gerade etwas länger. Bitte kurz warten."
-                  : "Seite konnte nicht geladen werden.",
-            tone: "error",
-          });
+          setNotice(
+            failed.status === 409
+              ? { text: "Diese Seite ist noch nicht aufbereitet.", tone: "error" }
+              : NICHT_GELADEN,
+          );
           return;
         }
 
@@ -318,7 +323,12 @@ export default function PageMode({
             const abbruch = new AbortController();
             job.userData.abbruch = abbruch;
             const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(job.src);
-            mitTicket(job.src, sessionToken, issueId, abbruch.signal)
+            // Je Versuch ein frisches Ticket; gebremste Kacheln kommen nach
+            // einer kurzen Pause von selbst.
+            mitWiederholung(
+              () => mitTicket(job.src, sessionToken, issueId, abbruch.signal),
+              abbruch.signal,
+            )
               .then((res) => {
                 if (!res.ok) throw new Error(`Kachel ${res.status}`);
                 return res.blob();
@@ -343,9 +353,7 @@ export default function PageMode({
         openedPagesRef.current = [...shown];
         viewerRef.current.open(tileSources);
       } catch (error) {
-        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
-          setNotice({ text: "Seite konnte nicht geladen werden.", tone: "error" });
-        }
+        if (!cancelled && !abortController.signal.aborted) setNotice(NICHT_GELADEN);
       }
     }
 
@@ -356,7 +364,7 @@ export default function PageMode({
       window.clearTimeout(timer);
     };
     // Die konkrete Folge ist absichtlich Teil der Abhaengigkeit.
-  }, [issueId, sessionToken, pageIndexes.join(",")]);
+  }, [issueId, sessionToken, pageIndexes.join(","), nochmal]);
 
   return (
     <div className={`page-mode ${spread ? "spread" : "single"} ${hasTwoPages ? "two-pages" : "one-page"}`}>
@@ -370,6 +378,18 @@ export default function PageMode({
             aria-live="polite"
           >
             {notice.text}
+            {notice.nochmal && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="btn quiet small"
+                  onClick={() => setNochmal((n) => n + 1)}
+                >
+                  Erneut versuchen
+                </button>
+              </>
+            )}
           </div>
         )}
 
