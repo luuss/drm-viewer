@@ -181,3 +181,35 @@ def verzeichnis_doppelseite(hints: list, rubriken: dict[int, str]) -> list:
             h = replace(h, label=f"{' '.join(links.split())} – {' '.join(rechts.split())}")
         out.append(h)
     return out
+
+
+# So weit darf der Anfang eines Artikels von der Seite seines Eintrags
+# entfernt sein, wenn der Eintrag ihn beim Titel nennt.
+TITEL_SEITENABSTAND = 1
+
+
+def titel_nennt_artikel(eintrag: str | None, titel: str | None) -> bool:
+    """Nennt ein Verzeichniseintrag diesen Artikel beim Titel?
+
+    Verglichen wird ohne Satzzeichen, Trennstriche und Gross/klein. Ein
+    Eintrag aus zwei Teilen ("Leserbriefe/Impressum") nennt mit dem ersten
+    Teil den Artikel, mit dem die Seite beginnt; ein laengerer Eintrag passt,
+    wenn er mit dem Titel beginnt ("Made in Germany – jetzt erst recht!" fuer
+    "Made in Germany") und umgekehrt.
+    """
+    from .textutil import normalize_compare
+
+    t = normalize_compare(titel or "")
+    if len(t) < 4:
+        return False
+    teile = [eintrag or "", re.split(r"\s*/\s*", eintrag or "")[0]]
+    for teil in teile:
+        e = normalize_compare(teil)
+        if len(e) < 4:
+            continue
+        if e == t:
+            return True
+        kurz, lang = sorted((e, t), key=len)
+        if len(kurz) >= 8 and lang.startswith(kurz):
+            return True
+    return False

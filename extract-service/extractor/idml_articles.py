@@ -44,6 +44,10 @@ ROLLEN_REGELN: tuple[tuple[tuple[str, ...], str], ...] = (
     # sagt, worum es auf der Seite geht. Steht vor "kasten" und "autor", damit
     # "Zitatkasten" und "Zitat Autor" hier landen.
     (("zungentext", "zitat", "quote"), "schmuckzitat"),
+    # Beschriftung einer Karte oder Grafik ("Text in der Karte": Ortsnamen,
+    # Prozentwerte, Achsen). Ohne die Zeichnung ist sie kein Lesetext; im
+    # Artikel stand sie als zwanzig lose Absaetze ("32 %", "2025", "Madrid").
+    (("text in der karte", "text in der grafik", "kartentext", "grafiktext"), "grafik"),
     (("autorenname", "autor", "verfasser", "byline"), "autor"),
     (("zwischen", "rubrikname", "dachzeile", "kicker"), "zwischentitel"),
     (
@@ -456,36 +460,87 @@ def _kopf_zuordnen(
     Texte in zwei Spalten; die Zeile links oben und der Text rechts oben
     liegen in der Hoehe naeher beieinander als Zeile und Text derselben
     Spalte. Der Text einer Zeile beginnt in ihrer Spalte, unter ihr.
-    """
-    zuordnung: dict[str, Story] = {}
-    for kopf in sorted(kandidaten, key=lambda s: (s.erste_seite, s.oben, s.links)):
-        moeglich = [
-            k
-            for k in koerper
-            if k.story_id not in zuordnung
-            and 0 <= k.erste_seite - kopf.erste_seite <= VORLAUF_SEITEN
-        ]
-        if not moeglich:
-            continue
 
-        def passt(k: Story) -> tuple:
-            gleiche_seite = k.erste_seite == kopf.erste_seite
+    Vergeben wird nach Guete, nicht nach der Reihenfolge der Zeilen: erst
+    alle Paare auf derselben Seite und in derselben Spalte, dann der Rest.
+    Frueher nahm sich jede Zeile der Reihe nach den besten freien Text; eine
+    verirrte Zeile auf der Seite davor (die Kartenbeschriftung in 4/2025,
+    S. 45) nahm so dem naechsten Artikel seine Einleitung weg, und jede
+    folgende Einleitung rutschte einen Artikel weiter — samt Seitenbereich.
+    """
+    paare: list[tuple[tuple, int, int]] = []
+    for n, kopf in enumerate(kandidaten):
+        for m, k in enumerate(koerper):
+            vorlauf = k.erste_seite - kopf.erste_seite
+            if not 0 <= vorlauf <= VORLAUF_SEITEN:
+                continue
             # Dieselbe Spalte: der Text beginnt (fast) buendig mit der Zeile
             # und nicht ueber ihr.
             gleiche_spalte = (
-                gleiche_seite
+                vorlauf == 0
                 and abs(k.links - kopf.links) <= SPALTEN_TOLERANZ
                 and k.oben >= kopf.oben - SPALTEN_TOLERANZ
             )
-            return (
-                k.erste_seite - kopf.erste_seite,
+            guete = (
+                vorlauf,
                 0 if gleiche_spalte else 1,
                 abs(k.oben - kopf.oben) + abs(k.links - kopf.links),
             )
-
-        ziel = min(moeglich, key=passt)
-        zuordnung[ziel.story_id] = kopf
+            paare.append((guete, n, m))
+    paare.sort(key=lambda p: p[0])
+    zuordnung: dict[str, Story] = {}
+    vergeben: set[int] = set()
+    for _guete, n, m in paare:
+        if n in vergeben or koerper[m].story_id in zuordnung:
+            continue
+        vergeben.add(n)
+        zuordnung[koerper[m].story_id] = kandidaten[n]
     return zuordnung
+
+
+# So viele kurze Textrahmen in einem Bildrahmen machen ihn zur Karte oder
+# Grafik; ihre Beschriftung ("N-VA", "Flandern", "Wallonien") ist kein
+# Lesetext. Ein Aufmacherfoto traegt hoechstens Zeile und Einleitung.
+GRAFIK_MINDESTRAHMEN = 3
+GRAFIK_HOECHSTLAENGE = 60
+# Rollen, die eine Beschriftung haben kann. Ueberschrift, Bildunterschrift
+# ("Bildunterschrift weiss" steht auf dem Foto) und Autor bleiben, was sie sind.
+GRAFIK_ROLLEN = ("einleitung", "unterzeile", "kasten", "mengentext", "beiwerk")
+
+
+def grafikbeschriftungen(stories: list[Story], bilder: list | None) -> set[str]:
+    """Stories, die als Beschriftung in einer Karte oder Grafik stehen.
+
+    Ein Bildrahmen, in dem mindestens drei kurze Textrahmen stehen, ist eine
+    Karte oder Grafik: die Wahlkarte Belgiens in ZUERST! 4/2025 traegt zwoelf
+    Parteinamen und Landesteile, gesetzt im Format "Einleitungstext". Als
+    Einleitung kamen sie an den naechsten Artikel. Was dagegen ein eigenes
+    Format fuer Kartentext hat ("Text in der Karte"), erkennt schon
+    `rolle_fuer`.
+    """
+    if not bilder:
+        return set()
+    kurz = [
+        s
+        for s in stories
+        if s.blocks
+        and len(s.seiten) == 1
+        and s.zeichen <= GRAFIK_HOECHSTLAENGE
+        and s.rolle() in GRAFIK_ROLLEN
+    ]
+    out: set[str] = set()
+    for bild in bilder:
+        drin = []
+        for s in kurz:
+            if s.erste_seite != bild.page_index:
+                continue
+            x0, y0, x1, y1 = s.rahmen
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            if bild.x0 <= mx <= bild.x1 and bild.y0 <= my <= bild.y1:
+                drin.append(s.story_id)
+        if len(drin) >= GRAFIK_MINDESTRAHMEN:
+            out.update(drin)
+    return out
 
 
 def _text(story: Story) -> str:
@@ -708,6 +763,9 @@ def artikel_aus_satz(
     Story und bleibt stehen.
     """
     stories = initialen_einsetzen(stories_bilden(blocks))
+    # Beschriftungen in Karten und Grafiken gehoeren zur Zeichnung.
+    grafik = grafikbeschriftungen(stories, images)
+    stories = [s for s in stories if s.story_id not in grafik]
     lang = [
         s
         for s in stories

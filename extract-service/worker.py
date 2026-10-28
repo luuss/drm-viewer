@@ -63,10 +63,12 @@ from extractor.idml_articles import (
 )
 from extractor.publication_profiles import apply_profile
 from extractor.rubriken import (
+    TITEL_SEITENABSTAND,
     kopfzeilen,
     seitenrubriken,
     stehende_rubrik,
     titel_bereinigen,
+    titel_nennt_artikel,
     verzeichnis_doppelseite,
 )
 from extractor.textutil import normalize_compare
@@ -1146,13 +1148,31 @@ class Job:
                 None,
             )
 
-        for order, hint in enumerate(hints, start=1):
-            article_order = artikel_ab(hint.page_index)
+        def artikel_zum_eintrag(label: str, seite: int) -> int | None:
+            # Zuerst der Titel: nennt der Eintrag einen Artikel, der in der
+            # Naehe der Seite beginnt, ist es dieser — auch wenn sich die
+            # Seitenbereiche verschoben haben ("Leserbriefe/Impressum" zeigt
+            # auf die Seite nach dem Anfang der Briefe).
+            passend = [
+                (abs(article.pages[0] - seite), index + 1)
+                for index, article in enumerate(articles)
+                if article.pages
+                and abs(article.pages[0] - seite) <= TITEL_SEITENABSTAND
+                and titel_nennt_artikel(label, article.title)
+            ]
+            if passend:
+                return min(passend)[1]
+            # Sonst die Seite: der erste Artikel, der dort beginnt.
+            article_order = artikel_ab(seite)
             # Aufmacherseite: das Verzeichnis nennt die Seite mit Bild und
             # Titel, der Text der Story beginnt erst auf der naechsten. Die
             # Folgeseite zaehlt nur, wenn kein eigener Eintrag auf sie zeigt.
-            if article_order is None and hint.page_index + 1 not in ziele:
-                article_order = artikel_ab(hint.page_index + 1)
+            if article_order is None and seite + 1 not in ziele:
+                article_order = artikel_ab(seite + 1)
+            return article_order
+
+        for order, hint in enumerate(hints, start=1):
+            article_order = artikel_zum_eintrag(hint.label, hint.page_index)
             entry = {
                 "order": order,
                 "label": hint.label,
@@ -1195,9 +1215,7 @@ class Job:
         # Verzeichniszeile, auf deren Seite sie zeigen.
         for region in Job._anreisser_regionen(self, hints):
             ziel = region["targetPageIndex"]
-            article_order = artikel_ab(ziel)
-            if article_order is None and ziel + 1 not in ziele:
-                article_order = artikel_ab(ziel + 1)
+            article_order = artikel_zum_eintrag(region.get("label") or "", ziel)
             if article_order is None:
                 continue
             region = {k: v for k, v in region.items() if k != "label"}
