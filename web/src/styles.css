@@ -1908,17 +1908,22 @@ body:has(.reihe-seite) { overflow-x: clip; }
   object-position: top;
 }
 
-/* Lupe: Vollbild ueber allem, dunkel wie die Leseansicht. */
+/* Lupe: Vollbild ueber allem, dunkel wie die Leseansicht. Die Leiste mit
+   Miniaturen und Zoom steht unter dem Bild, nicht darauf; sonst verdeckte
+   sie die Unterzeile des Titelbilds. */
 .bild-lupe {
   position: fixed;
   inset: 0;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
   background: rgba(12, 13, 17, 0.96);
   color: var(--bar-text);
 }
 .bild-lupe .lupe-bild {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 .bild-lupe .lupe-knopf {
   display: grid;
@@ -1940,19 +1945,20 @@ body:has(.reihe-seite) { overflow-x: clip; }
   top: var(--s4);
   right: var(--s4);
 }
+/* Mittig ohne transform: die allgemeine Regel fuer gedrueckte Knoepfe
+   (button:active, translateY(1px)) ersetzte das translateY(-50%). Der
+   Knopf sprang beim Druecken um die halbe Hoehe nach unten, das Loslassen
+   landete auf dem Bild darunter, und es gab keinen Klick. */
 .bild-lupe .lupe-zurueck,
 .bild-lupe .lupe-weiter {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: calc(50% - var(--ctl-h) / 2);
 }
 .bild-lupe .lupe-zurueck { left: var(--s4); }
 .bild-lupe .lupe-weiter { right: var(--s4); }
 .bild-lupe .lupe-leiste {
-  position: absolute;
-  left: 50%;
-  bottom: var(--s4);
-  transform: translateX(-50%);
+  align-self: center;
+  margin: var(--s2) var(--s4) var(--s4);
   display: flex;
   align-items: center;
   gap: var(--s2);
