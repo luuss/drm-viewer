@@ -293,6 +293,42 @@ async def resolve_page(issue_id: str, index: int) -> dict:
     return info
 
 
+# Artikelbilder: wohin eine Kennung zeigt und die Bytes dahinter, kurz
+# gemerkt. Ein bildreicher Artikel fragte sonst je Bild erst Convex und dann
+# den Medienspeicher, und wer zwischen Artikeln hin und her blaettert, holte
+# dieselben Bilder jedes Mal neu. Verwuerfelt wird weiter je Sitzung.
+ASSET_TTL = 30
+BILD_CACHE = int(os.environ.get("BILD_CACHE", "48"))
+_asset_cache: dict[str, tuple[float, dict | None]] = {}
+_bild_cache: "OrderedDict[str, bytes]" = OrderedDict()
+
+
+async def resolve_asset(asset_id: str) -> dict | None:
+    now = time.monotonic()
+    hit = _asset_cache.get(asset_id)
+    if hit and hit[0] > now:
+        return hit[1]
+    info = await service_call("/service/asset/resolve", {"assetId": asset_id})
+    _asset_cache[asset_id] = (now + ASSET_TTL, info)
+    if len(_asset_cache) > 4096:
+        for k, (exp, _) in list(_asset_cache.items()):
+            if exp <= now:
+                _asset_cache.pop(k, None)
+    return info
+
+
+async def load_bild(info: dict) -> bytes:
+    key = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
+    if key in _bild_cache:
+        _bild_cache.move_to_end(key)
+        return _bild_cache[key]
+    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    _bild_cache[key] = daten
+    while len(_bild_cache) > BILD_CACHE:
+        _bild_cache.popitem(last=False)
+    return daten
+
+
 async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
     info = await resolve_page(issue_id, index)
     key = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
@@ -406,7 +442,7 @@ async def asset(
     es mit der Sitzung im Kopf, setzt es zusammen und malt es auf eine Flaeche.
     Die Sitzung in der Adresse (`?s=`) gibt es nicht mehr.
     """
-    info = await service_call("/service/asset/resolve", {"assetId": asset_id})
+    info = await resolve_asset(asset_id)
     if not info:
         raise HTTPException(404, "Unbekanntes Bild")
     if info.get("public"):
@@ -431,7 +467,7 @@ async def asset(
         MAX_TILES_PER_MIN,
         "Bilder",
     )
-    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    daten = await load_bild(info)
     seed = schutz.fnv1a32(f'{session.get("kachelSchluessel", 0)}:asset:{asset_id}')
 
     feld = wasserzeichen_feld(session)

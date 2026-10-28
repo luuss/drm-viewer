@@ -6,13 +6,18 @@ import ArtikelTabelle from "../components/ArtikelTabelle";
 import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
 import { meldungsfolge } from "./meldungsfolge";
 import { bildfolge } from "./bildfolge";
-import { bildAlsCanvas, schriftenLaden } from "./schutz";
+import { bildAlsCanvas, schriftenLaden, ticketVorrat } from "./schutz";
+import { bildschlange } from "./bildschlange";
 import type { Klickpunkt } from "./PageMode";
 
 /**
  * Artikelbild ohne Adresse: ueber Sitzung und Einmal-Ticket geholt, im
  * Browser zusammengesetzt und auf eine Zeichenflaeche gemalt. Kein `img`,
  * also nichts fuer Bildlupen oder "Bild speichern".
+ *
+ * Geholt wird erst, wenn das Bild in die Naehe des sichtbaren Bereichs
+ * kommt, und dann ueber die gemeinsame Warteschlange (`bildschlange.ts`):
+ * wenige zugleich, oben im Artikel zuerst. `rang` ist die Stelle im Artikel.
  */
 function SchutzBild({
   url,
@@ -21,6 +26,7 @@ function SchutzBild({
   schutzKey,
   width,
   height,
+  rang,
 }: {
   url: string;
   sessionToken: string | null | undefined;
@@ -28,13 +34,44 @@ function SchutzBild({
   schutzKey: number | null;
   width?: number;
   height?: number;
+  rang: number;
 }) {
   const halter = useRef<HTMLSpanElement>(null);
   const [fertig, setFertig] = useState(false);
+  // Fuer welche Adresse das Bild nah genug am Bildschirm ist. Die Knoten
+  // werden beim Blaettern fuer den naechsten Artikel weiterverwendet.
+  const [nahFuer, setNahFuer] = useState<string | null>(null);
+  const nah = nahFuer === url;
+  const rangRef = useRef(rang);
+  rangRef.current = rang;
   useEffect(() => {
-    if (!url || !sessionToken || !issueId || schutzKey === null) return;
+    const el = halter.current;
+    if (!el || nah) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setNahFuer(url);
+      return;
+    }
+    // Der Artikel rollt in seinem eigenen Kasten; anderthalb Hoehen davor
+    // und dahinter gelten als nah.
+    const beobachter = new IntersectionObserver(
+      (eintraege) => {
+        if (eintraege.some((e) => e.isIntersecting)) setNahFuer(url);
+      },
+      { root: el.closest(".article-mode"), rootMargin: "150% 0px" },
+    );
+    beobachter.observe(el);
+    return () => beobachter.disconnect();
+  }, [url, nah]);
+  useEffect(() => {
+    if (!nah || !url || !sessionToken || !issueId || schutzKey === null) return;
     const abbruch = new AbortController();
-    bildAlsCanvas(url, sessionToken, issueId, schutzKey, abbruch.signal)
+    let frei: (() => void) | null = null;
+    bildschlange
+      .platz(rangRef.current, abbruch.signal)
+      .then((freigabe) => {
+        frei = freigabe;
+        return bildAlsCanvas(url, sessionToken, issueId, schutzKey, abbruch.signal);
+      })
       .then((canvas) => {
         if (abbruch.signal.aborted || !halter.current) return;
         canvas.className = "fb-c";
@@ -42,13 +79,14 @@ function SchutzBild({
         halter.current.replaceChildren(canvas);
         setFertig(true);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => frei?.());
     return () => {
       abbruch.abort();
       halter.current?.replaceChildren();
       setFertig(false);
     };
-  }, [url, sessionToken, issueId, schutzKey]);
+  }, [nah, url, sessionToken, issueId, schutzKey]);
   // Bis das Bild steht, haelt ein leerer Rahmen in Bildgroesse den Platz.
   return (
     <span
@@ -143,6 +181,11 @@ export default function ArticleMode({
     articleId && sessionToken ? { articleId, sessionToken } : "skip",
   );
   const schrift = useSchutzSchrift(sessionToken, article?.issueId ?? null);
+  // Tickets fuer die Bilder schon holen, waehrend die Schrift laedt.
+  const artikelHeft = article?.issueId ?? null;
+  useEffect(() => {
+    if (sessionToken && artikelHeft) ticketVorrat(sessionToken, artikelHeft).vorbereiten();
+  }, [sessionToken, artikelHeft]);
   const schriftBereit = schrift.stand === "bereit";
   const koerper = useRef<HTMLElement>(null);
   const zielAbsatz = useQuery(
@@ -336,7 +379,7 @@ export default function ArticleMode({
             ? `–${pageLabel(article.pageEnd)}`
             : ""}
         </p>
-        {flow.map((item) => {
+        {flow.map((item, stelleImFluss) => {
           if (item.kind === "image") {
             const img = item.image;
             return (
@@ -346,6 +389,7 @@ export default function ArticleMode({
                   sessionToken={sessionToken}
                   issueId={article.issueId}
                   schutzKey={schutzKey}
+                  rang={stelleImFluss}
                   // Die eigene Groesse haelt das Bild davon ab, auf
                   // Spaltenbreite hochgezogen zu werden, und haelt waehrend
                   // des Ladens den Platz frei.

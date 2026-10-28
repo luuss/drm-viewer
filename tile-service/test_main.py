@@ -1,5 +1,6 @@
 """Tests fuer das Kachel-Gateway: `python -m pytest` in diesem Ordner."""
 
+import asyncio
 import os
 
 os.environ.setdefault("CONVEX_SITE_URL", "https://convex.example.test")
@@ -53,3 +54,28 @@ def test_andere_leser_und_hefte_haben_eigene_zaehler():
         main.check_rate("pages:a:heft", 3, "Seiten")
     main.check_rate("pages:b:heft", 3, "Seiten")
     main.check_rate("pages:a:anderes", 3, "Seiten")
+
+
+def test_artikelbilder_fragen_convex_und_speicher_nur_einmal(monkeypatch):
+    aufrufe = {"convex": 0, "speicher": 0}
+
+    async def service_call(path, body):
+        aufrufe["convex"] += 1
+        return {"issueId": "heft", "bucket": "emag-media", "key": "img/" + body["assetId"]}
+
+    async def fetch_object(url, bucket, key):
+        aufrufe["speicher"] += 1
+        return b"jpeg"
+
+    monkeypatch.setattr(main, "service_call", service_call)
+    monkeypatch.setattr(main, "fetch_object", fetch_object)
+    main._asset_cache.clear()
+    main._bild_cache.clear()
+
+    async def zweimal():
+        for _ in range(2):
+            info = await main.resolve_asset("a1")
+            assert await main.load_bild(info) == b"jpeg"
+
+    asyncio.run(zweimal())
+    assert aufrufe == {"convex": 1, "speicher": 1}
