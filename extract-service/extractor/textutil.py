@@ -15,13 +15,24 @@ _AKZENTE = {
 }
 
 
+# Passen beide Nachbarn zum Akzent, gewinnt der Buchstabe, der in der
+# Sprache dazu ueblich ist: "Kog˘alniceanu" (Rumaenisch ă), aber "Dog˘ru"
+# (Tuerkisch ğ); "Don˜a" ist "Doña", nicht "Donã"; der Hatschek sitzt auf
+# Konsonanten ("Cˇeské", "Sinkeviˇcius"), ebenso die Cedille ("Nicus¸or").
+_VORZUG = {
+    "˘": "aAgGuUoOeEiI",
+    "˜": "nNaAoOuUiIeE",
+    "ˇ": "cCsSzZrRnNdDtTlLeE",
+    "¸": "sStTcCgGkKlLnNrR",
+}
+
+
 def _akzente_setzen(text: str) -> str:
     """"Ca˘lin" und "C˘alin" werden "Călin" — nur, wo es das Zeichen gibt.
 
     Je nach Schrift steht der Akzent hinter oder vor seinem Buchstaben; er
     gehoert zu dem Nachbarn, mit dem er ein fertiges Zeichen ergibt.
     """
-
     out: list[str] = []
     i = 0
     while i < len(text):
@@ -35,12 +46,18 @@ def _akzente_setzen(text: str) -> str:
         ):
             akzent = _AKZENTE[zeichen]
             mit_davor = unicodedata.normalize("NFC", out[-1] + akzent)
-            if len(mit_davor) == 1:
+            mit_danach = unicodedata.normalize("NFC", text[i + 1] + akzent)
+            davor_geht, danach_geht = len(mit_davor) == 1, len(mit_danach) == 1
+            if davor_geht and danach_geht:
+                vorzug = _VORZUG.get(zeichen, "")
+                rang = lambda b: vorzug.index(b) if b in vorzug else len(vorzug)  # noqa: E731
+                danach_geht = rang(text[i + 1]) < rang(out[-1])
+                davor_geht = not danach_geht
+            if davor_geht:
                 out[-1] = mit_davor
                 i += 1
                 continue
-            mit_danach = unicodedata.normalize("NFC", text[i + 1] + akzent)
-            if len(mit_danach) == 1:
+            if danach_geht:
                 out.append(mit_danach)
                 i += 2
                 continue

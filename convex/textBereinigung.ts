@@ -8,11 +8,13 @@
  * Regeln anwenden.
  */
 
-// "den -Direktor", "„-ZUERST!“": ein Strich ohne Wort davor, dem ein
-// Grossbuchstabe folgt. Nach "und"/"oder" ist er dagegen ein echter
-// Ergaenzungsstrich ("US-Diensten und -Streitkräften") und bleibt.
+// "den -Direktor", "„-ZUERST!“": ein Strich nach Leerraum oder einem
+// oeffnenden Zeichen, dem ein Grossbuchstabe folgt. Nach "und"/"oder" ist er
+// dagegen ein echter Ergaenzungsstrich ("US-Diensten und -Streitkräften"),
+// nach einem schliessenden Anfuehrungszeichen Teil des Wortes
+// ("„Ampel“-Koalition") — beide bleiben.
 const STRICH_VOR_WORT =
-  /(?<!(?:^|\s)(?:und|oder|bzw\.|sowie|bis|als|wie))(^|[\s„“"«»‚‘(/[])-(?=\p{Lu})/gu;
+  /(?<!(?:^|\s)(?:und|oder|bzw\.|sowie|bis|als|wie))(^|[\s„‚»(/[])-(?=\p{Lu})/gu;
 // "Trump--Regierung": Bindestrich plus gewandelter Trennstrich.
 const DOPPELSTRICH = /(?<=\p{L})--(?=\p{L})/gu;
 // "t 12,80", "t 28,–": das Eurozeichen aus der Symbolschrift.
@@ -33,6 +35,15 @@ const AKZENTE: Record<string, string> = {
   "ˆ": "̂", // Zirkumflex
 };
 
+// Wie textutil._VORZUG: passen beide Nachbarn, gewinnt der in der Sprache
+// uebliche Buchstabe ("Kog˘alniceanu" ă, "Dog˘ru" ğ, "Don˜a" ñ, "Cˇeské" Č).
+const VORZUG: Record<string, string> = {
+  "\u02D8": "aAgGuUoOeEiI",
+  "\u02DC": "nNaAoOuUiIeE",
+  "\u02C7": "cCsSzZrRnNdDtTlLeE",
+  "\u00B8": "sStTcCgGkKlLnNrR",
+};
+
 /** "Ca˘lin" und "C˘alin" werden "Călin": der Akzent geht an den Nachbarn,
  * mit dem er ein fertiges Zeichen ergibt. */
 function akzenteSetzen(text: string): string {
@@ -41,14 +52,24 @@ function akzenteSetzen(text: string): string {
   const buchstabe = (z: string | undefined) => !!z && /\p{L}/u.test(z);
   for (let i = 0; i < zeichen.length; i++) {
     const akzent = AKZENTE[zeichen[i]];
-    if (akzent && buchstabe(out[out.length - 1]) && buchstabe(zeichen[i + 1])) {
-      const mitDavor = (out[out.length - 1] + akzent).normalize("NFC");
-      if ([...mitDavor].length === 1) {
+    const davor = out[out.length - 1];
+    const danach = zeichen[i + 1];
+    if (akzent && buchstabe(davor) && buchstabe(danach)) {
+      const mitDavor = (davor + akzent).normalize("NFC");
+      const mitDanach = (danach + akzent).normalize("NFC");
+      let davorGeht = [...mitDavor].length === 1;
+      let danachGeht = [...mitDanach].length === 1;
+      if (davorGeht && danachGeht) {
+        const vorzug = VORZUG[zeichen[i]] ?? "";
+        const rang = (b: string) => (vorzug.includes(b) ? vorzug.indexOf(b) : vorzug.length);
+        danachGeht = rang(danach) < rang(davor);
+        davorGeht = !danachGeht;
+      }
+      if (davorGeht) {
         out[out.length - 1] = mitDavor;
         continue;
       }
-      const mitDanach = (zeichen[i + 1] + akzent).normalize("NFC");
-      if ([...mitDanach].length === 1) {
+      if (danachGeht) {
         out.push(mitDanach);
         i++;
         continue;

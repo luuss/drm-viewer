@@ -19,6 +19,9 @@ describe("textBereinigen", () => {
     expect(textBereinigen("bei -30 Grad")).toBe("bei -30 Grad");
     expect(textBereinigen("Nordrhein-Westfalen")).toBe("Nordrhein-Westfalen");
     expect(textBereinigen("- erstens")).toBe("- erstens");
+    expect(textBereinigen("der „Ampel“-Koalition und „Tag X“-Fanatismus")).toBe(
+      "der „Ampel“-Koalition und „Tag X“-Fanatismus",
+    );
     // Ergaenzungsstrich (ZUERST! 3/2025).
     expect(textBereinigen("mit US-Diensten und -Streitkräften")).toBe(
       "mit US-Diensten und -Streitkräften",
@@ -40,6 +43,12 @@ describe("textBereinigen", () => {
     expect(textBereinigen("zahlreiche Flugzeuge. \uf071")).toBe("zahlreiche Flugzeuge.");
     expect(textBereinigen("Ca˘lin Georgescu, Don˜a Isabel")).toBe("Călin Georgescu, Doña Isabel");
     expect(textBereinigen("Kandidaten C˘alin Georgescu")).toBe("Kandidaten Călin Georgescu");
+    expect(textBereinigen("Hüseyin Dog˘ru, Mihail Kog˘alniceanu")).toBe(
+      "Hüseyin Doğru, Mihail Kogălniceanu",
+    );
+    expect(textBereinigen("Cˇeské dráhy, Sinkeviˇcius, Hospodáˇrské, Nicus¸or")).toBe(
+      "České dráhy, Sinkevičius, Hospodářské, Nicuşor",
+    );
     expect(textBereinigen("Wie geht´s")).toBe("Wie geht´s");
   });
 });
