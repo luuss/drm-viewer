@@ -172,6 +172,14 @@ export default function LibraryPage() {
       <div className="cover-placeholder">{i.displayTitle[0]}</div>
     );
 
+  const kompaktHeft = (i: Heft) => (
+    <Link key={i._id} to={`/reader/${i._id}`} className="kompakt-heft">
+      <div className="kompakt-umschlag">{umschlag(i)}</div>
+      <div className="kompakt-titel">{i.displayTitle}</div>
+      {i.edition && <div className="kompakt-meta">{i.edition}</div>}
+    </Link>
+  );
+
   const jahrgangKopf = (jahr: number | null, anzahl: number, gesamt: number) =>
     jahr !== null && (
       <div className="jahrgang-kopf">
@@ -218,25 +226,24 @@ export default function LibraryPage() {
       {ansicht === "kompakt" ? (
         // Alle Hefte in einer fliessenden Reihe; vor den Heften einer
         // Zeitschrift steht ein schmaler grauer Streifen mit ihrem Namen.
+        // Streifen und erstes Heft brechen nur gemeinsam um, damit nie ein
+        // Streifen allein am Zeilenende steht.
         <div className="kompakt-raster">
-          {gruppen.map((g) => [
-            <Link
-              key={g.key}
-              to={g.reihe ? `/zeitschrift/${g.reihe.slug}` : "/"}
-              className="kompakt-trenner"
-            >
-              <span>{g.name}</span>
-            </Link>,
-            ...g.jahrgaenge.flatMap((j) =>
-              j.hefte.map((i) => (
-                <Link key={i._id} to={`/reader/${i._id}`} className="kompakt-heft">
-                  <div className="kompakt-umschlag">{umschlag(i)}</div>
-                  <div className="kompakt-titel">{i.displayTitle}</div>
-                  {i.edition && <div className="kompakt-meta">{i.edition}</div>}
+          {gruppen.map((g) => {
+            const [erstes, ...rest] = g.jahrgaenge.flatMap((j) => j.hefte);
+            return [
+              <div key={g.key} className="kompakt-anfang">
+                <Link
+                  to={g.reihe ? `/zeitschrift/${g.reihe.slug}` : "/"}
+                  className="kompakt-trenner"
+                >
+                  <span>{g.name}</span>
                 </Link>
-              )),
-            ),
-          ])}
+                {kompaktHeft(erstes)}
+              </div>,
+              ...rest.map(kompaktHeft),
+            ];
+          })}
         </div>
       ) : (
         gruppen.map((g) => (

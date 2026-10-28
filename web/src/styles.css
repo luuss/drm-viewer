@@ -4443,14 +4443,23 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   min-width: 1.75rem;
   padding: var(--s2) var(--s1);
   height: calc(var(--heft-b) * 4 / 3);
-  margin-left: var(--s3);
   background: var(--paper-sunk);
   border-left: 2px solid var(--ink-soft);
   color: var(--ink-soft);
   text-decoration: none;
   overflow: hidden;
 }
-.kompakt-trenner:first-child { margin-left: 0; }
+/* Streifen und erstes Heft einer Zeitschrift als ein Stueck, damit der
+   Streifen nie allein am Zeilenende steht. */
+.kompakt-anfang {
+  display: flex;
+  align-items: flex-start;
+  column-gap: var(--s3);
+}
+/* Mehr Luft vor einer neuen Zeitschrift, als Abstand hinter dem letzten
+   Heft der vorigen: am Zeilenende faellt er nicht auf, am Anfang wuerde er
+   als Einrueckung stehen. */
+.kompakt-raster > :has(+ .kompakt-anfang) { margin-right: var(--s3); }
 .kompakt-trenner:hover { color: var(--ink); background: var(--rule); }
 .kompakt-trenner span {
   writing-mode: vertical-rl;
@@ -4462,6 +4471,7 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 }
 @media (max-width: 600px) {
   .kompakt-raster { --heft-b: 5.75rem; gap: var(--s3) var(--s2); }
+  .kompakt-anfang { column-gap: var(--s2); }
   .kompakt-trenner span { font-size: 0.6875rem; }
 }
 .kompakt-heft {
