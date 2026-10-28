@@ -33,6 +33,9 @@ export type UploadKind = "source" | "image" | "cover" | "page";
 
 export type Uploaded = { assetId: Id<"assets">; key: string };
 
+/** So oft wird ein abgebrochener Upload in den Medienspeicher wiederholt. */
+const VERSUCHE = 4;
+
 /**
  * Gibt neben der Kennung auch die Adresse zurueck: wer eine gerenderte Seite
  * hochlaedt, muss sie spaeter am Heft eintragen koennen, und dafuer zaehlt der
@@ -46,19 +49,40 @@ export async function uploadAsset(
   kind: UploadKind = "source",
 ): Promise<Uploaded> {
   const contentType = data.type || "application/octet-stream";
-  const direct = await deps.presignUpload({
-    issueId,
-    filename,
-    contentType,
-    bytes: data.size,
-  });
-  if (direct) {
-    const put = await fetch(direct.url, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: data,
+  // Zwischen Cloudflare und dem Server reisst ab und zu eine Verbindung
+  // mitten im Hochladen ab (Apache: "read request body failed"), MinIO
+  // antwortet dann 400. Am 28.10.2026 drei von 2.840 Seiten, und jede hat
+  // den ganzen Lauf beendet. Deshalb: neu signieren und noch einmal.
+  let direct: { url: string; key: string } | null = null;
+  for (let versuch = 1; ; versuch++) {
+    direct = await deps.presignUpload({
+      issueId,
+      filename,
+      contentType,
+      bytes: data.size,
     });
-    if (!put.ok) throw new Error(`Direkter Upload abgelehnt (${put.status})`);
+    if (!direct) break;
+    let status = 0;
+    try {
+      const put = await fetch(direct.url, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: data,
+      });
+      if (put.ok) break;
+      status = put.status;
+    } catch {
+      status = 0;
+    }
+    // 403 heisst: Signatur oder Rechte falsch, da hilft kein zweiter Versuch.
+    if (versuch >= VERSUCHE || status === 403) {
+      throw new Error(
+        `Direkter Upload abgelehnt (${status || "Verbindung abgebrochen"}, ${versuch} Versuche)`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 1500 * versuch));
+  }
+  if (direct) {
     const assetId = await deps.registerUpload({
       bucket: "emag-media",
       key: direct.key,
