@@ -220,7 +220,7 @@ export function heftMail(d: HeftMailDaten, e: HeftMailEmpfaenger): HeftMailInhal
     : `${name} ist erschienen und ab sofort digital zu lesen: im Browser auf Rechner, Tablet und Telefon, als Druckseite oder als Lesetext.`;
   const knopf = e.zugang ? "Jetzt lesen" : "Heft ansehen";
   const preis = !e.zugang && d.preisCents ? `Digitalausgabe ${euro(d.preisCents)}` : null;
-  const abmelden = `„${d.reiheName}“ abbestellen`;
+  const abmelden = "Wenn Sie keine Benachrichtigungen zu dieser Heftreihe erhalten möchten, klicken Sie einfach hier auf";
 
   const h = escapeHtml;
   const zeile = (inhalt: string, stil: string, attr = "") =>
@@ -323,8 +323,7 @@ export function heftMail(d: HeftMailDaten, e: HeftMailEmpfaenger): HeftMailInhal
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
         ${zeile(
           `Sie erhalten diese E-Mail, weil Sie bei Lesen &amp; Schenken digitale Hefte gekauft haben.<br>
-          <a href="${h(e.abmeldenUrl)}" style="color:#8a857d;text-decoration:underline;">${h(abmelden)}</a>
-          &nbsp;·&nbsp;
+          ${h(abmelden)} <a href="${h(e.abmeldenUrl)}" style="color:#8a857d;text-decoration:underline;">abbestellen</a>.<br>
           <a href="${h(e.einstellungenUrl)}" style="color:#8a857d;text-decoration:underline;">Alle Mail-Einstellungen</a><br><br>
           ${h(ANBIETER).replace(/ (\d)/g, "&nbsp;$1").replace(/(\d) /g, "$1&nbsp;")}<br>
           <a href="${h(d.appUrl)}/impressum" style="color:#8a857d;text-decoration:underline;">Impressum</a>`,
@@ -358,7 +357,8 @@ export function heftMail(d: HeftMailDaten, e: HeftMailEmpfaenger): HeftMailInhal
     "",
     "-- ",
     "Sie erhalten diese E-Mail, weil Sie bei Lesen & Schenken digitale Hefte gekauft haben.",
-    `${abmelden}: ${e.abmeldenUrl}`,
+    `${abmelden} abbestellen:`,
+    e.abmeldenUrl,
     `Alle Mail-Einstellungen: ${e.einstellungenUrl}`,
     "",
     ANBIETER,

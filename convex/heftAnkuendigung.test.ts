@@ -103,7 +103,12 @@ describe("Vorlage", () => {
     expect(m.html).toContain("https://digital.lesenundschenken.de/abbestellen?t=T0K&amp;r=dmz");
     expect(m.text).toContain("Heft ansehen: https://digital.lesenundschenken.de/issue/dmz-170");
     expect(m.text).toContain("– Auge des Heeres: Aufklärung");
-    expect(m.text).toContain("„Deutsche Militärzeitschrift“ abbestellen: https://digital.lesenundschenken.de/abbestellen?t=T0K&r=dmz");
+    expect(m.html).toContain(
+      'Wenn Sie keine Benachrichtigungen zu dieser Heftreihe erhalten möchten, klicken Sie einfach hier auf <a href="https://digital.lesenundschenken.de/abbestellen?t=T0K&amp;r=dmz"',
+    );
+    expect(m.text).toContain(
+      "Wenn Sie keine Benachrichtigungen zu dieser Heftreihe erhalten möchten, klicken Sie einfach hier auf abbestellen:\nhttps://digital.lesenundschenken.de/abbestellen?t=T0K&r=dmz",
+    );
     // Jede Adresse in der Mail zeigt auf den Leser (das prueft auch der Laden).
     for (const [, url] of m.html.matchAll(/(?:href|src)="([^"]*)"/g)) {
       expect(url.startsWith("https://digital.lesenundschenken.de/")).toBe(true);
