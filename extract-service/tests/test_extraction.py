@@ -301,6 +301,23 @@ def test_zuerst_profil_entfernt_umschlag_und_inhaltsseite():
     assert [i.page_index for i in kept_images] == [2, 4]
 
 
+def test_zuerst_kartenrahmen_nur_mit_kartenunterschrift():
+    """Der Rahmen fuer die Vektorkarte in 3/2026 schnitt in jedem Heft Text aus Seite 9."""
+    pages = [
+        {"index": 2, "role": "content", "printedLabel": "3"},
+        {"index": 8, "role": "content", "printedLabel": "9"},
+    ]
+    text = block("Kampfzone Indopazifik", page=8)
+    _blocks, ohne, _toc = apply_profile([text], [], pages, "zuerst")
+    assert ohne == []
+
+    karte = block("Deutsche Gebietsverluste 1919/1945", page=8)
+    _blocks, mit, _toc = apply_profile([text, karte], [], pages, "zuerst")
+    assert [(i.page_index, i.caption) for i in mit] == [
+        (8, "Deutsche Gebietsverluste 1919/1945")
+    ]
+
+
 def test_andere_publikation_bleibt_unveraendert():
     pages = [{"index": 0, "role": "content", "printedLabel": "1"}]
     blocks = [block("Im Vorfeld von Bologna")]
