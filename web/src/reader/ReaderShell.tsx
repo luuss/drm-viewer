@@ -11,6 +11,7 @@ import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import { reiheVon } from "../lib/reihen";
 import { ProductChoice } from "./ShopProduct";
+import { wischachse, wischziel, type Wischachse } from "./wischen";
 
 type Mode = "page" | "article";
 type PageLayout = "single" | "spread";
@@ -122,7 +123,9 @@ export default function ReaderShell() {
   const ohneArtikelTimer = useRef<number | null>(null);
   const [restored, setRestored] = useState(false);
   const saveTimer = useRef<number | null>(null);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  // Die Leseflaeche als Zustand, nicht als Ref: sie entsteht erst nach dem
+  // Laden, und die Wischgeste haengt sich dann an sie.
+  const [leseflaeche, setLeseflaeche] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (access !== false || issue === undefined) return;
@@ -439,6 +442,75 @@ export default function ReaderShell() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [prev, next, canPrev, canNext, adChoice]);
 
+  // Kein Zurueck per Wischen, solange der Leser offen ist. Chromium blaettert
+  // sonst bei einem Wisch nach rechts in der Browser-Geschichte zurueck, statt
+  // den vorigen Artikel zu zeigen, und der Leser ist weg.
+  useEffect(() => {
+    const html = document.documentElement.style;
+    const body = document.body.style;
+    const vorher = [html.overscrollBehaviorX, body.overscrollBehaviorX];
+    html.overscrollBehaviorX = "none";
+    body.overscrollBehaviorX = "none";
+    return () => {
+      [html.overscrollBehaviorX, body.overscrollBehaviorX] = vorher;
+    };
+  }, []);
+
+  // Wischen im Artikelmodus: ein Artikel vor oder zurueck. Die Bewegung wird
+  // ohne `passive` verfolgt (Reacts Beruehrungsereignisse sind passiv), damit
+  // eine klar seitliche Geste dem Browser genommen werden kann. Im
+  // Seitenmodus gehoert die Geste dem gemeinsamen Zoom-/Pan-Viewport;
+  // geblaettert wird dort ueber die Randtasten, sonst loeste horizontales
+  // Verschieben einer vergroesserten Doppelseite zugleich einen Wechsel aus.
+  const wischRef = useRef({ mode, prev, next });
+  wischRef.current = { mode, prev, next };
+  useEffect(() => {
+    if (!leseflaeche) return;
+    let start: { x: number; y: number } | null = null;
+    let achse: Wischachse | null = null;
+    const beginn = (e: TouchEvent) => {
+      start = null;
+      if (wischRef.current.mode === "page" || e.touches.length !== 1) return;
+      // Tabellen rollen seitlich; dort gehoert die Geste ihnen.
+      const ziel = e.target instanceof Element ? e.target : null;
+      const rolle = ziel?.closest<HTMLElement>(".article-table");
+      if (rolle && rolle.scrollWidth > rolle.clientWidth) return;
+      start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      achse = null;
+    };
+    const bewegung = (e: TouchEvent) => {
+      if (!start) return;
+      if (e.touches.length !== 1) {
+        start = null;
+        return;
+      }
+      achse ??= wischachse(e.touches[0].clientX - start.x, e.touches[0].clientY - start.y);
+      if (achse === "quer" && e.cancelable) e.preventDefault();
+    };
+    const ende = (e: TouchEvent) => {
+      if (!start) return;
+      const punkt = e.changedTouches[0];
+      const wohin =
+        achse === "hoch" ? null : wischziel(punkt.clientX - start.x, punkt.clientY - start.y);
+      start = null;
+      if (wohin === "zurueck") wischRef.current.prev();
+      else if (wohin === "weiter") wischRef.current.next();
+    };
+    const abbruch = () => {
+      start = null;
+    };
+    leseflaeche.addEventListener("touchstart", beginn, { passive: true });
+    leseflaeche.addEventListener("touchmove", bewegung, { passive: false });
+    leseflaeche.addEventListener("touchend", ende);
+    leseflaeche.addEventListener("touchcancel", abbruch);
+    return () => {
+      leseflaeche.removeEventListener("touchstart", beginn);
+      leseflaeche.removeEventListener("touchmove", bewegung);
+      leseflaeche.removeEventListener("touchend", ende);
+      leseflaeche.removeEventListener("touchcancel", abbruch);
+    };
+  }, [leseflaeche]);
+
   if (devtools) {
     return (
       <div className="centered reader-gesperrt" role="alert">
@@ -479,32 +551,8 @@ export default function ReaderShell() {
 
   return (
     <div
+      ref={setLeseflaeche}
       className={verdeckt ? "reader-screen rv-on" : "reader-screen"}
-      onTouchStart={(e) => {
-        // Im Seitenmodus gehoert die Geste dem gemeinsamen Zoom-/Pan-Viewport.
-        // Geblaettert wird dort ueber die Randtasten; sonst loest horizontales
-        // Verschieben einer vergroesserten Doppelseite zugleich einen Wechsel aus.
-        if (mode === "page") return;
-        touchStart.current = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-        };
-      }}
-      onTouchEnd={(e) => {
-        if (mode === "page") {
-          touchStart.current = null;
-          return;
-        }
-        const start = touchStart.current;
-        if (!start) return;
-        const dx = e.changedTouches[0].clientX - start.x;
-        const dy = e.changedTouches[0].clientY - start.y;
-        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-          if (dx > 0) prev();
-          else next();
-        }
-        touchStart.current = null;
-      }}
     >
       <header className="reader-bar">
         <button className="btn quiet small" onClick={() => navigate("/library")}>
