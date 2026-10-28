@@ -828,12 +828,11 @@ def artikel_aus_satz(
         if kopf:
             for b in kopf.blocks:
                 eigene.append(_als(b, "heading"))
-        if unter:
-            for b in unter.blocks:
-                eigene.append(_als(b, "lead"))
-        if einleitung:
-            for b in einleitung.blocks:
-                eigene.append(_als(b, "lead"))
+        # Unterzeile und Vorspann sind je ein Absatz; der Setzer bricht ihre
+        # Zeilen mit Absatzmarken ("… wo er Anfang 1944 als" / "ausgebildet").
+        for vorn in (unter, einleitung):
+            if vorn:
+                eigene.append(_als(_kopie_mit_text(vorn.blocks[0], _text(vorn)), "lead"))
         eigene.extend(story.blocks)
         rahmen = [] if kopf else titelrahmen.get(story.story_id, [])
         eigene[0:0] = [_als(b, "heading") for r in rahmen for b in r.blocks]
@@ -882,12 +881,13 @@ def artikel_aus_satz(
                     autor = b.text
                     break
 
+        unterzeile, vorspann = _unterzeile_und_vorspann(unter, einleitung)
         stueck = AssembledArticle(
             title=titel,
             blocks=eigene,
-            subtitle=_text(unter) if unter else None,
+            subtitle=unterzeile,
             author=autor,
-            teaser=_text(einleitung) if einleitung else None,
+            teaser=vorspann,
             title_from_body=not kopf and aus_text,
         )
         artikel.append(stueck)
@@ -931,6 +931,42 @@ def artikel_aus_satz(
 
         _attach_images(artikel, images)
     return artikel
+
+
+# Eine Unterzeile hat zwei, drei Zeilen (ZUERST!: 40 bis 140 Zeichen). Ein
+# Vorspann von fuenf Saetzen (DMZ-Soldatenportraet, 550 bis 600 Zeichen) ist
+# Lesetext und gehoert als Vorspann-Absatz in den Artikel, nicht in den Kopf.
+UNTERZEILE_HOECHSTLAENGE = 250
+
+
+def _unterzeile_und_vorspann(
+    unter: Story | None, einleitung: Story | None
+) -> tuple[str | None, str | None]:
+    """Unterzeile und Vorspann des Kopfes.
+
+    Die Unterzeile ist die kurze Zeile unter dem Titel — bei der DMZ im
+    Format "Unterueberschrift", bei ZUERST! im "Einleitungstext" (eine eigene
+    Unterzeile gibt es dort nicht). Der Leser zeigt nur die Unterzeile im
+    Kopf; was als Vorspann (`teaser`) im Kopf stand, fehlte im Lesetext, weil
+    der gleichlautende Absatz als Wiederholung des Kopfes wegfiel. Deshalb:
+
+    * kurze Unterzeile oder, ohne sie, kurze Einleitung: Unterzeile;
+    * eine Einleitung, die zur Unterzeile wurde, steht auch als Vorspann
+      (fuer die Suche) — im Lesetext faellt sie als Wiederholung weg;
+    * alles Lange und eine zweite Einleitung neben der Unterzeile bleiben
+      Vorspann-Absaetze im Text.
+    """
+    unter_text = _text(unter) if unter else None
+    einleitung_text = _text(einleitung) if einleitung else None
+
+    def kurz(t: str | None) -> bool:
+        return bool(t) and len(t) <= UNTERZEILE_HOECHSTLAENGE
+
+    if kurz(unter_text):
+        return unter_text, None
+    if kurz(einleitung_text):
+        return einleitung_text, einleitung_text
+    return None, None
 
 
 def _letzte_stelle(blocks: list[SourceBlock], seite: int) -> int:

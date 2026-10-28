@@ -185,3 +185,59 @@ def test_rubrikeintrag_ohne_titel_fuehrt_zum_ersten_artikel_der_seite():
     hints = [TocHint("Innere Sicherheit", 32, 3, 0.1, 0.1, 0.4, 0.2)]
     entries = worker.Job._build_toc_entries(None, hints, articles, payload)
     assert entries[0]["articleOrder"] == 2
+
+
+# --- Aufgabe C: Unterzeile und Vorspann -----------------------------------
+
+
+def test_zuerst_einleitung_ist_die_unterzeile():
+    """ZUERST! 3/2026, S. 23: der Einleitungstext unter der Zeile."""
+    blocks = zuerst_artikel(
+        "1",
+        22,
+        ["Wahlrechtsentzug", "statt Strafpsychiatrie"],
+        ["Die Bundesregierung plant den Entzug der Wählbarkeit", "bei einer Verurteilung wegen Volksverhetzung"],
+        "Nein, die Bundesrepublik",
+    )
+    [a] = artikel_aus_satz(blocks)
+    assert a.subtitle == (
+        "Die Bundesregierung plant den Entzug der Wählbarkeit bei einer Verurteilung wegen Volksverhetzung"
+    )
+    # Im Lesetext steht sie nicht noch einmal.
+    lesetext = worker._ohne_kopfzeilen(a.blocks, a)
+    assert [b.kind for b in lesetext][:1] == ["paragraph"]
+
+
+def test_langer_vorspann_bleibt_im_text():
+    """DMZ 170, S. 11: der Vorspann des Soldatenportraets hat 600 Zeichen."""
+    vorspann = [
+        "„Frido“ von Senger und Etterlin stammte aus einer adeligen Familie. Im Ersten Weltkrieg "
+        "bewährte er sich als Artillerist. Zur Kavallerie versetzt, kämpfte er 1940 in Holland und "
+        "in Frankreich. Als Verbindungsoffizier war er bei der Waffenstillstandskommission in Turin,",
+        "danach führte er eine Panzerdivision. Für seine Erfolge wurde ihm 1944 das 439. Eichenlaub verliehen.",
+        "Nach dem Krieg beteiligte er sich am Aufbau der Bundeswehr.",
+    ]
+    blocks = (
+        [rb("Weltgewandter Offizier von Adel", "k", "HÜ Soldatenporträt 2023", 10, (0.05, 0.08, 0.95, 0.15))]
+        + [rb(z, "u", "UÜ Soldatenporträt 2023", 10, (0.05, 0.16, 0.95, 0.25)) for z in vorspann]
+        + [rb("Fridolin Rudolf " + "x" * 600, "t", "Mengentext Initiale 2023", 10, (0.05, 0.3, 0.33, 0.94))]
+    )
+    [a] = artikel_aus_satz(blocks)
+    assert a.subtitle is None and a.teaser is None
+    lesetext = worker._ohne_kopfzeilen(a.blocks, a)
+    assert [b.kind for b in lesetext] == ["lead", "paragraph"]
+    # Ein Absatz, die Zeilen verbunden.
+    assert lesetext[0].text.startswith("„Frido“ von Senger")
+    assert "Turin, danach führte er" in lesetext[0].text
+
+
+def test_kurze_unterzeile_der_dmz_bleibt_unterzeile():
+    """DMZ 170, S. 5: "Unterüberschrift 2023" — so wie bisher."""
+    blocks = [
+        rb("Schicksalsschlacht", "k", "Überschrift 2023", 4, (0.05, 0.08, 0.95, 0.15)),
+        rb("Napoleon unterliegt bei Waterloo", "u", "Unterüberschrift 2023", 4, (0.05, 0.16, 0.95, 0.2)),
+        rb("Die Schlacht " + "x" * 600, "t", "Mengentext Initiale 2023", 4, (0.05, 0.22, 0.33, 0.94)),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert a.subtitle == "Napoleon unterliegt bei Waterloo"
+    assert a.teaser is None
