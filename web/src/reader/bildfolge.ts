@@ -1,7 +1,25 @@
 // Hinter einem Zwischentitel steht kein Bild: es truege ihn von seinem Text weg.
 const KOEPFE = new Set(["heading", "subheading"]);
+// Kuerzer ist eine Zeile, kein Absatz: Kopfzeilen eines Leserbriefs, Eintraege
+// einer Liste von Einheiten oder Auszeichnungen.
+const KURZ = 80;
 
 type Platziert = { page: number; y: number };
+/**
+ * `text` zaehlt nur seine Laenge (der Leser hat ihn verschluesselt, Zeichen
+ * fuer Zeichen); `liste` sagt der Server (`istListenzeile`).
+ */
+type Block = { type: string; text?: string; liste?: boolean };
+
+const kurz = (b: Block) => b.text !== undefined && b.text.trim().length < KURZ;
+
+/**
+ * Gehoeren zwei Bloecke so zusammen, dass kein Bild zwischen sie darf? Zwei
+ * Zeilen einer Aufzaehlung oder zwei kurze Zeilen: sonst stand das Bild
+ * mitten in einer Liste ("Standartenfuehrer Alfons Rebane", "Warschauer
+ * Aufstand 1944") oder zwischen den Kopfzeilen eines Leserbriefs.
+ */
+const zusammen = (a: Block, b: Block) => (a.liste && b.liste) || (kurz(a) && kurz(b));
 
 /**
  * Lesefolge fuer Bilder ohne Absatzanker, ueber eine Folge von Seiten.
@@ -12,11 +30,12 @@ type Platziert = { page: number; y: number };
  * Seite, verteilt sich aber gleichmaessig zwischen deren Absaetze. Ein Bild
  * ueber dem Text seiner Seite steht vor ihm. Zwischen zwei Bildern steht
  * mindestens ein Absatz; nur wenn es mehr Bilder als Absaetze gibt, ruecken
- * welche zusammen.
+ * welche zusammen. Nie steht ein Bild mitten in einer Aufzaehlung oder
+ * zwischen zwei kurzen Zeilen (`zusammen`).
  *
  * `blocks` in Lesefolge, Seite fuer Seite; `images` in Druckfolge.
  */
-export function bildfolge<B extends Platziert & { block: { type: string } }, I extends Platziert>(
+export function bildfolge<B extends Platziert & { block: Block }, I extends Platziert>(
   blocks: B[],
   images: I[],
 ): (B | I)[] {
@@ -39,11 +58,16 @@ export function bildfolge<B extends Platziert & { block: { type: string } }, I e
     }
   }
 
-  // Erlaubt: vor dem ersten Block und hinter jedem, der kein Titel ist. Zwei
-  // verschiedene Stellen trennt so immer mindestens ein Absatz.
+  // Erlaubt: vor dem ersten Block und hinter jedem, der kein Titel ist und
+  // nicht mit dem naechsten zusammengehoert. Zwei verschiedene Stellen trennt
+  // so immer mindestens ein Absatz.
   const stellen = [
     0,
-    ...blocks.flatMap((b, i) => (KOEPFE.has(b.block.type) ? [] : [i + 1])),
+    ...blocks.flatMap((b, i) => {
+      if (KOEPFE.has(b.block.type)) return [];
+      const danach = blocks[i + 1];
+      return danach && zusammen(b.block, danach.block) ? [] : [i + 1];
+    }),
   ];
   const n = stellen.length;
   const m = reihe.length;

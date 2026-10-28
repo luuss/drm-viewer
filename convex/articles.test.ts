@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { istListenzeile } from "./articles";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -659,5 +660,18 @@ describe("Artikeloperationen", () => {
     ).rejects.toThrow(/Kein Artikel freigegeben/);
     const issue = await t.run(async (ctx: any) => await ctx.db.get(issueId));
     expect(issue.isPublished).toBe(false);
+  });
+});
+
+describe("istListenzeile", () => {
+  test("Zeilen mit Spiegelstrich oder Punkt am Anfang", () => {
+    expect(istListenzeile("– Eisernes Kreuz II. Klasse")).toBe(true);
+    expect(istListenzeile("• 3. Kompanie")).toBe(true);
+    expect(istListenzeile("- Panzerjäger-Abteilung 128")).toBe(true);
+  });
+  test("Fliesstext, Bindestrichwoerter und Zahlen sind keine Liste", () => {
+    expect(istListenzeile("Die Division kämpfte – wie schon 1943 – an der Narwa.")).toBe(false);
+    expect(istListenzeile("-Direktor")).toBe(false);
+    expect(istListenzeile("1944 begann der Aufstand.")).toBe(false);
   });
 });

@@ -318,6 +318,16 @@ export const regionsForReader = query({
   },
 });
 
+/**
+ * Zeile einer Aufzaehlung ("– Eisernes Kreuz", "• 3. Kompanie"). Der Leser
+ * sieht den Text nur verschluesselt und erkennt das Zeichen am Anfang nicht;
+ * er bekommt die Angabe mit und stellt kein Bild mitten in eine Liste
+ * (`web/src/reader/bildfolge.ts`).
+ */
+export function istListenzeile(text: string): boolean {
+  return /^\s*[–—•·▪■●◦‣\-*]\s/u.test(text);
+}
+
 export const getForReader = query({
   args: { articleId: v.id("articles"), sessionToken: v.optional(v.string()) },
   handler: async (ctx, { articleId, sessionToken }) => {
@@ -399,6 +409,7 @@ export const getForReader = query({
         order: b.order,
         type: b.type,
         text: enc(b.text),
+        liste: istListenzeile(b.text),
         page: b.sourcePageIndex ?? null,
         sourceY: b.sourceY ?? null,
         // Zahlen bleiben in Tabellen lesbar: daran erkennt der Reader
