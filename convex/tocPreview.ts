@@ -6,7 +6,7 @@ import { assetUrl } from "./assets";
 import { shopLabels } from "./issues";
 import { issueShopSku } from "./shopLinks";
 import { Doc, Id } from "./_generated/dataModel";
-import { passt, suchwoerter } from "./suche";
+import { passt, suchwoerter, trefferRang } from "./suche";
 
 /**
  * Ist die Leserseite ein Umschlag (U1 oder U4)? Die erste Leserseite ist
@@ -161,6 +161,8 @@ export const searchCatalog = query({
       pageIndex: number | null;
       articleId: Id<"articles"> | null;
       imText: boolean;
+      /** Wie in `articles.search`: ganze Woerter vor Wortanfaengen. */
+      rang: number;
     };
     const kandidaten: Kandidat[] = imTitel.map((e) => ({
       key: e._id as string,
@@ -170,6 +172,7 @@ export const searchCatalog = query({
       pageIndex: e.pageIndex ?? null,
       articleId: e.articleId ?? null,
       imText: false,
+      rang: trefferRang(e.label, "", begriff),
     }));
     for (const c of imText) {
       // Steht der Artikel im Verzeichnis, erscheint er mit dessen Eintrag.
@@ -182,6 +185,7 @@ export const searchCatalog = query({
         pageIndex: eintrag?.pageIndex ?? c.pageIndex,
         articleId: c.articleId,
         imText: true,
+        rang: trefferRang(eintrag?.label ?? c.title, c.text, begriff),
       });
     }
 
@@ -196,6 +200,7 @@ export const searchCatalog = query({
           section: string | null;
           page: string | null;
           imText: boolean;
+          rang: number;
         }[];
       }
     >();
@@ -247,11 +252,20 @@ export const searchCatalog = query({
         section: e.section,
         page: seite?.printedLabel ?? null,
         imText: e.imText,
+        rang: e.rang,
       });
     }
 
+    // Nachvollziehbar: das Heft mit dem besten Treffer zuerst, bei gleichem
+    // Rang das neuere; im Heft die Eintraege nach Rang, sonst wie gefunden.
+    const datum = (i: Doc<"issues">) => i.publicationDate ?? i.publishedAt ?? i.createdAt;
+    const bester = (h: { entries: { rang: number }[] }) => Math.min(...h.entries.map((e) => e.rang));
+    const reihe = [...hefte.values()].sort(
+      (a, b) => bester(a) - bester(b) || datum(b.issue) - datum(a.issue),
+    );
     const out = [];
-    for (const { issue, entries } of hefte.values()) {
+    for (const { issue, entries } of reihe) {
+      entries.sort((a, b) => a.rang - b.rang);
       const publication = await ctx.db.get(issue.publicationId);
       out.push({
         _id: issue._id,

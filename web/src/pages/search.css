@@ -232,6 +232,15 @@ a.suche-heft-kopf:hover .heft { color: var(--accent); }
 }
 .suche-kauf .preis { font-weight: 700; }
 .suche-kauf .btn { border-radius: 0; }
+/* Unter den eigenen Treffern: die naechsten holen, mit Stand daneben. */
+.suche-mehr {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+.suche-mehr .btn { border-radius: 0; }
+.suche-mehr .hint { font-size: var(--fs-mini); color: var(--muted); }
 
 @media (max-width: 48rem) {
   .suche-feld { padding: 0 var(--s3); }

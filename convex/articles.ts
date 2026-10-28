@@ -7,6 +7,7 @@ import {
   MutationCtx,
   mutation,
   query,
+  QueryCtx,
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, requirePublisher, audit } from "./roles";
@@ -15,7 +16,14 @@ import { blockType, tableData } from "./schema";
 import { assetUrl } from "./assets";
 import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
 import { internal } from "./_generated/api";
-import { ausschnitt, passt, suchwoerter, sucheVormerken } from "./suche";
+import {
+  ausschnitt,
+  ganzeWoerter,
+  passt,
+  suchwoerter,
+  sucheVormerken,
+  trefferRang,
+} from "./suche";
 import { Doc, Id } from "./_generated/dataModel";
 
 const regionInput = v.object({
@@ -410,18 +418,61 @@ export const getForReader = query({
   },
 });
 
+/** Treffer je Abruf; "Weitere Treffer" holt die naechsten dazu. */
+const SUCHE_SEITE = 25;
+/**
+ * So viele Stuecke liest eine Suche hoechstens. Gerankt wird ueber alle, damit
+ * "Weitere Treffer" die Reihenfolge der schon gezeigten nicht umstellt.
+ */
+const SUCHE_TIEFE = 256;
+
+/**
+ * Wo im Artikel der Begriff steht: der erste Absatz mit allen Teilen als
+ * ganze Woerter, sonst der erste, der ueberhaupt passt. Der Titel steht im
+ * Kopf des Artikels und ist keine Fundstelle. Null, wenn nur Titel oder
+ * Unterzeile passen.
+ */
+async function fundstelle(ctx: QueryCtx, articleId: Id<"articles">, begriff: string) {
+  let erster = true;
+  let ungefaehr: Doc<"articleBlocks"> | null = null;
+  for await (const b of ctx.db
+    .query("articleBlocks")
+    .withIndex("by_article_order", (q) => q.eq("articleId", articleId))) {
+    const titel = erster && b.type === "heading";
+    erster = false;
+    if (titel) continue;
+    if (ganzeWoerter(b.text, begriff)) return b;
+    if (!ungefaehr && passt(b.text, begriff)) ungefaehr = b;
+  }
+  return ungefaehr;
+}
+
 /**
  * Volltext der Hefte, auf die der Leser Zugriff hat, mit Ausschnitt. Gesucht
  * wird in den Stuecken aus `suche.ts`, nicht in den Artikeln selbst.
+ *
+ * Reihenfolge: erst ganze Woerter im Titel, dann ganze Woerter im Text, dann
+ * Wortanfaenge ("Euro" vor "Europa", `trefferRang`); im selben Rang das
+ * neuere Heft zuerst, dann die Relevanz aus dem Suchindex. Jeder Treffer
+ * nennt den Absatz der Fundstelle (`stelle`), der Leser springt dorthin.
+ * Bis `limit` Treffer, `gesamt` zaehlt alle gefundenen; `vollstaendig` ist
+ * falsch, wenn die Suche an ihre Tiefe stiess und es noch mehr geben kann.
  */
 export const search = query({
-  args: { term: v.string(), issueId: v.optional(v.id("issues")) },
-  handler: async (ctx, { term, issueId }) => {
+  args: {
+    term: v.string(),
+    issueId: v.optional(v.id("issues")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { term, issueId, limit }) => {
     const userId = await getAuthUserId(ctx);
     const begriff = term.trim();
     const woerter = suchwoerter(begriff);
-    if (!userId || begriff.length < 3 || !woerter) return [];
+    if (!userId || begriff.length < 3 || !woerter) {
+      return { treffer: [], gesamt: 0, vollstaendig: true };
+    }
     const allowed = await accessibleIssueIds(ctx, userId as Id<"users">);
+    const anzahl = Math.max(1, Math.min(SUCHE_TIEFE, Math.floor(limit ?? SUCHE_SEITE)));
 
     const hits = await ctx.db
       .query("searchChunks")
@@ -429,29 +480,55 @@ export const search = query({
         const base = q.search("text", woerter);
         return issueId ? base.eq("issueId", issueId) : base;
       })
-      .take(64);
+      .take(SUCHE_TIEFE);
 
     const hefte = new Map<string, Doc<"issues"> | null>();
-    const gesehen = new Set<string>();
-    const out = [];
-    for (const c of hits) {
-      if (!allowed.has(c.issueId as string)) continue;
-      if (gesehen.has(c.articleId as string) || !passt(c.text, begriff)) continue;
+    // Je Artikel das beste Stueck: niedrigster Rang, bei Gleichstand das
+    // relevantere (fruehere) aus dem Index.
+    const beste = new Map<string, { c: Doc<"searchChunks">; rang: number; pos: number }>();
+    for (const [pos, c] of hits.entries()) {
+      if (!allowed.has(c.issueId as string) || !passt(c.text, begriff)) continue;
       if (!hefte.has(c.issueId as string)) hefte.set(c.issueId as string, await ctx.db.get(c.issueId));
-      const issue = hefte.get(c.issueId as string);
-      if (!issue?.isPublished) continue;
-      gesehen.add(c.articleId as string);
-      out.push({
+      if (!hefte.get(c.issueId as string)?.isPublished) continue;
+      const rang = trefferRang(c.title, c.text, begriff);
+      const bisher = beste.get(c.articleId as string);
+      if (!bisher) beste.set(c.articleId as string, { c, rang, pos });
+      else if (rang < bisher.rang) beste.set(c.articleId as string, { c, rang, pos: bisher.pos });
+    }
+    const datum = (i: Doc<"issues">) => i.publicationDate ?? i.publishedAt ?? i.createdAt;
+    const sortiert = [...beste.values()].sort(
+      (a, b) =>
+        a.rang - b.rang ||
+        datum(hefte.get(b.c.issueId as string)!) - datum(hefte.get(a.c.issueId as string)!) ||
+        a.pos - b.pos,
+    );
+
+    const treffer = [];
+    for (const { c } of sortiert.slice(0, anzahl)) {
+      const issue = hefte.get(c.issueId as string)!;
+      const stelle = await fundstelle(ctx, c.articleId, begriff);
+      const pageIndex = stelle?.sourcePageIndex ?? c.pageIndex;
+      // Gedruckte Seitenzahl, nicht die Stelle in der Leserfolge.
+      const seite = await ctx.db
+        .query("issuePages")
+        .withIndex("by_issue_index", (q) => q.eq("issueId", c.issueId).eq("index", pageIndex))
+        .unique();
+      treffer.push({
         _id: c.articleId,
         issueId: c.issueId,
         issueTitle: issue.title,
         title: c.title,
-        pageIndex: c.pageIndex,
-        snippet: ausschnitt(c.text, begriff),
+        pageIndex,
+        page: seite?.printedLabel || String(pageIndex + 1),
+        stelle: stelle?.order ?? null,
+        snippet: ausschnitt(stelle?.text ?? c.text, begriff),
       });
-      if (out.length >= 25) break;
     }
-    return out;
+    return {
+      treffer,
+      gesamt: sortiert.length,
+      vollstaendig: hits.length < SUCHE_TIEFE,
+    };
   },
 });
 

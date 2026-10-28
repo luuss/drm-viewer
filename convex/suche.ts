@@ -72,11 +72,48 @@ export function passt(text: string, begriff: string): boolean {
     .every((teil) => new RegExp(`(^|[^\\p{L}\\p{N}])${escape(teil)}`, "u").test(t));
 }
 
-/** Fundstelle in einem Stueck: der Ausschnitt um den ersten passenden Teil. */
+const WORTGRENZE = "[^\\p{L}\\p{N}]";
+
+function teileVon(begriff: string): string[] {
+  return begriff.toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+function ganzesWortMuster(teil: string) {
+  return new RegExp(`(^|${WORTGRENZE})${escape(teil)}(?=$|${WORTGRENZE})`, "u");
+}
+
+/**
+ * Steht jeder Teil des Begriffs als ganzes Wort im Text? Der Suchindex nimmt
+ * das letzte Wort als Wortanfang; "Euro" findet so auch "Europa", "Trump"
+ * auch "Trumpf". Ganze Woerter stehen darum vorn (`trefferRang`).
+ */
+export function ganzeWoerter(text: string, begriff: string): boolean {
+  const t = text.toLowerCase().replace(/\s+/g, " ");
+  const teile = teileVon(begriff);
+  return teile.length > 0 && teile.every((teil) => ganzesWortMuster(teil).test(t));
+}
+
+/**
+ * Rang eines Treffers, kleiner steht weiter vorn: 0 alle Teile als ganze
+ * Woerter im Titel, 1 als ganze Woerter im Text, 2 nur als Wortanfang.
+ * Innerhalb eines Rangs kommt das neuere Heft zuerst (`articles.search`).
+ */
+export function trefferRang(titel: string, text: string, begriff: string): number {
+  if (ganzeWoerter(titel, begriff)) return 0;
+  if (ganzeWoerter(text, begriff)) return 1;
+  return 2;
+}
+
+/**
+ * Fundstelle in einem Stueck: der Ausschnitt um den ersten passenden Teil,
+ * als ganzes Wort, wenn es so vorkommt.
+ */
 export function ausschnitt(text: string, begriff: string): string {
   const t = text.replace(/\s+/g, " ");
-  const teil = begriff.toLowerCase().split(/\s+/).filter(Boolean)[0] ?? "";
-  const idx = Math.max(0, t.toLowerCase().indexOf(teil));
+  const teil = teileVon(begriff)[0] ?? "";
+  const klein = t.toLowerCase();
+  const ganz = teil ? ganzesWortMuster(teil).exec(klein) : null;
+  const idx = ganz ? ganz.index + ganz[1].length : Math.max(0, klein.indexOf(teil));
   const start = Math.max(0, idx - 70);
   return (start > 0 ? "..." : "") + t.slice(start, start + 220) + "...";
 }

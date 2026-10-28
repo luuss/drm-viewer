@@ -103,6 +103,11 @@ export default function ReaderShell() {
   const [einstiegPunkt, setEinstiegPunkt] = useState<
     (Klickpunkt & { articleId: Id<"articles">; n: number }) | null
   >(null);
+  // Fundstelle aus der Suche (`?stelle=<Absatz>`): der Artikel oeffnet dort
+  // und hebt den Absatz kurz hervor.
+  const [stelle, setStelle] = useState<{ articleId: Id<"articles">; order: number } | null>(
+    null,
+  );
   const [tocOpen, setTocOpen] = useState(false);
   // Auf breiten Schirmen steht das Verzeichnis fest links; der Knopf "Inhalt"
   // blendet es aus und wieder ein. Die Wahl bleibt ueber Hefte hinweg.
@@ -174,6 +179,8 @@ export default function ReaderShell() {
     if (deepLink && articles.some((a) => a._id === deepLink)) {
       setMode("article");
       setArticleId(deepLink);
+      const absatz = Number(searchParams.get("stelle"));
+      if (Number.isInteger(absatz) && absatz > 0) setStelle({ articleId: deepLink, order: absatz });
       const hit = articles.find((a) => a._id === deepLink);
       if (hit) setPageIndex(hit.primaryPageIndex);
     } else if (progress) {
@@ -274,6 +281,7 @@ export default function ReaderShell() {
   const openArticle = useCallback(
     (id: Id<"articles"> | null, fromPageIndex?: number, punkt?: Klickpunkt) => {
       setArticleId(id);
+      setStelle(null);
       setArtikelEinstieg(fromPageIndex ?? null);
       setEinstiegPunkt(id && punkt ? { ...punkt, articleId: id, n: Date.now() } : null);
       setMode("article");
@@ -289,6 +297,7 @@ export default function ReaderShell() {
       const next = new URLSearchParams(searchParams);
       if (id) next.set("article", id as string);
       else next.delete("article");
+      next.delete("stelle");
       setSearchParams(next, { replace: true });
       persist({ mode: "article", pageIndex: target, articleId: id });
     },
@@ -668,6 +677,11 @@ export default function ReaderShell() {
                 )?.products ?? []
               }
               fromPageIndex={artikelEinstieg}
+              stelle={
+                stelle && stelle.articleId === (articleId ?? articleList[0]?._id)
+                  ? stelle.order
+                  : null
+              }
               einstiegPunkt={
                 einstiegPunkt && einstiegPunkt.articleId === (articleId ?? articleList[0]?._id)
                   ? einstiegPunkt

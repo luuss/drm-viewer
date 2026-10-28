@@ -115,6 +115,8 @@ type Props = {
   fromPageIndex?: number | null;
   /** Angetippter Punkt der Druckseite: dorthin springt der Lesetext. */
   einstiegPunkt?: (Klickpunkt & { n: number }) | null;
+  /** Absatz der Fundstelle aus der Suche (`order`): dorthin, kurz markiert. */
+  stelle?: number | null;
   /** Schluessel zum Zusammensetzen der Artikelbilder. */
   schutzKey: number | null;
 };
@@ -132,6 +134,7 @@ export default function ArticleMode({
   sessionToken,
   fromPageIndex,
   einstiegPunkt,
+  stelle = null,
   schutzKey,
 }: Props) {
   // Text gibt es nur zu einer Lesesitzung, und nur verschluesselt.
@@ -158,13 +161,21 @@ export default function ArticleMode({
   // und jedes Bild traegt seine Druckseite; die erste Marke der Seite ist der
   // Einstieg. Auf der Anfangsseite bleibt es beim Artikelkopf. Mit einem
   // Tipppunkt geht es genauer: zum Absatz unter dem Finger.
+  // Eine Fundstelle aus der Suche geht vor, ebenso genau.
   const geladen = article ?? null;
-  const punktOffen = einstiegPunkt != null && zielAbsatz === undefined;
+  const punktOffen = stelle === null && einstiegPunkt != null && zielAbsatz === undefined;
+  const zielOrder = stelle ?? (zielAbsatz && einstiegPunkt ? zielAbsatz.order : null);
+  // Jeder Einstieg springt einmal. Laedt der Artikel spaeter neu (die Abfrage
+  // ist reaktiv), bleibt der Leser, wo er inzwischen gelesen hat.
+  const gesprungen = useRef<string | null>(null);
   useEffect(() => {
     if (!geladen || !schriftBereit || punktOffen) return;
+    const einstieg = `${articleId}|${zielOrder}|${einstiegPunkt?.n}|${fromPageIndex}`;
+    if (gesprungen.current === einstieg) return;
+    gesprungen.current = einstieg;
     const absatz =
-      zielAbsatz && einstiegPunkt
-        ? koerper.current?.querySelector<HTMLElement>(`[data-order="${zielAbsatz.order}"]`)
+      zielOrder !== null
+        ? koerper.current?.querySelector<HTMLElement>(`[data-order="${zielOrder}"]`)
         : null;
     if (absatz) {
       absatz.scrollIntoView({ block: "center" });
@@ -182,7 +193,7 @@ export default function ArticleMode({
           );
     if (ziel) ziel.scrollIntoView({ block: "start" });
     else koerper.current?.scrollIntoView({ block: "start" });
-  }, [geladen, fromPageIndex, articleId, schriftBereit, punktOffen, zielAbsatz, einstiegPunkt?.n]);
+  }, [geladen, fromPageIndex, articleId, schriftBereit, punktOffen, zielOrder, einstiegPunkt?.n]);
 
   if (!articleId) {
     return (
@@ -356,7 +367,7 @@ export default function ArticleMode({
             ) : b.type === "lead" ? (
               <p className="lead" data-source-page={item.page} data-order={b.order}>{b.text}</p>
             ) : b.type === "table" && b.table ? (
-              <ArtikelTabelle table={b.table} sourcePage={item.page} />
+              <ArtikelTabelle table={b.table} sourcePage={item.page} order={b.order} />
             ) : b.type === "caption" ? (
               <p className="caption" data-source-page={item.page} data-order={b.order}>{b.text}</p>
             ) : (
