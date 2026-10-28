@@ -104,6 +104,42 @@ def test_weicher_trennstrich_vor_grossbuchstabe_wird_bindestrich():
     assert clean_text("demogra\u00adphischen") == "demographischen"
 
 
+def test_trennsperre_vor_dem_wort_wird_kein_strich():
+    """Vor einem Wort verbietet der bedingte Trennstrich nur die Trennung.
+
+    Live stand 729-mal "den -Direktor", "Jens -Jeremies", "Trump--Regierung".
+    """
+    assert clean_text("warnte er den \u00adDirektor der") == "warnte er den Direktor der"
+    assert clean_text("Jens \u00adJeremies") == "Jens Jeremies"
+    assert clean_text("\u201e\u00adZUERST!\u201c") == "\u201eZUERST!\u201c"
+    assert clean_text("Trump-\u00adRegierung") == "Trump-Regierung"
+    # Mitten im Wort bleibt er der Bindestrich.
+    assert clean_text("Nordrhein\u00adWestfalen") == "Nordrhein-Westfalen"
+
+
+def test_symbolschrift_und_abgesetzte_akzente():
+    # Schlusszeichen aus einer Zierschrift (DMZ 170) stand als leeres Kaestchen da.
+    assert clean_text("zahlreiche Flugzeuge. \uf071") == "zahlreiche Flugzeuge."
+    assert clean_text("Ca\u02d8lin Georgescu") == "C\u0103lin Georgescu"
+    assert clean_text("K\u00f6nigin Don\u02dca Isabel") == "K\u00f6nigin Do\u00f1a Isabel"
+    # Wo es kein Zeichen gibt, bleibt der Text, wie er ist.
+    assert clean_text("Wie geht\u00b4s dir") == "Wie geht\u00b4s dir"
+
+
+def test_umbrochene_titelzeilen():
+    from extractor.textutil import zeilen_verbinden
+
+    assert zeilen_verbinden(["\u201eMarxisten-", "Schlangennest\u201c"]) == "\u201eMarxisten-Schlangennest\u201c"
+    assert zeilen_verbinden(["Mehr Straftaten gegen Bahn-", "mitarbeiter"]) == (
+        "Mehr Straftaten gegen Bahnmitarbeiter"
+    )
+    assert zeilen_verbinden(["Ein-", "und Ausfuhr"]) == "Ein- und Ausfuhr"
+    assert zeilen_verbinden(["Wadephul warnt vor", "Debatte \u00fcber NATO-Zerfall"]) == (
+        "Wadephul warnt vor Debatte \u00fcber NATO-Zerfall"
+    )
+    assert zeilen_verbinden(["  ", "Titel"]) == "Titel"
+
+
 def test_zeile_ueber_zwei_spalten_bleibt_ganz():
     """Eine Ueberschrift ueber mehrere Spalten darf nicht zerschnitten werden."""
     woerter = [

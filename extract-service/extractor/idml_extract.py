@@ -227,6 +227,31 @@ def _in_zelle(element) -> bool:
     return any(_lokal(a) == "Cell" for a in element.iterancestors())
 
 
+# Das Eurozeichen steht im Satz als Buchstabe in einer Symbolschrift
+# ("EuroLogo", "t"); als Text gelesen hiess jeder Preis "t 12,80".
+_EURO_ZEICHEN = re.compile(r"[^\W\d_]")
+
+
+def _euroschrift(content) -> bool:
+    """Steht dieser Text in einer Euro-Symbolschrift?
+
+    ZUERST! setzt die Schrift direkt ("EuroLogo"), die DMZ ueber eine
+    Zeichenformatvorlage ("Euro-Logo Katalog").
+    """
+    csr = content.getparent()
+    if csr is None or _lokal(csr) != "CharacterStyleRange":
+        return False
+    if "euro" in (csr.get("AppliedCharacterStyle") or "").casefold():
+        return True
+    for teil in csr:
+        if _lokal(teil) != "Properties":
+            continue
+        for el in teil:
+            if _lokal(el) == "AppliedFont" and "euro" in (el.text or "").casefold():
+                return True
+    return False
+
+
 def _absatz_teile(psr) -> list["str | TableData"]:
     """Die Absaetze eines Formatbereichs, Tabellen an ihrer Stelle.
 
@@ -255,7 +280,9 @@ def _absatz_teile(psr) -> list["str | TableData"]:
                     teile.append(tabelle)
                 continue
             if tag == "Content" and node.text:
-                laufend.append(node.text)
+                laufend.append(
+                    _EURO_ZEICHEN.sub("€", node.text) if _euroschrift(node) else node.text
+                )
             elif tag == "Br":
                 abschliessen()
             gehen(node)

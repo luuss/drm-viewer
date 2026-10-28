@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass, field
 
 from .model import AssembledArticle, SourceBlock
+from .textutil import zeilen_verbinden
 
 # Absatzformat -> Rolle. Die Reihenfolge entscheidet: das erste Stichwort,
 # das im Namen vorkommt, gewinnt. Alle vier Reihen benennen ihre Formate
@@ -433,7 +434,7 @@ def _kopf_zuordnen(
 
 
 def _text(story: Story) -> str:
-    return " ".join(b.text for b in story.blocks).strip()
+    return zeilen_verbinden(b.text for b in story.blocks)
 
 
 def _erster_satz(text: str, laenge: int = 80) -> str:
@@ -594,7 +595,7 @@ def _meldungsseiten(
                     replace(
                         zeilen[0],
                         kind="subheading",
-                        text=" ".join(z.text.strip() for z in zeilen),
+                        text=zeilen_verbinden(z.text for z in zeilen),
                     )
                 )
             else:
@@ -633,7 +634,7 @@ def _anzeigenzeilen(story: Story) -> str:
         if rolle_fuer(b.style_name, len(b.text)) == "autor":
             continue
         zeilen.append(b.text.strip())
-    return " ".join(z for z in zeilen if z)
+    return zeilen_verbinden(zeilen)
 
 
 def artikel_aus_satz(

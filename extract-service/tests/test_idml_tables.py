@@ -244,3 +244,29 @@ def test_tabelle_ist_nie_beiwerk():
     ]
     mark_furniture(blocks, 8)
     assert not any(b.drop for b in blocks)
+
+
+def test_eurozeichen_aus_symbolschrift():
+    """Im Satz steht das Eurozeichen als "t" in der Schrift EuroLogo."""
+    preis = (
+        '<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/werbeseite text">'
+        '<CharacterStyleRange><Properties><AppliedFont type="string">EuroLogo</AppliedFont>'
+        "</Properties><Content>t</Content></CharacterStyleRange>"
+        "<CharacterStyleRange><Content> 12,–</Content></CharacterStyleRange>"
+        "</ParagraphStyleRange>"
+    )
+    blocks = extract_idml_blocks(idml(a=story("a", absatz("240 Seiten, gebunden,") + preis)))
+    assert blocks[-1].text == "€ 12,–"
+    # DMZ: Schrift ueber die Zeichenformatvorlage.
+    dmz = (
+        '<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Katalog">'
+        '<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/Euro-Logo Katalog">'
+        "<Content>t</Content></CharacterStyleRange>"
+        "<CharacterStyleRange><Content> 60,–</Content></CharacterStyleRange>"
+        "</ParagraphStyleRange>"
+    )
+    blocks = extract_idml_blocks(idml(a=story("a", dmz)))
+    assert blocks[-1].text == "€ 60,–"
+    # Dasselbe "t" in einer Textschrift bleibt ein "t".
+    blocks = extract_idml_blocks(idml(a=story("a", absatz("t 12 Tonnen"))))
+    assert blocks[0].text == "t 12 Tonnen"
