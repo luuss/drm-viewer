@@ -5,6 +5,7 @@ import ReaderTurnButton from "./ReaderTurnButton";
 import ArtikelTabelle from "../components/ArtikelTabelle";
 import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
 import { meldungsfolge } from "./meldungsfolge";
+import { bildfolge } from "./bildfolge";
 import { bildAlsCanvas, schriftenLaden } from "./schutz";
 import type { Klickpunkt } from "./PageMode";
 
@@ -234,46 +235,61 @@ export default function ArticleMode({
     y: image.sourceY ?? 0.5,
     afterBlockOrder: image.afterBlockOrder ?? null,
   }));
-  const flow = [...new Set([
+  type FlowItem = (typeof visibleBlocks)[number] | (typeof visibleImages)[number];
+  const flow: FlowItem[] = [];
+  // Seiten ohne Anker und ohne Meldungen verteilen ihre Bilder gemeinsam
+  // (bildfolge.ts): so kann ein Bild auch in den Text der Nachbarseite
+  // ruecken, wenn seine eigene zu wenig Absaetze hat.
+  let frei: { blocks: typeof visibleBlocks; images: typeof visibleImages } = {
+    blocks: [],
+    images: [],
+  };
+  const freiAbschliessen = () => {
+    flow.push(...bildfolge(frei.blocks, frei.images));
+    frei = { blocks: [], images: [] };
+  };
+  const pages = [...new Set([
     ...visibleBlocks.map((item) => item.page),
     ...visibleImages.map((item) => item.page),
-  ])]
-    .sort((a, b) => a - b)
-    .flatMap((page) => {
-      // Ein KI-geprueftes Bild traegt einen exakten Absatzanker. Nur alte,
-      // ungepruefte Importe fallen auf die geometrische Seitenlogik zurueck.
-      const blocks = visibleBlocks.filter((item) => item.page === page);
-      const images = visibleImages
-        .filter((item) => item.page === page)
-        .sort((a, b) => a.y - b.y || a.index - b.index);
-      const anchored = images.filter((item) => item.afterBlockOrder !== null);
-      if (anchored.length) {
-        const hiddenTitleOrder = article.blocks[0]?.type === "heading" ? 1 : null;
-        const before = anchored.filter((item) => {
-          const anchor = item.afterBlockOrder ?? 0;
-          return anchor === 0 || anchor === hiddenTitleOrder;
-        });
-        const after = new Map<number, typeof anchored>();
-        for (const image of anchored) {
-          const anchor = image.afterBlockOrder ?? 0;
-          if (anchor === 0 || anchor === hiddenTitleOrder) continue;
-          after.set(anchor, [...(after.get(anchor) ?? []), image]);
-        }
-        return [
-          ...before,
-          ...blocks.flatMap((block) => [block, ...(after.get(block.order) ?? [])]),
-          ...images.filter((item) => item.afterBlockOrder === null),
-        ];
+  ])].sort((a, b) => a - b);
+  for (const page of pages) {
+    // Ein KI-geprueftes Bild traegt einen exakten Absatzanker. Nur alte,
+    // ungepruefte Importe fallen auf die geometrische Seitenlogik zurueck.
+    const blocks = visibleBlocks.filter((item) => item.page === page);
+    const images = visibleImages
+      .filter((item) => item.page === page)
+      .sort((a, b) => a.y - b.y || a.index - b.index);
+    const anchored = images.filter((item) => item.afterBlockOrder !== null);
+    if (anchored.length) {
+      const hiddenTitleOrder = article.blocks[0]?.type === "heading" ? 1 : null;
+      const before = anchored.filter((item) => {
+        const anchor = item.afterBlockOrder ?? 0;
+        return anchor === 0 || anchor === hiddenTitleOrder;
+      });
+      const after = new Map<number, typeof anchored>();
+      for (const image of anchored) {
+        const anchor = image.afterBlockOrder ?? 0;
+        if (anchor === 0 || anchor === hiddenTitleOrder) continue;
+        after.set(anchor, [...(after.get(anchor) ?? []), image]);
       }
-      const meldungen = meldungsfolge(blocks, images);
-      if (meldungen) return meldungen;
-      const firstTextY = Math.min(...blocks.map((item) => item.y), 1);
-      return [
-        ...images.filter((item) => item.y < firstTextY),
-        ...blocks,
-        ...images.filter((item) => item.y >= firstTextY),
-      ];
-    });
+      freiAbschliessen();
+      flow.push(
+        ...before,
+        ...blocks.flatMap((block) => [block, ...(after.get(block.order) ?? [])]),
+        ...images.filter((item) => item.afterBlockOrder === null),
+      );
+      continue;
+    }
+    const meldungen = meldungsfolge(blocks, images);
+    if (meldungen) {
+      freiAbschliessen();
+      flow.push(...meldungen);
+      continue;
+    }
+    frei.blocks.push(...blocks);
+    frei.images.push(...images);
+  }
+  freiAbschliessen();
 
   // Der Bestellknopf steht unter dem Absatz der Anzeige, zu dem er gehoert.
   // Was keinen sichtbaren Absatz findet (der Titel steht schon im Kopf), kommt
