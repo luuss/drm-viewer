@@ -45,7 +45,7 @@ from extractor.idml_extract import (
     toc_from_idml,
 )
 from extractor.image_regions import read_trim_boxes
-from extractor.issue_meta import publication_date, read_issue_meta
+from extractor.issue_meta import erscheinung_aus_umschlag, publication_date, read_issue_meta
 from extractor.model import SourceBlock
 from extractor.pdf_extract import (
     attach_captions,
@@ -461,6 +461,13 @@ class Job:
         meta: dict = {}
         if innen is not None:
             meta.update(read_issue_meta(blobs[innen["assetId"]]))
+        # Der Erscheinungsmonat steht in der Kopfzeile der Titelseite; deren
+        # Textebene laedt der Browser mit hoch ("textebene-umschlag.json").
+        for quelle in sources:
+            if "monthFrom" in meta:
+                break
+            if quelle["kind"] == "text" and blobs.get(quelle["assetId"]):
+                meta.update(erscheinung_aus_umschlag(blobs[quelle["assetId"]]))
         # Nur das Impressum, und nur als erster Anhaltspunkt: dort steht
         # gelegentlich noch der Preis der Vorauflage. Den Verkaufspreis fuehrt
         # der Netzladen, und von dort holt ihn der taegliche Abgleich — er

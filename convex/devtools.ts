@@ -8,6 +8,7 @@ import { rebuildSearchText } from "./articles";
 import { deleteLinksForBlock } from "./articleProducts";
 import { heftStueckeLoeschen, sucheVormerken } from "./suche";
 import { textBereinigen, titelBereinigen } from "./textBereinigung";
+import { erscheinungAusBezeichnung } from "./erscheinung";
 
 /**
  * Hilfen fuer Entwicklung und Integrationspruefung.
@@ -425,6 +426,41 @@ export const textBereinigenInternal = internalMutation({
       beispiele,
       probelauf: nurZaehlen,
     };
+  },
+});
+
+/**
+ * Erscheinungsdatum fuer Hefte nachtragen, die keins haben, aus den Angaben
+ * des Ladens (shopDesignation, shopSubtitle, shopTitle). Ein gesetztes Datum
+ * bleibt. Mit `probelauf` wird nur gezeigt, was gesetzt wuerde.
+ */
+export const erscheinungNachtragenInternal = internalMutation({
+  args: { probelauf: v.optional(v.boolean()) },
+  returns: v.array(
+    v.object({ heft: v.string(), datum: v.union(v.string(), v.null()), quelle: v.string() }),
+  ),
+  handler: async (ctx, { probelauf }) => {
+    const out = [];
+    for await (const issue of ctx.db.query("issues")) {
+      if (issue.publicationDate) continue;
+      const datum = erscheinungAusBezeichnung(
+        issue.shopDesignation,
+        issue.shopSubtitle,
+        issue.shopTitle,
+      );
+      out.push({
+        heft: issue.title,
+        datum: datum ? new Date(datum).toISOString().slice(0, 10) : null,
+        quelle: [issue.shopDesignation, issue.shopSubtitle].filter(Boolean).join(" / "),
+      });
+      if (datum && !probelauf) {
+        await ctx.db.patch(issue._id, { publicationDate: datum, updatedAt: Date.now() });
+      }
+    }
+    if (!probelauf && out.some((o) => o.datum)) {
+      await audit(ctx, "issue.erscheinungNachtragen", "issues", `${out.filter((o) => o.datum).length} Hefte (Kommandozeile)`);
+    }
+    return out;
   },
 });
 
