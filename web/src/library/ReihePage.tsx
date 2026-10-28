@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "convex/react";
-import { useState, type CSSProperties } from "react";
+import NichtGefunden from "../components/NichtGefunden";
+import { Fragment, useState, type CSSProperties } from "react";
 import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
 import SocialIcon from "../components/SocialIcon";
@@ -22,16 +23,7 @@ export default function ReihePage() {
   const storefront = useQuery(api.shopIntegration.storefront, {});
   const [nurMeine, setNurMeine] = useState(false);
 
-  if (!reihe) {
-    return (
-      <div className="page">
-        <p>Diese Zeitschrift gibt es hier nicht.</p>
-        <Link className="btn" to="/">
-          Zum Kiosk
-        </Link>
-      </div>
-    );
-  }
+  if (!reihe) return <NichtGefunden text="Diese Zeitschrift gibt es hier nicht." />;
   if (issues === undefined || offers === undefined || eigene === undefined) {
     return <div className="centered">Laden...</div>;
   }
@@ -282,7 +274,9 @@ export default function ReihePage() {
                     <Icon name="mail" />
                     <span>
                       <span className="reihe-kontakt-art">{m.label}</span>
-                      <span className="reihe-kontakt-wert">{m.adresse}</span>
+                      <span className="reihe-kontakt-wert">
+                        <Umbrechbar text={m.adresse} />
+                      </span>
                     </span>
                   </a>
                 </li>
@@ -302,5 +296,19 @@ export default function ReihePage() {
 
       </div>
     </div>
+  );
+}
+
+/** Adresse mit Umbruchstellen vor "@" und "." fuer schmale Schirme. */
+function Umbrechbar({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(?=[@.])/).map((teil, i) => (
+        <Fragment key={i}>
+          {i > 0 && <wbr />}
+          {teil}
+        </Fragment>
+      ))}
+    </>
   );
 }

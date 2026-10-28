@@ -10,7 +10,7 @@ const modules = import.meta.glob("./**/*.ts");
  * einer Artikelseite 7. Beide Seiten sind gerendert; nur die Verzeichnisseite
  * darf ohne Lesesitzung heraus.
  */
-async function heft(t: any, { published = true } = {}) {
+async function heft(t: any, { published = true, anreisser = false } = {}) {
   return await t.run(async (ctx: any) => {
     const now = Date.now();
     const publicationId = await ctx.db.insert("publications", {
@@ -37,7 +37,11 @@ async function heft(t: any, { published = true } = {}) {
       issueId,
       createdAt: now,
     });
-    const seite = async (index: number, printedLabel: string) => {
+    const seite = async (
+      index: number,
+      printedLabel: string,
+      role: "front_cover" | "content" = "content",
+    ) => {
       const key = `pages/${issueId}/${index}/full.jpg`;
       const assetId = await ctx.db.insert("assets", {
         key,
@@ -53,7 +57,7 @@ async function heft(t: any, { published = true } = {}) {
         issueId,
         index,
         printedLabel,
-        role: "content",
+        role,
         sourceAssetId: quelle,
         sourcePageIndex: index,
         width: 2400,
@@ -62,6 +66,7 @@ async function heft(t: any, { published = true } = {}) {
       });
       return assetId;
     };
+    const titel = await seite(0, "U1", "front_cover");
     const verzeichnis = await seite(3, "3");
     const artikelseite = await seite(7, "7");
     const articleId = await ctx.db.insert("articles", {
@@ -102,6 +107,21 @@ async function heft(t: any, { published = true } = {}) {
       kind: "body",
       order: 1,
     });
+    if (anreisser) {
+      // ZUERST!: die Anreisser auf dem Titel springen zu ihren Artikeln.
+      await ctx.db.insert("articleRegions", {
+        issueId,
+        articleId,
+        pageIndex: 0,
+        x0: 0.1,
+        y0: 0.8,
+        x1: 0.9,
+        y1: 0.9,
+        kind: "other",
+        targetPageIndex: 7,
+        order: 0,
+      });
+    }
     await ctx.db.insert("tocEntries", {
       issueId,
       order: 1,
@@ -110,7 +130,7 @@ async function heft(t: any, { published = true } = {}) {
       articleId,
       level: 1,
     });
-    return { issueId, verzeichnis, artikelseite };
+    return { issueId, titel, verzeichnis, artikelseite };
   });
 }
 
@@ -147,6 +167,21 @@ describe("Inhaltsverzeichnis in der Heftvorschau", () => {
         height: 3200,
       },
     ]);
+  });
+
+  test("der Titel mit Anreissern ist kein Inhaltsverzeichnis", async () => {
+    // ZUERST! 1/2025 bis 6/2025 zeigten den Titel als "Inhaltsverzeichnis,
+    // Seite 1": seine Anreisser tragen wie das Verzeichnis eine Zielseite.
+    process.env.PUBLIC_TILE_ORIGIN = "https://lesen.example.test";
+    const t = convexTest(schema, modules);
+    const { issueId, titel, verzeichnis } = await heft(t, { anreisser: true });
+    const issue = await t.query(api.issues.getPublic, { issueId });
+    expect(issue?.tocImages.map((b: any) => b.pageIndex)).toEqual([3]);
+    expect(issue?.tocImages[0].url).toContain(verzeichnis);
+    const umschlag = await t.query(internal.assets.resolveForServiceInternal, {
+      assetId: titel,
+    });
+    expect(umschlag?.public).toBe(false);
   });
 
   test("die Kiosk-Suche findet Verzeichniseintraege ungekaufter Hefte", async () => {

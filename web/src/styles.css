@@ -1559,8 +1559,17 @@ body:has(.reihe-seite) { overflow-x: clip; }
 }
 @media (max-width: 40rem) {
   .reihe-kontakt-karte { flex-direction: column; align-items: flex-start; }
-  .reihe-kontakt-liste { flex-direction: column; }
-  .reihe-kontakt-liste .reihe-kontakt-art { width: 5.5rem; }
+  .reihe-kontakt-liste { flex-direction: column; align-self: stretch; min-width: 0; }
+  .reihe-kontakt-liste .reihe-kontakt-art { width: 5.5rem; flex: 0 0 auto; white-space: nowrap; }
+  /* Lange Adressen ruecken schmal unter ihre Bezeichnung und brechen, wenn
+     noetig, vor "@" oder "." um (wbr), notfalls irgendwo. Vorher ragten sie
+     hinaus, und die Reihenseite rollte auf dem Telefon seitlich (459 statt
+     390 px). */
+  .reihe-kontakt-liste a { white-space: normal; }
+  .reihe-kontakt-liste a,
+  .reihe-kontakt-liste a > span { min-width: 0; }
+  .reihe-kontakt-liste a > span { flex-wrap: wrap; column-gap: var(--s2); row-gap: 0; }
+  .reihe-kontakt-wert { overflow-wrap: anywhere; }
 }
 .reihe-kontakt-art {
   font-size: var(--fs-mini);
@@ -1908,17 +1917,22 @@ body:has(.reihe-seite) { overflow-x: clip; }
   object-position: top;
 }
 
-/* Lupe: Vollbild ueber allem, dunkel wie die Leseansicht. */
+/* Lupe: Vollbild ueber allem, dunkel wie die Leseansicht. Die Leiste mit
+   Miniaturen und Zoom steht unter dem Bild, nicht darauf; sonst verdeckte
+   sie die Unterzeile des Titelbilds. */
 .bild-lupe {
   position: fixed;
   inset: 0;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
   background: rgba(12, 13, 17, 0.96);
   color: var(--bar-text);
 }
 .bild-lupe .lupe-bild {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 .bild-lupe .lupe-knopf {
   display: grid;
@@ -1940,19 +1954,20 @@ body:has(.reihe-seite) { overflow-x: clip; }
   top: var(--s4);
   right: var(--s4);
 }
+/* Mittig ohne transform: die allgemeine Regel fuer gedrueckte Knoepfe
+   (button:active, translateY(1px)) ersetzte das translateY(-50%). Der
+   Knopf sprang beim Druecken um die halbe Hoehe nach unten, das Loslassen
+   landete auf dem Bild darunter, und es gab keinen Klick. */
 .bild-lupe .lupe-zurueck,
 .bild-lupe .lupe-weiter {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: calc(50% - var(--ctl-h) / 2);
 }
 .bild-lupe .lupe-zurueck { left: var(--s4); }
 .bild-lupe .lupe-weiter { right: var(--s4); }
 .bild-lupe .lupe-leiste {
-  position: absolute;
-  left: 50%;
-  bottom: var(--s4);
-  transform: translateX(-50%);
+  align-self: center;
+  margin: var(--s2) var(--s4) var(--s4);
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -2752,9 +2767,10 @@ body:has(.reihe-seite) { overflow-x: clip; }
   font-size: var(--fs-sub);
   font-weight: 500;
 }
-.mode-switch button:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.mode-switch button:hover:not(:disabled):not([aria-disabled="true"]):not(.active) { background: rgba(255, 255, 255, 0.07); color: #fff; }
 .mode-switch button.active { background: var(--accent); color: #fff; }
-.mode-switch button:disabled { background: transparent; border: 0; color: var(--night-muted); opacity: 0.35; cursor: not-allowed; }
+.mode-switch button:disabled,
+.mode-switch button[aria-disabled="true"] { background: transparent; border: 0; color: var(--night-muted); opacity: 0.35; cursor: not-allowed; }
 .page-layout-switch button {
   display: inline-flex;
   align-items: center;
@@ -2951,6 +2967,19 @@ body:has(.reihe-seite) { overflow-x: clip; }
   color: var(--ink-soft);
   font-style: italic;
 }
+/* Kasten aus dem Heft (Info-, Zitatkasten): ruhig abgesetzt, etwas kleiner.
+   Folgen mehrere Absaetze eines Kastens aufeinander, stehen sie in einer
+   Flaeche. Vorher sahen Kaesten aus wie Fliesstext. */
+.article-body .kasten {
+  display: block;
+  margin: var(--s5) 0;
+  padding: var(--s3) var(--s4);
+  background: rgba(60, 45, 20, 0.05);
+  border-left: 3px solid var(--rule);
+  font-size: 0.95em;
+  line-height: 1.55;
+}
+.article-body .kasten + .kasten { margin-top: calc(-1 * var(--s5)); padding-top: 0; }
 .article-body figure {
   width: 100%;
   margin: clamp(1.5rem, 4vw, 2.5rem) 0;
@@ -4233,12 +4262,13 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   background: rgba(255, 252, 240, 0.45);
 }
 .reader-screen .mode-switch button { color: var(--papier-leise); }
-.reader-screen .mode-switch button:hover:not(:disabled):not(.active) {
+.reader-screen .mode-switch button:hover:not(:disabled):not([aria-disabled="true"]):not(.active) {
   background: rgba(60, 45, 20, 0.07);
   color: var(--papier-tinte);
 }
 .reader-screen .mode-switch button.active { background: var(--accent); color: #fff; }
-.reader-screen .mode-switch button:disabled { color: var(--papier-leise); }
+.reader-screen .mode-switch button:disabled,
+.reader-screen .mode-switch button[aria-disabled="true"] { color: var(--papier-leise); }
 
 /* Hinweise und Wasserzeichen auf hellem Grund */
 .reader-screen .page-hint { color: var(--papier-leise); }

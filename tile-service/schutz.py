@@ -16,6 +16,7 @@ import io
 from collections import OrderedDict
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 M32 = 0xFFFFFFFF
@@ -82,27 +83,8 @@ def umformungen(n: int, seed: int) -> list[tuple[int, int, int]]:
     return out
 
 
-def _baender(block: Image.Image, zeilen: int, spalten: int) -> Image.Image:
-    """Querstriche: 8-px-Baender invertieren, erst Zeilen, dann Spalten.
-
-    Wo sich zwei Baender kreuzen, ist doppelt invertiert, also wieder normal.
-    Die Baender liegen auf dem 8er-Raster des JPEG, darum ueberlebt das die
-    Kompression ohne Naehte.
-    """
-    from PIL import ImageOps
-
-    for i in range(BLOCK // 8):
-        if zeilen >> i & 1:
-            box = (0, i * 8, BLOCK, i * 8 + 8)
-            block.paste(ImageOps.invert(block.crop(box)), box[:2])
-    for i in range(BLOCK // 8):
-        if spalten >> i & 1:
-            box = (i * 8, 0, i * 8 + 8, BLOCK)
-            block.paste(ImageOps.invert(block.crop(box)), box[:2])
-    return block
-
-
-_DREHUNG = {1: Image.Transpose.ROTATE_90, 2: Image.Transpose.ROTATE_180, 3: Image.Transpose.ROTATE_270}
+# Fuer jede der 64 Zeilen (Spalten) eines Blocks: zu welchem 8-px-Band sie gehoert.
+_BAND = np.arange(BLOCK) // 8
 
 
 def verwuerfeln(image: Image.Image, seed: int) -> Image.Image:
@@ -110,28 +92,53 @@ def verwuerfeln(image: Image.Image, seed: int) -> Image.Image:
 
     1. Vertauschen: Block k des Ergebnisses ist Block p[k] des Originals.
     2. Den Block um 90°·d gegen den Uhrzeigersinn drehen und mit
-       invertierten Querstrichen versehen.
+       invertierten Querstrichen versehen: 8-px-Baender, erst Zeilen, dann
+       Spalten; wo sich zwei kreuzen, ist doppelt invertiert, also wieder
+       normal. Die Baender liegen auf dem 8er-Raster des JPEG, darum
+       ueberlebt das die Kompression ohne Naehte.
 
-    Der Reader macht es in umgekehrter Folge rueckgaengig.
+    Der Reader macht es in umgekehrter Folge rueckgaengig. Alle Bloecke auf
+    einmal mit numpy: Block fuer Block mit Pillow brauchte ein Artikelbild
+    von 1600 Pixeln gut 300 ms, und ein bildreicher Artikel wartete Sekunden.
+    Das Ergebnis ist Pixel fuer Pixel dasselbe (`test_schutz.py`).
     """
     spalten = image.width // BLOCK
     zeilen = image.height // BLOCK
     n = spalten * zeilen
     if n < 2:
         return image
+    if image.mode not in ("RGB", "L"):
+        image = image.convert("RGB")
     p = vertauschung(n, seed)
-    formen = umformungen(n, seed)
-    out = image.copy()
-    for k in range(n):
-        q = p[k]
-        sx, sy = (q % spalten) * BLOCK, (q // spalten) * BLOCK
-        dx, dy = (k % spalten) * BLOCK, (k // spalten) * BLOCK
-        block = image.crop((sx, sy, sx + BLOCK, sy + BLOCK))
-        drehung, zb, sb = formen[k]
-        if drehung:
-            block = block.transpose(_DREHUNG[drehung])
-        out.paste(_baender(block, zb, sb), (dx, dy))
-    return out
+    formen = np.array(umformungen(n, seed), dtype=np.int64)
+    quelle = np.asarray(image)
+    kanal = quelle.shape[2:]
+    hoch, breit = zeilen * BLOCK, spalten * BLOCK
+
+    bloecke = (
+        quelle[:hoch, :breit]
+        .reshape(zeilen, BLOCK, spalten, BLOCK, *kanal)
+        .swapaxes(1, 2)
+        .reshape(n, BLOCK, BLOCK, *kanal)
+    )[np.array(p)]
+    for d in (1, 2, 3):
+        welche = formen[:, 0] == d
+        if welche.any():
+            bloecke[welche] = np.rot90(bloecke[welche], d, axes=(1, 2))
+    zeilenband = ((formen[:, 1:2] >> _BAND) & 1).astype(bool)
+    spaltenband = ((formen[:, 2:3] >> _BAND) & 1).astype(bool)
+    maske = zeilenband[:, :, None] ^ spaltenband[:, None, :]
+    if kanal:
+        maske = maske[..., None]
+    bloecke = np.where(maske, 255 - bloecke, bloecke)
+
+    out = quelle.copy()
+    out[:hoch, :breit] = (
+        bloecke.reshape(zeilen, spalten, BLOCK, BLOCK, *kanal)
+        .swapaxes(1, 2)
+        .reshape(hoch, breit, *kanal)
+    )
+    return Image.fromarray(out, image.mode)
 
 
 def als_jpeg(image: Image.Image, quality: int = 85) -> bytes:

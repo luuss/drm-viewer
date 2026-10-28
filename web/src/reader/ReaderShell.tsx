@@ -9,8 +9,12 @@ import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import AppShell from "../components/AppShell";
+import NichtGefunden from "../components/NichtGefunden";
 import { reiheVon } from "../lib/reihen";
 import { ProductChoice } from "./ShopProduct";
+import { wischachse, wischziel, type Wischachse } from "./wischen";
+import { artikelAufSeite } from "./artikelAufSeite";
 
 type Mode = "page" | "article";
 type PageLayout = "single" | "spread";
@@ -34,6 +38,9 @@ function useBreit() {
   }, []);
   return breit;
 }
+
+/** Erklaerung am Knopf "Artikelansicht", wenn ein Heft keine Artikel hat. */
+const OHNE_ARTIKEL = "Für diese Ausgabe gibt es keine Artikelansicht, nur die Seiten.";
 
 /** Umschlag allein, danach echte linke/rechte Magazinpaare. */
 function spreadStart(index: number) {
@@ -99,6 +106,11 @@ export default function ReaderShell() {
   const [einstiegPunkt, setEinstiegPunkt] = useState<
     (Klickpunkt & { articleId: Id<"articles">; n: number }) | null
   >(null);
+  // Fundstelle aus der Suche (`?stelle=<Absatz>`): der Artikel oeffnet dort
+  // und hebt den Absatz kurz hervor.
+  const [stelle, setStelle] = useState<{ articleId: Id<"articles">; order: number } | null>(
+    null,
+  );
   const [tocOpen, setTocOpen] = useState(false);
   // Auf breiten Schirmen steht das Verzeichnis fest links; der Knopf "Inhalt"
   // blendet es aus und wieder ein. Die Wahl bleibt ueber Hefte hinweg.
@@ -113,17 +125,21 @@ export default function ReaderShell() {
     fromPageIndex?: number;
     punkt?: Klickpunkt;
   } | null>(null);
+  // Auf dem Telefon gibt es keinen Hinweis beim Zeigen; ein Tipp auf die
+  // gesperrte Artikelansicht blendet die Erklaerung kurz ein.
+  const [ohneArtikelHinweis, setOhneArtikelHinweis] = useState(false);
+  const ohneArtikelTimer = useRef<number | null>(null);
   const [restored, setRestored] = useState(false);
   const saveTimer = useRef<number | null>(null);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  // Die Leseflaeche als Zustand, nicht als Ref: sie entsteht erst nach dem
+  // Laden, und die Wischgeste haengt sich dann an sie.
+  const [leseflaeche, setLeseflaeche] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (access !== false || issue === undefined) return;
+    if (access !== false || !issue) return;
     // Die Verkaufsseite laeuft unter `/issue/:slug`, nicht unter der Kennung.
     // Mit der Kennung landete der Leser auf "Ausgabe nicht gefunden".
-    navigate(issue?.slug ? `/issue/${issue.slug}` : "/library", {
-      replace: true,
-    });
+    navigate(`/issue/${issue.slug}`, { replace: true });
   }, [access, issue, navigate]);
 
   useEffect(() => {
@@ -164,6 +180,8 @@ export default function ReaderShell() {
     if (deepLink && articles.some((a) => a._id === deepLink)) {
       setMode("article");
       setArticleId(deepLink);
+      const absatz = Number(searchParams.get("stelle"));
+      if (Number.isInteger(absatz) && absatz > 0) setStelle({ articleId: deepLink, order: absatz });
       const hit = articles.find((a) => a._id === deepLink);
       if (hit) setPageIndex(hit.primaryPageIndex);
     } else if (progress) {
@@ -175,6 +193,18 @@ export default function ReaderShell() {
   }, [restored, progress, articles, searchParams]);
 
   const articleList = articles ?? [];
+  const ohneArtikel = articles !== undefined && articles.length === 0;
+  const zeigeOhneArtikel = useCallback(() => {
+    setOhneArtikelHinweis(true);
+    if (ohneArtikelTimer.current) window.clearTimeout(ohneArtikelTimer.current);
+    ohneArtikelTimer.current = window.setTimeout(() => setOhneArtikelHinweis(false), 4000);
+  }, []);
+  useEffect(
+    () => () => {
+      if (ohneArtikelTimer.current) window.clearTimeout(ohneArtikelTimer.current);
+    },
+    [],
+  );
 
   /**
    * Die gedruckte Seitenzahl zu einer Leseseite. Sie ist nicht die laufende
@@ -252,6 +282,7 @@ export default function ReaderShell() {
   const openArticle = useCallback(
     (id: Id<"articles"> | null, fromPageIndex?: number, punkt?: Klickpunkt) => {
       setArticleId(id);
+      setStelle(null);
       setArtikelEinstieg(fromPageIndex ?? null);
       setEinstiegPunkt(id && punkt ? { ...punkt, articleId: id, n: Date.now() } : null);
       setMode("article");
@@ -267,6 +298,7 @@ export default function ReaderShell() {
       const next = new URLSearchParams(searchParams);
       if (id) next.set("article", id as string);
       else next.delete("article");
+      next.delete("stelle");
       setSearchParams(next, { replace: true });
       persist({ mode: "article", pageIndex: target, articleId: id });
     },
@@ -330,9 +362,20 @@ export default function ReaderShell() {
     openArticle(nearest._id, pageIndex);
   }, [articleList, pageIndex, openArticle]);
 
+  // Im Seitenmodus gehoert kein Artikel in die Adresse; sonst oeffnete ein
+  // Neuladen wieder den alten Artikel.
+  const adresseOhneArtikel = useCallback(() => {
+    if (!searchParams.has("article") && !searchParams.has("stelle")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("article");
+    next.delete("stelle");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const switchToPages = useCallback(() => {
     const current = articleList.find((a) => a._id === articleId);
     setMode("page");
+    adresseOhneArtikel();
     // Steht der Leser schon auf einer Seite des Artikels, bleibt er dort.
     // Nur wenn die gemerkte Seite nicht zum Artikel gehoert, wird auf seinen
     // Anfang gesprungen.
@@ -341,7 +384,26 @@ export default function ReaderShell() {
     const target = covers ? pageIndex : (current?.primaryPageIndex ?? pageIndex);
     setPageIndex(target);
     persist({ mode: "page", pageIndex: target, articleId });
-  }, [articleList, articleId, pageIndex, persist]);
+  }, [articleList, articleId, pageIndex, persist, adresseOhneArtikel]);
+
+  /**
+   * Ein Eintrag im Inhaltsverzeichnis, der nur eine Seite kennt. Im
+   * Artikelmodus bleibt der Leser dort und bekommt den Artikel dieser Seite;
+   * nur wenn keiner sie abdeckt, geht es in den Seitenmodus.
+   */
+  const zuVerzeichnisSeite = useCallback(
+    (p: number) => {
+      const deckt = mode === "article" ? artikelAufSeite(articleList, p) : null;
+      if (deckt) {
+        openArticle(deckt._id, p);
+        return;
+      }
+      setMode("page");
+      adresseOhneArtikel();
+      goPage(p);
+    },
+    [mode, articleList, openArticle, adresseOhneArtikel, goPage],
+  );
 
   const prev = useCallback(() => {
     if (mode === "article") {
@@ -420,6 +482,75 @@ export default function ReaderShell() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [prev, next, canPrev, canNext, adChoice]);
 
+  // Kein Zurueck per Wischen, solange der Leser offen ist. Chromium blaettert
+  // sonst bei einem Wisch nach rechts in der Browser-Geschichte zurueck, statt
+  // den vorigen Artikel zu zeigen, und der Leser ist weg.
+  useEffect(() => {
+    const html = document.documentElement.style;
+    const body = document.body.style;
+    const vorher = [html.overscrollBehaviorX, body.overscrollBehaviorX];
+    html.overscrollBehaviorX = "none";
+    body.overscrollBehaviorX = "none";
+    return () => {
+      [html.overscrollBehaviorX, body.overscrollBehaviorX] = vorher;
+    };
+  }, []);
+
+  // Wischen im Artikelmodus: ein Artikel vor oder zurueck. Die Bewegung wird
+  // ohne `passive` verfolgt (Reacts Beruehrungsereignisse sind passiv), damit
+  // eine klar seitliche Geste dem Browser genommen werden kann. Im
+  // Seitenmodus gehoert die Geste dem gemeinsamen Zoom-/Pan-Viewport;
+  // geblaettert wird dort ueber die Randtasten, sonst loeste horizontales
+  // Verschieben einer vergroesserten Doppelseite zugleich einen Wechsel aus.
+  const wischRef = useRef({ mode, prev, next });
+  wischRef.current = { mode, prev, next };
+  useEffect(() => {
+    if (!leseflaeche) return;
+    let start: { x: number; y: number } | null = null;
+    let achse: Wischachse | null = null;
+    const beginn = (e: TouchEvent) => {
+      start = null;
+      if (wischRef.current.mode === "page" || e.touches.length !== 1) return;
+      // Tabellen rollen seitlich; dort gehoert die Geste ihnen.
+      const ziel = e.target instanceof Element ? e.target : null;
+      const rolle = ziel?.closest<HTMLElement>(".article-table");
+      if (rolle && rolle.scrollWidth > rolle.clientWidth) return;
+      start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      achse = null;
+    };
+    const bewegung = (e: TouchEvent) => {
+      if (!start) return;
+      if (e.touches.length !== 1) {
+        start = null;
+        return;
+      }
+      achse ??= wischachse(e.touches[0].clientX - start.x, e.touches[0].clientY - start.y);
+      if (achse === "quer" && e.cancelable) e.preventDefault();
+    };
+    const ende = (e: TouchEvent) => {
+      if (!start) return;
+      const punkt = e.changedTouches[0];
+      const wohin =
+        achse === "hoch" ? null : wischziel(punkt.clientX - start.x, punkt.clientY - start.y);
+      start = null;
+      if (wohin === "zurueck") wischRef.current.prev();
+      else if (wohin === "weiter") wischRef.current.next();
+    };
+    const abbruch = () => {
+      start = null;
+    };
+    leseflaeche.addEventListener("touchstart", beginn, { passive: true });
+    leseflaeche.addEventListener("touchmove", bewegung, { passive: false });
+    leseflaeche.addEventListener("touchend", ende);
+    leseflaeche.addEventListener("touchcancel", abbruch);
+    return () => {
+      leseflaeche.removeEventListener("touchstart", beginn);
+      leseflaeche.removeEventListener("touchmove", bewegung);
+      leseflaeche.removeEventListener("touchend", ende);
+      leseflaeche.removeEventListener("touchcancel", abbruch);
+    };
+  }, [leseflaeche]);
+
   if (devtools) {
     return (
       <div className="centered reader-gesperrt" role="alert">
@@ -434,6 +565,15 @@ export default function ReaderShell() {
   }
   if (access === undefined || issue === undefined) {
     return <div className="centered">Laden...</div>;
+  }
+  // Unbekannt oder nicht veroeffentlicht: fuer Leser dasselbe, statt still
+  // in die Bibliothek umzuleiten.
+  if (!access && issue === null) {
+    return (
+      <AppShell>
+        <NichtGefunden />
+      </AppShell>
+    );
   }
   if (!access) {
     return (
@@ -460,32 +600,8 @@ export default function ReaderShell() {
 
   return (
     <div
+      ref={setLeseflaeche}
       className={verdeckt ? "reader-screen rv-on" : "reader-screen"}
-      onTouchStart={(e) => {
-        // Im Seitenmodus gehoert die Geste dem gemeinsamen Zoom-/Pan-Viewport.
-        // Geblaettert wird dort ueber die Randtasten; sonst loest horizontales
-        // Verschieben einer vergroesserten Doppelseite zugleich einen Wechsel aus.
-        if (mode === "page") return;
-        touchStart.current = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-        };
-      }}
-      onTouchEnd={(e) => {
-        if (mode === "page") {
-          touchStart.current = null;
-          return;
-        }
-        const start = touchStart.current;
-        if (!start) return;
-        const dx = e.changedTouches[0].clientX - start.x;
-        const dy = e.changedTouches[0].clientY - start.y;
-        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-          if (dx > 0) prev();
-          else next();
-        }
-        touchStart.current = null;
-      }}
     >
       <header className="reader-bar">
         <button className="btn quiet small" onClick={() => navigate("/library")}>
@@ -509,8 +625,14 @@ export default function ReaderShell() {
           </button>
           <button
             className={mode === "article" ? "active" : ""}
-            onClick={switchToArticles}
-            disabled={articleList.length === 0}
+            onClick={ohneArtikel ? zeigeOhneArtikel : switchToArticles}
+            // Solange die Liste laedt, ist der Knopf einfach gesperrt. Steht
+            // fest, dass es keine Artikel gibt, bleibt er erreichbar und sagt
+            // warum; ein gesperrter Knopf zeigt keinen Hinweis und nimmt
+            // keinen Fokus.
+            disabled={articles === undefined}
+            aria-disabled={ohneArtikel || undefined}
+            title={ohneArtikel ? OHNE_ARTIKEL : undefined}
           >
             <Icon name="book-open" />
             Artikelansicht
@@ -556,6 +678,11 @@ export default function ReaderShell() {
 
       <div className={tocDocked ? "reader-body toc-fest" : "reader-body"}>
         <main className="reader-main">
+          {ohneArtikelHinweis && (
+            <div className="page-hint retry" role="status">
+              {OHNE_ARTIKEL}
+            </div>
+          )}
           {mode === "page" ? (
             sessionToken && schutzKey !== null ? (
               <PageMode
@@ -590,6 +717,11 @@ export default function ReaderShell() {
                 )?.products ?? []
               }
               fromPageIndex={artikelEinstieg}
+              stelle={
+                stelle && stelle.articleId === (articleId ?? articleList[0]?._id)
+                  ? stelle.order
+                  : null
+              }
               einstiegPunkt={
                 einstiegPunkt && einstiegPunkt.articleId === (articleId ?? articleList[0]?._id)
                   ? einstiegPunkt
@@ -617,10 +749,7 @@ export default function ReaderShell() {
           currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
           pageLabel={pageLabel}
           onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
-          onPage={(p) => {
-            setMode("page");
-            goPage(p);
-          }}
+          onPage={zuVerzeichnisSeite}
           onArticle={openArticle}
         />
       </div>

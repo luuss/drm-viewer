@@ -56,8 +56,9 @@ function currentEntryId(
 
 /**
  * Inhaltsverzeichnis als Schublade — aus beiden Modi mit demselben Knopf
- * erreichbar. Kennt ein Eintrag nur eine Seite, springt der Artikelmodus
- * zur Seite; kennt er einen Artikel, oeffnet ihn der Seitenmodus dort.
+ * erreichbar. Kennt ein Eintrag nur eine Seite, oeffnet der Artikelmodus den
+ * Artikel dieser Seite, sonst geht es zur Seite (`onPage`, ReaderShell);
+ * kennt er einen Artikel, oeffnet ihn der Seitenmodus dort.
  */
 export default function TocDrawer({
   issueId,

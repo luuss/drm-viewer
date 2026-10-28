@@ -46,8 +46,14 @@ TILE_SIZE = int(os.environ.get("TILE_SIZE", "512"))
 PAGE_CACHE = int(os.environ.get("PAGE_CACHE", "24"))
 SESSION_CACHE_TTL = 60
 USAGE_FLUSH_SECONDS = int(os.environ.get("USAGE_FLUSH_SECONDS", "30"))
-MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "80"))
-MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "1200"))
+# Bremse je Leser und Heft. Zuegiges Blaettern eines Menschen bleibt
+# darunter: Doppelseiten im Sekundentakt sind 120 Seiten und einige tausend
+# Kacheln in der Minute (scharfe Schirme laden je Seite bis 35 Kacheln). Mit
+# 80 Seiten und 1200 Kacheln blieben beim Blaettern Seiten bis zu einer
+# Minute leer (Pruefung 28.10.2026). Wer ein Heft maschinell abzieht, wird
+# weiter gebremst; der Leser wartet bei 429 und fragt selbst nach.
+MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "300"))
+MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "6000"))
 
 # Medienspeicher. Liegen die Bilder in einem Eimer statt in der Convex-Ablage,
 # hat Convex keine Adresse fuer den Browser — dieser Dienst hat den Zugang und
@@ -65,7 +71,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-V"],
+    expose_headers=["X-V", "Retry-After"],
 )
 
 _client = httpx.AsyncClient(timeout=60.0, follow_redirects=False)
@@ -228,7 +234,12 @@ def check_rate(key: str, limit: int, what: str) -> None:
     while hits and now - hits[0] > 60:
         hits.popleft()
     if len(hits) >= limit:
-        raise HTTPException(429, f"Zu viele {what} pro Minute")
+        # Wann der aelteste Zugriff aus dem Fenster faellt: so lange wartet
+        # der Leser, bevor er von selbst nachfragt (`web/src/reader/nachladen.ts`).
+        frei = max(1, int(60 - (now - hits[0])) + 1)
+        raise HTTPException(
+            429, f"Zu viele {what} pro Minute", headers={"Retry-After": str(frei)}
+        )
     hits.append(now)
 
 
@@ -280,6 +291,42 @@ async def resolve_page(issue_id: str, index: int) -> dict:
             if exp <= now:
                 _resolve_cache.pop(k, None)
     return info
+
+
+# Artikelbilder: wohin eine Kennung zeigt und die Bytes dahinter, kurz
+# gemerkt. Ein bildreicher Artikel fragte sonst je Bild erst Convex und dann
+# den Medienspeicher, und wer zwischen Artikeln hin und her blaettert, holte
+# dieselben Bilder jedes Mal neu. Verwuerfelt wird weiter je Sitzung.
+ASSET_TTL = 30
+BILD_CACHE = int(os.environ.get("BILD_CACHE", "48"))
+_asset_cache: dict[str, tuple[float, dict | None]] = {}
+_bild_cache: "OrderedDict[str, bytes]" = OrderedDict()
+
+
+async def resolve_asset(asset_id: str) -> dict | None:
+    now = time.monotonic()
+    hit = _asset_cache.get(asset_id)
+    if hit and hit[0] > now:
+        return hit[1]
+    info = await service_call("/service/asset/resolve", {"assetId": asset_id})
+    _asset_cache[asset_id] = (now + ASSET_TTL, info)
+    if len(_asset_cache) > 4096:
+        for k, (exp, _) in list(_asset_cache.items()):
+            if exp <= now:
+                _asset_cache.pop(k, None)
+    return info
+
+
+async def load_bild(info: dict) -> bytes:
+    key = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
+    if key in _bild_cache:
+        _bild_cache.move_to_end(key)
+        return _bild_cache[key]
+    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    _bild_cache[key] = daten
+    while len(_bild_cache) > BILD_CACHE:
+        _bild_cache.popitem(last=False)
+    return daten
 
 
 async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
@@ -395,7 +442,7 @@ async def asset(
     es mit der Sitzung im Kopf, setzt es zusammen und malt es auf eine Flaeche.
     Die Sitzung in der Adresse (`?s=`) gibt es nicht mehr.
     """
-    info = await service_call("/service/asset/resolve", {"assetId": asset_id})
+    info = await resolve_asset(asset_id)
     if not info:
         raise HTTPException(404, "Unbekanntes Bild")
     if info.get("public"):
@@ -420,7 +467,7 @@ async def asset(
         MAX_TILES_PER_MIN,
         "Bilder",
     )
-    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    daten = await load_bild(info)
     seed = schutz.fnv1a32(f'{session.get("kachelSchluessel", 0)}:asset:{asset_id}')
 
     feld = wasserzeichen_feld(session)

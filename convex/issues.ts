@@ -128,6 +128,12 @@ export const getPublic = query({
   },
 });
 
+/**
+ * Kennung zum Slug der Heftseite. Ein Heft im Entwurf kennt nur, wer es lesen
+ * darf (Redaktion, Kaeufer); fuer alle anderen sieht es aus wie ein
+ * unbekanntes. Frueher verriet "nicht gefunden" statt "Laden..." seine
+ * Existenz.
+ */
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) => {
@@ -135,7 +141,13 @@ export const getBySlug = query({
       .query("issues")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first();
-    return issue?._id ?? null;
+    if (!issue) return null;
+    if (issue.isPublished) return issue._id;
+    const userId = await getAuthUserId(ctx);
+    if (userId && (await hasIssueAccess(ctx, userId as Id<"users">, issue._id))) {
+      return issue._id;
+    }
+    return null;
   },
 });
 
@@ -285,6 +297,10 @@ export const overviewForEditors = query({
           .withIndex("by_issue", (q) => q.eq("issueId", i._id))
           .order("desc")
           .first();
+        const verzeichnis = await ctx.db
+          .query("tocEntries")
+          .withIndex("by_issue", (q) => q.eq("issueId", i._id))
+          .first();
         const pubKey = i.publicationId as string;
         if (!names.has(pubKey)) {
           names.set(pubKey, (await ctx.db.get(i.publicationId))?.name ?? null);
@@ -303,6 +319,8 @@ export const overviewForEditors = query({
           shopOffered: i.shopDigital?.offered ?? false,
           articleCount: articles.length,
           pendingArticles: articles.filter((a) => a.reviewStatus === "pending").length,
+          approvedArticles: articles.filter((a) => a.reviewStatus === "approved").length,
+          hasToc: verzeichnis !== null,
           coverUrl: await assetUrl(ctx, i.coverAssetId),
           lastJob: job
             ? {
@@ -645,6 +663,23 @@ export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
   if (pending > 0) {
     throw new Error(
       `Noch ${pending} Artikel ohne Entscheidung. Erst freigeben oder ausschließen.`,
+    );
+  }
+  // Ein Heft ohne freigegebenen Artikel und ohne Verzeichnis ist nur ein
+  // Bildarchiv: keine Artikelansicht, keine Suche, Tipps ins Leere. So stand
+  // ZUERST! 12/2025 verkauft im Kiosk.
+  if (!articles.some((a) => a.reviewStatus === "approved")) {
+    throw new Error(
+      "Kein Artikel freigegeben. Ohne Artikel kann nicht veröffentlicht werden.",
+    );
+  }
+  const verzeichnis = await ctx.db
+    .query("tocEntries")
+    .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+    .first();
+  if (!verzeichnis) {
+    throw new Error(
+      "Kein Inhaltsverzeichnis. Ohne Verzeichnis kann nicht veröffentlicht werden.",
     );
   }
   await ctx.db.patch(issueId, {

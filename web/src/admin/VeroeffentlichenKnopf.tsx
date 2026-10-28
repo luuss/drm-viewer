@@ -9,7 +9,14 @@ import { MeldungZeile, useMeldung } from "./adminUi";
 export default function VeroeffentlichenKnopf({
   issue,
 }: {
-  issue: { _id: Id<"issues">; isPublished: boolean; pageCount: number; pendingArticles: number };
+  issue: {
+    _id: Id<"issues">;
+    isPublished: boolean;
+    pageCount: number;
+    pendingArticles: number;
+    approvedArticles: number;
+    tocCount: number;
+  };
 }) {
   const setPublished = useMutation(api.issues.setPublished);
   const [meldung, tue, busy] = useMeldung();
@@ -17,7 +24,11 @@ export default function VeroeffentlichenKnopf({
     ? "Noch keine Seiten"
     : issue.pendingArticles > 0
       ? `${issue.pendingArticles} Artikel offen`
-      : null;
+      : issue.approvedArticles === 0
+        ? "Kein Artikel freigegeben"
+        : issue.tocCount === 0
+          ? "Kein Inhaltsverzeichnis"
+          : null;
 
   return (
     <div className="veroeffentlichen">

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
@@ -10,6 +10,8 @@ import "./search.css";
 const MIN_ZEICHEN = 3;
 /** Pause nach dem letzten Tastendruck, bevor gesucht wird. */
 const ENTPRELLUNG_MS = 220;
+/** Treffer je Abruf in den eigenen Heften; "Weitere Treffer" holt so viele dazu. */
+const SEITE = 25;
 const ZULETZT_KEY = "suche-zuletzt";
 const ZULETZT_MAX = 6;
 
@@ -36,15 +38,25 @@ function zuletztMerken(begriff: string): string[] {
   return liste;
 }
 
+/** Sprung in den Leser, zum Absatz der Fundstelle, wenn es einen gibt. */
+function leserLink(r: { issueId: string; _id: string; stelle: number | null }) {
+  return `/reader/${r.issueId}?article=${r._id}${r.stelle !== null ? `&stelle=${r.stelle}` : ""}`;
+}
+
 /**
  * Suche ueber die freigeschalteten Hefte (Volltext) und die Verzeichnisse
  * aller Hefte im Kiosk. Gesucht wird schon beim Tippen, kurz entprellt; die
- * Treffer stehen je Heft beisammen, mit Umschlag, Reihe und Seite.
+ * Treffer stehen je Heft beisammen, mit Umschlag, Reihe und Seite. Der
+ * Begriff steht in der Adresse (`?q=`): Zurueck aus dem Leser und ein
+ * geteilter Link zeigen dieselbe Suche.
  */
 export default function SearchPage() {
   const navigate = useNavigate();
-  const [term, setTerm] = useState("");
-  const [begriff, setBegriff] = useState("");
+  const [params, setParams] = useSearchParams();
+  const q = params.get("q") ?? "";
+  const [term, setTerm] = useState(q);
+  const [begriff, setBegriff] = useState(q.trim());
+  const [limit, setLimit] = useState(SEITE);
   const [zuletzt, setZuletzt] = useState<string[]>(zuletztLesen);
   const eingabe = useRef<HTMLInputElement>(null);
   const { isAuthenticated } = useConvexAuth();
@@ -55,16 +67,45 @@ export default function SearchPage() {
     return () => window.clearTimeout(t);
   }, [term]);
 
+  // Begriff in die Adresse, ohne fuer jeden Tastendruck einen Eintrag im
+  // Verlauf. Aendert sich die Adresse von aussen (Kopfzeile "Suche"), folgt
+  // das Feld.
+  const geschrieben = useRef(q);
+  useEffect(() => {
+    if (q === geschrieben.current) return;
+    geschrieben.current = q;
+    setTerm(q);
+    setBegriff(q.trim());
+  }, [q]);
+  useEffect(() => {
+    const ziel = begriff.length >= MIN_ZEICHEN ? begriff : "";
+    if (ziel === geschrieben.current) return;
+    geschrieben.current = ziel;
+    setParams(ziel ? { q: ziel } : {}, { replace: true });
+  }, [begriff, setParams]);
+
+  // Ein neuer Begriff beginnt wieder mit der ersten Seite Treffer.
+  useEffect(() => setLimit(SEITE), [begriff]);
+
   const active = begriff.length >= MIN_ZEICHEN;
   // Volltext nur in freigeschalteten Heften; aus allen anderen die Verzeichnisse.
-  const results = useQuery(
+  const abgefragt = useQuery(
     api.articles.search,
-    active && isAuthenticated ? { term: begriff } : "skip",
+    active && isAuthenticated ? { term: begriff, limit } : "skip",
   );
+  // Laedt "Weitere Treffer", bleiben die bisherigen stehen, statt dass die
+  // Liste kurz verschwindet.
+  const vorher = useRef<{ begriff: string; ergebnis: NonNullable<typeof abgefragt> } | null>(null);
+  if (abgefragt) vorher.current = { begriff, ergebnis: abgefragt };
+  const results =
+    abgefragt ?? (vorher.current?.begriff === begriff ? vorher.current.ergebnis : undefined);
+  const mehrLaedt = abgefragt === undefined && results !== undefined;
   const kiosk = useQuery(api.tocPreview.searchCatalog, active ? { term: begriff } : "skip");
   const bibliothek = useQuery(api.issues.myLibrary, isAuthenticated ? {} : "skip");
 
-  const eigene = isAuthenticated ? results : [];
+  const eigene = isAuthenticated ? results?.treffer : [];
+  // Stiess die Suche an ihre Tiefe, kann es mehr geben, als gezaehlt sind.
+  const unvollstaendig = isAuthenticated && results?.vollstaendig === false;
   const laeuft = active && (eigene === undefined || kiosk === undefined);
   // Waehrend getippt wird, bleiben die letzten Treffer stehen statt zu flackern.
   const tipptNoch = term.trim() !== begriff;
@@ -97,9 +138,10 @@ export default function SearchPage() {
     return out;
   }, [eigene, bibliothek]);
 
-  const anzahl = (eigene?.length ?? 0) + (kiosk ?? []).reduce((n, h) => n + h.entries.length + h.more, 0);
+  const eigeneAnzahl = isAuthenticated ? (results?.gesamt ?? 0) : 0;
+  const anzahl = eigeneAnzahl + (kiosk ?? []).reduce((n, h) => n + h.entries.length + h.more, 0);
   const ersterLink = gruppen[0]?.treffer[0]
-    ? `/reader/${gruppen[0].issueId}?article=${gruppen[0].treffer[0]._id}`
+    ? leserLink(gruppen[0].treffer[0])
     : kiosk?.[0]
       ? `/issue/${kiosk[0].slug}?bild=inhalt`
       : null;
@@ -173,7 +215,8 @@ export default function SearchPage() {
         {active && (laeuft || tipptNoch) && <span className="suche-laeuft">Suche läuft</span>}
         {active && !laeuft && !tipptNoch && anzahl > 0 && (
           <span>
-            <strong>{anzahl}</strong> {anzahl === 1 ? "Treffer" : "Treffer"} zu „{begriff}“
+            {unvollstaendig && "Mehr als "}
+            <strong>{anzahl}</strong> Treffer zu „{begriff}“
             {ersterLink && <span className="suche-tipp"> · Enter öffnet den ersten</span>}
           </span>
         )}
@@ -222,7 +265,11 @@ export default function SearchPage() {
       {active && gruppen.length > 0 && (
         <section className="suche-block">
           <h3>
-            In Ihren Ausgaben <span className="zahl">{eigene?.length}</span>
+            In Ihren Ausgaben{" "}
+            <span className="zahl">
+              {unvollstaendig && "mehr als "}
+              {eigeneAnzahl}
+            </span>
           </h3>
           {gruppen.map((g) => (
             <article key={g.issueId} className="suche-heft">
@@ -241,11 +288,11 @@ export default function SearchPage() {
                 <ul className="suche-treffer">
                   {g.treffer.map((r) => (
                     <li key={r._id}>
-                      <Link to={`/reader/${r.issueId}?article=${r._id}`} onClick={merken}>
+                      <Link to={leserLink(r)} onClick={merken}>
                         <span className="titel">
                           <Markiert text={r.title} begriff={begriff} />
                         </span>
-                        <span className="seite">S. {r.pageIndex + 1}</span>
+                        <span className="seite">S. {r.page}</span>
                         <span className="ausschnitt">
                           <Markiert text={r.snippet} begriff={begriff} />
                         </span>
@@ -256,6 +303,23 @@ export default function SearchPage() {
               </div>
             </article>
           ))}
+          {(eigene?.length ?? 0) < eigeneAnzahl && (
+            <div className="suche-mehr">
+              <button
+                type="button"
+                className="btn secondary small"
+                disabled={mehrLaedt}
+                aria-busy={mehrLaedt}
+                onClick={() => setLimit((n) => n + SEITE)}
+              >
+                Weitere Treffer
+              </button>
+              <span className="hint">
+                {eigene?.length} von {unvollstaendig && "mehr als "}
+                {eigeneAnzahl}
+              </span>
+            </div>
+          )}
         </section>
       )}
 

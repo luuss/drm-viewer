@@ -71,12 +71,15 @@ export default function IssueOverview({ issue }: { issue: EditorIssue }) {
         ) : null,
     },
     {
-      ok: issue.pendingArticles === 0,
+      // Ohne freigegebenen Artikel sperrt `publishIssue` ebenfalls.
+      ok: issue.pendingArticles === 0 && issue.approvedArticles > 0,
       sperrt: true,
       text:
         issue.pendingArticles > 0
           ? `${issue.pendingArticles} von ${issue.articleCount} Artikeln offen`
-          : `Artikel entschieden: ${issue.approvedArticles} freigegeben, ${issue.excludedArticles} ausgeschlossen`,
+          : issue.approvedArticles === 0
+            ? "Kein Artikel freigegeben"
+            : `Artikel entschieden: ${issue.approvedArticles} freigegeben, ${issue.excludedArticles} ausgeschlossen`,
       aktion: issue.pendingArticles > 0 && (
         <>
           <Link className="btn quiet small" to={`${basis}/artikel`}>
@@ -118,6 +121,7 @@ export default function IssueOverview({ issue }: { issue: EditorIssue }) {
     },
     {
       ok: issue.tocCount > 0,
+      sperrt: true,
       text: issue.tocCount ? `Inhaltsverzeichnis mit ${issue.tocCount} Einträgen` : "Kein Inhaltsverzeichnis",
       aktion: (
         <Link className="btn quiet small" to={`${basis}/inhalt`}>
