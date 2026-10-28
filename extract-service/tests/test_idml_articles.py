@@ -119,6 +119,93 @@ def test_ausgelagerte_initiale_kommt_an_ihren_absatz():
     assert all(t.strip() != "F" for t in texte)
 
 
+def _im_rahmen(b: SourceBlock, rahmen: tuple[float, float, float, float]) -> SourceBlock:
+    from dataclasses import replace
+
+    return replace(b, x0=rahmen[0], y0=rahmen[1], x1=rahmen[2], y1=rahmen[3], frame_box=rahmen)
+
+
+def test_initiale_ueberlebt_das_aussortieren_des_beiwerks():
+    """DMZ 170, S. 4: die Initiale "D" steht als eigene Story im Textrahmen.
+
+    `mark_furniture` verwirft jeden Block mit zwei Zeichen; vorher muss der
+    Buchstabe an seinem Absatz stehen ("ie Schlacht von Waterloo").
+    """
+    from extractor.idml_articles import initialen_zurueck
+    from extractor.pdf_extract import mark_furniture
+
+    blocks = [
+        _im_rahmen(
+            block("Schicksalsschlacht", story="k1", style="Überschrift 2023", page=4),
+            (0.048, 0.08, 0.95, 0.15),
+        ),
+        _im_rahmen(
+            block("D", story="i1", style="$ID/NormalParagraphStyle", page=4),
+            (0.048, 0.229, 0.095, 0.263),
+        ),
+        _im_rahmen(
+            block(
+                "ie Schlacht von Waterloo fand am 18. Juni 1815 statt. " + "x" * 500,
+                story="t1",
+                style="Mengentext Initiale 2023",
+                page=4,
+            ),
+            (0.048, 0.22, 0.333, 0.94),
+        ),
+    ]
+    blocks = initialen_zurueck(blocks)
+    mark_furniture(blocks, 80)
+    artikel = artikel_aus_satz([b for b in blocks if not b.drop])
+    assert artikel[0].title == "Schicksalsschlacht"
+    assert artikel[0].blocks[-1].text.startswith("Die Schlacht von Waterloo")
+
+
+def test_drei_initialen_einer_seite_finden_ihre_besprechung():
+    """DMZ 170, S. 80: drei Buchbesprechungen, drei Initialen in ihren Spalten."""
+    from extractor.idml_articles import initialen_zurueck
+
+    def rahmen(text, story, kasten):
+        return _im_rahmen(block(text, story=story, style="Buchbesprechung 2023", page=80), kasten)
+
+    blocks = [
+        rahmen("W", "i1", (0.363, 0.077, 0.406, 0.104)),
+        rahmen("I", "i2", (0.054, 0.267, 0.077, 0.293)),
+        rahmen("D", "i3", (0.668, 0.267, 0.699, 0.293)),
+        rahmen("eltgeschichte ist Kriegsgeschichte. " + "x" * 400, "t1", (0.35, 0.07, 0.95, 0.25)),
+        rahmen("m Loire-Örtchen La Charité " + "x" * 400, "t2", (0.048, 0.26, 0.33, 0.94)),
+        rahmen("as Wettrüsten im Kalten Krieg " + "x" * 400, "t3", (0.66, 0.26, 0.95, 0.94)),
+    ]
+    texte = [b.text[:14] for b in initialen_zurueck(blocks)]
+    assert texte == ["Weltgeschichte", "Im Loire-Örtch", "Das Wettrüsten"]
+
+
+def test_kleiner_anfang_ohne_initiale_im_rahmen_bleibt():
+    """ZUERST!: das Editorial beginnt nach der Anrede klein ("nicht selten sind").
+
+    Ein Buchstabe ausserhalb seines Rahmens (hier auf der Seite gegenueber)
+    gehoert nicht davor.
+    """
+    from extractor.idml_articles import initialen_zurueck
+
+    blocks = [
+        _im_rahmen(
+            block("Sehr geehrte Leser,", story="t1", style="Kleine Überschrift rot", page=2),
+            (0.135, 0.242, 0.487, 0.88),
+        ),
+        _im_rahmen(
+            block("nicht selten sind die größten Feinde " + "x" * 500, story="t2", style="Mengentext", page=2),
+            (0.512, 0.418, 0.864, 0.987),
+        ),
+        _im_rahmen(
+            block("X", story="i1", style="$ID/NormalParagraphStyle", page=2),
+            (0.02, 0.02, 0.05, 0.05),
+        ),
+    ]
+    texte = [b.text for b in initialen_zurueck(blocks)]
+    assert any(t.startswith("nicht selten sind") for t in texte)
+    assert "X" in texte
+
+
 def test_kasten_steht_an_seiner_seite_im_lesefluss():
     blocks = [
         block("Titel", story="k1", style="hauptüberschrift", page=0, y0=0.09),

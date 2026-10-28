@@ -56,6 +56,7 @@ from extractor.pdf_extract import (
 )
 from extractor.idml_articles import (
     artikel_aus_satz,
+    initialen_zurueck,
     ohne_unterlagen,
     ohne_vorschaubilder,
     rollen_je_story,
@@ -797,7 +798,9 @@ class Job:
                 jobId=self.job_id,
                 entfernt=len(bildrahmen) - len(gefiltert),
             )
-        satz_blocks = frames_to_blocks(rohe_blocks, page_map, trims)
+        # Die ausgelagerte Initiale zurueck an ihren Absatz, bevor das
+        # Aussortieren sie als Beiwerk (zwei Zeichen) verwirft.
+        satz_blocks = initialen_zurueck(frames_to_blocks(rohe_blocks, page_map, trims))
         satz_images = frames_to_images(gefiltert, page_map, trims)
         return satz_blocks, satz_images
 

@@ -325,41 +325,96 @@ def _abstand(a: SourceBlock, b: SourceBlock) -> float:
     return abs(ka[0] - kb[0]) + abs(ka[1] - kb[1])
 
 
+# Die Initiale steht im Textrahmen ihres Absatzes (der Text laeuft um sie
+# herum) oder knapp davor. Ohne Rahmenangabe zaehlt der Abstand der Ecken.
+INITIALE_RAND = 0.02
+INITIALE_ABSTAND = 0.05
+
+
+def _initiale_passt(initiale: SourceBlock, absatz: SourceBlock) -> bool:
+    if initiale.page_index != absatz.page_index:
+        return False
+    i = initiale.frame_box or (initiale.x0, initiale.y0, initiale.x1, initiale.y1)
+    if absatz.frame_box is None:
+        return _abstand(initiale, absatz) <= INITIALE_ABSTAND
+    x0, y0, x1, y1 = absatz.frame_box
+    mx, my = (i[0] + i[2]) / 2, (i[1] + i[3]) / 2
+    return (
+        x0 - INITIALE_RAND <= mx <= x1 + INITIALE_RAND
+        and y0 - INITIALE_RAND <= my <= y1 + INITIALE_RAND
+    )
+
+
 def initialen_einsetzen(stories: list["Story"]) -> list["Story"]:
     """Den ausgelagerten Anfangsbuchstaben an seinen Absatz zurueckgeben.
 
     Der Setzer legt die Initiale gern in einen eigenen Rahmen, damit sie frei
     ueber mehrere Zeilen stehen kann. Im Satz fehlt sie dem Absatz dann am
-    Anfang: "ridolin Rudolf ..." statt "Fridolin Rudolf ...". Gesucht wird der
-    naechstgelegene freie Buchstabe auf derselben Seite.
+    Anfang: "ridolin Rudolf ..." statt "Fridolin Rudolf ...". Ein Absatz, der
+    klein beginnt, bekommt den Buchstaben, der in seinem Textrahmen steht;
+    stehen mehrere zur Wahl (drei Buchbesprechungen auf einer Seite), gehen
+    die naechstgelegenen Paare zuerst zusammen. Ein Absatz ohne Initiale in
+    seinem Rahmen bleibt, wie er ist — das Editorial von ZUERST! beginnt nach
+    der Anrede bewusst klein ("nicht selten sind …").
     """
     from dataclasses import replace
 
     initialen = [s for s in stories if _ist_initiale(s)]
     if not initialen:
         return stories
+    offen = [
+        s
+        for s in stories
+        if s.blocks
+        and not _ist_initiale(s)
+        and s.blocks[0].text.lstrip()[:1].islower()
+    ]
+    paare = sorted(
+        (
+            (_abstand(i.blocks[0], s.blocks[0]), n, m)
+            for n, i in enumerate(initialen)
+            for m, s in enumerate(offen)
+            if i.blocks and _initiale_passt(i.blocks[0], s.blocks[0])
+        ),
+        key=lambda p: p[0],
+    )
     vergeben: set[str] = set()
-    for story in stories:
-        if not story.blocks or _ist_initiale(story):
+    versorgt: set[int] = set()
+    for _abst, n, m in paare:
+        initiale, story = initialen[n], offen[m]
+        if initiale.story_id in vergeben or m in versorgt:
             continue
+        vergeben.add(initiale.story_id)
+        versorgt.add(m)
         erster = story.blocks[0]
-        text = erster.text.lstrip()
-        if not text or not text[0].islower():
-            continue
-        moeglich = [
-            i
-            for i in initialen
-            if i.story_id not in vergeben
-            and i.blocks
-            and i.blocks[0].page_index == erster.page_index
-        ]
-        if not moeglich:
-            continue
-        treffer = min(moeglich, key=lambda i: _abstand(i.blocks[0], erster))
-        vergeben.add(treffer.story_id)
-        buchstabe = "".join(b.text for b in treffer.blocks).strip()
+        buchstabe = "".join(b.text for b in initiale.blocks).strip()
         story.blocks[0] = replace(erster, text=f"{buchstabe}{erster.text}")
     return [s for s in stories if s.story_id not in vergeben]
+
+
+def initialen_zurueck(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """`initialen_einsetzen` auf der flachen Blockliste, in ihrer Reihenfolge.
+
+    Muss laufen, bevor Beiwerk aussortiert wird: `mark_furniture` verwirft
+    jeden Block mit hoechstens zwei Zeichen — auch die Initiale. Danach fehlte
+    sie in DMZ 170 einundzwanzig Artikeln ("ie Schlacht von Waterloo").
+    """
+    stories = stories_bilden(blocks)
+    erste = {s.story_id: s.blocks[0] for s in stories if s.blocks}
+    uebrig = initialen_einsetzen(stories)
+    if len(uebrig) == len(stories):
+        return blocks
+    weg = {s.story_id for s in stories} - {s.story_id for s in uebrig}
+    ersatz = {
+        id(erste[s.story_id]): s.blocks[0]
+        for s in uebrig
+        if s.blocks and s.blocks[0] is not erste[s.story_id]
+    }
+    return [
+        ersatz.get(id(b), b)
+        for b in blocks
+        if not (b.origin == "idml" and b.story_id in weg)
+    ]
 
 
 def stories_bilden(blocks: list[SourceBlock]) -> list[Story]:
