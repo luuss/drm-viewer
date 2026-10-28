@@ -145,20 +145,39 @@ def _sieht_aus_wie_name(text: str) -> bool:
     return gross == len(woerter)
 
 
+# "Werner Reichel: Best of Baerbock" — Verfasser und Titel in einer Zeile.
+_VERFASSER_DOPPELPUNKT = re.compile(r"^(?P<autor>[^:]{3,90}?)\s*:\s+(?P<titel>\S.*)$")
+
+
+def _verfasser_abtrennen(autor: str | None, titel: str) -> tuple[str | None, str]:
+    """Steht der Verfasser mit Doppelpunkt vor dem Titel, wird er abgetrennt.
+
+    Der Laden kennt das Buch unter seinem Titel; mit dem Verfasser davor
+    ("Werner Reichel: Best of Baerbock") findet seine Suche nichts.
+    """
+    if autor:
+        return autor, titel
+    m = _VERFASSER_DOPPELPUNKT.match(" ".join(titel.split()))
+    if m and _sieht_aus_wie_name(m.group("autor")):
+        return m.group("autor").strip(), m.group("titel").strip()
+    return None, titel
+
+
 def _kopf_der_kachel(absaetze: list[SourceBlock]) -> tuple[str | None, str | None]:
     """Verfasser und Titel einer Kachel.
 
     Zuerst die Absatzformate des Satzes ("werbeseite autor", "Bücherseite
     Titel 2023", "Autorenname Katalog", "Buchtitel Katalog"). Fehlen sie, die
     kurzen Absaetze vor dem Text: ein Name zuerst ist der Verfasser, der
-    naechste der Titel.
+    naechste der Titel. Steht beides in einer Zeile ("Verfasser: Titel"),
+    wird es dort getrennt.
     """
     autor = [b.text.strip() for b in absaetze if re.search(r"autor", b.style_name or "", re.I)]
     titel = [b.text.strip() for b in absaetze if re.search(r"titel", b.style_name or "", re.I)]
     if titel:
         # Verfasser in mehreren Zeilen ("Alexander Marguier/" "Ben Krischke (Hg.)").
         a = " ".join(autor).replace("/ ", "/") if autor else None
-        return a or None, " ".join(titel)
+        return _verfasser_abtrennen(a or None, " ".join(titel))
     kopf: list[str] = []
     for b in absaetze:
         t = b.text.strip()
@@ -177,7 +196,7 @@ def _kopf_der_kachel(absaetze: list[SourceBlock]) -> tuple[str | None, str | Non
         return None, None
     if len(kopf) >= 2 and _sieht_aus_wie_name(kopf[0]):
         return kopf[0], kopf[1]
-    return None, kopf[0]
+    return _verfasser_abtrennen(None, kopf[0])
 
 
 def _ueberlappung(a0: float, a1: float, b0: float, b1: float) -> float:

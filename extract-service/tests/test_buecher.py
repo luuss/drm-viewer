@@ -141,7 +141,9 @@ def test_dmz_zeitgeschichte_katalog_und_kalender():
     alle = buecher_der_seiten(blocks, images)
     nummern = {b.titel: b.referenz for b in alle if b.page_index in (18, 62)}
     assert nummern["Die Generale der Waffen‑SS"] == "101208"
-    assert nummern["Wolfgang Willrich: Soldatenköpfe"] == "460721"
+    # "Wolfgang Willrich: Soldatenköpfe": der Verfasser steht vor dem Titel.
+    assert nummern["Soldatenköpfe"] == "460721"
+    assert {b.titel: b.autor for b in alle}["Soldatenköpfe"] == "Wolfgang Willrich"
     # Impressum und Kleinanzeigen tragen Preise, sind aber keine Buecher.
     assert not any(t.startswith(("Impressum", "Kleinanzeigen")) for t in nummern)
 

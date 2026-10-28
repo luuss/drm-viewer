@@ -148,6 +148,11 @@ class SourceBlock:
     # Nur bei `kind == "table"`: die Tabelle selbst. `text` traegt dann ihren
     # flachen Text, damit Suche und Zaehlungen weiter funktionieren.
     table: TableData | None = None
+    # Nur bei Bloecken aus dem Satz: die wievielte Absatzgruppe der Story.
+    # Eine Leerzeile (leerer Absatz) beginnt eine neue Gruppe. In einem
+    # Bildunterschriften-Rahmen zwischen zwei Bildern trennt sie die
+    # Unterschrift des oberen von der des unteren Bildes.
+    absatzgruppe: int = 0
 
     @property
     def char_count(self) -> int:
@@ -173,6 +178,19 @@ class SourceImage:
     # None laesst die bisherige geometrische Rueckfalllogik aktiv.
     after_block_order: int | None = None
     after_block: SourceBlock | None = field(default=None, repr=False, compare=False)
+    # Was der Satz ueber das Bild weiss (extractor/satzbilder.py). Nur bei
+    # Bildern aus der Satzdatei gesetzt:
+    # * `satz_geprueft`: Unterschrift und Zugehoerigkeit sind aus dem Satz
+    #   bestimmt; die Rueckfallregeln fuer das PDF bleiben dann aus.
+    # * `story_id`: die Text-Story, zu der das Bild gehoert.
+    # * `anzeige`: das Bild ist Teil einer Anzeige und kommt nie in einen
+    #   redaktionellen Artikel (mit `story_id` in die Anzeige selbst).
+    # * `beleg`: woran das Bild als redaktionelles Foto zu erkennen ist
+    #   ("unterschrift", "quelle"), leer ohne Beleg.
+    satz_geprueft: bool = False
+    story_id: str | None = None
+    anzeige: bool = False
+    beleg: str = ""
 
 
 @dataclass
