@@ -68,6 +68,7 @@ from extractor.rubriken import (
     titel_bereinigen,
     verzeichnis_doppelseite,
 )
+from extractor.textutil import normalize_compare
 from extractor.titel_anreisser import titel_anreisser
 from extractor.toc_layout import (
     refine_toc_hints,
@@ -1130,6 +1131,7 @@ class Job:
         """Gedruckten Inhalt mit Artikeln und Seitensprung-Regionen verbinden."""
         out = []
         ziele = {h.page_index for h in hints}
+        gesehen: dict[tuple[int, str], dict] = {}
 
         def artikel_ab(seite: int) -> int | None:
             return next(
@@ -1172,6 +1174,18 @@ class Job:
                         "targetPageIndex": hint.page_index,
                     }
                 )
+            # Nennt das Verzeichnis einen Titel zweimal (ZUERST!: Bildanreisser
+            # neben der Rubrikliste), bleiben beide Zeilen klickbar, im Inhalt
+            # steht er einmal — mit Rubrik und der volleren Schreibweise.
+            schluessel = (hint.page_index, normalize_compare(hint.label))
+            alt = gesehen.get(schluessel)
+            if alt is not None:
+                if "section" in entry and "section" not in alt:
+                    alt["section"] = entry["section"]
+                if len(hint.label) > len(alt["label"]):
+                    alt["label"] = hint.label
+                continue
+            gesehen[schluessel] = entry
             out.append(entry)
 
         # Die Anreisser der Titelseite fuehren zum selben Artikel wie die
