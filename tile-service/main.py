@@ -75,8 +75,7 @@ app.add_middleware(
 )
 
 _client = httpx.AsyncClient(timeout=60.0, follow_redirects=False)
-_page_cache: "OrderedDict[str, Image.Image]" = OrderedDict()
-_page_meta: dict[str, dict] = {}
+_page_cache: "OrderedDict[str, tuple[float, Image.Image, dict]]" = OrderedDict()
 _session_cache: dict[str, tuple[float, dict]] = {}
 _rate: dict[str, deque[float]] = defaultdict(deque)
 _usage: dict[str, int] = defaultdict(int)
@@ -271,6 +270,17 @@ async def require_session(token: str | None, issue_id: str | None = None) -> dic
 # und der alte Schluessel lieferte sonst weiter das alte Bild (DMZ 170 zeigte
 # am 30.09. als Titel noch eine Anzeige aus dem ersten Lauf).
 RESOLVE_TTL = 30
+# Auch der Speicherschluessel reicht allein nicht: der Import legt Seiten und
+# Artikelbilder unter festen Namen ab (`images/{seite}-{x0}-{y0}.jpg`) und
+# ueberschreibt sie beim Neuimport. Darum gehoert der Stand aus Convex
+# (Zeitpunkt und Groesse, `assetStand`) mit in den Schluessel, und kein
+# Eintrag lebt laenger als fuenf Minuten.
+DATEI_TTL = 300
+
+
+def speicher_schluessel(info: dict) -> str:
+    ort = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
+    return f"{ort}#{info.get('stand') or ''}"
 _resolve_cache: dict[str, tuple[float, dict]] = {}
 
 
@@ -300,7 +310,7 @@ async def resolve_page(issue_id: str, index: int) -> dict:
 ASSET_TTL = 30
 BILD_CACHE = int(os.environ.get("BILD_CACHE", "48"))
 _asset_cache: dict[str, tuple[float, dict | None]] = {}
-_bild_cache: "OrderedDict[str, bytes]" = OrderedDict()
+_bild_cache: "OrderedDict[str, tuple[float, bytes]]" = OrderedDict()
 
 
 async def resolve_asset(asset_id: str) -> dict | None:
@@ -318,12 +328,15 @@ async def resolve_asset(asset_id: str) -> dict | None:
 
 
 async def load_bild(info: dict) -> bytes:
-    key = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
-    if key in _bild_cache:
+    key = speicher_schluessel(info)
+    now = time.monotonic()
+    hit = _bild_cache.get(key)
+    if hit and hit[0] > now:
         _bild_cache.move_to_end(key)
-        return _bild_cache[key]
+        return hit[1]
     daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
-    _bild_cache[key] = daten
+    _bild_cache[key] = (now + DATEI_TTL, daten)
+    _bild_cache.move_to_end(key)
     while len(_bild_cache) > BILD_CACHE:
         _bild_cache.popitem(last=False)
     return daten
@@ -331,21 +344,21 @@ async def load_bild(info: dict) -> bytes:
 
 async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
     info = await resolve_page(issue_id, index)
-    key = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
+    key = speicher_schluessel(info)
     async with _lock:
-        if key in _page_cache:
+        hit = _page_cache.get(key)
+        if hit and hit[0] > time.monotonic():
             _page_cache.move_to_end(key)
-            return _page_cache[key], _page_meta[key]
+            return hit[1], hit[2]
 
     daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
     image = Image.open(io.BytesIO(daten)).convert("RGB")
     meta = {"width": image.width, "height": image.height}
     async with _lock:
-        _page_cache[key] = image
-        _page_meta[key] = meta
+        _page_cache[key] = (time.monotonic() + DATEI_TTL, image, meta)
+        _page_cache.move_to_end(key)
         while len(_page_cache) > PAGE_CACHE:
-            old, _ = _page_cache.popitem(last=False)
-            _page_meta.pop(old, None)
+            _page_cache.popitem(last=False)
     return image, meta
 
 

@@ -201,6 +201,9 @@ export default defineSchema(
     width: v.optional(v.number()),
     height: v.optional(v.number()),
     createdAt: v.number(),
+    // Letztes Ueberschreiben durch den Import (gleicher Schluessel, neue
+    // Datei). Das Kachel-Gateway merkt sich Bilder nach Schluessel und Stand.
+    updatedAt: v.optional(v.number()),
   })
     .index("by_key", ["key"])
     .index("by_issue", ["issueId"]),

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { requireEditor } from "./roles";
 import { assertUploadAllowed } from "./uploadRules";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { isPublicTocPage } from "./tocPreview";
 
 export const assetKind = v.union(
@@ -64,6 +64,16 @@ export const registerUpload = mutation({
   },
 });
 
+/**
+ * Stand einer Datei fuer Zwischenspeicher. Der Import legt Seiten und
+ * Artikelbilder unter festen Schluesseln ab (`images/{seite}-{x0}-{y0}.jpg`)
+ * und ueberschreibt sie beim Neuimport; der Schluessel allein sagt also
+ * nicht, ob das Bild noch dasselbe ist. Zeitpunkt und Groesse sagen es.
+ */
+export function assetStand(asset: Doc<"assets">): string {
+  return `${asset.updatedAt ?? asset._creationTime}:${asset.bytes ?? ""}`;
+}
+
 export const createInternal = internalMutation({
   args: {
     key: v.string(),
@@ -82,7 +92,7 @@ export const createInternal = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .first();
     if (existing) {
-      await ctx.db.patch(existing._id, { ...args });
+      await ctx.db.patch(existing._id, { ...args, updatedAt: Date.now() });
       return existing._id;
     }
     return await ctx.db.insert("assets", { ...args, createdAt: Date.now() });
@@ -203,6 +213,7 @@ export const resolveForServiceInternal = internalQuery({
       url: asset.convexStorageId
         ? await ctx.storage.getUrl(asset.convexStorageId)
         : null,
+      stand: assetStand(asset),
     };
   },
 });

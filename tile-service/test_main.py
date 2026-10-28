@@ -99,3 +99,61 @@ def test_artikelbilder_fragen_convex_und_speicher_nur_einmal(monkeypatch):
 
     asyncio.run(zweimal())
     assert aufrufe == {"convex": 1, "speicher": 1}
+
+
+def test_neuimport_unter_demselben_schluessel_liefert_das_neue_bild(monkeypatch):
+    geholt = []
+
+    async def fetch_object(url, bucket, key):
+        geholt.append(key)
+        return f"bild-{len(geholt)}".encode()
+
+    jetzt = [1000.0]
+    monkeypatch.setattr(main, "fetch_object", fetch_object)
+    monkeypatch.setattr(main.time, "monotonic", lambda: jetzt[0])
+    main._bild_cache.clear()
+    info = {"bucket": "emag-media", "key": "issues/x/images/12-0.1-0.2.jpg", "stand": "1:41000"}
+
+    async def laden(i):
+        return await main.load_bild(i)
+
+    assert asyncio.run(laden(info)) == b"bild-1"
+    assert asyncio.run(laden(info)) == b"bild-1"
+    # Neuimport: gleicher Schluessel, neuer Stand aus Convex.
+    assert asyncio.run(laden({**info, "stand": "2:39000"})) == b"bild-2"
+    # Ohne Stand (altes Backend) haelt kein Eintrag laenger als fuenf Minuten.
+    ohne = {"bucket": "emag-media", "key": "issues/x/images/3-0.5-0.5.jpg"}
+    assert asyncio.run(laden(ohne)) == b"bild-3"
+    jetzt[0] += main.DATEI_TTL + 1
+    assert asyncio.run(laden(ohne)) == b"bild-4"
+
+
+def test_seitenbild_mit_neuem_stand_wird_neu_geladen(monkeypatch):
+    import io
+
+    from PIL import Image
+
+    stand = ["1:100"]
+    geholt = []
+
+    async def resolve_page(issue_id, index):
+        return {"ready": True, "bucket": "emag-media", "key": f"pages/{issue_id}/{index}/full.jpg", "stand": stand[0]}
+
+    async def fetch_object(url, bucket, key):
+        geholt.append(key)
+        puffer = io.BytesIO()
+        Image.new("RGB", (40 + len(geholt), 60)).save(puffer, "JPEG")
+        return puffer.getvalue()
+
+    monkeypatch.setattr(main, "resolve_page", resolve_page)
+    monkeypatch.setattr(main, "fetch_object", fetch_object)
+    main._page_cache.clear()
+
+    async def laden():
+        return await main.load_page("heft", 0)
+
+    assert asyncio.run(laden())[1]["width"] == 41
+    assert asyncio.run(laden())[1]["width"] == 41
+    stand[0] = "2:120"
+    assert asyncio.run(laden())[1]["width"] == 42
+    assert len(geholt) == 2

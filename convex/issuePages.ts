@@ -4,7 +4,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor } from "./roles";
 import { hasIssueAccess } from "./access";
 import { pageHalf, pageRole } from "./schema";
-import { redaktionsAssetUrl } from "./assets";
+import { assetStand, redaktionsAssetUrl } from "./assets";
 import { Id } from "./_generated/dataModel";
 
 /** Kanonische Seitenliste fuer den Reader. Ohne Zugriff kommt nichts zurueck. */
@@ -323,6 +323,8 @@ export const resolveForServiceInternal = internalQuery({
       key: rendered.key,
       bucket: rendered.bucket ?? null,
       url,
+      // Neuimport ueberschreibt das Seitenbild unter demselben Schluessel.
+      stand: assetStand(rendered),
     };
   },
 });
