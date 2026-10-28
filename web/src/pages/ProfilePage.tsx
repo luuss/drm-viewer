@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFrage } from "../components/Frage";
 import ZahlungsdatenKonto from "../components/ZahlungsdatenKonto";
+import HeftMailWahl from "../components/HeftMailWahl";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api, formatEuro } from "../lib/api";
@@ -26,6 +27,8 @@ export default function ProfilePage() {
   const revokeLogin = useMutation(api.sessions.revoke);
   const { signOut } = useAuthActions();
   const setName = useMutation(api.account.setName);
+  const heftMails = useQuery(api.heftAnkuendigung.meineEinstellungen, {});
+  const heftMailsSetzen = useMutation(api.heftAnkuendigung.meineEinstellen);
 
   const [name, setNameValue] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -190,6 +193,16 @@ export default function ProfilePage() {
       </section>
 
       <ZahlungsdatenKonto />
+
+      {heftMails && heftMails.reihen.length > 0 && (
+        <section>
+          <h3>E-Mails zu neuen Heften</h3>
+          <HeftMailWahl
+            stand={heftMails}
+            setzen={(publicationId, erhalten) => heftMailsSetzen({ publicationId, erhalten })}
+          />
+        </section>
+      )}
 
       <section>
         <h3>Käufe</h3>

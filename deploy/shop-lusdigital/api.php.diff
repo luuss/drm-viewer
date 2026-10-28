@@ -1,0 +1,25 @@
+--- a/controllers/front/api.php	2026-10-19 21:45:36.399550524 +0200
++++ b/controllers/front/api.php	2026-10-28 11:02:52.636046055 +0100
+@@ -8,7 +8,8 @@
+  * Zeitstempel älter/jünger als 300 s oder falsche Signatur → 403.
+  *
+  * Aktionen: search, product, offer_digital, withdraw_digital, send_mail
+- * (Anmeldelink, classes/LusdigitalLoginMail.php); quote, create_order,
++ * (Anmeldelink, classes/LusdigitalLoginMail.php); heft_mail (neues Heft an
++ * die Käufer, classes/LusdigitalHeftMail.php); quote, create_order,
+  * refund_order für den Kartenkauf im Leser (classes/LeserKauf.php).
+  * Vertrag: drm-viewer/docs/shop-integration.md, Abschnitt „Shop-API“.
+  */
+@@ -110,6 +111,12 @@
+                 list($status, $daten) = LusdigitalLoginMail::senden($d);
+                 $this->antwort($status, $daten);
+                 // no break
++            case 'heft_mail':
++                // Neues Heft an die Käufer, siehe classes/LusdigitalHeftMail.php
++                require_once _PS_MODULE_DIR_ . 'lusdigital/classes/LusdigitalHeftMail.php';
++                list($status, $daten) = LusdigitalHeftMail::senden($d);
++                $this->antwort($status, $daten);
++                // no break
+             case 'quote':
+             case 'create_order':
+             case 'refund_order':

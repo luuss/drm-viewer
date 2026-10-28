@@ -2206,6 +2206,11 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .profile .session-list li:last-child { border-bottom: 0; }
 .profile .sub-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
 
+/* Mails zu neuen Heften: je Zeitschrift ein Haken (Konto, Abmeldeseite). */
+.heftmail-wahl { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
+.heftmail-reihen { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.heftmail-reihen label { display: flex; align-items: center; gap: var(--s2); cursor: pointer; }
+
 /* Rechtstexte sind ein durchlaufender Text, kein Stapel aus Abschnitten:
    die Luecke ist enger als zwischen den Abschnitten einer Bedienansicht. */
 .legal { max-width: var(--prose); gap: var(--s5); }
@@ -3974,6 +3979,8 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .pruefliste li.sperrt .zeichen { background: var(--warn-soft); color: var(--warn); }
 .pruefliste li.sperrt .text { color: var(--ink); font-weight: 600; }
 .pruefliste .aktion { display: flex; flex-wrap: wrap; gap: var(--s1); justify-content: flex-end; }
+.heft-seite-spalte { display: flex; flex-direction: column; gap: var(--s5); min-width: 0; }
+.knopfreihe { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
 .pruefliste-fuss { align-self: stretch; display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; justify-content: flex-end; padding-top: var(--s2); }
 
 .auftraege { list-style: none; padding: 0; margin: 0; align-self: stretch; display: flex; flex-direction: column; }

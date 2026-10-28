@@ -213,6 +213,24 @@ danach `account:purgeByEmailInternal`).
   jetzt mit dem CrowdSec-Block vom Server). Neue Gateway-Pfade unter `/api`
   muessen dort eingetragen werden, sonst landen sie bei Convex (404).
 
+## 1f. Mails zu neuen Heften (28.10.2026)
+
+* Wer ein Digitalheft gekauft hat (Laden, auch Gast, oder Leser), bekommt
+  beim ersten Veroeffentlichen eines Hefts eine Werbemail in der Hausfarbe
+  der Reihe, 30 min spaeter und nie nachts. Je Reihe abbestellbar (Link in
+  der Mail, Ein-Klick-Kopf, Konto). Einzelheiten:
+  `docs/shop-integration.md`, Abschnitt „Mails zu neuen Heften“.
+* Convex: `heftAnkuendigung.ts`, `heftMail.ts`, Tabellen
+  `heftAnkuendigungen`, `heftAnkuendigungEmpfaenger`, `mailEinstellungen`.
+  Abschalten: `HEFT_ANKUENDIGUNG=aus`.
+* Versand ueber das Shop-Modul `lusdigital` (Aktion `heft_mail`, Hook
+  `actionMailAlterMessageBeforeSend`), Dateien und Diffs in
+  `deploy/shop-lusdigital/`. Ohne diesen Modulstand bleibt jede Mail als
+  Stoerung haengen und wird bis zu 12-mal versucht.
+* Redaktion: Heft → Uebersicht → „Mail an die Kaeufer“ (Stand, Probe an
+  mich, sofort senden, anhalten). Die vor dem 28.10. veroeffentlichten Hefte
+  sind nicht angekuendigt; dort steht „Jetzt ankuendigen“.
+
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 
 Der Leser heisst seit 19.10.2026 **https://digital.lesenundschenken.de**

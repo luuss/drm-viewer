@@ -20,6 +20,7 @@ import { seriesFor } from "./shopCovers";
 import { internal } from "./_generated/api";
 import { tocImages } from "./tocPreview";
 import { heftStueckeLoeschen } from "./suche";
+import { ankuendigungAnhalten, ankuendigungPlanen } from "./heftAnkuendigung";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -647,6 +648,8 @@ export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
   await audit(ctx, "issue.publish", issueId);
   // Volltextsuche: die Stuecke des Hefts anlegen.
   await ctx.scheduler.runAfter(0, internal.suche.heftNeu, { issueId });
+  // Kaeufer per Mail auf das neue Heft hinweisen (heftAnkuendigung.ts).
+  await ankuendigungPlanen(ctx, issue, issue.publishedAt === undefined);
 
   // Neue Ausgabe: laufende Abos der Publikation bekommen sie dauerhaft.
   const subs = await ctx.db.query("subscriptions").collect();
@@ -670,6 +673,7 @@ export const setPublished = mutation({
     await ctx.db.patch(issueId, { isPublished: false, updatedAt: Date.now() });
     await audit(ctx, "issue.unpublish", issueId);
     await heftStueckeLoeschen(ctx, issueId);
+    await ankuendigungAnhalten(ctx, issueId);
   },
 });
 

@@ -219,6 +219,7 @@ aktiv ist. Nach `withdraw_digital` steht `id_product_attribute: null`,
 | `create_order` | siehe „Kartenkauf im Leser“ | `{"ok":true,"id_order":291,"reference":"CRGATIWJM","state":2,"paid":true,"total_cents":1380,"repeated":false}` |
 | `refund_order` | `{"action":"refund_order","mode":"live","payment_intent":"pi_…","ts":…}` | `{"ok":true,"state":7,"refunded_cents":1380,"full":true}` |
 | `send_mail` | `{"action":"send_mail","template":"lusdigital_login","to":"kunde@example.de","link":"https://digital.lesenundschenken.de/anmelden?t=…","ts":…}` | `{"ok":true}`; 400 `bad_template`/`bad_email`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
+| `heft_mail` | `{"action":"heft_mail","to":"kunde@example.de","subject":"DMZ Nr. 170 ist erschienen: Fernspäher","html":"<!DOCTYPE html>…","text":"…","from_name":"Deutsche Militärzeitschrift · Lesen & Schenken","unsubscribe":"https://digital.lesenundschenken.de/hooks/mail/abbestellen?t=…&r=dmz","ts":…}` | `{"ok":true}`; 400 `bad_email`/`bad_subject`/`bad_content`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
 
 **Suche.** Jedes Wort muss in Name, Referenz, Hersteller, Merkmal „Ausgabe“
 oder einem Kategorienamen vorkommen. Reine Zahlen zaehlen nur als ganze Zahl
@@ -701,3 +702,52 @@ Stripe-Kunde aus `leserKarten`, Webhook `/hooks/stripe/webhook` (Endpunkt
   Stripe-Kundenportal mit eigener Konfiguration (`metadata.source`).
 * Andere Webhook-Empfaenger im selben Konto (zuerst.de, weltkrieg-online.de)
   bekommen die Abo-Ereignisse ebenfalls.
+
+## Mails zu neuen Heften (seit 28.10.2026)
+
+Wer schon einmal ein Digitalheft oder ein Digital-Abo gekauft hat (im Laden,
+auch als Gast, oder im Leser), bekommt eine Mail, sobald ein neues Heft im
+Leser erscheint. Je Zeitschrift abbestellbar. Code: `convex/heftAnkuendigung.ts`
+(Ablauf, Abbestellen), `convex/heftMail.ts` (Betreff, HTML, Text, Regeln).
+
+* **Wann.** Beim ersten Veroeffentlichen eines Hefts plant `publishIssue` die
+  Ankuendigung 30 Minuten spaeter, nie zwischen 21 und 8 Uhr (dann um 8 Uhr).
+  Zurueckziehen haelt sie an, erneutes Veroeffentlichen setzt sie fort. Ein
+  Heft geht hoechstens einmal an dieselbe Adresse. Hefte, die vor dem
+  28.10.2026 veroeffentlicht waren, werden nicht von selbst angekuendigt.
+* **An wen.** Adressen aus `shopAccess` (nicht widerrufen), Konten mit
+  gekaufter Freischaltung (`entitlements`: purchase, claim, external_shop,
+  subscription; nicht gift/admin), Kartenkaeufe im Leser (`leserKaeufe`
+  bestellt, live), alte Stripe-Kaeufe. Abbestellte Reihen
+  (`mailEinstellungen`) fallen heraus, auch noch kurz vor dem Versand.
+* **Inhalt.** Schriftzug und Hausfarbe der Reihe, Umschlag, Titelthema, bis
+  zu fuenf Beitraege aus dem Inhaltsverzeichnis (ohne Editorial, Impressum,
+  Kalenderblatt usw.). Wer das Heft schon lesen darf (Abo, Kauf), bekommt
+  „Jetzt lesen“, sonst „Heft ansehen“ mit Preis und, wenn es eines gibt, den
+  Hinweis auf das Digital-Abo. Alle Links fuehren auf den Leser.
+* **Versand.** Ueber die Shop-API `heft_mail` (Modul `lusdigital`, Klasse
+  `LusdigitalHeftMail`, Vorlage `lusdigital_heft.{html,txt}` mit nur
+  `{inhalt_html}` bzw. `{inhalt_text}`), Absender
+  `bestellung-netzladen@`, Absendername „<Reihe> · Lesen & Schenken“, DKIM
+  vom Laden. Der Hook `actionMailAlterMessageBeforeSend` nimmt das Praefix
+  „[Lesen und Schenken]“ aus dem Betreff und setzt `List-Unsubscribe` und
+  `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. Der Laden prueft:
+  jedes `href`/`src` auf den Leser, keine Skripte/Formulare, hoechstens
+  6 Heft-Mails je Adresse und Tag. Zehn Mails je Stapel, 2 s Pause; bei
+  einer Stoerung 5 min Pause, bis zu 12 Versuche je Adresse; ungueltige
+  Adresse oder `rate_limited` gilt sofort als Fehler.
+* **Abbestellen.** Link in jeder Mail auf `/abbestellen?t=<schluessel>&r=<reihe>`
+  (Knopf fuer die Reihe, darunter alle Reihen als Haken), Ein-Klick aus dem
+  Mailprogramm `POST /hooks/mail/abbestellen` (ein GET fuehrt nur auf die
+  Seite), Konto → „E-Mails zu neuen Heften“. „Alle abbestellen“ gilt auch fuer
+  spaeter dazukommende Reihen. Kontoloeschung bestellt alles ab;
+  `account:purgeByEmailInternal` loescht Einstellungen und Versandzeilen.
+* **Redaktion.** Heft → Uebersicht → „Mail an die Kaeufer“: Stand, „Probe an
+  mich“, „Sofort senden“ / „Nicht senden“ / „Anhalten“ / „Weiter senden“,
+  bei aelteren Heften „Jetzt ankuendigen“.
+* **Aufpasser.** Cron alle 10 min: verpasste Starts, stehengebliebene Laeufe
+  (Adressen, deren Mail beim Absturz unterwegs war, gelten als Fehler statt
+  doppelt zu gehen), Versandzeilen nach 60 Tagen loeschen.
+* **Abschalten:** Convex-Umgebung `HEFT_ANKUENDIGUNG=aus`.
+* Die Shop-Dateien liegen als Kopie bzw. Diff unter `deploy/shop-lusdigital/`.
+

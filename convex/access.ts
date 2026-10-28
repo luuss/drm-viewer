@@ -165,7 +165,33 @@ async function hasShopAccess(
 ): Promise<boolean> {
   const email = await emailOfUser(ctx, userId);
   if (!email) return false;
+  return await hasShopAccessByEmail(ctx, email, issueId, now);
+}
 
+/**
+ * Zugriff einer Adresse, auch ohne Konto: das Konto dieser Adresse wie im
+ * Leser, sonst die Kaeufe im Laden. Fuer Mails an Kaeufer, die sich noch nie
+ * angemeldet haben.
+ */
+export async function hasAccessByEmail(
+  ctx: QueryCtx | MutationCtx,
+  email: string,
+  issueId: Id<"issues">,
+): Promise<boolean> {
+  const user = await ctx.db
+    .query("users")
+    .withIndex("email", (q) => q.eq("email", email))
+    .first();
+  if (user) return await hasIssueAccess(ctx, user._id, issueId);
+  return await hasShopAccessByEmail(ctx, email, issueId, Date.now());
+}
+
+async function hasShopAccessByEmail(
+  ctx: QueryCtx | MutationCtx,
+  email: string,
+  issueId: Id<"issues">,
+  now: number,
+): Promise<boolean> {
   const single = await ctx.db
     .query("shopAccess")
     .withIndex("by_email_issue", (q) =>

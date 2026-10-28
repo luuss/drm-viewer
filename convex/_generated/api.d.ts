@@ -23,6 +23,8 @@ import type * as devtools from "../devtools.js";
 import type * as einstieg from "../einstieg.js";
 import type * as email from "../email.js";
 import type * as entitlements from "../entitlements.js";
+import type * as heftAnkuendigung from "../heftAnkuendigung.js";
+import type * as heftMail from "../heftMail.js";
 import type * as http from "../http.js";
 import type * as imports from "../imports.js";
 import type * as issuePages from "../issuePages.js";
@@ -88,6 +90,8 @@ declare const fullApi: ApiFromModules<{
   einstieg: typeof einstieg;
   email: typeof email;
   entitlements: typeof entitlements;
+  heftAnkuendigung: typeof heftAnkuendigung;
+  heftMail: typeof heftMail;
   http: typeof http;
   imports: typeof imports;
   issuePages: typeof issuePages;

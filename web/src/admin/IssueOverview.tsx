@@ -11,6 +11,7 @@ import {
   type EditorIssue,
 } from "./adminUi";
 import VeroeffentlichenKnopf from "./VeroeffentlichenKnopf";
+import HeftAnkuendigung from "./HeftAnkuendigung";
 
 type Punkt = {
   ok: boolean;
@@ -185,7 +186,10 @@ export default function IssueOverview({ issue }: { issue: EditorIssue }) {
         )}
       </section>
 
-      <Auftraege issue={issue} />
+      <div className="heft-seite-spalte">
+        <HeftAnkuendigung issue={issue} />
+        <Auftraege issue={issue} />
+      </div>
     </div>
   );
 }

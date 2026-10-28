@@ -820,6 +820,78 @@ export default defineSchema(
     .index("by_user", ["userId"])
     .index("by_status", ["status"]),
 
+  // --- Ankuendigung neuer Hefte per Mail (heftAnkuendigung.ts) -------------
+
+  /**
+   * Eine Zeile je Heft: so geht jedes Heft hoechstens einmal an die Kaeufer.
+   * `lauf` zaehlt hoch, wenn die Redaktion stoppt oder neu ansetzt; geplante
+   * Laeufe mit altem Stand verfallen dann. Die Zaehler bleiben, wenn die
+   * Empfaengerzeilen nach einiger Zeit geloescht sind.
+   */
+  heftAnkuendigungen: defineTable({
+    issueId: v.id("issues"),
+    publicationId: v.id("publications"),
+    status: v.union(
+      v.literal("geplant"),
+      v.literal("sammelt"),
+      v.literal("sendet"),
+      v.literal("fertig"),
+      v.literal("abgebrochen"),
+    ),
+    // `zurueckgezogen`: Heft nicht mehr veroeffentlicht, geht beim erneuten
+    // Veroeffentlichen weiter. `gestoppt`: von der Redaktion angehalten.
+    grund: v.optional(v.union(v.literal("zurueckgezogen"), v.literal("gestoppt"))),
+    lauf: v.number(),
+    geplantFuer: v.number(),
+    empfaenger: v.number(),
+    gesendet: v.number(),
+    fehler: v.number(),
+    abgemeldet: v.number(),
+    // Letztes Lebenszeichen des Versands; bleibt es aus, setzt der
+    // Aufpasser (Cron) den Lauf fort.
+    aktivAm: v.optional(v.number()),
+    fertigAm: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_status", ["status"]),
+
+  /** Eine Adresse in einer Ankuendigung; sichert, dass niemand sie zweimal bekommt. */
+  heftAnkuendigungEmpfaenger: defineTable({
+    ankuendigungId: v.id("heftAnkuendigungen"),
+    email: v.string(),
+    status: v.union(
+      v.literal("offen"),
+      v.literal("laeuft"),
+      v.literal("gesendet"),
+      v.literal("fehler"),
+      v.literal("abgemeldet"),
+    ),
+    versuche: v.number(),
+    fehler: v.optional(v.string()),
+    vergebenAm: v.optional(v.number()),
+    gesendetAm: v.optional(v.number()),
+  })
+    .index("by_ankuendigung_and_status", ["ankuendigungId", "status"])
+    .index("by_ankuendigung_and_email", ["ankuendigungId", "email"])
+    .index("by_email", ["email"]),
+
+  /**
+   * Werbemails je Adresse: Schluessel fuer die Abmeldeseite und welche Reihen
+   * abbestellt sind. `alleAbbestellt` gilt auch fuer Reihen, die erst
+   * spaeter dazukommen. Ohne Zeile bekommt die Adresse alles.
+   */
+  mailEinstellungen: defineTable({
+    email: v.string(),
+    token: v.string(),
+    alleAbbestellt: v.optional(v.boolean()),
+    abbestellt: v.optional(v.array(v.id("publications"))),
+    geaendertAm: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_token", ["token"]),
+
   // Wer hinter einer Wasserzeichen-Kennung steht. Bleibt, wenn die
   // Lesesitzung laengst abgelaufen ist; nur das Gateway-Werkzeug fragt hier.
   wasserzeichen: defineTable({

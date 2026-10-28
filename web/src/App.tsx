@@ -22,6 +22,7 @@ import SearchPage from "./pages/SearchPage";
 import LegalPage from "./pages/LegalPage";
 import AppShell from "./components/AppShell";
 import WarenkorbPage from "./pages/WarenkorbPage";
+import AbbestellenPage from "./pages/AbbestellenPage";
 
 export default function App() {
   return (
@@ -48,6 +49,8 @@ export default function App() {
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
           <Route path="/datenschutz" element={<Shell><LegalPage doc="datenschutz" /></Shell>} />
+          {/* Abmeldelink aus den Mails zu neuen Heften, mit und ohne Anmeldung. */}
+          <Route path="/abbestellen" element={<Shell><AbbestellenPage /></Shell>} />
           <Route path="*" element={<LoginPage />} />
         </Routes>
       </Unauthenticated>
@@ -81,6 +84,8 @@ export default function App() {
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
           <Route path="/datenschutz" element={<Shell><LegalPage doc="datenschutz" /></Shell>} />
+          {/* Abmeldelink aus den Mails zu neuen Heften, mit und ohne Anmeldung. */}
+          <Route path="/abbestellen" element={<Shell><AbbestellenPage /></Shell>} />
           <Route path="*" element={<Navigate to="/library" replace />} />
         </Routes>
       </Authenticated>
