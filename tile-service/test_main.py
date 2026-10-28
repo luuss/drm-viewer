@@ -56,6 +56,26 @@ def test_andere_leser_und_hefte_haben_eigene_zaehler():
     main.check_rate("pages:a:anderes", 3, "Seiten")
 
 
+def test_gebremste_kachel_verbraucht_kein_ticket(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    async def sitzung(token, issue_id=None):
+        return {"userId": "leser", "issueId": "heft", "kachelSchluessel": 1}
+
+    monkeypatch.setattr(main, "require_session", sitzung)
+    for _ in range(main.MAX_TILES_PER_MIN):
+        main.check_rate("tiles:leser:heft", main.MAX_TILES_PER_MIN, "Kacheln")
+    ticket = main.neue_tickets("sitzung")[0]
+    antwort = TestClient(main.app).get(
+        "/api/issue/heft/page/0/tile/0/0/0.jpg",
+        headers={"X-Tile-Session": "sitzung", "X-Req": ticket},
+    )
+    assert antwort.status_code == 429
+    assert "Retry-After" in antwort.headers
+    # Das Ticket gilt weiter, der Neuversuch des Lesers kann es nehmen.
+    assert ticket not in main._tickets_benutzt
+
+
 def test_artikelbilder_fragen_convex_und_speicher_nur_einmal(monkeypatch):
     aufrufe = {"convex": 0, "speicher": 0}
 

@@ -73,6 +73,26 @@ describe("mitWiederholung", () => {
     expect(hole).toHaveBeenCalledTimes(2);
   });
 
+  it("wartet nicht ueber die Frist der ganzen Kette hinaus", async () => {
+    vi.useFakeTimers();
+    const hole = vi.fn(async () => new Response("", { status: 429, headers: { "Retry-After": "8" } }));
+    const laeuft = mitWiederholung(hole, new AbortController().signal, undefined, { bisMs: 20_000 });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect((await laeuft).status).toBe(429);
+    // 0 s, 8 s, 16 s; eine weitere Pause bis 24 s laege ueber der Frist.
+    expect(hole).toHaveBeenCalledTimes(3);
+  });
+
+  it("ein Abbruch in hole beendet die Kette ohne zweiten Versuch", async () => {
+    const hole = vi.fn(async () => {
+      throw new DOMException("Kachel nicht mehr gefragt", "AbortError");
+    });
+    await expect(mitWiederholung(hole, new AbortController().signal)).rejects.toThrow(
+      "Kachel nicht mehr gefragt",
+    );
+    expect(hole).toHaveBeenCalledTimes(1);
+  });
+
   it("hoert beim Weiterblaettern sofort auf zu warten", async () => {
     vi.useFakeTimers();
     const abbruch = new AbortController();

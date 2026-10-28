@@ -5,6 +5,7 @@ import { TILE_SERVICE_URL, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import { kachelSeed, mitTicket, zusammensetzen } from "./schutz";
 import { mitWiederholung } from "./nachladen";
+import { kachelLader } from "./kachelLaden";
 
 /** Wo auf der Seite getippt wurde, normiert auf 0..1. */
 export type Klickpunkt = { pageIndex: number; x: number; y: number };
@@ -63,6 +64,12 @@ type PageInfo = {
 
 /** Schnell ueberblaetterte Seiten sollen keine unnoetigen Anfragen ausloesen. */
 const SETTLE_MS = 180;
+/**
+ * So lange darf eine Kachel samt Neuversuchen nach 429 dauern. Danach gibt
+ * OpenSeadragon den Auftrag ohnehin auf (Zeitlimit 30 s) und versucht es
+ * selbst noch einmal.
+ */
+const KACHEL_FRIST_MS = 20_000;
 const NICHT_GELADEN: PageNotice = {
   text: "Seite konnte nicht geladen werden.",
   tone: "error",
@@ -282,6 +289,29 @@ export default function PageMode({
     let cancelled = false;
     let timer = 0;
     const abortController = new AbortController();
+    // Alle Ladeketten dieser Seiten; beim Blaettern bricht der Aufraeumer sie
+    // ab (kachelLaden.ts).
+    const kacheln = kachelLader(async (src, signal, aktuell) => {
+      const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(src);
+      // Je Versuch ein frisches Ticket; gebremste Kacheln kommen nach einer
+      // kurzen Pause von selbst, solange die Kachel noch gefragt ist.
+      const res = await mitWiederholung(
+        () => {
+          if (!aktuell()) throw new DOMException("Kachel nicht mehr gefragt", "AbortError");
+          return mitTicket(src, sessionToken, issueId, signal);
+        },
+        signal,
+        undefined,
+        { bisMs: KACHEL_FRIST_MS },
+      );
+      if (!res.ok) throw new Error(`Kachel ${res.status}`);
+      const bild = await createImageBitmap(await res.blob());
+      const canvas = zusammensetzen(
+        bild,
+        kachelSeed(schutzKeyRef.current, issueId, teile![1], teile![2], teile![3], teile![4]),
+      );
+      return canvas.getContext("2d");
+    });
     readyRef.current = false;
     openedPagesRef.current = [];
     setReady(false);
@@ -346,31 +376,8 @@ export default function PageMode({
             `${base}/tile/${info.maxLevel - level}/${x}/${y}.jpg`;
           // Kacheln kommen verwuerfelt (`tile-service/schutz.py`) und werden
           // erst hier auf einer Zeichenflaeche zusammengesetzt.
-          tileSource.downloadTileStart = (job: any) => {
-            const abbruch = new AbortController();
-            job.userData.abbruch = abbruch;
-            const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(job.src);
-            // Je Versuch ein frisches Ticket; gebremste Kacheln kommen nach
-            // einer kurzen Pause von selbst.
-            mitWiederholung(
-              () => mitTicket(job.src, sessionToken, issueId, abbruch.signal),
-              abbruch.signal,
-            )
-              .then((res) => {
-                if (!res.ok) throw new Error(`Kachel ${res.status}`);
-                return res.blob();
-              })
-              .then((blob) => createImageBitmap(blob))
-              .then((bild) => {
-                const canvas = zusammensetzen(
-                  bild,
-                  kachelSeed(schutzKeyRef.current, issueId, teile![1], teile![2], teile![3], teile![4]),
-                );
-                job.finish(canvas.getContext("2d"), null, "context2d");
-              })
-              .catch((error) => job.fail(String(error), null));
-          };
-          tileSource.downloadTileAbort = (job: any) => job.userData.abbruch?.abort();
+          tileSource.downloadTileStart = (job: any) => kacheln.start(job);
+          tileSource.downloadTileAbort = (job: any) => kacheln.abbrechen(job);
           const spec = { x: worldX, y: 0, width: worldWidth, tileSource };
           worldX += worldWidth;
           return spec;
@@ -388,6 +395,7 @@ export default function PageMode({
     return () => {
       cancelled = true;
       abortController.abort();
+      kacheln.alleAbbrechen();
       window.clearTimeout(timer);
     };
     // Die konkrete Folge ist absichtlich Teil der Abhaengigkeit.

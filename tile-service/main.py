@@ -461,12 +461,14 @@ async def asset(
         )
     require_fetch(request)
     session = await require_session(x_tile_session, info.get("issueId"))
-    require_ticket(x_tile_session or "", x_ticket)
+    # Erst bremsen, dann das Ticket verbrauchen: ein 429 kostete sonst ein
+    # Ticket, und jeder Neuversuch des Lesers leerte seinen Vorrat weiter.
     check_rate(
         f'assets:{session.get("userId")}:{info.get("issueId")}',
         MAX_TILES_PER_MIN,
         "Bilder",
     )
+    require_ticket(x_tile_session or "", x_ticket)
     daten = await load_bild(info)
     seed = schutz.fnv1a32(f'{session.get("kachelSchluessel", 0)}:asset:{asset_id}')
 
@@ -545,12 +547,14 @@ async def tile(
 ) -> Response:
     require_fetch(request)
     session = await require_session(x_tile_session, issue_id)
-    require_ticket(x_tile_session or "", x_ticket)
+    # Wie bei den Bildern: die Bremse vor dem Ticket (der Schluessel haengt
+    # an der schon geprueften Sitzung).
     check_rate(
         f'tiles:{session.get("userId")}:{issue_id}',
         MAX_TILES_PER_MIN,
         "Kacheln",
     )
+    require_ticket(x_tile_session or "", x_ticket)
     _usage[x_tile_session or ""] += 1
 
     image, meta = await load_page(issue_id, index)
