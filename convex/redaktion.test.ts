@@ -53,6 +53,22 @@ describe("Redaktion", () => {
     expect(leser.some((i: any) => i._id === issueId)).toBe(false);
   });
 
+  test("ein Heft im Entwurf sieht fuer Leser aus wie ein unbekanntes", async () => {
+    const t = convexTest(schema, modules);
+    const { editorId, leserId, issueId } = await setup(t);
+    expect(await t.query(api.issues.getBySlug, { slug: "entwurf" })).toBeNull();
+    expect(
+      await t.withIdentity({ subject: leserId }).query(api.issues.getBySlug, { slug: "entwurf" }),
+    ).toBeNull();
+    expect(await t.query(api.issues.getBySlug, { slug: "gibt-es-nicht" })).toBeNull();
+    // Die Redaktion kommt an ihre Vorschau.
+    expect(
+      await t.withIdentity({ subject: editorId }).query(api.issues.getBySlug, { slug: "entwurf" }),
+    ).toBe(issueId);
+    await t.run(async (ctx: any) => ctx.db.patch(issueId, { isPublished: true }));
+    expect(await t.query(api.issues.getBySlug, { slug: "entwurf" })).toBe(issueId);
+  });
+
   test("Heftliste und Arbeitsplatz liefern den Stand", async () => {
     const t = convexTest(schema, modules);
     const { editorId, issueId } = await setup(t);

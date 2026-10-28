@@ -9,6 +9,8 @@ import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
+import AppShell from "../components/AppShell";
+import NichtGefunden from "../components/NichtGefunden";
 import { reiheVon } from "../lib/reihen";
 import { ProductChoice } from "./ShopProduct";
 import { wischachse, wischziel, type Wischachse } from "./wischen";
@@ -133,12 +135,10 @@ export default function ReaderShell() {
   const [leseflaeche, setLeseflaeche] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (access !== false || issue === undefined) return;
+    if (access !== false || !issue) return;
     // Die Verkaufsseite laeuft unter `/issue/:slug`, nicht unter der Kennung.
     // Mit der Kennung landete der Leser auf "Ausgabe nicht gefunden".
-    navigate(issue?.slug ? `/issue/${issue.slug}` : "/library", {
-      replace: true,
-    });
+    navigate(`/issue/${issue.slug}`, { replace: true });
   }, [access, issue, navigate]);
 
   useEffect(() => {
@@ -534,6 +534,15 @@ export default function ReaderShell() {
   }
   if (access === undefined || issue === undefined) {
     return <div className="centered">Laden...</div>;
+  }
+  // Unbekannt oder nicht veroeffentlicht: fuer Leser dasselbe, statt still
+  // in die Bibliothek umzuleiten.
+  if (!access && issue === null) {
+    return (
+      <AppShell>
+        <NichtGefunden />
+      </AppShell>
+    );
   }
   if (!access) {
     return (

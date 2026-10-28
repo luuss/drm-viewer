@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "convex/react";
+import NichtGefunden from "../components/NichtGefunden";
 import { useState, type CSSProperties } from "react";
 import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
@@ -22,16 +23,7 @@ export default function ReihePage() {
   const storefront = useQuery(api.shopIntegration.storefront, {});
   const [nurMeine, setNurMeine] = useState(false);
 
-  if (!reihe) {
-    return (
-      <div className="page">
-        <p>Diese Zeitschrift gibt es hier nicht.</p>
-        <Link className="btn" to="/">
-          Zum Kiosk
-        </Link>
-      </div>
-    );
-  }
+  if (!reihe) return <NichtGefunden text="Diese Zeitschrift gibt es hier nicht." />;
   if (issues === undefined || offers === undefined || eigene === undefined) {
     return <div className="centered">Laden...</div>;
   }

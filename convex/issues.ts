@@ -128,6 +128,12 @@ export const getPublic = query({
   },
 });
 
+/**
+ * Kennung zum Slug der Heftseite. Ein Heft im Entwurf kennt nur, wer es lesen
+ * darf (Redaktion, Kaeufer); fuer alle anderen sieht es aus wie ein
+ * unbekanntes. Frueher verriet "nicht gefunden" statt "Laden..." seine
+ * Existenz.
+ */
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) => {
@@ -135,7 +141,13 @@ export const getBySlug = query({
       .query("issues")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first();
-    return issue?._id ?? null;
+    if (!issue) return null;
+    if (issue.isPublished) return issue._id;
+    const userId = await getAuthUserId(ctx);
+    if (userId && (await hasIssueAccess(ctx, userId as Id<"users">, issue._id))) {
+      return issue._id;
+    }
+    return null;
   },
 });
 

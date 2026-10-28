@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import NichtGefunden from "../components/NichtGefunden";
 import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/react";
 import { api, formatEuro, type Id, cleanError } from "../lib/api";
 import Icon from "../components/Icon";
@@ -38,14 +39,7 @@ export default function SubscriptionDetailPage() {
   const [err, setErr] = useState<string | null>(null);
 
   if (offer === undefined || storefront === undefined) return <div className="centered">Laden...</div>;
-  if (!offer) {
-    return (
-      <div className="centered">
-        <p>Dieses Abo gibt es nicht.</p>
-        <Link to="/" className="btn secondary">Zum Kiosk</Link>
-      </div>
-    );
-  }
+  if (!offer) return <NichtGefunden text="Dieses Abo gibt es nicht." />;
 
   const plans = offer.tiers.flatMap((t) => t.plans);
   // Kombi-Abos anderer Reihen, die diese einschliessen (DMZ: Kombi mit
