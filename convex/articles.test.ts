@@ -180,6 +180,56 @@ describe("Artikeloperationen", () => {
     expect(counts.regions).toBe(2);
   });
 
+  test("Neuer Lauf ueber ein freigegebenes Heft behaelt Freigabe und Lesestand", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, editorId } = await base(t);
+    const jobId = await t.run(async (ctx: any) =>
+      ctx.db.insert("importJobs", {
+        issueId,
+        kind: "full",
+        status: "running",
+        attempts: 1,
+        workerId: "w1",
+        createdAt: Date.now(),
+      }),
+    );
+    const lauf = (articles: any[]) =>
+      t.mutation(internal.imports.activateResultInternal, { jobId, workerId: "w1", issueId, articles });
+    const artikel = () =>
+      t.run(async (ctx: any) =>
+        ctx.db
+          .query("articles")
+          .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+          .collect(),
+      );
+
+    await lauf([article(1, 0, ["Alt", "Alttext"]), article(2, 1, ["Alt2", "Mehr"])]);
+    const erste = await artikel();
+    // Halb freigegeben: der naechste Lauf bringt wieder Entwuerfe.
+    await t.run(async (ctx: any) => ctx.db.patch(erste[0]._id, { reviewStatus: "approved" }));
+    await lauf([article(1, 0, ["Neu", "Neutext"]), article(2, 1, ["Neu2", "Mehr"])]);
+    expect((await artikel()).map((a: any) => a.reviewStatus)).toEqual(["pending", "pending"]);
+
+    // Ganz freigegeben, ein Leser steht im zweiten Artikel: der Lauf ist eine Korrektur.
+    const zweite = await artikel();
+    await t.run(async (ctx: any) => {
+      for (const a of zweite) await ctx.db.patch(a._id, { reviewStatus: "approved" });
+      await ctx.db.insert("readingProgress", {
+        userId: editorId,
+        issueId,
+        mode: "article",
+        pageIndex: 1,
+        articleId: zweite[1]._id,
+        updatedAt: Date.now(),
+      });
+    });
+    await lauf([article(1, 0, ["Korrigiert", "Text"]), article(2, 1, ["Korrigiert2", "Mehr"])]);
+    const dritte = await artikel();
+    expect(dritte.map((a: any) => a.reviewStatus)).toEqual(["approved", "approved"]);
+    const stand = await t.run(async (ctx: any) => ctx.db.query("readingProgress").first());
+    expect(stand.articleId).toBe(dritte.find((a: any) => a.title === "Korrigiert2")._id);
+  });
+
   test("Trennen an der Blockgrenze verteilt Bloecke und Regionen", async () => {
     const t = convexTest(schema, modules);
     const { issueId, editorId } = await base(t);
