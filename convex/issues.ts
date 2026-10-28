@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
   internalMutation,
   internalQuery,
@@ -479,7 +479,14 @@ export const ensureFromFolder = mutation({
     const gepflegt = seriesFor(args.publicationSlug)?.name;
     let title = args.title;
     if (!publication) {
-      await requireAdmin(ctx);
+      // Neue Reihen legt nur ein Admin an. Wer sonst hier landet, hat meist
+      // einen Ordnernamen, der falsch gelesen wurde; das soll er sehen.
+      await requireAdmin(ctx).catch(() => {
+        throw new ConvexError(
+          `Die Reihe "${args.publicationName}" gibt es noch nicht. Bitte den Ordnernamen ` +
+            `pruefen (z. B. "zuerst 8-9-2025"); neue Reihen legt ein Admin an.`,
+        );
+      });
       const name = gepflegt ?? args.publicationName;
       if (title.startsWith(`${args.publicationName} `)) {
         title = name + title.slice(args.publicationName.length);

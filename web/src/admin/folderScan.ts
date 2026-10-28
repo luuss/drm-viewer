@@ -287,9 +287,16 @@ export function parseFolderName(folderName: string): ParsedName {
   let vor = rest;
   let nach = "";
 
+  // Doppelheft "8-9-2025" oder "8-9/2025": sonst wuerde die erste Zahl
+  // zum Reihennamen ("Zuerst 8") und das Heft zu 9/2025.
+  const doppel = rest.match(/(\d{1,2})\s*[-+/]\s*(\d{1,2})\s*[-/]\s*(\d{4})/);
   const jahr = rest.match(/(\d{1,2})\s*[-/]\s*(\d{4})/);
   const einzeln = rest.match(/\d{1,4}/);
-  if (jahr) {
+  if (doppel) {
+    issueNumber = `${Number(doppel[1])}-${Number(doppel[2])}/${doppel[3]}`;
+    vor = rest.slice(0, doppel.index ?? 0);
+    nach = rest.slice((doppel.index ?? 0) + doppel[0].length);
+  } else if (jahr) {
     issueNumber = `${Number(jahr[1])}/${jahr[2]}`;
     vor = rest.slice(0, jahr.index ?? 0);
     nach = rest.slice((jahr.index ?? 0) + jahr[0].length);

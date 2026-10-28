@@ -154,6 +154,8 @@ describe("parseFolderName", () => {
       "Greim",
     ],
     ["zuerst 3-2026 innenteil + titelseite", "zuerst", "3/2026", "Zuerst 3/2026"],
+    ["zuerst 8-9-2025", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["bilder 8-9-2025", "bilder", "8-9/2025", "Bilder 8-9/2025"],
   ];
   for (const [ordner, slug, nummer, titel] of faelle) {
     it(`liest "${ordner}"`, () => {

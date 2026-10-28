@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aufteilen } from "./folderDrop";
+import { aufteilen, zusammenfuehren } from "./folderDrop";
 
 const datei = (path: string) => ({
   path,
@@ -47,5 +47,34 @@ describe("aufteilen", () => {
   it("bleibt beim Ordner, wenn kein Heft darin erkennbar ist", () => {
     const ordner = { folderName: "leer", files: [datei("x/y.txt")] };
     expect(aufteilen(ordner)).toEqual([ordner]);
+  });
+});
+
+describe("zusammenfuehren", () => {
+  it("haengt Bilderordner und lose IDML an das Heft", () => {
+    const hefte = zusammenfuehren(
+      [
+        { folderName: "zuerst 8-9-2025", files: [datei("innen.pdf")] },
+        { folderName: "bilder 8-9-2025", files: [datei("a.jpg"), datei("b.tif")] },
+      ],
+      [datei("zuerst 8-9.idml")],
+    );
+    expect(hefte).toHaveLength(1);
+    expect(hefte[0].folderName).toBe("zuerst 8-9-2025");
+    expect(hefte[0].files.map((f) => f.path)).toEqual([
+      "innen.pdf",
+      "bilder 8-9-2025/a.jpg",
+      "bilder 8-9-2025/b.tif",
+      "zuerst 8-9.idml",
+    ]);
+  });
+
+  it("ordnet Bilderordner bei mehreren Heften nach Heftnummer zu", () => {
+    const hefte = zusammenfuehren([
+      { folderName: "zuerst 7-2025", files: [datei("innen.pdf")] },
+      { folderName: "zuerst 8-9-2025", files: [datei("innen.pdf")] },
+      { folderName: "bilder 8-9-2025", files: [datei("a.jpg")] },
+    ]);
+    expect(hefte.map((h) => h.files.length)).toEqual([1, 2]);
   });
 });
