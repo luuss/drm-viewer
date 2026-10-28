@@ -43,6 +43,51 @@ async function walk(
   }
 }
 
+/**
+ * Ein Heftordner hat seine PDFs oben liegen. Liegen dort keine, ist es ein
+ * Sammelordner: jeder Unterordner mit einem PDF obenauf wird ein eigenes Heft.
+ */
+export function aufteilen(ordner: DroppedFolder): DroppedFolder[] {
+  const istPdf = (name: string) => name.toLowerCase().endsWith(".pdf");
+  if (ordner.files.some((f) => !f.path.includes("/") && istPdf(f.name))) return [ordner];
+  const gruppen = new Map<string, ScannedFile[]>();
+  for (const f of ordner.files) {
+    const schnitt = f.path.indexOf("/");
+    if (schnitt < 0) continue;
+    const name = f.path.slice(0, schnitt);
+    const liste = gruppen.get(name) ?? [];
+    liste.push({ ...f, path: f.path.slice(schnitt + 1) });
+    gruppen.set(name, liste);
+  }
+  const hefte = [...gruppen]
+    .filter(([, files]) => files.some((f) => !f.path.includes("/") && istPdf(f.name)))
+    .sort(([a], [b]) => a.localeCompare(b, "de", { numeric: true }))
+    .map(([folderName, files]) => ({ folderName, files }));
+  // Ohne erkennbare Hefte bleibt es beim Ordner; der Import meldet dann,
+  // was fehlt.
+  return hefte.length ? hefte : [ordner];
+}
+
+/**
+ * Alle Ordner eines Drops lesen, Sammelordner aufgeteilt. Einzelne Dateien
+ * werden uebergangen.
+ */
+export async function readDroppedFolders(items: DataTransferItemList): Promise<DroppedFolder[]> {
+  // Die Eintraege sofort abholen: nach dem ersten `await` ist die Liste leer.
+  const eintraege: FileSystemDirectoryEntry[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry?.();
+    if (entry?.isDirectory) eintraege.push(entry as FileSystemDirectoryEntry);
+  }
+  const out: DroppedFolder[] = [];
+  for (const ordner of eintraege) {
+    const files: ScannedFile[] = [];
+    await walk(ordner, "", files);
+    out.push(...aufteilen({ folderName: ordner.name, files }));
+  }
+  return out;
+}
+
 /** Ordner aus einem Drop lesen. Einzelne Dateien werden uebergangen. */
 export async function readDroppedFolder(
   items: DataTransferItemList,
