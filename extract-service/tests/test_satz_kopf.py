@@ -241,3 +241,81 @@ def test_kurze_unterzeile_der_dmz_bleibt_unterzeile():
     [a] = artikel_aus_satz(blocks)
     assert a.subtitle == "Napoleon unterliegt bei Waterloo"
     assert a.teaser is None
+
+
+# --- Aufgabe B: Autor ---------------------------------------------------------
+
+
+def _titelgeschichte_mit_anzeige() -> list[SourceBlock]:
+    """ZUERST! 3/2026, S. 15: Buchanzeige in der rechten Spalte der Titelgeschichte.
+
+    Schlagzeile im Format "Autorenname Katalog", Beschreibung und Preis im
+    Format "Mengentext Katalog", der Preis in einem eigenen Rahmen.
+    """
+    return [
+        rb("Vergiftete", "k", "Hauptüberschrift", 7, ZEILE),
+        rb("Nachbarschaft", "k", "Hauptüberschrift", 7, ZEILE),
+        rb("Im Herbst 2022 " + "x" * 2000, "t", "Mengentext mit Initiale", 7, SPALTE_1),
+        rb("Weiter auf Seite 15 " + "y" * 900, "t", "Mengentext", 14, (0.048, 0.061, 0.643, 0.943)),
+        rb("Hartmut Lieger, Christian Schöps, Ludwig Kranzler", "t", "Autorenname", 15, SPALTE_3),
+        rb("Was die Deutschen", "anz-kopf", "Autorenname Katalog", 14, (0.667, 0.068, 0.952, 0.113)),
+        rb("nicht wissen sollen", "anz-kopf", "Autorenname Katalog", 14, (0.667, 0.068, 0.952, 0.113)),
+        rb(
+            "Nachdem ein Gericht die Vernichtung der Restauflage angeordnet hatte, " + "z" * 560,
+            "anz",
+            "Mengentext Katalog",
+            14,
+            (0.675, 0.375, 0.94, 0.646),
+        ),
+        rb("€ 32,80", "anz-preis", "Mengentext Katalog", 14, (0.876, 0.646, 0.949, 0.672)),
+    ]
+
+
+def test_schlagzeile_einer_anzeige_ist_nie_autor():
+    artikel = artikel_aus_satz(_titelgeschichte_mit_anzeige())
+    titel = artikel[0]
+    assert titel.title == "Vergiftete Nachbarschaft"
+    assert titel.author == "Hartmut Lieger, Christian Schöps, Ludwig Kranzler"
+    # Schlagzeile und Preis gehoeren zur Anzeige, nicht in die Titelgeschichte.
+    assert "€ 32,80" not in [b.text for b in titel.blocks]
+    anzeige = artikel[1]
+    assert anzeige.title == "Was die Deutschen nicht wissen sollen"
+    assert anzeige.blocks[-1].text == "€ 32,80"
+
+
+def test_autorzeile_im_eigenen_rahmen_bleibt_autor():
+    """Ein Autor in eigenem Rahmen ohne Anzeigenformat zaehlt weiter."""
+    blocks = [
+        rb("Begeisterter Flieger", "k", "hauptüberschrift schwerter", 2, ZEILE),
+        rb("Robert Greim wurde " + "x" * 600, "t", "mengentext schwerter", 2, SPALTE_1),
+        rb("Peter Stockert", "a", "autorenname schwerter", 2, (0.667, 0.9, 0.952, 0.92)),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert a.author == "Peter Stockert"
+
+
+def test_kurzer_anzeigenteil_geht_an_die_anzeige_in_deren_rahmen_er_steht():
+    """DMZ-Zeitgeschichte 80, S. 43: "5 Bände im Schuber" steht im Rahmen der
+    Divisionsgeschichte (Preis und Artikelnummer im Text, Format des
+    Mengentexts), nicht bei der Katalog-Anzeige darunter."""
+    blocks = [
+        rb(
+            "Im März 1933 als Stabswache Berlin gegründet " + "x" * 600 + " Art. 101543 € 148,–",
+            "gross",
+            "Mengentext DMZ-Zeit 2018",
+            42,
+            (0.04, 0.107, 0.96, 0.649),
+        ),
+        rb("5 Bände", "schuber", "Mengentext Katalog", 42, (0.036, 0.517, 0.251, 0.577)),
+        rb("im Schuber", "schuber", "Mengentext Katalog", 42, (0.036, 0.517, 0.251, 0.577)),
+        rb(
+            "Der älteste Truppenteil der Waffen-SS " + "y" * 500 + " Art. 101077 € 39,80",
+            "klein",
+            "Mengentext Katalog",
+            42,
+            (0.052, 0.698, 0.471, 0.92),
+        ),
+    ]
+    artikel = artikel_aus_satz(blocks)
+    texte = [[b.text for b in a.blocks] for a in artikel]
+    assert "5 Bände" in texte[0] and "5 Bände" not in texte[1]

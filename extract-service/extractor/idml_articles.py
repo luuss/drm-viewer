@@ -724,6 +724,29 @@ def _meldungsseiten(
     return out
 
 
+# Absatzformate der Anzeigen und Buecherseiten ("Mengentext Katalog",
+# "Autorenname Katalog", "werbeseite titel", "Bücherseite Text 2023").
+ANZEIGEN_FORMATE = ("katalog", "werbeseite", "anzeige", "bücherseite", "buecherseite")
+
+
+def _anzeigenformat(story: Story) -> bool:
+    """Ist die Story ueberwiegend in den Formaten einer Anzeige gesetzt?"""
+    gesamt = sum(len(b.text) for b in story.blocks) or 1
+    werbung = sum(
+        len(b.text)
+        for b in story.blocks
+        if any(f in (b.style_name or "").lower() for f in ANZEIGEN_FORMATE)
+    )
+    return werbung * 2 > gesamt
+
+
+def _rahmenabstand(a: Story, b: Story) -> float:
+    """Luecke zwischen den Rahmen zweier Stories auf der ersten Seite von a."""
+    ax0, ay0, ax1, ay1 = a.rahmen
+    bx0, by0, bx1, by1 = b.rahmen
+    return max(0.0, bx0 - ax1, ax0 - bx1) + max(0.0, by0 - ay1, ay0 - by1)
+
+
 def _kopie_mit_text(block: SourceBlock, text: str) -> SourceBlock:
     from dataclasses import replace
 
@@ -866,19 +889,27 @@ def artikel_aus_satz(
                 eigene[eigene.index(erster)] = _als(erster, "heading")
             else:
                 titel = _erster_satz(_text(story))
-        autor = None
-        for a in autoren:
-            if a.story_id in vergeben:
-                continue
-            if a.erste_seite in story.seiten:
-                autor = _text(a)
-                vergeben.add(a.story_id)
-                break
-        # Ein Autorenname kann auch als letzter Absatz im Mengentext stehen.
+        # Der Autor im eigenen Text zuerst: ZUERST! und DMZ setzen ihn als
+        # Absatz im Format "Autorenname" ans Ende des Mengentexts. Eine
+        # Autorzeile in einem eigenen Rahmen zaehlt erst danach, und nie
+        # die einer Anzeige: in 3/2026 trug die Titelgeschichte sonst die
+        # Schlagzeile der Buchanzeige auf S. 15 ("Was die Deutschen nicht
+        # wissen sollen") als Autor.
+        autor = next(
+            (
+                b.text
+                for b in story.blocks
+                if rolle_fuer(b.style_name, len(b.text)) == "autor"
+            ),
+            None,
+        )
         if autor is None:
-            for b in story.blocks:
-                if rolle_fuer(b.style_name, len(b.text)) == "autor":
-                    autor = b.text
+            for a in autoren:
+                if a.story_id in vergeben or _anzeigenformat(a):
+                    continue
+                if a.erste_seite in story.seiten:
+                    autor = _text(a)
+                    vergeben.add(a.story_id)
                     break
 
         unterzeile, vorspann = _unterzeile_und_vorspann(unter, einleitung)
@@ -904,10 +935,44 @@ def artikel_aus_satz(
         for seite in stueck.pages:
             belegte_seiten.setdefault(seite, stueck)
 
+    # Teile einer Anzeige (der Preis "€ 32,80" in eigenem Rahmen, die
+    # Schlagzeile im Format "Autorenname Katalog") gehoeren zur Anzeige
+    # derselben Seite, nie in den redaktionellen Artikel daneben.
+    anzeigen_auf_seite = [
+        (s, st)
+        for s, st in paare
+        if id(st) in noch_da and (_anzeigenformat(s) or s.story_id in anzeigen)
+    ]
+
+    def anzeige_zu(teil: Story) -> AssembledArticle | None:
+        moeglich = [
+            (_rahmenabstand(teil, s), n, st)
+            for n, (s, st) in enumerate(anzeigen_auf_seite)
+            if teil.erste_seite in s.seiten
+        ]
+        return min(moeglich, key=lambda m: m[:2])[2] if moeglich else None
+
+    for kopf in autoren:
+        if kopf.story_id in vergeben or not _anzeigenformat(kopf):
+            continue
+        ziel = anzeige_zu(kopf)
+        if ziel is None:
+            continue
+        zeile = _text(kopf)
+        ziel.blocks.insert(0, _als(_kopie_mit_text(kopf.blocks[0], zeile), "heading"))
+        if ziel.title_from_body:
+            ziel.title = zeile
+            ziel.title_from_body = False
+
     # Kaesten und kurze Reste wandern in den Artikel ihrer Seite — und dort
     # hinter den letzten Absatz derselben Seite, damit sie im Lesefluss an der
     # richtigen Stelle stehen und nicht am Ende des Artikels.
     for rest in kaesten + kurze:
+        if _anzeigenformat(rest) and rest.textzeichen < ANZEIGE_MINDESTZEICHEN:
+            ziel = anzeige_zu(rest)
+            if ziel is not None:
+                ziel.blocks.extend(_als(b, "paragraph") for b in rest.blocks)
+            continue
         ziel = belegte_seiten.get(rest.erste_seite)
         if ziel is None and any(b.kind == "table" for b in rest.blocks):
             # Eine Tabelle steht oft allein auf der Nachbarseite ihres Textes,
