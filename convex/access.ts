@@ -102,6 +102,14 @@ export async function accessibleIssueIds(
  * unveroeffentlichtes. Die Rolle `reader` liest jedes veroeffentlichte Heft,
  * auch jedes kuenftige, ohne Kauf.
  */
+/** Redaktion: liest auch unveroeffentlichte Hefte (Vorschau vor der Freigabe). */
+export async function istRedaktion(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<boolean> {
+  return (await leseRolle(ctx, userId)) === "editor";
+}
+
 async function leseRolle(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,

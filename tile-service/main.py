@@ -185,6 +185,28 @@ def wasserzeichen_feld(session: dict) -> Image.Image | None:
     return _felder[schluessel]
 
 
+def redaktion_erlaubt(asset_id: str, r: str | None) -> bool:
+    """Unterschrift aus `convex/assets.ts` (`redaktionsAssetUrl`) pruefen.
+
+    Die Redaktion zeigt Seitenvorschauen als schlichte `<img>`, ohne
+    Lesesitzung. Convex gibt solche Adressen nur nach `requireEditor` aus.
+    """
+    if not r or "." not in r:
+        return False
+    ablauf, signatur = r.split(".", 1)
+    try:
+        if int(ablauf) < time.time():
+            return False
+    except ValueError:
+        return False
+    erwartet = hmac.new(
+        TILE_SERVICE_SECRET.encode(),
+        f"redaktion:{asset_id}:{ablauf}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(signatur, erwartet)
+
+
 def require_fetch(request: Request) -> None:
     """Nur `fetch` aus der eigenen Seite.
 
@@ -382,6 +404,13 @@ async def asset(
             content=daten,
             media_type=info.get("contentType") or "image/jpeg",
             headers={"Cache-Control": "private, max-age=3600"},
+        )
+    if redaktion_erlaubt(asset_id, request.query_params.get("r")):
+        daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+        return Response(
+            content=daten,
+            media_type=info.get("contentType") or "image/jpeg",
+            headers={"Cache-Control": "private, no-store"},
         )
     require_fetch(request)
     session = await require_session(x_tile_session, info.get("issueId"))

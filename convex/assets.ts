@@ -144,6 +144,41 @@ export async function assetUrl(
 }
 
 /**
+ * Bildadresse fuer die Redaktion. Die Seitenvorschauen im Admin sind
+ * schlichte `<img>` ohne Lesesitzung; das Gateway laesst sie nur mit dieser
+ * Unterschrift durch (`?r=<ablauf>.<hmac>`, Geheimnis des Kacheldienstes).
+ * Der Ablauf springt einmal am Tag, damit die Query-Ergebnisse stabil
+ * bleiben; gueltig ist eine Adresse 24 bis 48 Stunden. Nur nach
+ * `requireEditor` aufrufen.
+ */
+export async function redaktionsAssetUrl(
+  ctx: any,
+  assetId: Id<"assets"> | undefined | null,
+): Promise<string | null> {
+  const url = await assetUrl(ctx, assetId);
+  const secret = process.env.TILE_SERVICE_SECRET ?? "";
+  if (!url || !assetId || !secret || !url.includes("/api/asset/")) return url;
+  const tag = 86_400;
+  const ablauf = (Math.floor(Date.now() / 1000 / tag) + 2) * tag;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`redaktion:${assetId}:${ablauf}`),
+  );
+  const hex = Array.from(new Uint8Array(mac))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${url}?r=${ablauf}.${hex}`;
+}
+
+/**
  * Was das Kachel-Gateway braucht, um ein Bild auszuliefern: wo es liegt und
  * ob es oeffentlich ist. Titelbilder und die Seiten des gedruckten
  * Inhaltsverzeichnisses stehen im Kiosk und sind frei; alles andere gehoert

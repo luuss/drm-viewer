@@ -10,7 +10,7 @@ import {
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, requirePublisher, audit } from "./roles";
-import { hasIssueAccess, accessibleIssueIds } from "./access";
+import { hasIssueAccess, accessibleIssueIds, istRedaktion } from "./access";
 import { blockType, tableData } from "./schema";
 import { assetUrl } from "./assets";
 import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
@@ -337,10 +337,15 @@ export const getForReader = query({
     if (!(await hasIssueAccess(ctx, userId as Id<"users">, article.issueId))) {
       return null;
     }
-    // Sichtbar sind freigegebene Artikel veroeffentlichter Ausgaben.
+    // Sichtbar sind freigegebene Artikel veroeffentlichter Ausgaben. Die
+    // Redaktion sieht ein frisch hochgeladenes Heft schon vor der
+    // Veroeffentlichung; Seiten und Artikelliste zeigt der Reader ihr ohnehin.
     if (article.reviewStatus !== "approved") return null;
     const issue = await ctx.db.get(article.issueId);
-    if (!issue?.isPublished) return null;
+    if (!issue) return null;
+    if (!issue.isPublished && !(await istRedaktion(ctx, userId as Id<"users">))) {
+      return null;
+    }
 
     const blocks = await ctx.db
       .query("articleBlocks")
