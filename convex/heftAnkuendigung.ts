@@ -682,6 +682,22 @@ export const probe = action({
   },
 });
 
+/**
+ * Dieselbe Probe von der Kommandozeile an eine beliebige Adresse:
+ * `npx convex run heftAnkuendigung:probeInternal '{"issueId":"…","email":"…"}'`.
+ */
+export const probeInternal = internalAction({
+  args: { issueId: v.id("issues"), email: v.string() },
+  handler: async (ctx, { issueId, email }): Promise<{ an: string }> => {
+    const an = normalizeEmail(email);
+    if (!isPlausibleEmail(an)) throw new Error("Adresse ungültig");
+    const p: { daten: HeftMailDaten; reiheSlug: string; token: string; zugang: boolean } =
+      await ctx.runMutation(internal.heftAnkuendigung.probeVorbereitenInternal, { issueId, email: an });
+    await verschicken(p.daten, p.reiheSlug, { email: an, token: p.token, zugang: p.zugang });
+    return { an };
+  },
+});
+
 // --- Abbestellen -----------------------------------------------------------
 
 /** Reihen, zu denen es Mails gibt: aktiv und mit mindestens einem Heft draussen. */
