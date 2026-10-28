@@ -13,6 +13,9 @@ from fastapi import HTTPException  # noqa: E402
 
 import main  # noqa: E402
 
+# Eine Kennung in der Form, wie Convex sie vergibt.
+KENNUNG = "jh70gfhsmykjn6x2ygz8qhpe7h8h41p5"
+
 
 @pytest.fixture(autouse=True)
 def leere_zaehler():
@@ -94,11 +97,54 @@ def test_artikelbilder_fragen_convex_und_speicher_nur_einmal(monkeypatch):
 
     async def zweimal():
         for _ in range(2):
-            info = await main.resolve_asset("a1")
+            info = await main.resolve_asset(KENNUNG)
             assert await main.load_bild(info) == b"jpeg"
 
     asyncio.run(zweimal())
     assert aufrufe == {"convex": 1, "speicher": 1}
+
+
+def test_unsinn_kennungen_fragen_convex_nicht_und_fuellen_keinen_speicher(monkeypatch):
+    aufrufe = []
+
+    async def service_call(path, body):
+        aufrufe.append(body["assetId"])
+        return None
+
+    jetzt = [1000.0]
+    monkeypatch.setattr(main, "service_call", service_call)
+    monkeypatch.setattr(main.time, "monotonic", lambda: jetzt[0])
+    main._asset_cache.clear()
+
+    async def frage(kennung):
+        return await main.resolve_asset(kennung)
+
+    # Keine Kennung: gar nicht erst nach Convex.
+    for unsinn in ["a1", "../../etc", "x" * 40, "JH70GFHSMYKJN6X2YGZ8QHPE7H8H41P5"]:
+        assert asyncio.run(frage(unsinn)) is None
+    assert aufrufe == []
+    assert len(main._asset_cache) == 0
+    # Unbekannt, aber in der richtigen Form: nur kurz gemerkt.
+    assert asyncio.run(frage(KENNUNG)) is None
+    assert asyncio.run(frage(KENNUNG)) is None
+    assert len(aufrufe) == 1
+    jetzt[0] += main.UNBEKANNT_TTL + 1
+    asyncio.run(frage(KENNUNG))
+    assert len(aufrufe) == 2
+
+
+def test_merkliste_bleibt_klein_und_schnell():
+    import time as zeit
+
+    liste = main.Merkliste(100)
+    start = zeit.perf_counter()
+    for i in range(20_000):
+        liste.lege(f"k{i}", i, 60)
+    assert len(liste) == 100
+    assert zeit.perf_counter() - start < 1.0
+    # Das zuletzt Gelegte ist da, das aelteste herausgefallen.
+    assert liste.hole("k19999") == (True, 19999)
+    assert liste.hole("k0") == (False, None)
 
 
 def test_neuimport_unter_demselben_schluessel_liefert_das_neue_bild(monkeypatch):
