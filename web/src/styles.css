@@ -1559,8 +1559,17 @@ body:has(.reihe-seite) { overflow-x: clip; }
 }
 @media (max-width: 40rem) {
   .reihe-kontakt-karte { flex-direction: column; align-items: flex-start; }
-  .reihe-kontakt-liste { flex-direction: column; }
-  .reihe-kontakt-liste .reihe-kontakt-art { width: 5.5rem; }
+  .reihe-kontakt-liste { flex-direction: column; align-self: stretch; min-width: 0; }
+  .reihe-kontakt-liste .reihe-kontakt-art { width: 5.5rem; flex: 0 0 auto; white-space: nowrap; }
+  /* Lange Adressen ruecken schmal unter ihre Bezeichnung und brechen, wenn
+     noetig, vor "@" oder "." um (wbr), notfalls irgendwo. Vorher ragten sie
+     hinaus, und die Reihenseite rollte auf dem Telefon seitlich (459 statt
+     390 px). */
+  .reihe-kontakt-liste a { white-space: normal; }
+  .reihe-kontakt-liste a,
+  .reihe-kontakt-liste a > span { min-width: 0; }
+  .reihe-kontakt-liste a > span { flex-wrap: wrap; column-gap: var(--s2); row-gap: 0; }
+  .reihe-kontakt-wert { overflow-wrap: anywhere; }
 }
 .reihe-kontakt-art {
   font-size: var(--fs-mini);
