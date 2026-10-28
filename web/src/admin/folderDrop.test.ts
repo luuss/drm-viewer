@@ -28,6 +28,22 @@ describe("aufteilen", () => {
     expect(hefte[1].files.map((f) => f.path)).toEqual(["innen.pdf", "Links/a.jpg"]);
   });
 
+  it("teilt keinen Heftordner, dessen PDFs in Unterordnern liegen", () => {
+    const ordner = {
+      folderName: "zuerst 11-2025",
+      files: [datei("zuerst.idml"), datei("PDF/innen.pdf"), datei("Umschlag/umschlag.pdf")],
+    };
+    expect(aufteilen(ordner)).toEqual([ordner]);
+  });
+
+  it("teilt keinen Ordner mit Innenteil und Umschlag als Unterordnern", () => {
+    const ordner = {
+      folderName: "dmz 170",
+      files: [datei("Innenteil/innen.pdf"), datei("Umschlag/umschlag.pdf")],
+    };
+    expect(aufteilen(ordner)).toEqual([ordner]);
+  });
+
   it("bleibt beim Ordner, wenn kein Heft darin erkennbar ist", () => {
     const ordner = { folderName: "leer", files: [datei("x/y.txt")] };
     expect(aufteilen(ordner)).toEqual([ordner]);

@@ -6,7 +6,7 @@
  * hundert Eintraege je Aufruf und ist erst leer, wenn nichts mehr kommt.
  */
 
-import type { ScannedFile } from "./folderScan";
+import { parseFolderName, type ScannedFile } from "./folderScan";
 
 export type DroppedFolder = { folderName: string; files: ScannedFile[] };
 
@@ -44,12 +44,15 @@ async function walk(
 }
 
 /**
- * Ein Heftordner hat seine PDFs oben liegen. Liegen dort keine, ist es ein
- * Sammelordner: jeder Unterordner mit einem PDF obenauf wird ein eigenes Heft.
+ * Ein Sammelordner voller Heftordner wird in seine Hefte geteilt. Erkannt
+ * wird er streng, denn ein Heftordner hat oft selbst Unterordner (`PDF/`,
+ * `Innenteil/`, `Umschlag/`), und ein falsch geteiltes Heft verliert seine
+ * IDML (28.10.2026). Sammelordner heisst: oben liegt keine Heftdatei, und
+ * mindestens zwei Unterordner mit PDF tragen verschiedene Heftnummern im Namen.
  */
 export function aufteilen(ordner: DroppedFolder): DroppedFolder[] {
-  const istPdf = (name: string) => name.toLowerCase().endsWith(".pdf");
-  if (ordner.files.some((f) => !f.path.includes("/") && istPdf(f.name))) return [ordner];
+  const heftdatei = (name: string) => /\.(pdf|idml|indd)$/i.test(name);
+  if (ordner.files.some((f) => !f.path.includes("/") && heftdatei(f.name))) return [ordner];
   const gruppen = new Map<string, ScannedFile[]>();
   for (const f of ordner.files) {
     const schnitt = f.path.indexOf("/");
@@ -60,12 +63,14 @@ export function aufteilen(ordner: DroppedFolder): DroppedFolder[] {
     gruppen.set(name, liste);
   }
   const hefte = [...gruppen]
-    .filter(([, files]) => files.some((f) => !f.path.includes("/") && istPdf(f.name)))
+    .filter(([, files]) => files.some((f) => /\.pdf$/i.test(f.name)))
     .sort(([a], [b]) => a.localeCompare(b, "de", { numeric: true }))
     .map(([folderName, files]) => ({ folderName, files }));
-  // Ohne erkennbare Hefte bleibt es beim Ordner; der Import meldet dann,
-  // was fehlt.
-  return hefte.length ? hefte : [ordner];
+  const nummern = new Set(hefte.map((h) => parseFolderName(h.folderName).issueNumber));
+  if (hefte.length < 2 || nummern.has(undefined) || nummern.size !== hefte.length) {
+    return [ordner];
+  }
+  return hefte;
 }
 
 /**
