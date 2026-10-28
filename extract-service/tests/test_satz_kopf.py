@@ -319,3 +319,162 @@ def test_kurzer_anzeigenteil_geht_an_die_anzeige_in_deren_rahmen_er_steht():
     artikel = artikel_aus_satz(blocks)
     texte = [[b.text for b in a.blocks] for a in artikel]
     assert "5 Bände" in texte[0] and "5 Bände" not in texte[1]
+
+
+# --- Aufgabe D: Titel ------------------------------------------------------------
+
+
+def test_editorial_anrede_ist_erster_absatz_nicht_titel():
+    """ZUERST!: "Sehr geehrte Leser," steht im Format "Kleine Überschrift rot"."""
+    from extractor.rubriken import titel_bereinigen
+
+    blocks = [
+        rb("Sehr geehrte Leser,", "t", "Kleine Überschrift rot", 2, (0.135, 0.242, 0.487, 0.88)),
+        rb("nicht selten sind die größten Feinde " + "x" * 600, "t", "Mengentext", 2, (0.135, 0.242, 0.487, 0.88)),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert a.title_from_body
+    assert [(b.kind, b.text) for b in a.blocks][0] == ("paragraph", "Sehr geehrte Leser,")
+    assert titel_bereinigen(a.title, aus_text=True, seitenrubrik="EDITORIAL") == "Editorial"
+
+
+def test_dmz_anrede_in_zwei_absaetzen_wird_einer():
+    """DMZ 170, S. 3: "Verehrter" / "Leser," ohne Format vor dem Text."""
+    blocks = [
+        rb("Verehrter", "t", "$ID/NormalParagraphStyle", 2, (0.449, 0.103, 0.952, 0.944)),
+        rb("Leser,", "t", "$ID/NormalParagraphStyle", 2, (0.449, 0.103, 0.952, 0.944)),
+        rb("kaum ist das Jahr 2025 zur Neige gegangen " + "x" * 600, "t", "Mengentext 2023", 2, (0.449, 0.103, 0.952, 0.944)),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert [b.text for b in a.blocks][0] == "Verehrter Leser,"
+    assert a.title_from_body
+
+
+def test_meldungszeile_ueber_zwei_absaetze_ist_ein_titel():
+    """ZUERST! 5/2025, S. 20: "Abgang einer" / "Überzeugungstäterin: Faesers fatale Bilanz"."""
+    box = (0.667, 0.061, 0.952, 0.936)
+    blocks = [
+        rb("Abgang einer", "t", "Kleine Überschrift rot", 19, box),
+        rb("Überzeugungstäterin: Faesers fatale Bilanz", "t", "Kleine Überschrift rot", 19, box),
+        rb("Vor dem Hintergrund " + "x" * 600, "t", "Mengentext mit Initiale", 19, box),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert a.title == "Abgang einer Überzeugungstäterin: Faesers fatale Bilanz"
+    assert [b.kind for b in a.blocks] == ["heading", "heading", "paragraph"]
+
+
+def test_kalenderblatt_zeile_in_drei_absaetzen():
+    """DMZ 170, S. 64: "Erich Raeder" / "vergrößert" / "die Kriegsmarine"."""
+    box = (0.652, 0.302, 0.952, 0.935)
+    blocks = [rb(z, "t", "Überschrift Kalender 2023", 63, box) for z in ("Erich Raeder", "vergrößert", "die Kriegsmarine")]
+    blocks.append(rb("Erich Raeder hatte seit 1928 " + "x" * 800, "t", "Text Nachrichten 2023", 63, box))
+    [a] = artikel_aus_satz(blocks)
+    assert a.title == "Erich Raeder vergrößert die Kriegsmarine"
+
+
+def test_zwei_meldungen_in_einem_textrahmen_werden_zwei_artikel():
+    """ZUERST! 3/2026, S. 25: Wadephul und der Bundeswehr-General in einer Story."""
+    box = (0.667, 0.061, 0.952, 0.936)
+    blocks = [
+        rb("Wadephul warnt vor", "t", "Kleine Überschrift rot", 24, box),
+        rb("Debatte über NATO-Zerfall", "t", "Kleine Überschrift rot", 24, box),
+        rb("Außenminister Johann Wadephul " + "x" * 600, "t", "Mengentext mit Initiale", 24, box),
+        rb("Bundeswehr-General", "t", "Kleine Überschrift rot", 24, box),
+        rb("verlangt Atombombe", "t", "Kleine Überschrift rot", 24, box),
+        rb("Der Bundeswehr-Brigadegeneral Frank Pieper " + "y" * 300, "t", "Mengentext mit Initiale", 24, box),
+    ]
+    artikel = artikel_aus_satz(blocks)
+    assert [a.title for a in artikel] == [
+        "Wadephul warnt vor Debatte über NATO-Zerfall",
+        "Bundeswehr-General verlangt Atombombe",
+    ]
+    # Eine Meldung allein bleibt ein Artikel.
+    [a] = artikel_aus_satz(blocks[:3])
+    assert a.title == "Wadephul warnt vor Debatte über NATO-Zerfall"
+
+
+def test_buchbesprechung_heisst_nach_dem_besprochenen_buch():
+    from extractor.idml_articles import buchtitel_aus_angabe
+
+    assert buchtitel_aus_angabe(
+        "Christiane Hoffmann. Alles, was wir nicht erinnern: Zu Fuß auf dem Fluchtweg meines Vaters. "
+        "279 S., geb., € 22,–. München: C.H. Beck, 2022."
+    ) == "Christiane Hoffmann: Alles, was wir nicht erinnern"
+    assert buchtitel_aus_angabe(
+        "Cora Stephan (Hrsg.). Deutsche Legenden: Wer schreibt unsere Geschichte? 248 S., Pb., € 22,–."
+    ) == "Cora Stephan (Hrsg.): Deutsche Legenden"
+    assert buchtitel_aus_angabe(
+        "Erich Thöle/Martin Glade. Veteranen der Waffen-SS berichten. Bd. 12. 120 S., geb., € 18,80."
+    ) == "Erich Thöle/Martin Glade: Veteranen der Waffen-SS berichten. Bd. 12"
+    assert buchtitel_aus_angabe(
+        "Claus-M. Wolfschlag. Das andere Buch: Ein Untertitel. 96 S., geb., € 10,–."
+    ) == "Claus-M. Wolfschlag: Das andere Buch"
+    # Keine Buchangabe: eine Anzeige mit Umfang und Preis, ein Satz mit "S.".
+    assert buchtitel_aus_angabe("384 S., viele Abb., geb. im Großformat. € 32,80") is None
+    assert buchtitel_aus_angabe("Mit Grüßen aus der Redaktion. Siehe S. 12, oben.") is None
+
+    box = (0.667, 0.236, 0.952, 0.943)
+    blocks = [
+        rb("Endzeit in Schlesien. Im Dorf Rosenthal bricht 1945 ein Treck auf. " + "x" * 1500, "t", "Mengentext mit Initiale", 77, box),
+        rb("Christiane Hoffmann. Alles, was wir nicht erinnern: Zu Fuß auf dem Fluchtweg meines Vaters. "
+           "279 S., geb., € 22,–. München: C.H. Beck, 2022.", "t", "Mengentext mit Initiale", 77, box),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert a.title == "Christiane Hoffmann: Alles, was wir nicht erinnern"
+    assert not a.title_from_body
+
+
+def test_kolumne_heisst_nach_dem_titel_in_ihrem_textrahmen():
+    """ZUERST! 3/2026, S. 38: "Unseriöse Medien" in einem Rahmen ohne Format
+    mitten im Textrahmen der Kolumne. Ein Rahmen ausserhalb (Seitenfuss)
+    zaehlt nicht."""
+    text = (0.066, 0.29, 0.932, 0.929)
+    blocks = [
+        rb("Durch das, mit dem wir unseren Kopf füttern " + "x" * 3000, "t", "Mengentext mit Initiale", 37, text),
+        rb("Dr. Claus-M. Wolfschlag ist freier Publizist.", "t", "Mengentext", 37, text),
+        rb("Unseriöse Medien", "titel", "$ID/[No paragraph style]", 37, (0.375, 0.431, 0.625, 0.461)),
+        rb("3/2026 · Deutsches Nachrichtenmagazin", "fuss", "$ID/NormalParagraphStyle", 37, (0.512, 0.956, 0.871, 0.976)),
+    ]
+    [a] = artikel_aus_satz(blocks)
+    assert a.title == "Unseriöse Medien"
+    assert not a.title_from_body
+    # Ohne den Titelrahmen bleibt der Titel aus dem Text (dann gilt die Rubrik).
+    [a] = artikel_aus_satz([b for b in blocks if b.story_id != "titel"])
+    assert a.title_from_body
+
+
+def test_verfasser_der_kolumne_aus_dem_verzeichnis():
+    from extractor.rubriken import verfasser_aus_eintrag
+
+    assert verfasser_aus_eintrag("Claus-M. Wolfschlag: Die Kolumne") == "Claus-M. Wolfschlag"
+    assert verfasser_aus_eintrag("Pius Leitner: Die Kolumne") == "Pius Leitner"
+    # Kein Verfasser: Doppelpunkt im Titel, Rubrik ohne Namen.
+    assert verfasser_aus_eintrag("Abschiebungen in NRW: Chronik des Scheiterns") is None
+    assert verfasser_aus_eintrag("Die Kolumne") is None
+    assert verfasser_aus_eintrag("Kalenderblatt – Personen") is None
+
+
+def _anzeige(zeilen: list[tuple[str, str]], text: str = "Beschreibung des Buches. " * 8 + "288 S., geb., € 22,–") -> list[SourceBlock]:
+    box = (0.232, 0.808, 0.399, 0.92)
+    return [rb(t, "a", stil, 78, box) for t, stil in zeilen] + [rb(text, "a", zeilen[-1][1].replace("Autor", "Text").replace("titel", "text"), 78, box)]
+
+
+def test_buchanzeige_trennt_verfasser_titel_und_untertitel():
+    # ZUERST! 1/2025, S. 79: Verfasser und Titel beide im Autorformat.
+    [a] = artikel_aus_satz(_anzeige([("Gustav Sichelschmidt", "Bücherseite Autor 2018"), ("Wie im alten Rom", "Bücherseite Autor 2018")]))
+    assert (a.title, a.author) == ("Wie im alten Rom", "Gustav Sichelschmidt")
+    lesetext = worker._ohne_kopfzeilen(a.blocks, a)
+    assert [b.text for b in lesetext][0].startswith("Beschreibung")
+    # ZUERST! 10/2025: zwei Verfasser, die Zeile endet mit "/".
+    [a] = artikel_aus_satz(_anzeige([
+        ("Alexander Marguier/", "werbeseite autor"),
+        ("Ben Krischke (Hg.)", "werbeseite autor"),
+        ("Die Wokeness-Illusion", "werbeseite titel"),
+    ]))
+    assert (a.title, a.author) == ("Die Wokeness-Illusion", "Alexander Marguier/Ben Krischke (Hg.)")
+
+
+def test_buchanzeige_der_dmz_bleibt_wie_sie_war():
+    """DMZ 170, S. 59: Verfasser im Autorformat, Titel im Titelformat."""
+    [a] = artikel_aus_satz(_anzeige([("Danny Bauer", "Bücherseite Autor 2023"), ("Heinrich Kling", "Bücherseite Titel 2023")]))
+    assert (a.title, a.author, a.subtitle) == ("Heinrich Kling", "Danny Bauer", None)

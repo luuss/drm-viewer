@@ -69,6 +69,7 @@ from extractor.rubriken import (
     stehende_rubrik,
     titel_bereinigen,
     titel_nennt_artikel,
+    verfasser_aus_eintrag,
     verzeichnis_doppelseite,
 )
 from extractor.textutil import normalize_compare
@@ -236,7 +237,11 @@ class Job:
                 verzeichnis=verzeichnis.get(seite),
                 erster_auf_seite=seite not in gesehen,
             )
+            erster_auf_seite = seite not in gesehen
             gesehen.add(seite)
+            if not a.author and erster_auf_seite:
+                # Die Kolumne nennt ihren Verfasser nur im Verzeichnis.
+                a.author = verfasser_aus_eintrag(verzeichnis.get(seite))
             if neu != a.title:
                 kern = (stehende_rubrik(neu) or neu).lower()
                 if (seite, kern) in vergeben:

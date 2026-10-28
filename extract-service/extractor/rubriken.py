@@ -183,6 +183,32 @@ def verzeichnis_doppelseite(hints: list, rubriken: dict[int, str]) -> list:
     return out
 
 
+_VERFASSER_EINTRAG = re.compile(r"^\s*(?P<name>[^:]{3,60}?)\s*:\s*(?P<rubrik>.+?)\s*$")
+
+
+def verfasser_aus_eintrag(eintrag: str | None) -> str | None:
+    """Der Verfasser einer Rubrik aus ihrem Verzeichniseintrag.
+
+    Die Kolumne von ZUERST! nennt ihren Verfasser nur im Inhaltsverzeichnis:
+    "Claus-M. Wolfschlag: Die Kolumne", "Pius Leitner: Die Kolumne". Gilt nur,
+    wenn hinter dem Doppelpunkt genau eine stehende Rubrik steht und davor
+    ein Name (zwei bis fuenf Woerter, gross geschrieben, ohne Ziffern).
+    """
+    m = _VERFASSER_EINTRAG.match(eintrag or "")
+    if not m:
+        return None
+    rubrik = " ".join(m.group("rubrik").split())
+    if (stehende_rubrik(rubrik, mit_anrede=False) or "").lower() != rubrik.lower():
+        return None
+    name = " ".join(m.group("name").split())
+    woerter = name.split()
+    if not 2 <= len(woerter) <= 5 or re.search(r"\d", name):
+        return None
+    if not all(w[0].isupper() or w in ("von", "van", "de", "zu") for w in woerter):
+        return None
+    return name
+
+
 # So weit darf der Anfang eines Artikels von der Seite seines Eintrags
 # entfernt sein, wenn der Eintrag ihn beim Titel nennt.
 TITEL_SEITENABSTAND = 1
