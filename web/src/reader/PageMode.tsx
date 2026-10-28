@@ -160,16 +160,42 @@ export default function PageMode({
       springStiffness: 8,
       tileRetryMax: 3,
       tileRetryDelay: 1000,
+      // Groessenaenderungen behandelt der Beobachter unten. OpenSeadragon
+      // selbst rechnete den Zoom nach dem Seitenverhaeltnis um: nach dem
+      // Ausblenden des Inhaltsverzeichnisses stand die Doppelseite
+      // vergroessert da, Kopf, Fuss und rechte Seite abgeschnitten.
+      autoResize: false,
     });
     viewerRef.current = viewer;
     setOverlayHost(viewer.canvas as HTMLElement);
+    // Steht die ganze Seite im Bild (wie nach dem Oeffnen), wird sie nach
+    // jeder Groessenaenderung der Leseflaeche neu eingepasst. Hat der Leser
+    // hineingezoomt, bleibt sein Ausschnitt.
+    let eingepasst = true;
     viewer.addHandler("open", () => {
       readyRef.current = true;
       setReady(true);
       setNotice(null);
       viewer.viewport.goHome(true);
+      eingepasst = true;
       syncLayers();
     });
+    viewer.addHandler("animation-finish", () => {
+      const vp = viewer.viewport;
+      eingepasst = Math.abs(vp.getZoom(true) / vp.getHomeZoom() - 1) < 0.01;
+    });
+    const beobachter = new ResizeObserver(() => {
+      const flaeche = viewer.container as HTMLElement;
+      if (!flaeche.clientWidth || !flaeche.clientHeight) return;
+      viewer.viewport.resize(
+        new OpenSeadragon.Point(flaeche.clientWidth, flaeche.clientHeight),
+        true,
+      );
+      if (eingepasst) viewer.viewport.goHome(true);
+      viewer.forceRedraw();
+      syncLayers();
+    });
+    beobachter.observe(hostRef.current);
     viewer.addHandler("open-failed", () => {
       readyRef.current = false;
       setReady(false);
@@ -242,6 +268,7 @@ export default function PageMode({
     });
 
     return () => {
+      beobachter.disconnect();
       setOverlayHost(null);
       viewer.destroy();
       viewerRef.current = null;
