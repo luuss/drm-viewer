@@ -1071,6 +1071,7 @@ def artikel_aus_satz(
     vergeben: set[str] = set()
     artikel: list[AssembledArticle] = []
     paare: list[tuple[Story, AssembledArticle]] = []
+    interviews: set[int] = set()
     belegte_seiten: dict[int, AssembledArticle] = {}
 
     for story in koerper:
@@ -1173,6 +1174,11 @@ def artikel_aus_satz(
             teaser=vorspann,
             title_from_body=not kopf and aus_text,
         )
+        if ist_leserbriefseite(story):
+            stueck.blocks = leserbriefe_gliedern(stueck.blocks)
+        elif ist_interview(story):
+            stueck.blocks = fragen_absetzen(stueck.blocks)
+            interviews.add(id(stueck))
         artikel.append(stueck)
         paare.append((story, stueck))
 
@@ -1235,9 +1241,16 @@ def artikel_aus_satz(
             )
         if ziel is None:
             continue
-        art = "box" if rest.rolle() == "kasten" else "paragraph"
-        # Eine Tabelle bleibt eine Tabelle, auch in einem Kasten.
-        neue = [b if b.kind == "table" else _als(b, art) for b in rest.blocks]
+        if rest.rolle() == "kasten":
+            neue = _kasten_bloecke(rest.blocks)
+        else:
+            # Eine Tabelle bleibt eine Tabelle.
+            neue = [b if b.kind == "table" else _als(b, "paragraph") for b in rest.blocks]
+        if id(ziel) in interviews and rest.rolle() == "kasten":
+            # Die Kurzbiografie zum Interview ("Interview-Vita") stuende an
+            # ihrer Seite zwischen Frage und Antwort; sie kommt ans Ende.
+            ziel.blocks.extend(neue)
+            continue
         stelle = _letzte_stelle(ziel.blocks, rest.erste_seite)
         ziel.blocks[stelle:stelle] = neue
 
@@ -1284,6 +1297,211 @@ def _unterzeile_und_vorspann(
     if kurz(einleitung_text):
         return einleitung_text, einleitung_text
     return None, None
+
+
+# --- Interviews ---------------------------------------------------------------
+
+_FRAGE = re.compile(r"interview[\s-]*frage")
+_ANTWORT = re.compile(r"interview[\s-]*antwort")
+
+
+def _stil(b: SourceBlock) -> str:
+    return (b.style_name or "").lower()
+
+
+def ist_interview(story: Story) -> bool:
+    """Fragen und Antworten in eigenen Formaten ("Interviewfrage",
+    "Interview-Antwort 2023"). Die Leserbriefseite von ZUERST! setzt die
+    Unterschriften auch im Frageformat, hat aber keine Antworten."""
+    fragen = sum(1 for b in story.blocks if _FRAGE.search(_stil(b)))
+    antworten = sum(1 for b in story.blocks if _ANTWORT.search(_stil(b)))
+    return fragen >= 2 and antworten >= 1
+
+
+def fragen_absetzen(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Die Fragen eines Interviews als eigener Blocktyp ("question").
+
+    Im Druck stehen sie kursiv und abgesetzt; als gewoehnliche Absaetze
+    waren Frage und Antwort im Lesetext nicht zu unterscheiden.
+    """
+    return [_als(b, "question") if _FRAGE.search(_stil(b)) else b for b in blocks]
+
+
+# --- Leserbriefe --------------------------------------------------------------
+
+# "Zu „Siegfried der Rüpel“ in ZUERST! 12/2024", "Antwort auf den Leserbrief
+# von …", "Zu Meldung „…“". Der Bezug beginnt jeden Brief.
+LESERBRIEF_BEZUG = re.compile(r"^(?:Zu|Antwort auf)\s")
+# Der Bezug endet mit der Heftangabe ("in ZUERST! 12/2024", "in DMZ 169").
+_HEFTANGABE = re.compile(r"(?:\d{1,2}(?:[-–]\d{1,2})?/\d{4}|\b(?:DMZ|ZUERST!?)\s+\d{1,4})\s*$")
+LESERBRIEF_KOPFZEILE = 100
+UNTERSCHRIFT_HOECHSTLAENGE = 60
+
+
+def ist_leserbriefseite(story: Story) -> bool:
+    """Mindestens zwei Briefe mit Bezugszeile in einer Story."""
+    return (
+        sum(
+            1
+            for b in story.blocks
+            if len(b.text) <= LESERBRIEF_KOPFZEILE and LESERBRIEF_BEZUG.match(b.text)
+        )
+        >= 2
+    )
+
+
+def _ist_unterschrift(text: str) -> bool:
+    t = text.strip()
+    return (
+        0 < len(t) <= UNTERSCHRIFT_HOECHSTLAENGE
+        and len(t.split()) <= 7
+        and not re.search(r"[.!?…:]$", t)
+        and (t[0].isupper() or t[0] in "„\"»")
+        and not LESERBRIEF_BEZUG.match(t)
+    )
+
+
+def unterschrift_abtrennen(text: str) -> tuple[str, str | None]:
+    """Eine Unterschrift, die am Briefende klebt: "… nachziehen. Holger Dörr".
+
+    Im Satz steht sie mit Leerraum oder Tabulator rechtsbuendig in der
+    letzten Zeile; im Text bleibt davon ein Leerzeichen. Ein Brief endet
+    sonst mit einem Satzzeichen — was danach kommt, ist die Unterschrift.
+    """
+    t = text.rstrip()
+    if not t or re.search(r"[.!?…:;,)“”\"»]$", t):
+        return text, None
+    for m in reversed(list(re.finditer(r"[.!?…][“”\"»)]*\s+", t))):
+        davor = t[: m.start()]
+        if re.search(r"(?:^|\s)[A-ZÄÖÜ]$", davor):
+            # "D. Kaspareit": der Punkt beendet ein Kuerzel.
+            continue
+        rest = t[m.end() :]
+        if _ist_unterschrift(rest):
+            return t[: m.end()].rstrip(), rest
+        break
+    return text, None
+
+
+def leserbriefe_gliedern(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Bezug und Brieftitel als ein Zwischentitel, die Unterschrift als Absatz.
+
+    Der Satz bricht beides mit Absatzmarken: "Zu „Siegfried der Rüpel“" /
+    "in ZUERST! 12/2024" / "Positive" / "Überraschung". Daraus wird ein
+    Zwischentitel "Zu „Siegfried der Rüpel“ in ZUERST! 12/2024 – Positive
+    Überraschung". Die Unterschrift steht danach als eigener Absatz, auch
+    wenn sie im Satz ueber zwei Zeilen geht ("Peter Lüdin," / "kommentiert
+    auf zuerst.de") oder am letzten Satz des Briefes klebt.
+    """
+    out: list[SourceBlock] = []
+    i, n = 0, len(blocks)
+    while i < n:
+        b = blocks[i]
+        if (
+            b.kind != "table"
+            and len(b.text) <= LESERBRIEF_KOPFZEILE
+            and LESERBRIEF_BEZUG.match(b.text)
+        ):
+            kopf: list[SourceBlock] = []
+            j = i
+            while (
+                j < n
+                and len(kopf) < 5
+                and blocks[j].kind != "table"
+                and len(blocks[j].text) <= LESERBRIEF_KOPFZEILE
+                and not (kopf and LESERBRIEF_BEZUG.match(blocks[j].text))
+            ):
+                kopf.append(blocks[j])
+                j += 1
+            if j < n and len(blocks[j].text) > LESERBRIEF_KOPFZEILE:
+                ende = next((k for k, z in enumerate(kopf) if _HEFTANGABE.search(z.text)), 0)
+                bezug = zeilen_verbinden(z.text for z in kopf[: ende + 1])
+                titel = zeilen_verbinden(z.text for z in kopf[ende + 1 :])
+                zeile = f"{bezug} – {titel}" if titel else bezug
+                out.append(_als(_kopie_mit_text(kopf[0], zeile), "subheading"))
+                i = j
+                continue
+        out.append(b)
+        i += 1
+
+    gegliedert: list[SourceBlock] = []
+    k = 0
+    while k < len(out):
+        b = out[k]
+        vorher = gegliedert[-1] if gegliedert else None
+        if (
+            b.kind in ("paragraph", "other")
+            and _ist_unterschrift(b.text)
+            and vorher is not None
+            and vorher.kind == "paragraph"
+            and len(vorher.text) > LESERBRIEF_KOPFZEILE
+        ):
+            zeilen = [b]
+            k += 1
+            while (
+                k < len(out)
+                and out[k].kind in ("paragraph", "other")
+                and len(out[k].text) <= UNTERSCHRIFT_HOECHSTLAENGE
+                and not LESERBRIEF_BEZUG.match(out[k].text)
+                and not re.search(r"[.!?]$", zeilen[-1].text.strip())
+            ):
+                zeilen.append(out[k])
+                k += 1
+            gegliedert.append(_als(_kopie_mit_text(b, zeilen_verbinden(z.text for z in zeilen)), "paragraph"))
+            continue
+        naechster = out[k + 1] if k + 1 < len(out) else None
+        if (
+            b.kind == "paragraph"
+            and len(b.text) > LESERBRIEF_KOPFZEILE
+            and (naechster is None or naechster.kind == "subheading")
+        ):
+            text, unterschrift = unterschrift_abtrennen(b.text)
+            if unterschrift:
+                gegliedert.append(_kopie_mit_text(b, text))
+                gegliedert.append(_kopie_mit_text(b, unterschrift))
+                k += 1
+                continue
+        gegliedert.append(b)
+        k += 1
+    return gegliedert
+
+
+def _kasten_bloecke(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Ein Kasten ist ein Block: seine Absaetze als Zeilen, getrennt durch "\\n".
+
+    Ein Datenkasten der DMZ ("Panzerjäger Centauro – Technische Daten:")
+    setzt jede Zeile als eigenen Absatz ("Länge 7,85 m", "Breite 2,94 m");
+    als zwanzig lose Absaetze zerfiel er im Lesetext. Der Leser zeigt einen
+    Kasten abgesetzt und mit seinen Zeilenumbruechen. Eine am Zeilenende
+    getrennte Bezeichnung ("Haupt-" / "bewaffnung 1 × 105-mm-Kanone") wird
+    eine Zeile. Eine Tabelle im Kasten bleibt eine Tabelle.
+    """
+    out: list[SourceBlock] = []
+    zeilen: list[str] = []
+    erster: SourceBlock | None = None
+
+    def abschliessen() -> None:
+        nonlocal zeilen, erster
+        if erster is not None and zeilen:
+            out.append(_als(_kopie_mit_text(erster, "\n".join(zeilen)), "box"))
+        zeilen, erster = [], None
+
+    for b in blocks:
+        if b.kind == "table":
+            abschliessen()
+            out.append(b)
+            continue
+        text = " ".join(b.text.split())
+        if not text:
+            continue
+        if erster is None:
+            erster = b
+        if zeilen and re.search(r"[^\W\d_]-$", zeilen[-1]) and text[:1].islower():
+            zeilen[-1] = zeilen_verbinden([zeilen[-1], text])
+        else:
+            zeilen.append(text)
+    abschliessen()
+    return out
 
 
 def _letzte_stelle(blocks: list[SourceBlock], seite: int) -> int:

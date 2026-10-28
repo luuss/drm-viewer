@@ -16,6 +16,8 @@ BlockType = Literal[
     "subheading",
     "lead",
     "paragraph",
+    # Frage eines Interviews, im Druck kursiv und abgesetzt.
+    "question",
     "quote",
     "caption",
     "box",

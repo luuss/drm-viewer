@@ -1081,7 +1081,7 @@ class Job:
                 {
                     "order": i + 1,
                     "type": b.kind if b.kind in
-                    ("heading", "subheading", "lead", "paragraph", "quote", "caption", "box")
+                    ("heading", "subheading", "lead", "paragraph", "question", "quote", "caption", "box")
                     or (b.kind == "table" and b.table is not None)
                     else "other",
                     "text": b.text,
