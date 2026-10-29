@@ -29,12 +29,20 @@ export function nenntMonat(texte: (string | null | undefined)[], ms: number): bo
   const monat = Number(teile.find((t) => t.type === "month")?.value);
   const jahr = teile.find((t) => t.type === "year")?.value ?? "";
   const name = monatJahr(ms).split(" ")[0].toLowerCase();
-  // "März" auch als "Mär", "Mrz" oder "Maerz", "September" als "Sep"/"Sept".
-  const namen = [name, name.slice(0, 3), name.replace("ä", "ae"), name === "märz" ? "mrz" : name];
+  // Ganze Monatsnamen und die ueblichen Kuerzel, jeweils als ganzes Wort:
+  // "Mainzer" ist kein Mai, "Augenzeugen" kein August.
+  const KUERZEL: Record<string, string[]> = {
+    januar: ["jan"], februar: ["feb"], märz: ["mär", "mrz", "maerz"], april: ["apr"],
+    august: ["aug"], september: ["sep", "sept"], oktober: ["okt"], november: ["nov"],
+    dezember: ["dez"],
+  };
+  const namen = [name, ...(KUERZEL[name] ?? [])];
+  const wort = new RegExp(`(^|[^\\p{L}])(${namen.join("|")})(?![\\p{L}])`, "u");
+  const zahl = new RegExp(`(^|\\D)0?${monat}\\s*[/.-]\\s*(${jahr}|${jahr.slice(2)})(\\D|$)`);
   return texte.some((roh) => {
     const text = (roh ?? "").toLowerCase();
-    if (!jahr || !text.includes(jahr)) return false;
-    if (namen.some((n) => new RegExp(`(^|[^\\p{L}])${n}`, "u").test(text))) return true;
-    return new RegExp(`(^|\\D)0?${monat}\\s*[/.-]\\s*(${jahr}|${jahr.slice(2)})(\\D|$)`).test(text);
+    if (!jahr) return false;
+    if (zahl.test(text)) return true;
+    return text.includes(jahr) && wort.test(text);
   });
 }

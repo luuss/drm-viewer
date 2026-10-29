@@ -476,16 +476,23 @@ const SUCHE_TIEFE = 256;
 async function fundstelle(ctx: QueryCtx, articleId: Id<"articles">, begriff: string) {
   let erster = true;
   let ungefaehr: Doc<"articleBlocks"> | null = null;
+  // Kaesten und Zitate zuletzt: ein Randzitat wiederholt oft einen Absatz
+  // und wird dann im Leser gar nicht gezeigt (getForReader, `doppelt`).
+  let kasten: Doc<"articleBlocks"> | null = null;
   for await (const b of ctx.db
     .query("articleBlocks")
     .withIndex("by_article_order", (q) => q.eq("articleId", articleId))) {
     const titel = erster && b.type === "heading";
     erster = false;
     if (titel) continue;
+    if (b.type === "box" || b.type === "quote") {
+      if (!kasten && passt(b.text, begriff)) kasten = b;
+      continue;
+    }
     if (ganzeWoerter(b.text, begriff)) return b;
     if (!ungefaehr && passt(b.text, begriff)) ungefaehr = b;
   }
-  return ungefaehr;
+  return ungefaehr ?? kasten;
 }
 
 /**
@@ -513,7 +520,9 @@ export const search = query({
       return { treffer: [], gesamt: 0, vollstaendig: true };
     }
     const allowed = await accessibleIssueIds(ctx, userId as Id<"users">);
-    const anzahl = Math.max(1, Math.min(SUCHE_TIEFE, Math.floor(limit ?? SUCHE_SEITE)));
+    // Jeder Aufrufer darf `limit` setzen; mehr als vier Seiten auf einmal liest
+    // die Suche nicht (je Treffer werden die Absaetze fuer die Fundstelle gelesen).
+    const anzahl = Math.max(1, Math.min(4 * SUCHE_SEITE, Math.floor(limit ?? SUCHE_SEITE)));
 
     const hits = await ctx.db
       .query("searchChunks")

@@ -9,13 +9,13 @@ import { Doc, Id } from "./_generated/dataModel";
 import { passt, suchwoerter, trefferRang } from "./suche";
 
 /**
- * Ist die Leserseite ein Umschlag (U1 oder U4)? Die erste Leserseite ist
- * immer der Titel (`spreadStart` im Reader), auch wenn ein alter Import ihr
- * keine Rolle mitgab.
+ * Ist die Leserseite ein Umschlag (U1 oder U4)? Ohne Rolle (alter Import)
+ * gilt die erste Leserseite als Titel (`spreadStart` im Reader); mit Rolle
+ * entscheidet die Rolle, ein Innenteil ohne Umschlag beginnt mit "content".
  */
 export function istUmschlag(page: Pick<Doc<"issuePages">, "index" | "role" | "printedLabel">) {
   return (
-    page.index === 0 ||
+    (page.index === 0 && !page.role) ||
     page.role === "front_cover" ||
     page.role === "back_cover" ||
     /^U\s*[14]$/i.test(page.printedLabel?.trim() ?? "")
@@ -252,6 +252,8 @@ export const searchCatalog = query({
         section: e.section,
         page: seite?.printedLabel ?? null,
         imText: e.imText,
+        // Der Rang bleibt intern: nach aussen verriete er bei fremden Heften,
+        // ob ein Wort als ganzes Wort im bezahlten Text steht.
         rang: e.rang,
       });
     }
@@ -275,7 +277,7 @@ export const searchCatalog = query({
         coverUrl: await assetUrl(ctx, issue.coverAssetId),
         priceAmountCents: issue.priceAmountCents,
         shopSku: issueShopSku(issue),
-        entries: entries.slice(0, 6),
+        entries: entries.slice(0, 6).map(({ rang: _rang, ...e }) => e),
         more: Math.max(0, entries.length - 6),
       });
     }

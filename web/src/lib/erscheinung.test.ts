@@ -16,6 +16,11 @@ describe("monatJahr", () => {
 describe("nenntMonat", () => {
   it("erkennt den Monat in der Bezeichnung", () => {
     expect(nenntMonat(["März 2026"], maerz2026)).toBe(true);
+    expect(nenntMonat(["ZUERST! 3/26"], maerz2026)).toBe(true);
+    // Fremde Woerter mit Monatsanfang zaehlen nicht.
+    expect(nenntMonat(["Mainzer Erklärung 2026"], Date.UTC(2026, 4, 1))).toBe(false);
+    expect(nenntMonat(["Augenzeugen berichten 2026"], Date.UTC(2026, 7, 1))).toBe(false);
+    expect(nenntMonat(["Ausgabe Sept. 2026"], Date.UTC(2026, 8, 1))).toBe(true);
     expect(nenntMonat(["ZUERST! · März-April 2026"], maerz2026)).toBe(true);
     expect(nenntMonat(["Maerz 2026"], maerz2026)).toBe(true);
     expect(nenntMonat(["ZUERST! 3/2026"], maerz2026)).toBe(true);
