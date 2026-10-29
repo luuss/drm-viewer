@@ -12,6 +12,8 @@
  * und spricht mit keinem Server — deshalb laesst es sich ohne Browser pruefen.
  */
 
+import { DOPPEL_WORT, findeHeftnummer, formatHeftnummer } from "../../../convex/heftnummer";
+
 export type ScannedFile = {
   /** Pfad im Ordner, mit `/` getrennt, ohne den Ordnernamen selbst. */
   path: string;
@@ -233,6 +235,8 @@ export type ParsedName = {
   /** Was im Ordnernamen hinter der Heftnummer steht, etwa "Greim". */
   issueSubtitle?: string;
   issueTitle: string;
+  /** Was an der Heftnummer nicht stimmt (Tippfehler im Jahr). */
+  problem?: string;
 };
 
 /**
@@ -256,7 +260,7 @@ export function slugify(s: string): string {
     .toLowerCase()
     .replace(/[äöüß]/g, (c) => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" })[c] ?? c)
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80);
@@ -266,6 +270,14 @@ function grossAnfang(s: string): string {
   return s.replace(/(^|[\s-])([a-zäöü])/g, (_m, a, b) => a + b.toUpperCase());
 }
 
+// Woerter rund um die Nummer, die weder Reihe noch Zusatz sind.
+const FUELLWORT = /\b(?:doppel(?:ausgabe|heft|nummer)|ausgabe|heft|nr)\b\.?/gi;
+const RAND = /^[\s,;+_.-]+|[\s,;+_.-]+$/g;
+
+function ohneFuellwort(s: string): string {
+  return s.replace(FUELLWORT, " ").replace(/\s{2,}/g, " ").replace(RAND, "").trim();
+}
+
 /**
  * Reihe und Heftnummer aus dem Ordnernamen lesen.
  *
@@ -273,41 +285,38 @@ function grossAnfang(s: string): string {
  * "DMZ-Zeitgeschichte 80 innenteil + titelseite" -> DMZ-Zeitgeschichte, 80
  * "schwertertraeger 36 greim, innenteil ..."   -> Schwertertraeger, 36, "Greim"
  * "zuerst 3-2026 innenteil + titelseite"       -> zuerst, 3/2026
+ * "zuerst 8-9 2025", "zuerst_08_09_2025",
+ * "zuerst 2025-08-09", "Doppelausgabe 8/2025"  -> zuerst, 8-9/2025
+ *
+ * Das Lesen der Nummer selbst steht in convex/heftnummer.ts.
  */
 export function parseFolderName(folderName: string): ParsedName {
-  let rest = folderName.trim();
-  // Alles ab dem ersten Hinweis auf den Inhalt abschneiden.
+  let rest = folderName.trim().replace(/_/g, " ");
+  // Alles ab dem ersten Hinweis auf den Inhalt abschneiden ("innen s. 20-39"
+  // ist ein Seitenbereich, keine Heftnummer).
   rest = rest.replace(
-    /[\s,+_-]*\b(innenteile?|innen|titelseiten?|titel|umschlag|cover)\b.*$/i,
+    /[\s,+_-]*\b(innenteile?|innen|titelseiten?|titel|umschlag|cover|seiten?|s\.)(?![\p{L}]).*$/iu,
     "",
   );
-  rest = rest.replace(/[\s,;+_-]+$/, "").trim();
+  // Dateiendung eines Dateinamens ("zuerst 8-9-2025.idml").
+  rest = rest.replace(/\.(idml|indd|pdf|jpe?g|tiff?|png|zip)$/i, "");
+  // Ein Arbeitsdatum ("stand 28.10.2026") ist weder Nummer noch Titel.
+  rest = rest.replace(/(?:\b(?:stand|vom)\s*)?\b\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})\b/gi, " ");
+  rest = rest.replace(/\s{2,}/g, " ").replace(/[\s,;+_-]+$/, "").trim();
 
+  const doppel = DOPPEL_WORT.test(rest);
+  const fund = findeHeftnummer(rest, doppel);
   let issueNumber: string | undefined;
   let vor = rest;
   let nach = "";
-
-  // Doppelheft "8-9-2025" oder "8-9/2025": sonst wuerde die erste Zahl
-  // zum Reihennamen ("Zuerst 8") und das Heft zu 9/2025.
-  const doppel = rest.match(/(\d{1,2})\s*[-+/]\s*(\d{1,2})\s*[-/]\s*(\d{4})/);
-  const jahr = rest.match(/(\d{1,2})\s*[-/]\s*(\d{4})/);
-  const einzeln = rest.match(/\d{1,4}/);
-  if (doppel) {
-    issueNumber = `${Number(doppel[1])}-${Number(doppel[2])}/${doppel[3]}`;
-    vor = rest.slice(0, doppel.index ?? 0);
-    nach = rest.slice((doppel.index ?? 0) + doppel[0].length);
-  } else if (jahr) {
-    issueNumber = `${Number(jahr[1])}/${jahr[2]}`;
-    vor = rest.slice(0, jahr.index ?? 0);
-    nach = rest.slice((jahr.index ?? 0) + jahr[0].length);
-  } else if (einzeln) {
-    issueNumber = String(Number(einzeln[0]));
-    vor = rest.slice(0, einzeln.index ?? 0);
-    nach = rest.slice((einzeln.index ?? 0) + einzeln[0].length);
+  if (fund) {
+    issueNumber = formatHeftnummer(fund.heft);
+    vor = rest.slice(0, fund.index);
+    nach = rest.slice(fund.index + fund.laenge);
   }
 
-  const publicationName = vor.replace(/[\s,;+_-]+$/, "").trim() || rest || folderName;
-  const zusatz = nach.replace(/^[\s,;+_-]+/, "").replace(/[\s,;+_-]+$/, "").trim();
+  const publicationName = ohneFuellwort(vor) || ohneFuellwort(rest) || folderName;
+  const zusatz = ohneFuellwort(nach);
 
   const issueTitle = zusatz
     ? grossAnfang(zusatz)
@@ -321,7 +330,36 @@ export function parseFolderName(folderName: string): ParsedName {
     issueNumber,
     issueSubtitle: zusatz ? grossAnfang(zusatz) : undefined,
     issueTitle,
+    problem: fund?.problem,
   };
+}
+
+/**
+ * Heftname aus dem Ordner, gegengeprueft an Satzdatei und Innenteil.
+ *
+ * Der Ordnername ist von Hand getippt, die IDML heisst meist wie das Heft
+ * ("zuerst 6-2026.idml"). Hat der Ordnername einen Tippfehler im Jahr
+ * ("zuerst 6-6026", so kam ZUERST! 6/6026 in den Kiosk) oder keine
+ * Heftnummer, gilt die Nummer aus der Datei derselben Reihe.
+ */
+export function heftnameFuerPlan(plan: Pick<FolderPlan, "folderName" | "idml" | "inner">): ParsedName {
+  const ordner = parseFolderName(plan.folderName);
+  if (ordner.issueNumber && !ordner.problem) return ordner;
+  for (const datei of [plan.idml, plan.inner]) {
+    if (!datei) continue;
+    const aus = parseFolderName(datei.name);
+    if (!aus.issueNumber || aus.problem) continue;
+    if (aus.publicationSlug !== ordner.publicationSlug) continue;
+    return {
+      ...ordner,
+      issueNumber: aus.issueNumber,
+      issueTitle: ordner.issueSubtitle
+        ? ordner.issueTitle
+        : `${ordner.publicationName} ${aus.issueNumber}`,
+      problem: undefined,
+    };
+  }
+  return ordner;
 }
 
 export function formatBytes(n: number): string {

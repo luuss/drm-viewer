@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   canonicalSeriesName,
   coverCandidates,
+  bestMatchingCard,
+  designationExact,
   designationMatches,
   parseMagazineStrip,
   parsePrice,
@@ -126,6 +128,40 @@ describe("Heftbezeichnungen aus dem Verlagsshop", () => {
     expect(designationMatches(zuerst, "März 2025", "3/2026")).toBe(false);
     expect(designationMatches(zuerst, "Juli/August 2026", "7-8/2026")).toBe(true);
     expect(designationMatches(zuerst, "Juli/August 2026", "8/2026")).toBe(true);
+  });
+
+  test("Doppelhefte finden ihr Produkt", () => {
+    const zuerst = seriesFor("zuerst")!;
+    // So steht ZUERST! 8-9/2025 im Laden (9655-zuerst.html).
+    expect(searchQueryForIssue(zuerst, "8-9/2025")).toBe("ZUERST! August 2025");
+    expect(designationMatches(zuerst, "August/September 2025", "8-9/2025")).toBe(true);
+    expect(designationExact(zuerst, "August/September 2025", "8-9/2025")).toBe(true);
+    expect(designationExact(zuerst, "Juli/Aug. 2026", "7-8/2026")).toBe(true);
+    // Anders geschriebene Nummer, dasselbe Heft.
+    expect(searchQueryForIssue(zuerst, "08/09 2025")).toBe("ZUERST! August 2025");
+    // Falsches Jahr, falscher Monat: kein Treffer.
+    expect(designationMatches(zuerst, "August/September 2024", "8-9/2025")).toBe(false);
+    expect(designationMatches(zuerst, "Oktober 2025", "8-9/2025")).toBe(false);
+    expect(designationMatches(zuerst, "Mainzer Ausgabe 2025", "5/2025")).toBe(false);
+    // Laufende Doppelnummer: der Laden fuehrt sie unter der ersten Nummer.
+    const dmz = seriesFor("dmz")!;
+    expect(searchQueryForIssue(dmz, "170-171")).toBe("DMZ Nr. 170");
+    expect(designationMatches(dmz, "DMZ Nr. 170/171", "170-171")).toBe(true);
+    expect(designationMatches(dmz, "DMZ Nr. 171", "170-171")).toBe(false);
+  });
+
+  test("die genaue Bezeichnung gewinnt vor einem geteilten Monat", () => {
+    const zuerst = seriesFor("zuerst")!;
+    const karten = [
+      { designation: "August/September 2025", url: "doppel" },
+      { designation: "September 2025", url: "einzel" },
+    ];
+    // Ein Einzelheft 9/2025 nimmt sein eigenes Produkt, nicht das Doppelheft.
+    expect(bestMatchingCard(zuerst, karten, "9/2025")?.url).toBe("einzel");
+    expect(bestMatchingCard(zuerst, karten, "8-9/2025")?.url).toBe("doppel");
+    // Gibt es nur das Doppelheft, findet es auch ein als "8/2025" angelegtes Heft.
+    expect(bestMatchingCard(zuerst, karten.slice(0, 1), "8/2025")?.url).toBe("doppel");
+    expect(bestMatchingCard(zuerst, karten, "10/2025")).toBeNull();
   });
 });
 

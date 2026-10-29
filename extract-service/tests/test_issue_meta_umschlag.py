@@ -55,3 +55,36 @@ def test_ohne_titelseite_oder_ohne_datum_bleibt_leer():
     # Die Textebene des Innenteils (ohne "cover") ist keine Titelseite.
     innen = json.dumps({"version": 1, "pages": [{"role": "front_cover", "items": [["April 2025", 0, 0, 1, 1, 9]]}]})
     assert erscheinung_aus_umschlag(innen.encode()) == {}
+
+
+def test_doppelheft_schreibweisen():
+    # Kopfzeilen von Doppelheften in allen Formen, die vorkommen koennen.
+    for zeile in (
+        "Juli/August 2026",
+        "Juli – August 2026",
+        "Juli bis August 2026",
+        "Juli + August 2026",
+        "Juli und August 2026",
+        "Juli/Aug. 2026",
+        "J u l i  /  A u g u s t  2 0 2 6",
+    ):
+        meta = erscheinung_aus_umschlag(umschlag((zeile, 0.02)))
+        assert meta == {"monthFrom": 7, "monthTo": 8, "year": 2026}, zeile
+    meta = erscheinung_aus_umschlag(umschlag(("Sept./Okt. 2025", 0.02)))
+    assert meta == {"monthFrom": 9, "monthTo": 10, "year": 2025}
+    # Das Heft liegt ab dem ersten Monat vor (so steht ZUERST! 8-9/2025 im Bestand).
+    assert publication_date({"monthFrom": 8, "monthTo": 9, "year": 2025}) == 1754006400000
+
+
+def test_kein_doppelheft_ohne_folgemonat():
+    # "Januar bis Mai" ist ein Zeitraum im Text, kein Erscheinungsmonat; die
+    # Kopfzeile darunter zaehlt.
+    meta = erscheinung_aus_umschlag(umschlag(("Januar bis Mai 2026", 0.01), ("Juni 2026", 0.02)))
+    assert meta == {"monthFrom": 6, "monthTo": 6, "year": 2026}
+    # Einzelheft bleibt Einzelheft, "Mainzer" ist kein Mai.
+    assert erscheinung_aus_umschlag(umschlag(("März 2026", 0.02))) == {
+        "monthFrom": 3,
+        "monthTo": 3,
+        "year": 2026,
+    }
+    assert erscheinung_aus_umschlag(umschlag(("Mainzer 2026", 0.02))) == {}

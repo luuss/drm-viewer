@@ -9,7 +9,7 @@ import {
   SHOP_URL,
   categoryUrl,
   coverCandidates,
-  designationMatches,
+  bestMatchingCard,
   parseMagazineStrip,
   parseProductCards,
   parseProductPage,
@@ -20,6 +20,7 @@ import {
   type Series,
   type StripEntry,
 } from "./shopCovers";
+import { ersteNummer } from "./heftnummer";
 
 const USER_AGENT = "LesenUndSchenkenDigital/1.0 (+https://d.chuk.dev)";
 
@@ -247,14 +248,14 @@ async function findIssueProduct(
     const query = searchQueryForIssue(series, issueNumber);
     if (!query) return null;
     const cards = await cardsOf(searchUrl(query));
-    return cards.find((c) => designationMatches(series, c.designation, issueNumber)) ?? null;
+    return bestMatchingCard(series, cards, issueNumber);
   }
-  const wanted = Number(/^(\d+)/.exec(issueNumber.trim())?.[1]);
+  const wanted = ersteNummer(issueNumber) ?? Number(/^(\d+)/.exec(issueNumber.trim())?.[1]);
   if (!wanted) return null;
   for (let page = 1; page <= MAX_CATEGORY_PAGES; page++) {
     const cards = await cardsOf(categoryUrl(series, page));
     if (cards.length === 0) break;
-    const hit = cards.find((c) => designationMatches(series, c.designation, issueNumber));
+    const hit = bestMatchingCard(series, cards, issueNumber);
     if (hit) return hit;
     const numbers = cards
       .map((c) => Number(/(?:Nr\.?|Heft)\s*(\d+)\b/i.exec(c.designation)?.[1]))

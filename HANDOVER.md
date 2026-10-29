@@ -1064,6 +1064,66 @@ Kommandozeile: `npx convex run --env-file _scratch/verlag-direkt.env --identity
 (userId des Testkontos über `devtools:usersByEmailPartInternal`). Stand live vor
 dem Fix: `live-<issueId>.json` dort.
 
+## 4n. Doppelhefte: Nummer, Titel, Adresse, Monat, Laden (29.10.2026)
+
+Anlass: ZUERST! 8-9/2025 stand im Kiosk als Heft „9 2025“, Nummer „8“,
+Adresse `9-2025-8`, ohne Laden. Der Ordner hiess vermutlich „zuerst 8-9 2025“
+(Leerzeichen vor dem Jahr): der Leser von 7628709 kannte nur „8-9-2025“ und
+„8-9/2025“, nahm die erste Zahl als Nummer und den Rest als Titel. Beim
+Durchsehen aller Hefte fiel ein zweiter Fall auf: **ZUERST! 6/6026** (Ordner
+vertippt, die IDML hiess richtig „zuerst 6-2026.idml“), ebenfalls ohne Laden.
+
+**Eine Stelle fuer Heftnummern:** `convex/heftnummer.ts` (rein, auch von der
+Oberflaeche importiert). Gespeicherte Formen: `3/2026`, `8-9/2025`, `170`,
+`170-171`. Gelesen werden u. a. „8-9-2025“, „8-9/2025“, „8/9 2025“,
+„8+9 2025“, „08_09_2025“, „zuerst 2026-07-08“, „Heft 7-8 2026“,
+„Doppelausgabe 7/2026“ (-> 7-8/2026). Ein Doppelheft nur bei direkt
+folgender Zahl („8-9“, „170-171“); „s. 20-39“, „12-15“, „28.10.2026“,
+„2026-07-15“ sind keine Hefte. Ein Jahr ausserhalb 1950–2099 wird gemeldet.
+
+* **Import** (`folderScan.ts`): `parseFolderName` nutzt den Leser oben,
+  schneidet Dateiendungen, Seitenbereiche („s. 21-40“) und Arbeitsdaten
+  („stand 28.10.2026“) ab. `heftnameFuerPlan` nimmt die Nummer aus IDML bzw.
+  Innenteil, wenn der Ordnername keine oder eine mit unmoeglichem Jahr hat
+  (nur gleiche Reihe). Bleibt ein Problem, startet der Lauf nicht.
+* **Convex** (`issues.ts`): `ensureFromFolder`, `create`, `update` speichern
+  die feste Form und lehnen „6/6026“ ab; das Wiederfinden beim zweiten
+  Import vergleicht vereinheitlicht (`gleicheHeftnummer`). Neue Adressen
+  ohne doppelte Nummer (`zuerst-8-9-2025`; alte Hefte behalten
+  `zuerst-3-2026-3-2026`). `slugErneuernInternal` bildet die Adresse neu und
+  legt die alte in `issues.alteSlugs` ab; `getBySlug` findet auch die alte.
+  Kiosk/Reihe (`listPublished`) ordnet nach Erscheinungsdatum, sonst nach dem
+  ersten Monat der Nummer, erst dann nach dem Anlegetag.
+* **Erscheinungsmonat:** gespeichert bleibt der erste Tag des ersten Monats.
+  Die Heftseite zeigt fuer ein Doppelheft „August/September 2025“
+  (`web/src/lib/erscheinung.ts` `erscheinungText`/`nenntZeitraum`).
+  `issue_meta.py` liest jetzt auch „Juli bis/und/+ August“, „Juli/Aug.“,
+  breit gesperrte Kopfzeilen, und nimmt nur aufeinander folgende Monate.
+* **Laden:** `searchQueryForIssue` sucht mit dem ersten Monat („ZUERST!
+  August 2025“ findet „August/September 2025“, Produkt 9655),
+  `bestMatchingCard` nimmt die genaue Bezeichnung vor einer, die nur einen
+  Monat teilt. Artikelnummer der Digital-Variante: `ZUERST-8-9-2025-DIGITAL`
+  (`digitalSku`); Freischaltung laeuft ueber die SKU, nicht ueber die Nummer.
+
+**Live geaendert (29.10., per `issues:update` als Testkonto, kein Deploy):**
+`md7cg3c9v925mpk8yejm9q5mmd8h5yrx` -> Titel „ZUERST! 8-9/2025“, Nummer
+„8-9/2025“; `md74g0vmshwnqyaepjb35k5xa18h6m4d` -> „ZUERST! 6/2026“, „6/2026“.
+Danach `publicationCovers:refreshAll`: beide haben jetzt Laden, Bezeichnung und
+Preis (7,95 bzw. 8,70 €). Sicherung vorher: `_scratch/doppelheft/`
+(`issues-vorher.json`, `md7cg3c9-vorher.json`, `md74g0vm-6-6026-vorher.json`,
+`listPublished-vorher.json`). Rueckweg: `issues:update` mit Titel und Nummer
+aus der Sicherung (`shopUrl` leeren mit `"shopUrl":""`).
+
+**Offen bis zum Deploy:** die Adressen `9-2025-8` und `zuerst-6-6026-6-6026`.
+Die Ankuendigungsmail fuer 8-9/2025 ging an niemanden (1 Empfaenger, 1 Fehler),
+alte Links in Mails gibt es also kaum; trotzdem bleibt die alte Adresse
+gueltig. Nach dem Deploy:
+
+```
+npx convex run --env-file _scratch/verlag-direkt.env issues:slugErneuernInternal '{"issueId":"md7cg3c9v925mpk8yejm9q5mmd8h5yrx"}'
+# Probelauf zeigt alt/neu, dann mit "apply":true; ebenso md74g0vmshwnqyaepjb35k5xa18h6m4d
+```
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde

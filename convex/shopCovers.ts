@@ -17,6 +17,8 @@
  * Reine Funktionen ohne Convex-Bezug, damit sie sich testen lassen.
  */
 
+import { leseHeftnummer } from "./heftnummer";
+
 export const SHOP_URL = "https://lesenundschenken.de";
 
 export type Series = {
@@ -214,32 +216,78 @@ export const MONTHS = [
   "Juli", "August", "September", "Oktober", "November", "Dezember",
 ];
 
-/** Suchbegriff, mit dem der Shop ein Heft nach seiner Bezeichnung findet. */
-export function searchQueryForIssue(series: Series, issueNumber: string): string | null {
-  const number = issueNumber.trim();
-  if (series.numbered) {
-    const match = /^(\d+)/.exec(number);
-    return match ? `${series.searchPrefix} ${match[1]}` : null;
-  }
-  // "3/2026" oder "7-8/2026": Monat(e) und Jahr.
-  const match = /^(\d{1,2})(?:[-/](\d{1,2}))?\/(\d{4})$/.exec(number);
-  if (!match) return null;
-  const month = MONTHS[Number(match[1]) - 1];
-  return month ? `${series.searchPrefix} ${month} ${match[3]}` : null;
+// Monatsnamen und uebliche Kuerzel in einer Ladenbezeichnung, als ganzes
+// Wort: "Juli/Aug. 2026", "Sept./Okt. 2025". "Mainzer" ist kein Mai.
+const MONATSWORT: [RegExp, number][] = ([
+  [/januar|jan\.?/, 1], [/februar|feb\.?/, 2], [/märz|maerz|mär\.?|mrz\.?/, 3],
+  [/april|apr\.?/, 4], [/mai/, 5], [/juni|jun\.?/, 6], [/juli|jul\.?/, 7],
+  [/august|aug\.?/, 8], [/september|sept?\.?/, 9], [/oktober|okt\.?/, 10],
+  [/november|nov\.?/, 11], [/dezember|dez\.?/, 12],
+] as [RegExp, number][]).map(([re, n]) => [new RegExp(`(?<![\\p{L}])(?:${re.source})(?![\\p{L}])`, "iu"), n]);
+
+/** Monate, die eine Ladenbezeichnung nennt ("Juli/August 2026" -> 7, 8). */
+export function monthsIn(designation: string): number[] {
+  return MONATSWORT.filter(([re]) => re.test(designation)).map(([, n]) => n);
 }
 
-/** Ob eine Heftbezeichnung aus dem Shop zu unserer Heftnummer gehoert. */
-export function designationMatches(series: Series, designation: string, issueNumber: string): boolean {
-  const number = issueNumber.trim();
+/** Suchbegriff, mit dem der Shop ein Heft nach seiner Bezeichnung findet. */
+export function searchQueryForIssue(series: Series, issueNumber: string): string | null {
+  const heft = leseHeftnummer(issueNumber);
   if (series.numbered) {
-    const wanted = /^(\d+)/.exec(number)?.[1];
-    const found = /(?:Nr\.?|Heft)\s*(\d+)\b/i.exec(designation)?.[1];
-    return !!wanted && found === wanted;
+    // Doppelnummer "170-171": der Laden fuehrt sie unter der ersten Nummer.
+    const erste = heft?.von ?? Number(/^(\d+)/.exec(issueNumber.trim())?.[1]);
+    return erste ? `${series.searchPrefix} ${erste}` : null;
   }
-  const match = /^(\d{1,2})(?:[-/](\d{1,2}))?\/(\d{4})$/.exec(number);
-  if (!match) return false;
-  const months = [match[1], match[2]].filter(Boolean).map((m) => MONTHS[Number(m) - 1]);
-  return designation.includes(match[3]) && months.some((m) => m && designation.includes(m));
+  // "3/2026" oder Doppelheft "7-8/2026": erster Monat und Jahr. Die Suche
+  // findet damit auch "Juli/August 2026".
+  if (!heft || heft.jahr === undefined) return null;
+  const month = MONTHS[heft.von - 1];
+  return month ? `${series.searchPrefix} ${month} ${heft.jahr}` : null;
+}
+
+/**
+ * Ob eine Heftbezeichnung aus dem Shop zu unserer Heftnummer gehoert.
+ *
+ * Monatshefte: das Jahr und mindestens ein Monat stimmen. So findet auch ein
+ * als "8/2026" angelegtes Heft sein Doppelheft "Juli/August 2026". Gibt es
+ * eine genaue Bezeichnung, gewinnt sie (`designationExact`).
+ */
+export function designationMatches(series: Series, designation: string, issueNumber: string): boolean {
+  const heft = leseHeftnummer(issueNumber);
+  if (series.numbered) {
+    const wanted = heft?.von ?? Number(/^(\d+)/.exec(issueNumber.trim())?.[1]);
+    const found = /(?:Nr\.?|Heft)\s*(\d+)\b/i.exec(designation)?.[1];
+    return !!wanted && Number(found) === wanted;
+  }
+  if (!heft || heft.jahr === undefined) return false;
+  if (!new RegExp(`(^|\\D)${heft.jahr}(\\D|$)`).test(designation)) return false;
+  const genannt = monthsIn(designation);
+  return genannt.some((m) => m >= heft.von && m <= heft.bis);
+}
+
+/** Genau dieselben Monate ("August/September 2025" fuer 8-9/2025). */
+export function designationExact(series: Series, designation: string, issueNumber: string): boolean {
+  if (!designationMatches(series, designation, issueNumber)) return false;
+  if (series.numbered) return true;
+  const heft = leseHeftnummer(issueNumber);
+  if (!heft) return false;
+  const genannt = [...new Set(monthsIn(designation))].sort((a, b) => a - b);
+  const gesucht: number[] = [];
+  for (let m = heft.von; m <= heft.bis; m++) gesucht.push(m);
+  return genannt.join(",") === gesucht.join(",");
+}
+
+/** Bester Treffer: genaue Bezeichnung vor einer, die nur einen Monat teilt. */
+export function bestMatchingCard<T extends { designation: string }>(
+  series: Series,
+  cards: T[],
+  issueNumber: string,
+): T | null {
+  return (
+    cards.find((c) => designationExact(series, c.designation, issueNumber)) ??
+    cards.find((c) => designationMatches(series, c.designation, issueNumber)) ??
+    null
+  );
 }
 
 /** Kategorie-Seite, neueste Hefte zuerst (Artikelnummern steigen je Ausgabe). */

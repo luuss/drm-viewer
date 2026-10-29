@@ -129,6 +129,10 @@ export default defineSchema(
     publicationId: v.id("publications"),
     title: v.string(),
     slug: v.string(),
+    // Fruehere Adressen nach einer Berichtigung (issues.slugErneuernInternal);
+    // sie fuehren weiter zum Heft.
+    alteSlugs: v.optional(v.array(v.string())),
+    // "3/2026", Doppelheft "8-9/2025", laufend "170" (convex/heftnummer.ts).
     issueNumber: v.optional(v.string()),
     publicationDate: v.optional(v.number()),
     description: v.optional(v.string()),

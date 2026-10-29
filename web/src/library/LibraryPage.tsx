@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import { REIHENFOLGE, reiheVon, reihenSchluessel, type Reihe } from "../lib/reihen";
+import { ersteNummer, monateDerNummer } from "../../../convex/heftnummer";
 
 const MONATE = [
   "jan", "feb", "mär", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "dez",
@@ -27,7 +28,9 @@ function einordnen(h: Heftdaten): { jahr: number | null; rang: number } {
   // Nicht der Titel: "Mscha 1943" ist kein Jahrgang.
   const text = h.edition ?? "";
   const datum = h.publicationDate ? new Date(h.publicationDate) : null;
-  const schraeg = nr.match(/^(\d{1,2})\s*\/\s*((?:19|20)\d{2})$/);
+  // "3/2026" und Doppelheft "8-9/2025": Jahr und erster Monat.
+  const nrMonate = monateDerNummer(nr);
+  const schraeg = nrMonate ? [nr, String(nrMonate.von), String(nrMonate.jahr)] : null;
   const jahrImText = `${nr} ${text}`.match(/\b((?:19|20)\d{2})\b/);
   const jahr = schraeg
     ? Number(schraeg[2])
@@ -45,7 +48,8 @@ function einordnen(h: Heftdaten): { jahr: number | null; rang: number } {
       : datum
         ? datum.getMonth() + 1
         : 0;
-  const laufend = /^\d+$/.test(nr) ? Number(nr) : 0;
+  // Laufende Nummer, auch als Doppelnummer "170-171".
+  const laufend = !nrMonate ? (ersteNummer(nr) ?? 0) : 0;
   return { jahr, rang: monat * 100000 + laufend };
 }
 

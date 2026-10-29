@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyFolder,
   fortschrittProzent,
+  heftnameFuerPlan,
   IMPORT_PHASEN,
   parseFolderName,
   slugify,
@@ -156,6 +157,30 @@ describe("parseFolderName", () => {
     ["zuerst 3-2026 innenteil + titelseite", "zuerst", "3/2026", "Zuerst 3/2026"],
     ["zuerst 8-9-2025", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
     ["bilder 8-9-2025", "bilder", "8-9/2025", "Bilder 8-9/2025"],
+    // Doppelhefte in allen Schreibweisen der Druckvorstufe (29.10.2026:
+    // "zuerst 8-9 2025" wurde zu Heft "8" mit Titel "9 2025").
+    ["zuerst 8-9 2025 innenteil + titelseite", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["zuerst 8-9/2025", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["zuerst 8/9 2025", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["zuerst 8+9 2025", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["zuerst_08_09_2025", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["zuerst 7-8-2026", "zuerst", "7-8/2026", "Zuerst 7-8/2026"],
+    ["zuerst 2026-07-08", "zuerst", "7-8/2026", "Zuerst 7-8/2026"],
+    ["zuerst Heft 7-8 2026", "zuerst", "7-8/2026", "Zuerst 7-8/2026"],
+    ["zuerst Doppelausgabe 7-8 2026", "zuerst", "7-8/2026", "Zuerst 7-8/2026"],
+    ["zuerst Doppelausgabe 7/2026", "zuerst", "7-8/2026", "Zuerst 7-8/2026"],
+    ["Doppelheft zuerst 8-9-2025, innenteil", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["dmz 170-171 innenteil", "dmz", "170-171", "Dmz 170-171"],
+    // Dateinamen: Endung und Seitenbereich zaehlen nicht.
+    ["zuerst 8-9-2025.idml", "zuerst", "8-9/2025", "Zuerst 8-9/2025"],
+    ["dmz 100 innen s. 20-39.indd.pdf", "dmz", "100", "Dmz 100"],
+    ["dmz-zeit 30, s. 21-40.pdf", "dmz-zeit", "30", "Dmz-Zeit 30"],
+    // Gegenproben: Einzelhefte bleiben Einzelhefte, Reihenname bleibt ganz.
+    ["zuerst 9-2026", "zuerst", "9/2026", "Zuerst 9/2026"],
+    ["zuerst 3 2026", "zuerst", "3/2026", "Zuerst 3/2026"],
+    ["DMZ-Zeitgeschichte 80", "dmz-zeitgeschichte", "80", "DMZ-Zeitgeschichte 80"],
+    ["dmz 170", "dmz", "170", "Dmz 170"],
+    ["zuerst 3-2026 stand 28.10.2026", "zuerst", "3/2026", "Zuerst 3/2026"],
   ];
   for (const [ordner, slug, nummer, titel] of faelle) {
     it(`liest "${ordner}"`, () => {
@@ -166,10 +191,49 @@ describe("parseFolderName", () => {
     });
   }
 
+  it("meldet ein unmoegliches Jahr", () => {
+    const p = parseFolderName("zuerst 6-6026 innenteil");
+    expect(p.issueNumber).toBe("6/6026");
+    expect(p.problem).toMatch(/6026/);
+    expect(parseFolderName("zuerst 6-2026").problem).toBeUndefined();
+  });
+
   it("kommt ohne Heftnummer aus", () => {
     const p = parseFolderName("sonderheft, innenteil");
     expect(p.publicationName).toBe("Sonderheft");
     expect(p.issueNumber).toBeUndefined();
+  });
+});
+
+describe("heftnameFuerPlan", () => {
+  it("nimmt die Nummer der IDML, wenn der Ordnername ein unmoegliches Jahr hat", () => {
+    // So kam ZUERST! 6/6026 in den Kiosk: Ordner vertippt, IDML richtig.
+    const plan = classifyFolder("zuerst 6-6026 innenteil + titelseite", [
+      f("zuerst 6-2026 innenteil.pdf", 9000),
+      f("zuerst 6-2026.idml", 500),
+    ]);
+    const name = heftnameFuerPlan(plan);
+    expect(name.issueNumber).toBe("6/2026");
+    expect(name.issueTitle).toBe("Zuerst 6/2026");
+    expect(name.problem).toBeUndefined();
+  });
+
+  it("ein richtiger Ordnername gewinnt vor der Datei", () => {
+    const plan = classifyFolder("zuerst 8-9 2025", [
+      f("innenteil.pdf", 9000),
+      f("zuerst 8-2025.idml", 500),
+    ]);
+    expect(heftnameFuerPlan(plan).issueNumber).toBe("8-9/2025");
+  });
+
+  it("eine Datei einer anderen Reihe zaehlt nicht", () => {
+    const plan = classifyFolder("zuerst 6-6026", [
+      f("innen.pdf", 9000),
+      f("dmz 170.idml", 500),
+    ]);
+    const name = heftnameFuerPlan(plan);
+    expect(name.issueNumber).toBe("6/6026");
+    expect(name.problem).toMatch(/6026/);
   });
 });
 

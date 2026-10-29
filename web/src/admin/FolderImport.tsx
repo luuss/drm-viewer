@@ -6,8 +6,8 @@ import {
   classifyFolder,
   formatBytes,
   fortschrittProzent,
+  heftnameFuerPlan,
   issueTitleFor,
-  parseFolderName,
   type FolderPlan,
   type ImportPhase,
   type ParsedName,
@@ -132,10 +132,8 @@ export default function FolderImport({
     () => (ordner ? classifyFolder(ordner.folderName, ordner.files) : null),
     [ordner],
   );
-  const gelesen = useMemo(
-    () => (ordner ? parseFolderName(ordner.folderName) : null),
-    [ordner],
-  );
+  // Nummer aus dem Ordnernamen, gegengeprueft an IDML und Innenteil.
+  const gelesen = useMemo(() => (plan ? heftnameFuerPlan(plan) : null), [plan]);
   // Eine schon gepflegte Reihe steht unter ihrem Namen, nicht unter der
   // Abkuerzung aus dem Ordnernamen: "dmz" ist die Deutsche Militaerzeitschrift.
   const name: Heftname | null = useMemo(() => {
@@ -161,6 +159,15 @@ export default function FolderImport({
     if (!plan.inner) {
       const fehler =
         "Kein Innenteil-PDF im Ordner. Ohne den Innenteil laesst sich nichts importieren.";
+      setErr(fehler);
+      setErledigtListe((alt) => [...alt, { titel: ordner.folderName, fehler }]);
+      naechster();
+      return;
+    }
+    // Ein unmoegliches Jahr ("zuerst 6-6026") legte frueher ein Heft
+    // "ZUERST! 6/6026" an. Jetzt haelt der Lauf an, bis der Name stimmt.
+    if (name.problem) {
+      const fehler = `${name.problem}. Bitte den Ordner umbenennen und neu fallen lassen.`;
       setErr(fehler);
       setErledigtListe((alt) => [...alt, { titel: ordner.folderName, fehler }]);
       naechster();
