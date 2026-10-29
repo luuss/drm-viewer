@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/react";
 import { api, formatEuro, type Id , cleanError } from "../lib/api";
-import { monatJahr, nenntMonat } from "../lib/erscheinung";
+import { erscheinungText, nenntZeitraum } from "../lib/erscheinung";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import Kasse from "../components/Kasse";
@@ -97,11 +97,12 @@ export default function IssueDetailPage() {
           {/* Erscheinungsmonat ("März 2026"), nicht der erste Tag des Monats,
               und nur, wenn die Bezeichnung ihn nicht schon nennt. */}
           {issue.publicationDate !== null &&
-          !nenntMonat(
+          !nenntZeitraum(
             [issue.designation, issue.subtitle, issue.displayTitle],
             issue.publicationDate,
+            issue.issueNumber,
           )
-            ? ` · ${monatJahr(issue.publicationDate)}`
+            ? ` · ${erscheinungText(issue.publicationDate, issue.issueNumber)}`
             : ""}
         </div>
         {issue.description && issue.description !== issue.subtitle && (

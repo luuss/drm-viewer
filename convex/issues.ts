@@ -17,6 +17,12 @@ import { Id } from "./_generated/dataModel";
 import { assertSkuFree } from "./shopIntegration";
 import { cleanShopUrl, cleanSku, issueShopLink, issueShopSku } from "./shopLinks";
 import { seriesFor } from "./shopCovers";
+import {
+  gleicheHeftnummer,
+  heftnummerProblem,
+  heftZeitpunkt,
+  normalisiereHeftnummer,
+} from "./heftnummer";
 import { internal } from "./_generated/api";
 import { tocImages } from "./tocPreview";
 import { heftStueckeLoeschen } from "./suche";
@@ -67,9 +73,9 @@ export const listPublished = query({
     const filtered = publicationId
       ? rows.filter((i) => i.publicationId === publicationId)
       : rows;
-    filtered.sort(
-      (a, b) => (b.publicationDate ?? b.createdAt) - (a.publicationDate ?? a.createdAt),
-    );
+    // Neueste zuerst. Ohne Erscheinungsdatum zaehlt der Monat aus der Nummer
+    // ("8-9/2025" -> August 2025), erst dann der Tag des Anlegens.
+    filtered.sort((a, b) => heftZeitpunkt(b) - heftZeitpunkt(a));
     return Promise.all(
       filtered.map(async (i) => {
         const publication = await ctx.db.get(i.publicationId);
@@ -141,11 +147,17 @@ export const getBySlug = query({
       .query("issues")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first();
-    if (!issue) return null;
-    if (issue.isPublished) return issue._id;
+    // Alte Adresse eines umbenannten Hefts ("9-2025-8" -> "zuerst-8-9-2025").
+    // Selten, deshalb ohne eigenen Index: es gibt nur einige Dutzend Hefte.
+    const heft =
+      issue ??
+      (await ctx.db.query("issues").collect()).find((i) => i.alteSlugs?.includes(slug)) ??
+      null;
+    if (!heft) return null;
+    if (heft.isPublished) return heft._id;
     const userId = await getAuthUserId(ctx);
-    if (userId && (await hasIssueAccess(ctx, userId as Id<"users">, issue._id))) {
-      return issue._id;
+    if (userId && (await hasIssueAccess(ctx, userId as Id<"users">, heft._id))) {
+      return heft._id;
     }
     return null;
   },
@@ -430,21 +442,13 @@ export const create = mutation({
     priceAmountCents: v.number(),
     externalSku: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, rohArgs) => {
     await requireEditor(ctx);
-    const base = slugify(
-      `${args.title}${args.issueNumber ? "-" + args.issueNumber : ""}`,
-    );
-    let slug = base;
-    let n = 2;
-    while (
-      await ctx.db
-        .query("issues")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .first()
-    ) {
-      slug = `${base}-${n++}`;
-    }
+    const problem = heftnummerProblem(rohArgs.issueNumber);
+    if (problem) throw new ConvexError(problem);
+    const roh = rohArgs.issueNumber?.trim() || undefined;
+    const args = { ...rohArgs, issueNumber: (roh && normalisiereHeftnummer(roh)) ?? roh };
+    const slug = await freierSlug(ctx, heftSlugBasis(args.title, args.issueNumber));
     const now = Date.now();
     const id = await ctx.db.insert("issues", {
       publicationId: args.publicationId,
@@ -485,8 +489,23 @@ export const ensureFromFolder = mutation({
     issueNumber: v.optional(v.string()),
     priceAmountCents: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, rohArgs) => {
     await requireEditor(ctx);
+    // Die Nummer in der gespeicherten Form ("08/09 2025" -> "8-9/2025"), sonst
+    // findet der zweite Import sein Heft nicht wieder. Ein unmoegliches Jahr
+    // ("6/6026") haelt den Import an, statt ein falsches Heft anzulegen.
+    const problem = heftnummerProblem(rohArgs.issueNumber);
+    if (problem) throw new ConvexError(`${problem}. Bitte den Ordnernamen pruefen.`);
+    const rohNummer = rohArgs.issueNumber?.trim() || undefined;
+    const nummer = (rohNummer && normalisiereHeftnummer(rohNummer)) ?? rohNummer;
+    const args = {
+      ...rohArgs,
+      issueNumber: nummer,
+      title:
+        rohNummer && nummer && rohArgs.title.endsWith(` ${rohNummer}`)
+          ? rohArgs.title.slice(0, -rohNummer.length) + nummer
+          : rohArgs.title,
+    };
     let publication = await ctx.db
       .query("publications")
       .withIndex("by_slug", (q) => q.eq("slug", args.publicationSlug))
@@ -534,7 +553,7 @@ export const ensureFromFolder = mutation({
         .query("issues")
         .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
         .collect();
-      const treffer = vorhanden.find((i) => i.issueNumber === args.issueNumber);
+      const treffer = vorhanden.find((i) => gleicheHeftnummer(i.issueNumber, args.issueNumber));
       if (treffer) {
         // Ein Preis aus dem Impressum wird nachgetragen, solange keiner steht.
         if (args.priceAmountCents && !treffer.priceAmountCents) {
@@ -553,19 +572,7 @@ export const ensureFromFolder = mutation({
       }
     }
 
-    const base = slugify(
-      `${title}${args.issueNumber ? "-" + args.issueNumber : ""}`,
-    );
-    let slug = base;
-    let n = 2;
-    while (
-      await ctx.db
-        .query("issues")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .first()
-    ) {
-      slug = `${base}-${n++}`;
-    }
+    const slug = await freierSlug(ctx, heftSlugBasis(title, args.issueNumber));
     const now = Date.now();
     const issueId = await ctx.db.insert("issues", {
       publicationId: publication._id,
@@ -587,6 +594,62 @@ export const ensureFromFolder = mutation({
       created: true,
       publicationCreated,
     };
+  },
+});
+
+/**
+ * Adresse eines Hefts: Titel, und die Nummer nur, wenn der Titel sie nicht
+ * schon traegt ("ZUERST! 8-9/2025" -> "zuerst-8-9-2025", "Greim" + 36 ->
+ * "greim-36"). Fruehere Hefte tragen die Nummer doppelt
+ * ("zuerst-3-2026-3-2026"); deren Adressen bleiben, sie stehen in Mails.
+ */
+export function heftSlugBasis(title: string, issueNumber?: string): string {
+  const t = slugify(title);
+  const n = issueNumber ? slugify(issueNumber) : "";
+  if (!n || t === n || t.endsWith(`-${n}`)) return t || n || "heft";
+  return t ? `${t}-${n}` : n;
+}
+
+async function freierSlug(
+  ctx: MutationCtx,
+  base: string,
+  eigenes?: Id<"issues">,
+): Promise<string> {
+  let slug = base;
+  let n = 2;
+  for (;;) {
+    const belegt = await ctx.db
+      .query("issues")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+    if (!belegt || belegt._id === eigenes) return slug;
+    slug = `${base}-${n++}`;
+  }
+}
+
+/**
+ * Adresse eines Hefts nach seinem (berichtigten) Titel neu bilden. Die alte
+ * bleibt in `alteSlugs` und fuehrt weiter zum Heft (getBySlug), damit Links
+ * aus Mails und Lesezeichen nicht ins Leere gehen.
+ *
+ *     npx convex run issues:slugErneuernInternal '{"issueId":"...","apply":true}'
+ *
+ * Ohne `apply: true` nur Probelauf.
+ */
+export const slugErneuernInternal = internalMutation({
+  args: { issueId: v.id("issues"), apply: v.optional(v.boolean()) },
+  handler: async (ctx, { issueId, apply }) => {
+    const issue = await ctx.db.get(issueId);
+    if (!issue) throw new Error("Ausgabe nicht gefunden");
+    const neu = await freierSlug(ctx, heftSlugBasis(issue.title, issue.issueNumber), issueId);
+    const alt = issue.slug;
+    if (neu === alt) return { alt, neu, geaendert: false };
+    if (apply) {
+      const alteSlugs = [...new Set([...(issue.alteSlugs ?? []), alt])].filter((x) => x !== neu);
+      await ctx.db.patch(issueId, { slug: neu, alteSlugs, updatedAt: Date.now() });
+      await audit(ctx, "issue.slug", issueId, `${alt} -> ${neu}`);
+    }
+    return { alt, neu, geaendert: !!apply };
   },
 });
 
@@ -614,6 +677,13 @@ export const update = mutation({
     const clean: Record<string, unknown> = { updatedAt: Date.now() };
     for (const [k, val] of Object.entries(patch)) {
       if (val !== undefined) clean[k] = val;
+    }
+    // Eingetippte Nummer in die gespeicherte Form: "8/9 2025" -> "8-9/2025".
+    if (patch.issueNumber !== undefined) {
+      const problem = heftnummerProblem(patch.issueNumber);
+      if (problem) throw new ConvexError(problem);
+      const roh = patch.issueNumber.trim();
+      clean.issueNumber = roh ? (normalisiereHeftnummer(roh) ?? roh) : undefined;
     }
     if (externalSku !== undefined) {
       const sku = cleanSku(externalSku);

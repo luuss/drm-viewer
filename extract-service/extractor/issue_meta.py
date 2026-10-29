@@ -35,11 +35,32 @@ MONATE = {
     "mai": 5, "juni": 6, "juli": 7, "august": 8, "september": 9,
     "oktober": 10, "november": 11, "dezember": 12,
 }
-MONAT = "|".join(MONATE)
-ZEITRAUM = re.compile(
-    rf"\b({MONAT})\s*(?:[–\-/]|bis)\s*({MONAT})\s*(20\d\d)\b", re.IGNORECASE
+# Kuerzel, wie sie in Kopfzeilen von Doppelheften stehen ("Juli/Aug. 2026",
+# "Sept./Okt. 2025"). Laengere Formen zuerst, damit "september" nicht als
+# "sep" endet.
+KUERZEL = {
+    "jan": 1, "feb": 2, "mär": 3, "mrz": 3, "apr": 4, "jun": 6, "jul": 7,
+    "aug": 8, "sept": 9, "sep": 9, "okt": 10, "nov": 11, "dez": 12,
+}
+MONAT = "|".join(sorted(MONATE, key=len, reverse=True))
+MONAT_ODER_KUERZEL = "|".join(
+    [*sorted(MONATE, key=len, reverse=True), *(rf"{k}\." for k in sorted(KUERZEL, key=len, reverse=True))]
 )
-EINZELMONAT = re.compile(rf"\b({MONAT})\s*(20\d\d)\b", re.IGNORECASE)
+# Doppelheft: "Juli/August 2026", "Juli–August", "Juli bis August",
+# "Juli + August", "Juli und August", "Juli/Aug. 2026".
+ZEITRAUM = re.compile(
+    rf"(?<![^\W\d_])({MONAT_ODER_KUERZEL})\s*(?:[–\-/+&]|bis|und)\s*({MONAT_ODER_KUERZEL})\s*(20\d\d)\b",
+    re.IGNORECASE,
+)
+EINZELMONAT = re.compile(rf"(?<![^\W\d_])({MONAT})\s*(20\d\d)\b", re.IGNORECASE)
+
+
+def _monat(wort: str) -> int:
+    """Monatszahl zu einem Namen oder Kuerzel ("Aug." -> 8)."""
+    w = wort.lower().rstrip(".")
+    return MONATE.get(w) or KUERZEL[w]
+
+
 # Wieviele Seiten vom Ende her nach dem Impressum abgesucht werden. Es steht
 # je nach Reihe auf der letzten oder der vorletzten Doppelseite.
 SEITEN_VOM_ENDE = 6
@@ -92,9 +113,13 @@ def read_issue_meta(pdf_bytes: bytes) -> dict:
 
 
 def _entsperrt(text: str) -> str:
-    """Gesperrten Satz zusammenziehen: "A p r i l 2 0 2 5" wird "April2025"."""
-    if re.fullmatch(r"(?:\S ){3,}\S", text.strip()):
-        return text.replace(" ", "")
+    """Gesperrten Satz zusammenziehen: "A p r i l 2 0 2 5" wird "April2025".
+
+    Zwischen Woertern steht oft ein breiterer Abstand ("J u l i  /  A u g u s t");
+    auch der wird zusammengezogen.
+    """
+    if re.fullmatch(r"(?:\S {1,3}){3,}\S", text.strip()):
+        return re.sub(r"\s+", "", text)
     return text
 
 
@@ -126,11 +151,13 @@ def erscheinung_aus_umschlag(textebene: bytes) -> dict:
             text = _entsperrt(it[0])
             treffer = ZEITRAUM.search(text)
             if treffer:
-                return {
-                    "monthFrom": MONATE[treffer.group(1).lower()],
-                    "monthTo": MONATE[treffer.group(2).lower()],
-                    "year": int(treffer.group(3)),
-                }
+                von, bis = _monat(treffer.group(1)), _monat(treffer.group(2))
+                # Nur aufeinander folgende Monate sind ein Doppelheft;
+                # "Januar bis Mai 2026" in einer Kopfzeile ist ein Zeitraum
+                # im Text, kein Erscheinungsmonat.
+                if bis == von + 1:
+                    return {"monthFrom": von, "monthTo": bis, "year": int(treffer.group(3))}
+                continue
             treffer = EINZELMONAT.search(text)
             if treffer:
                 monat = MONATE[treffer.group(1).lower()]
