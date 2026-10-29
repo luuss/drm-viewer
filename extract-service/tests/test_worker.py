@@ -110,6 +110,69 @@ def test_titel_zweimal_im_verzeichnis_ist_ein_eintrag():
     assert len(payload[0]["regions"]) == 2
 
 
+def _artikel(titel: str, *seiten: int):
+    from extractor.model import AssembledArticle, SourceBlock
+
+    return AssembledArticle(
+        title=titel,
+        blocks=[
+            SourceBlock(page_index=s, text=titel, x0=0.1, y0=0.1, x1=0.9, y1=0.2)
+            for s in seiten
+        ],
+    )
+
+
+def test_druckfehler_im_verzeichnis_fuehrt_zum_artikel_mit_dem_titel():
+    """DMZ 170: beide Nachrichtenseiten stehen im Verzeichnis mit der 35."""
+    from extractor.model import TocHint
+
+    articles = [
+        _artikel("Nachrichten aus Deutschland", 33),
+        _artikel("Putins Weltuntergangswaffe", 34, 35),
+        _artikel("Nachrichten aus aller Welt", 49),
+    ]
+    payload = [{"order": i + 1, "regions": []} for i in range(3)]
+    hints = [
+        TocHint("Nachrichten aus Deutschland", 33, 2, 0.5, 0.73, 0.8, 0.75, printed=35),
+        TocHint("Nachrichten aus aus aller Welt", 33, 2, 0.5, 0.75, 0.8, 0.77, printed=35),
+        TocHint("Putins Weltuntergangswaffe", 34, 2, 0.05, 0.5, 0.3, 0.58, printed=36),
+    ]
+    entries = worker.Job._build_toc_entries(None, hints, articles, payload)
+    assert [(e["label"], e["pageIndex"], e.get("articleOrder")) for e in entries] == [
+        ("Nachrichten aus Deutschland", 33, 1),
+        ("Putins Weltuntergangswaffe", 34, 2),
+        ("Nachrichten aus aus aller Welt", 49, 3),
+    ]
+    assert [r["targetPageIndex"] for r in payload[2]["regions"]] == [49]
+
+
+def test_gedruckte_seite_gilt_wenn_der_titel_dort_steht():
+    """Gleichnamige Artikel oder ein Treffer auf der gedruckten Seite: nichts umlegen."""
+    from extractor.model import TocHint
+
+    articles = [_artikel("Buchbesprechungen", 60), _artikel("Buchbesprechungen", 70)]
+    payload = [{"order": i + 1, "regions": []} for i in range(2)]
+    hints = [TocHint("Buchbesprechungen", 65, 2, 0.5, 0.7, 0.8, 0.72, printed=67)]
+    entries = worker.Job._build_toc_entries(None, hints, articles, payload)
+    assert [e["pageIndex"] for e in entries if e["order"] and e["label"] == "Buchbesprechungen"].count(65) == 1
+
+
+def test_eintrag_mitten_im_artikel_haengt_am_laufenden_artikel():
+    """ZUERST!: "Leserbriefe/Impressum 81", die Leserbriefe beginnen auf 80."""
+    from extractor.model import TocHint
+
+    articles = [_artikel("Kolumne", 78), _artikel("Leserbriefe", 79, 80), _artikel("Zuletzt", 81)]
+    payload = [{"order": i + 1, "regions": []} for i in range(3)]
+    hints = [
+        TocHint("Leserbriefe/Impressum", 80, 2, 0.6, 0.8, 0.9, 0.82, printed=81),
+        TocHint("Zuletzt", 81, 2, 0.6, 0.82, 0.9, 0.84, printed=82),
+    ]
+    entries = worker.Job._build_toc_entries(None, hints, articles, payload)
+    gedruckt = [e for e in entries if e["label"] in ("Leserbriefe/Impressum", "Zuletzt")]
+    assert [e.get("articleOrder") for e in gedruckt] == [2, 3]
+    assert [r["targetPageIndex"] for r in payload[1]["regions"]] == [80]
+
+
 # --- Platzierte Bilder aus dem Satz ----------------------------------------
 
 

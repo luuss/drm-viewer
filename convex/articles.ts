@@ -25,6 +25,7 @@ import {
   trefferRang,
 } from "./suche";
 import { Doc, Id } from "./_generated/dataModel";
+import { sprungflaechenRetten } from "./tocZiel";
 
 const regionInput = v.object({
   pageIndex: v.number(),
@@ -1037,26 +1038,43 @@ export const reviewSummary = query({
   },
 });
 
+/**
+ * Einen Artikel samt Bloecken, Flaechen und Bildern entfernen. Die Sprung-
+ * flaechen, die an ihm hingen (Zeilen des Inhaltsverzeichnisses, Anreisser
+ * der Titelseite), liegen auf anderen Seiten und gehen an den Artikel ihrer
+ * Zielseite, statt mit ihm zu verschwinden (drm-viewer-ag3).
+ */
+async function artikelEntfernen(ctx: MutationCtx, article: Doc<"articles">) {
+  const articleId = article._id;
+  const sprung: Doc<"articleRegions">[] = [];
+  for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
+    const rows = await ctx.db
+      .query(table)
+      .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
+      .collect();
+    for (const r of rows) {
+      if (table === "articleRegions" && (r as Doc<"articleRegions">).targetPageIndex !== undefined) {
+        sprung.push(r as Doc<"articleRegions">);
+        continue;
+      }
+      if (table === "articleBlocks") await deleteLinksForBlock(ctx, r._id as Id<"articleBlocks">);
+      await ctx.db.delete(r._id);
+    }
+  }
+  await ctx.db.delete(articleId);
+  await sprungflaechenRetten(ctx, article.issueId, sprung, new Set([articleId as string]));
+  await sucheVormerken(ctx, article.issueId, articleId);
+  await renumber(ctx, article.issueId);
+  await recountIssue(ctx, article.issueId);
+}
+
 export const removeArticle = mutation({
   args: { articleId: v.id("articles") },
   handler: async (ctx, { articleId }) => {
     await requireEditor(ctx);
     const article = await ctx.db.get(articleId);
     if (!article) return;
-    for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
-      const rows = await ctx.db
-        .query(table)
-        .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
-        .collect();
-      for (const r of rows) {
-        if (table === "articleBlocks") await deleteLinksForBlock(ctx, r._id as Id<"articleBlocks">);
-        await ctx.db.delete(r._id);
-      }
-    }
-    await ctx.db.delete(articleId);
-    await sucheVormerken(ctx, article.issueId, articleId);
-    await renumber(ctx, article.issueId);
-    await recountIssue(ctx, article.issueId);
+    await artikelEntfernen(ctx, article);
   },
 });
 
@@ -1066,20 +1084,7 @@ export const removeInternal = internalMutation({
   handler: async (ctx, { articleId }) => {
     const article = await ctx.db.get(articleId);
     if (!article) return;
-    for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
-      const rows = await ctx.db
-        .query(table)
-        .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
-        .collect();
-      for (const r of rows) {
-        if (table === "articleBlocks") await deleteLinksForBlock(ctx, r._id as Id<"articleBlocks">);
-        await ctx.db.delete(r._id);
-      }
-    }
-    await ctx.db.delete(articleId);
-    await sucheVormerken(ctx, article.issueId, articleId);
-    await renumber(ctx, article.issueId);
-    await recountIssue(ctx, article.issueId);
+    await artikelEntfernen(ctx, article);
   },
 });
 

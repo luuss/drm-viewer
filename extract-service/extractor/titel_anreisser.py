@@ -41,12 +41,23 @@ MIN_GEWICHT = 2.5
 VORSPRUNG = 1.5
 # Ein einzelnes Wort genuegt nur, wenn es lang ist und nur ein Eintrag es kennt.
 EINZELWORT_LAENGE = 10
+# Ein kuerzeres einzelnes Wort genuegt, wenn es genau so im Titel steht.
+TITELWORT_LAENGE = 5
 RAND = 0.006
 # Zwischen zwei Feldern einer Anreisserleiste bleibt dieser Abstand frei.
 FELDLUECKE = 0.008
+# Zwei Woerter mit so vielen gleichen Anfangsbuchstaben haben denselben Stamm.
+STAMM_LAENGE = 8
+STAMM_ANTEIL = 0.75
+# Bloecke mit mehr Zeilen werden nicht mehr in Anreisser aufgeteilt.
+MAX_TEILZEILEN = 16
 
 # Kopf und Rand der Titelseite: Preise, Jahrgang, Strichcode.
-PREIS = re.compile(r"€\s*\d|\d\s*€|\bCHF\b|\bEUR\b", re.IGNORECASE)
+# Das Eurozeichen kommt aus manchen Schriften als anderer Buchstabe ("t 9,80"),
+# deshalb zaehlt auch ein Betrag mit zwei Nachkommastellen und die Heftnummer.
+PREIS = re.compile(
+    r"€\s*\d|\d\s*€|\bCHF\b|\bEUR\b|\b\d{1,3},\d\d\b|\bNr\.\s*\d", re.IGNORECASE
+)
 
 STOPPWOERTER = {
     "aber", "alle", "also", "auch", "beim", "dass", "daß", "dem", "den", "der",
@@ -81,6 +92,9 @@ class _Block:
     x1: float
     y1: float
     text: str
+    # Die Zeilen des Blocks in Lesefolge; ein Block kann mehrere Anreisser
+    # tragen, die dicht untereinander stehen (`_aufteilen`).
+    zeilen: list | None = None
 
 
 def _verdoppelt(wort: str) -> str:
@@ -112,7 +126,24 @@ def _passt(wort: str, kandidat: str) -> bool:
     # "grönlandgelüste", "alliierte" in "westalliierten".
     if len(wort) >= 5 and (kandidat.startswith(wort) or wort.startswith(kandidat)):
         return min(len(wort), len(kandidat)) >= 5
-    return len(wort) >= 6 and wort in kandidat
+    if len(wort) >= 6 and wort in kandidat:
+        return True
+    # Gleicher langer Wortstamm: "fernspäher" und "fernspähtruppe". Der
+    # gemeinsame Anfang muss den groessten Teil des kuerzeren Wortes tragen,
+    # sonst waeren "unterschrift" und "unterscharführer" verwandt.
+    gemeinsam = _gemeinsamer_anfang(wort, kandidat)
+    return gemeinsam >= STAMM_LAENGE and gemeinsam >= STAMM_ANTEIL * min(
+        len(wort), len(kandidat)
+    )
+
+
+def _gemeinsamer_anfang(a: str, b: str) -> int:
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
 
 
 def _ohne_dubletten(items: list[TextItem]) -> list[TextItem]:
@@ -157,7 +188,7 @@ def _bloecke(items: list[TextItem]) -> list[_Block]:
                 ziel = b
                 break
         if ziel is None:
-            neu = _Block(z.x0, z.y0, z.x1, z.y1, z.text)
+            neu = _Block(z.x0, z.y0, z.x1, z.y1, z.text, [z])
             neu._letzte_hoehe = hoehe  # type: ignore[attr-defined]
             bloecke.append(neu)
             continue
@@ -165,6 +196,7 @@ def _bloecke(items: list[TextItem]) -> list[_Block]:
         ziel.x1 = max(ziel.x1, z.x1)
         ziel.y1 = max(ziel.y1, z.y1)
         ziel.text += " " + z.text
+        ziel.zeilen.append(z)  # type: ignore[union-attr]
         ziel._letzte_hoehe = hoehe  # type: ignore[attr-defined]
 
     # Schraeger Satz: Stuecke, deren Rechtecke sich beruehren, sind ein Band.
@@ -199,6 +231,15 @@ def _kandidaten(hints: list[TocHint]) -> dict[int, set[str]]:
     return out
 
 
+def _titelworte(hints: list[TocHint]) -> dict[int, set[str]]:
+    """Je Zielseite die Stichworte der Titel allein (ohne Unterzeile)."""
+    out: dict[int, set[str]] = {}
+    for h in hints:
+        if h.page_index is not None:
+            out.setdefault(h.page_index, set()).update(stichworte(h.label))
+    return out
+
+
 def _bewerten(
     worte: set[str], kandidaten: dict[int, set[str]]
 ) -> list[tuple[float, int, int, list[str]]]:
@@ -230,6 +271,126 @@ def _sicher(wertung, df) -> tuple[int, list[str]] | None:
     if anzahl == 1 and len(treffer[0]) >= EINZELWORT_LAENGE and df[treffer[0]] == 1:
         return seite, treffer
     return None
+
+
+def _ziel(
+    text: str, kandidaten: dict[int, set[str]], titel: dict[int, set[str]] | None = None
+) -> int | None:
+    """Die Zielseite eines Textes, wenn er sicher einem Eintrag gehoert.
+
+    Ausser den Regeln in `_sicher` genuegt ein einzelnes Wort, wenn es genau so
+    im Titel eines einzigen Eintrags steht und der Text sonst nur Zahlen hat:
+    das Titelthema "Mscha 1943" gehoert zu "Vorstoss ueber den Mscha".
+    """
+    worte = stichworte(text)
+    if not worte or PREIS.search(text):
+        return None
+    wertung, df = _bewerten(worte, kandidaten)
+    sicher = _sicher(wertung, df)
+    if sicher:
+        return sicher[0]
+    if titel and len(wertung) == 1 and wertung[0][2] == 1:
+        _gewicht, seite, _anzahl, (wort,) = wertung[0]
+        bedeutend = [w for w in worte if not w.isdigit()]
+        if (
+            bedeutend == [wort]
+            and df[wort] == 1
+            and len(wort) >= TITELWORT_LAENGE
+            and wort in titel.get(seite, set())
+        ):
+            return seite
+    return None
+
+
+def _aufteilen(
+    block: _Block, kandidaten: dict[int, set[str]], titel: dict[int, set[str]] | None = None
+) -> list[tuple[_Block, int]]:
+    """Einen Block in die Anreisser zerlegen, die er traegt.
+
+    Drei Anreisser gleicher Schrift dicht untereinander (DMZ: "Italiens
+    Panzerjaeger / Centauro / ...", darunter "Aristokrat mit dem Eichenlaub /
+    Diplomat und General / ...") bilden einen Block; als Ganzes gewaenne der
+    Anreisser mit den meisten Stichworten, die anderen fuehrten mit zu ihm.
+    Gesucht wird die Zerlegung in aufeinanderfolgende Zeilengruppen mit den
+    meisten sicheren Treffern; bei Gleichstand die, deren Treffer mehr Zeilen
+    abdecken, dann die mit weniger Gruppen. Der ganze Block ist eine der
+    Zerlegungen, er bleibt also, wenn Teilen nichts bringt. Benachbarte
+    Gruppen mit demselben Ziel sind ein Anreisser. Eine Zeile mit Preis (der
+    Kopf, wenn er dicht ueber dem Anreisser steht) bekommt nie eine Flaeche.
+    """
+    zeilen = block.zeilen or []
+    if len(zeilen) < 2 or len(zeilen) > MAX_TEILZEILEN:
+        ziel = _ziel(block.text, kandidaten, titel)
+        return [(block, ziel)] if ziel is not None else []
+    n = len(zeilen)
+    ziele: dict[tuple[int, int], int | None] = {}
+    for i in range(n):
+        for j in range(i + 1, n + 1):
+            ziele[(i, j)] = _ziel(" ".join(z.text for z in zeilen[i:j]), kandidaten, titel)
+    def luecke(i: int) -> float:
+        """Abstand vor Zeile i: zwischen zwei Anreissern ist er groesser."""
+        return max(0.0, zeilen[i].y0 - zeilen[i - 1].y1) if i > 0 else 0.0
+
+    # beste[j]: (Treffer, abgedeckte Zeilen, -Gruppen, Luecken an den
+    # Schnitten), Gruppen bis Zeile j
+    beste: list = [((0, 0, 0, 0.0), [])]
+    for j in range(1, n + 1):
+        kandidat = None
+        for i in range(j):
+            (treffer, deckung, gruppen, schnitte), teile = beste[i]
+            z = ziele[(i, j)]
+            wert = (
+                treffer + (z is not None),
+                deckung + ((j - i) if z is not None else 0),
+                gruppen - 1,
+                schnitte + luecke(i),
+            )
+            if kandidat is None or wert > kandidat[0]:
+                kandidat = (wert, teile + [(i, j)])
+        beste.append(kandidat)  # type: ignore[arg-type]
+    gruppen: list[tuple[int, int, int]] = []
+    for i, j in beste[n][1]:
+        z = ziele[(i, j)]
+        if z is None:
+            continue
+        if gruppen and gruppen[-1][1] == i and gruppen[-1][2] == z:
+            gruppen[-1] = (gruppen[-1][0], j, z)
+        else:
+            gruppen.append((i, j, z))
+    out = []
+    for i, j, z in gruppen:
+        teil = zeilen[i:j]
+        out.append(
+            (
+                _Block(
+                    min(s.x0 for s in teil),
+                    min(s.y0 for s in teil),
+                    max(s.x1 for s in teil),
+                    max(s.y1 for s in teil),
+                    " ".join(s.text for s in teil),
+                    list(teil),
+                ),
+                z,
+            )
+        )
+    return out
+
+
+def _stapel_trennen(flaechen: list[_Block]) -> None:
+    """Untereinanderstehende Anreisser teilen sich die Luecke.
+
+    Der Rand um die Zeilen reicht bei dicht gestapelten Anreissern in den
+    naechsten; die obere Flaeche endet und die untere beginnt dann in der
+    Mitte der Ueberlappung.
+    """
+    for oben in flaechen:
+        for unten in flaechen:
+            if oben is unten or not _ueberlappt_x(oben, unten) or unten.y0 <= oben.y0:
+                continue
+            ueber = oben.y1 - unten.y0
+            if 0 < ueber <= 0.5 * min(oben.y1 - oben.y0, unten.y1 - unten.y0):
+                mitte = (oben.y1 + unten.y0) / 2
+                oben.y1 = unten.y0 = mitte
 
 
 def _felder_aufziehen(flaechen: list[_Block]) -> None:
@@ -272,26 +433,22 @@ def _felder_aufziehen(flaechen: list[_Block]) -> None:
 def titel_anreisser(items: list[TextItem], hints: list[TocHint]) -> list[Anreisser]:
     """Die Anreisser der Titelseite, die sicher einem Verzeichniseintrag gehoeren."""
     kandidaten = _kandidaten(hints)
+    titel = _titelworte(hints)
     if not items or not kandidaten:
         return []
     gefunden: list[tuple[_Block, int]] = []
-    for block in _bloecke(_ohne_dubletten(items)):
-        worte = stichworte(block.text)
-        if not worte or PREIS.search(block.text):
-            continue
-        wertung, df = _bewerten(worte, kandidaten)
-        sicher = _sicher(wertung, df)
-        if sicher is None:
-            continue
-        flaeche = _Block(
-            max(0.0, block.x0 - RAND),
-            max(0.0, block.y0 - RAND),
-            min(1.0, block.x1 + RAND),
-            min(1.0, block.y1 + RAND),
-            block.text,
-        )
-        gefunden.append((flaeche, sicher[0]))
+    for ganzer in _bloecke(_ohne_dubletten(items)):
+        for block, seite in _aufteilen(ganzer, kandidaten, titel):
+            flaeche = _Block(
+                max(0.0, block.x0 - RAND),
+                max(0.0, block.y0 - RAND),
+                min(1.0, block.x1 + RAND),
+                min(1.0, block.y1 + RAND),
+                block.text,
+            )
+            gefunden.append((flaeche, seite))
     _felder_aufziehen([f for f, _ in gefunden])
+    _stapel_trennen([f for f, _ in gefunden])
     return [
         Anreisser(
             round(f.x0, 5),

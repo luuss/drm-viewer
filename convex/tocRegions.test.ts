@@ -136,7 +136,7 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
 
   test("die Folgeseite zaehlt nicht, wenn ein eigener Eintrag auf sie zeigt", async () => {
     const t = convexTest(schema, modules);
-    const { issueId, jobId, dritter } = await heft(t);
+    const { issueId, jobId, zweiter, dritter } = await heft(t);
     const result = await t.mutation(internal.imports.activateTocRegionsInternal, {
       jobId,
       workerId: "w1",
@@ -146,15 +146,22 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
         { pageIndex: 2, x0: 0.06, y0: 0.4, x1: 0.35, y1: 0.43, targetPageIndex: 10 },
       ],
     });
-    expect(result).toEqual({ regions: 1, skipped: 1, entries: 0 });
+    // Seite 9 gehoert nicht dem Artikel der Folgeseite, sondern dem, der
+    // ueber sie laeuft (8 bis 9); gesprungen wird weiter auf 9.
+    expect(result).toEqual({ regions: 2, skipped: 0, entries: 0 });
     const regions = await t.run(async (ctx: any) =>
       await ctx.db
         .query("articleRegions")
         .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
         .collect(),
     );
-    const neu = regions.filter((r: any) => r.targetPageIndex !== undefined);
-    expect(neu.map((r: any) => [r.articleId, r.targetPageIndex])).toEqual([[dritter, 10]]);
+    const neu = regions
+      .filter((r: any) => r.targetPageIndex !== undefined)
+      .sort((a: any, b: any) => a.y0 - b.y0);
+    expect(neu.map((r: any) => [r.articleId, r.targetPageIndex])).toEqual([
+      [zweiter, 9],
+      [dritter, 10],
+    ]);
   });
 
   test("traegt fehlende Eintraege des gedruckten Verzeichnisses nach", async () => {
