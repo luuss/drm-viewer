@@ -482,14 +482,20 @@ export default function ReaderShell() {
   );
 
   /**
-   * Die gedruckte Inhaltsseite: dort liegen die Klickflaechen der
-   * Verzeichniszeilen (`targetPageIndex`). Ohne sie gibt es kein Ziel.
+   * Die gedruckte Inhaltsseite: dort liegen die meisten Klickflaechen mit
+   * Sprungziel (`targetPageIndex`). Auch das Titelblatt traegt welche (die
+   * Anrisse), aber weniger. Ohne solche Flaechen gibt es kein Ziel.
    */
   const inhaltsseite = useMemo(() => {
-    const seiten = (regions ?? [])
-      .filter((r) => r.targetPageIndex != null)
-      .map((r) => r.pageIndex);
-    return seiten.length ? Math.min(...seiten) : null;
+    const anzahl = new Map<number, number>();
+    for (const r of regions ?? []) {
+      if (r.targetPageIndex != null) anzahl.set(r.pageIndex, (anzahl.get(r.pageIndex) ?? 0) + 1);
+    }
+    let beste: number | null = null;
+    for (const [seite, n] of anzahl) {
+      if (beste === null || n > (anzahl.get(beste) ?? 0)) beste = seite;
+    }
+    return beste;
   }, [regions]);
 
   const prev = useCallback(() => {
