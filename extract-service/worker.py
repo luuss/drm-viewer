@@ -58,6 +58,7 @@ from extractor.pdf_extract import (
 from extractor.idml_articles import (
     artikel_aus_satz,
     initialen_zurueck,
+    ohne_anzeigen,
     ohne_unterlagen,
     ohne_vorschaubilder,
     rollen_je_story,
@@ -825,6 +826,9 @@ class Job:
             bildrahmen, textrahmen, rollen_je_story(rohe_blocks)
         )
         gefiltert = ohne_vorschaubilder(gefiltert, textrahmen, rohe_blocks)
+        # Fremdanzeigen (Datei "Anzeige …" oder Kennzeichnung am Rahmen) sind
+        # kein Artikelbild; auf der Druckseite bleiben sie stehen.
+        gefiltert = ohne_anzeigen(gefiltert, textrahmen, rohe_blocks)
         gefiltert = ohne_schriftzuege(gefiltert)
         if len(gefiltert) != len(bildrahmen):
             log(

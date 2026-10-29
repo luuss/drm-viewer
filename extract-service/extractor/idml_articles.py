@@ -219,6 +219,60 @@ def ohne_vorschaubilder(bildrahmen: list, textrahmen: list, blocks: list[SourceB
     return [b for b in bildrahmen if not an_vorschau(b)]
 
 
+# Eine Fremdanzeige (Fraktionszeitung, Stellenangebot) steht im Satz als
+# platzierte Datei in einem Bildrahmen. Ohne Regel bekam sie der Artikel
+# daneben als erstes Bild — im Lesetext stand die Werbung ueber dem Text
+# (ZUERST! 6/2025, S. 32). Zwei Belege aus dem Heft selbst, einer genuegt:
+#
+# * Der Dateiname der Verknuepfung beginnt ein Wort mit "Anzeige"
+#   ("Anzeige Zuerst Magazin_ Aufbruch 7 ….pdf", "SMS Anzeige_A4.pdf").
+#   "Dienstanzug", "Strafanzeige" oder "Panzer" treffen nicht.
+# * Am Rahmen steht die Pflichtkennzeichnung: ein Textrahmen, dessen ganzer
+#   Text "Anzeige" ist, hoechstens ANZEIGE_MARKE_ABSTAND neben dem Bild
+#   (ZUERST! 2/2025: "Stellenangebot Pressereferent.tif" mit "Anzeige" am
+#   oberen rechten Eck).
+ANZEIGE_DATEI = re.compile(r"(?<![a-zäöüß])anzeige", re.I)
+ANZEIGE_MARKE = re.compile(r"\W*anzeige\W*", re.I)
+ANZEIGE_MARKE_ABSTAND = 0.02
+
+
+def _bildabstand(a, b) -> float:
+    """Kleinster Abstand zweier Rechtecke auf derselben Seite (0 = beruehren)."""
+    dx = max(0.0, a.x0 - b.x1, b.x0 - a.x1)
+    dy = max(0.0, a.y0 - b.y1, b.y0 - a.y1)
+    return max(dx, dy)
+
+
+def anzeigenrahmen(bildrahmen: list, textrahmen: list, blocks: list[SourceBlock]) -> list:
+    """Die Bildrahmen, die eine Anzeige zeigen (siehe `ANZEIGE_DATEI`)."""
+    treffer = [b for b in bildrahmen if b.link and ANZEIGE_DATEI.search(b.link)]
+    marken = {
+        s.story_id
+        for s in stories_bilden(blocks)
+        if ANZEIGE_MARKE.fullmatch(_text(s))
+    }
+    for t in textrahmen:
+        if t.story_id not in marken:
+            continue
+        nah = [
+            (_bildabstand(t, b), i)
+            for i, b in enumerate(bildrahmen)
+            if b.page_number == t.page_number
+            and _bildabstand(t, b) <= ANZEIGE_MARKE_ABSTAND
+        ]
+        if nah:
+            bild = bildrahmen[min(nah)[1]]
+            if not any(bild is x for x in treffer):
+                treffer.append(bild)
+    return treffer
+
+
+def ohne_anzeigen(bildrahmen: list, textrahmen: list, blocks: list[SourceBlock]) -> list:
+    """Anzeigen sind kein Artikelbild; auf der Druckseite bleiben sie stehen."""
+    weg = anzeigenrahmen(bildrahmen, textrahmen, blocks)
+    return [b for b in bildrahmen if not any(b is x for x in weg)]
+
+
 def _flaeche(rahmen) -> float:
     return max(0.0, rahmen.x1 - rahmen.x0) * max(0.0, rahmen.y1 - rahmen.y0)
 
