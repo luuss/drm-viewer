@@ -79,6 +79,37 @@ def test_aufmacherseite_ohne_text_fuehrt_zum_artikel_der_folgeseite():
     assert [r["targetPageIndex"] for r in payload[0]["regions"]] == [9]
 
 
+def test_titel_zweimal_im_verzeichnis_ist_ein_eintrag():
+    """ZUERST!: der Bildanreisser nennt denselben Titel wie die Rubrikliste."""
+    from extractor.model import AssembledArticle, SourceBlock, TocHint
+
+    block = SourceBlock(page_index=55, text="Made in Germany", x0=0.1, y0=0.1, x1=0.9, y1=0.2)
+    articles = [AssembledArticle(title="Made in Germany", blocks=[block])]
+    payload = [{"order": 1, "regions": []}]
+    hints = [
+        TocHint("Made in Germany – jetzt erst recht!", 55, 3, 0.6, 0.1, 0.9, 0.2),
+        TocHint(
+            "Made in Germany jetzt erst recht!", 55, 3, 0.1, 0.7, 0.4, 0.75,
+            section="Wirtschaft",
+        ),
+    ]
+
+    entries = worker.Job._build_toc_entries(None, hints, articles, payload)
+
+    assert entries == [
+        {
+            "order": 1,
+            "label": "Made in Germany – jetzt erst recht!",
+            "pageIndex": 55,
+            "level": 1,
+            "section": "Wirtschaft",
+            "articleOrder": 1,
+        }
+    ]
+    # Beide gedruckten Zeilen fuehren zum Artikel.
+    assert len(payload[0]["regions"]) == 2
+
+
 # --- Platzierte Bilder aus dem Satz ----------------------------------------
 
 

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { requireEditor } from "./roles";
 import { assertUploadAllowed } from "./uploadRules";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { isPublicTocPage } from "./tocPreview";
 
 export const assetKind = v.union(
@@ -64,6 +64,16 @@ export const registerUpload = mutation({
   },
 });
 
+/**
+ * Stand einer Datei fuer Zwischenspeicher. Der Import legt Seiten und
+ * Artikelbilder unter festen Schluesseln ab (`images/{seite}-{x0}-{y0}.jpg`)
+ * und ueberschreibt sie beim Neuimport; der Schluessel allein sagt also
+ * nicht, ob das Bild noch dasselbe ist. Zeitpunkt und Groesse sagen es.
+ */
+export function assetStand(asset: Doc<"assets">): string {
+  return `${asset.updatedAt ?? asset._creationTime}:${asset.bytes ?? ""}`;
+}
+
 export const createInternal = internalMutation({
   args: {
     key: v.string(),
@@ -82,7 +92,7 @@ export const createInternal = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .first();
     if (existing) {
-      await ctx.db.patch(existing._id, { ...args });
+      await ctx.db.patch(existing._id, { ...args, updatedAt: Date.now() });
       return existing._id;
     }
     return await ctx.db.insert("assets", { ...args, createdAt: Date.now() });
@@ -144,6 +154,41 @@ export async function assetUrl(
 }
 
 /**
+ * Bildadresse fuer die Redaktion. Die Seitenvorschauen im Admin sind
+ * schlichte `<img>` ohne Lesesitzung; das Gateway laesst sie nur mit dieser
+ * Unterschrift durch (`?r=<ablauf>.<hmac>`, Geheimnis des Kacheldienstes).
+ * Der Ablauf springt einmal am Tag, damit die Query-Ergebnisse stabil
+ * bleiben; gueltig ist eine Adresse 24 bis 48 Stunden. Nur nach
+ * `requireEditor` aufrufen.
+ */
+export async function redaktionsAssetUrl(
+  ctx: any,
+  assetId: Id<"assets"> | undefined | null,
+): Promise<string | null> {
+  const url = await assetUrl(ctx, assetId);
+  const secret = process.env.TILE_SERVICE_SECRET ?? "";
+  if (!url || !assetId || !secret || !url.includes("/api/asset/")) return url;
+  const tag = 86_400;
+  const ablauf = (Math.floor(Date.now() / 1000 / tag) + 2) * tag;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`redaktion:${assetId}:${ablauf}`),
+  );
+  const hex = Array.from(new Uint8Array(mac))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${url}?r=${ablauf}.${hex}`;
+}
+
+/**
  * Was das Kachel-Gateway braucht, um ein Bild auszuliefern: wo es liegt und
  * ob es oeffentlich ist. Titelbilder und die Seiten des gedruckten
  * Inhaltsverzeichnisses stehen im Kiosk und sind frei; alles andere gehoert
@@ -168,6 +213,7 @@ export const resolveForServiceInternal = internalQuery({
       url: asset.convexStorageId
         ? await ctx.storage.getUrl(asset.convexStorageId)
         : null,
+      stand: assetStand(asset),
     };
   },
 });

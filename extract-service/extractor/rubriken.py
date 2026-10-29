@@ -181,3 +181,61 @@ def verzeichnis_doppelseite(hints: list, rubriken: dict[int, str]) -> list:
             h = replace(h, label=f"{' '.join(links.split())} – {' '.join(rechts.split())}")
         out.append(h)
     return out
+
+
+_VERFASSER_EINTRAG = re.compile(r"^\s*(?P<name>[^:]{3,60}?)\s*:\s*(?P<rubrik>.+?)\s*$")
+
+
+def verfasser_aus_eintrag(eintrag: str | None) -> str | None:
+    """Der Verfasser einer Rubrik aus ihrem Verzeichniseintrag.
+
+    Die Kolumne von ZUERST! nennt ihren Verfasser nur im Inhaltsverzeichnis:
+    "Claus-M. Wolfschlag: Die Kolumne", "Pius Leitner: Die Kolumne". Gilt nur,
+    wenn hinter dem Doppelpunkt genau eine stehende Rubrik steht und davor
+    ein Name (zwei bis fuenf Woerter, gross geschrieben, ohne Ziffern).
+    """
+    m = _VERFASSER_EINTRAG.match(eintrag or "")
+    if not m:
+        return None
+    rubrik = " ".join(m.group("rubrik").split())
+    if (stehende_rubrik(rubrik, mit_anrede=False) or "").lower() != rubrik.lower():
+        return None
+    name = " ".join(m.group("name").split())
+    woerter = name.split()
+    if not 2 <= len(woerter) <= 5 or re.search(r"\d", name):
+        return None
+    if not all(w[0].isupper() or w in ("von", "van", "de", "zu") for w in woerter):
+        return None
+    return name
+
+
+# So weit darf der Anfang eines Artikels von der Seite seines Eintrags
+# entfernt sein, wenn der Eintrag ihn beim Titel nennt.
+TITEL_SEITENABSTAND = 1
+
+
+def titel_nennt_artikel(eintrag: str | None, titel: str | None) -> bool:
+    """Nennt ein Verzeichniseintrag diesen Artikel beim Titel?
+
+    Verglichen wird ohne Satzzeichen, Trennstriche und Gross/klein. Ein
+    Eintrag aus zwei Teilen ("Leserbriefe/Impressum") nennt mit dem ersten
+    Teil den Artikel, mit dem die Seite beginnt; ein laengerer Eintrag passt,
+    wenn er mit dem Titel beginnt ("Made in Germany – jetzt erst recht!" fuer
+    "Made in Germany") und umgekehrt.
+    """
+    from .textutil import normalize_compare
+
+    t = normalize_compare(titel or "")
+    if len(t) < 4:
+        return False
+    teile = [eintrag or "", re.split(r"\s*/\s*", eintrag or "")[0]]
+    for teil in teile:
+        e = normalize_compare(teil)
+        if len(e) < 4:
+            continue
+        if e == t:
+            return True
+        kurz, lang = sorted((e, t), key=len)
+        if len(kurz) >= 8 and lang.startswith(kurz):
+            return True
+    return False

@@ -91,6 +91,53 @@ def read_issue_meta(pdf_bytes: bytes) -> dict:
         return {}
 
 
+def _entsperrt(text: str) -> str:
+    """Gesperrten Satz zusammenziehen: "A p r i l 2 0 2 5" wird "April2025"."""
+    if re.fullmatch(r"(?:\S ){3,}\S", text.strip()):
+        return text.replace(" ", "")
+    return text
+
+
+def erscheinung_aus_umschlag(textebene: bytes) -> dict:
+    """Erscheinungsmonat aus der Textebene der Titelseite.
+
+    Die Kopfzeile ueber dem Titel nennt ihn ("16. Jahrgang | April 2025 |
+    € 7,95", "Nr. 170 · März–April 2026"), oft gesperrt gesetzt. Gesucht
+    wird nur auf der Titelseite (U1) und von oben nach unten; Daten in
+    Anreissern ("Seit Januar 2020 …") stehen tiefer. Was nicht eindeutig
+    zu lesen ist, bleibt leer.
+    """
+    import json
+
+    try:
+        daten = json.loads(textebene)
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    if not isinstance(daten, dict) or not daten.get("cover"):
+        return {}
+    for seite in daten.get("pages") or []:
+        if seite.get("role") != "front_cover":
+            continue
+        zeilen = sorted(
+            (it for it in seite.get("items") or [] if it and isinstance(it[0], str)),
+            key=lambda it: (it[2], it[1]),
+        )
+        for it in zeilen:
+            text = _entsperrt(it[0])
+            treffer = ZEITRAUM.search(text)
+            if treffer:
+                return {
+                    "monthFrom": MONATE[treffer.group(1).lower()],
+                    "monthTo": MONATE[treffer.group(2).lower()],
+                    "year": int(treffer.group(3)),
+                }
+            treffer = EINZELMONAT.search(text)
+            if treffer:
+                monat = MONATE[treffer.group(1).lower()]
+                return {"monthFrom": monat, "monthTo": monat, "year": int(treffer.group(2))}
+    return {}
+
+
 def publication_date(meta: dict) -> int | None:
     """Erscheinungsdatum als Zeitstempel in Millisekunden.
 
@@ -104,7 +151,8 @@ def publication_date(meta: dict) -> int | None:
     return int(tag.timestamp() * 1000)
 
 
-# Die Titelseite wird nicht gelesen.
+# Die Titelseite wird als Bild nicht gelesen (nur ihre Textebene, siehe
+# erscheinung_aus_umschlag).
 #
 # Sie kommt als Bild aus der Druckvorstufe, also ginge es nur ueber
 # Texterkennung — und die verwechselt Ziffern: aus 13,80 wird 13,60. Der

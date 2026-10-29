@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "convex/react";
-import { useState, type CSSProperties } from "react";
+import NichtGefunden from "../components/NichtGefunden";
+import { Fragment, useState, type CSSProperties } from "react";
 import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
 import SocialIcon from "../components/SocialIcon";
@@ -22,16 +23,7 @@ export default function ReihePage() {
   const storefront = useQuery(api.shopIntegration.storefront, {});
   const [nurMeine, setNurMeine] = useState(false);
 
-  if (!reihe) {
-    return (
-      <div className="page">
-        <p>Diese Zeitschrift gibt es hier nicht.</p>
-        <Link className="btn" to="/">
-          Zum Kiosk
-        </Link>
-      </div>
-    );
-  }
+  if (!reihe) return <NichtGefunden text="Diese Zeitschrift gibt es hier nicht." />;
   if (issues === undefined || offers === undefined || eigene === undefined) {
     return <div className="centered">Laden...</div>;
   }
@@ -51,6 +43,10 @@ export default function ReihePage() {
   const fortschritt = new Map(meine.map((i) => [i._id, i.progress]));
   const gezeigt = nurMeine ? alle.filter((i) => i.eigen) : alle;
   const k = reihe.kontakt;
+  // Die drei neuesten Umschlaege fuer die Netzladen-Kachel (Liste ist neueste zuerst).
+  const umschlaege = hefte
+    .flatMap((i) => (i.coverUrl ? [i.coverUrl] : []))
+    .slice(0, 3);
   const abo = abos[0] ?? null;
   // Preis nur, wenn das Abo hier abgeschlossen werden kann (Stripe Checkout).
   const aboPreis =
@@ -210,60 +206,109 @@ export default function ReihePage() {
           </section>
         )}
 
-        <section className="reihe-kontakt">
-          <h3>Kontakt</h3>
-          {/* Oben die zwei Wege zur Zeitschrift: Druckausgabe im Netzladen und
-              die eigene Website. Darunter Mail und Telefon. */}
-          <div className="reihe-kontakt-wege">
-            <a href={reihe.laden} target="_blank" rel="noopener" className="reihe-weg">
+        {/* Eine Zeile: links schmal die Druckausgabe im Netzladen, in der Mitte
+            breit die eigene Internetseite, rechts schmal die Netze als 2x2. */}
+        <section className={`reihe-wege${k.social.length > 0 ? " mit-netzen" : ""}`}>
+          <a href={reihe.laden} target="_blank" rel="noopener" className="reihe-weg reihe-weg-laden">
+            <div className="reihe-weg-bild reihe-weg-hefte">
+              {reihe.ladenBild ? (
+                <img src={reihe.ladenBild} alt="" loading="lazy" />
+              ) : (
+                umschlaege.map((u, n) => (
+                  <img key={u} src={u} alt="" loading="lazy" style={{ "--n": n } as CSSProperties} />
+                ))
+              )}
+            </div>
+            <div className="reihe-weg-text">
               <span>
-                <span className="reihe-kontakt-art">Druckausgabe</span>
+                <span className="reihe-weg-art">Druckausgabe</span>
                 <span className="reihe-weg-ziel">Im Netzladen bestellen</span>
               </span>
               <Icon name="arrow-right" />
-            </a>
-            {k.web && (
-              <a href={k.web} target="_blank" rel="noopener" className="reihe-weg">
+            </div>
+          </a>
+          {k.web && (
+            <a href={k.web} target="_blank" rel="noopener" className="reihe-weg reihe-weg-web">
+              <div className="reihe-weg-bild reihe-weg-seite">
+                {k.webBild && <img src={k.webBild} alt="" loading="lazy" />}
+              </div>
+              <div className="reihe-weg-text">
                 <span>
-                  <span className="reihe-kontakt-art">Internet</span>
+                  <span className="reihe-weg-art">{k.webLabel ?? "Internet"}</span>
                   <span className="reihe-weg-ziel">{k.web.replace(/^https?:\/\//, "")}</span>
                 </span>
                 <Icon name="arrow-right" />
-              </a>
-            )}
-          </div>
-          <div className="reihe-kontakt-raster">
-            {k.mails.map((m) => (
-              <div key={m.adresse}>
-                <span className="reihe-kontakt-art">{m.label}</span>
-                <a href={`mailto:${m.adresse}`}>{m.adresse}</a>
               </div>
-            ))}
-            <div>
-              <span className="reihe-kontakt-art">Telefon</span>
-              <a href={`tel:+49${k.tel.replace(/\D/g, "").replace(/^0/, "")}`}>{k.tel}</a>
-            </div>
-          </div>
+            </a>
+          )}
           {k.social.length > 0 && (
-            <div className="reihe-social">
-              {k.social.map((s) => (
-                <a
-                  key={s.url}
-                  href={s.url}
-                  target="_blank"
-                  rel="noopener"
-                  className="reihe-social-link"
-                  aria-label={`${reihe.name} bei ${s.name}`}
-                >
-                  <SocialIcon name={s.name} />
-                  <span>{s.name}</span>
-                </a>
-              ))}
+            <div className="reihe-netze">
+              <h3>Folgen Sie uns auf</h3>
+              <div className="reihe-netze-raster">
+                {k.social.map((s) => (
+                  <a
+                    key={s.url}
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener"
+                    className="reihe-netz"
+                    data-netz={s.name.toLowerCase()}
+                    aria-label={`${reihe.name} bei ${s.name}`}
+                  >
+                    <SocialIcon name={s.name} size={20} />
+                    <span>{s.name}</span>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
         </section>
 
+        <section className="reihe-kontakt">
+          <div className="reihe-kontakt-karte">
+            <h3>Kontakt</h3>
+            <ul className="reihe-kontakt-liste">
+              {k.mails.map((m) => (
+                <li key={m.adresse}>
+                  <a href={`mailto:${m.adresse}`}>
+                    <Icon name="mail" />
+                    <span>
+                      <span className="reihe-kontakt-art">{m.label}</span>
+                      <span className="reihe-kontakt-wert">
+                        <Umbrechbar text={m.adresse} />
+                      </span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+              <li>
+                <a href={`tel:+49${k.tel.replace(/\D/g, "").replace(/^0/, "")}`}>
+                  <Icon name="phone" />
+                  <span>
+                    <span className="reihe-kontakt-art">Telefon</span>
+                    <span className="reihe-kontakt-wert">{k.tel}</span>
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </section>
+
       </div>
     </div>
+  );
+}
+
+/** Adresse mit Umbruchstellen vor "@" und "." fuer schmale Schirme. */
+function Umbrechbar({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(?=[@.])/).map((teil, i) => (
+        <Fragment key={i}>
+          {i > 0 && <wbr />}
+          {teil}
+        </Fragment>
+      ))}
+    </>
   );
 }

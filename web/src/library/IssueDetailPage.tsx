@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Authenticated, Unauthenticated, useAction, useQuery } from "convex/react";
-import { api, formatEuro, formatDate, type Id , cleanError } from "../lib/api";
+import { api, formatEuro, type Id , cleanError } from "../lib/api";
+import { monatJahr, nenntMonat } from "../lib/erscheinung";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import Kasse from "../components/Kasse";
 import { heraus, hinein, kassenUrl, useWarenkorb } from "../lib/warenkorb";
 import HeftGalerie, { type GalerieBild } from "./HeftGalerie";
+import NichtGefunden from "../components/NichtGefunden";
 
 export default function IssueDetailPage() {
   const { slug } = useParams();
@@ -32,10 +34,13 @@ export default function IssueDetailPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Unbekannt und nicht veroeffentlicht sehen gleich aus. Frueher blieb
+  // ein unbekannter Slug bei "Laden...": die zweite Abfrage wurde nie gestellt.
+  if (issueId === null) return <NichtGefunden />;
   if (issueId === undefined || issue === undefined || storefront === undefined) {
     return <div className="centered">Laden...</div>;
   }
-  if (!issueId || !issue) return <div className="centered">Ausgabe nicht gefunden</div>;
+  if (!issue) return <NichtGefunden />;
 
   async function buy() {
     setErr(null);
@@ -89,7 +94,15 @@ export default function IssueDetailPage() {
         <div className="meta">
           {issue.designation ? `${issue.designation} · ` : ""}
           {issue.pageCount} Seiten
-          {issue.publicationDate ? ` · ${formatDate(issue.publicationDate)}` : ""}
+          {/* Erscheinungsmonat ("März 2026"), nicht der erste Tag des Monats,
+              und nur, wenn die Bezeichnung ihn nicht schon nennt. */}
+          {issue.publicationDate !== null &&
+          !nenntMonat(
+            [issue.designation, issue.subtitle, issue.displayTitle],
+            issue.publicationDate,
+          )
+            ? ` · ${monatJahr(issue.publicationDate)}`
+            : ""}
         </div>
         {issue.description && issue.description !== issue.subtitle && (
           <p>{issue.description}</p>

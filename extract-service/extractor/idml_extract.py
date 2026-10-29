@@ -227,6 +227,31 @@ def _in_zelle(element) -> bool:
     return any(_lokal(a) == "Cell" for a in element.iterancestors())
 
 
+# Das Eurozeichen steht im Satz als Buchstabe in einer Symbolschrift
+# ("EuroLogo", "t"); als Text gelesen hiess jeder Preis "t 12,80".
+_EURO_ZEICHEN = re.compile(r"[^\W\d_]")
+
+
+def _euroschrift(content) -> bool:
+    """Steht dieser Text in einer Euro-Symbolschrift?
+
+    ZUERST! setzt die Schrift direkt ("EuroLogo"), die DMZ ueber eine
+    Zeichenformatvorlage ("Euro-Logo Katalog").
+    """
+    csr = content.getparent()
+    if csr is None or _lokal(csr) != "CharacterStyleRange":
+        return False
+    if "euro" in (csr.get("AppliedCharacterStyle") or "").casefold():
+        return True
+    for teil in csr:
+        if _lokal(teil) != "Properties":
+            continue
+        for el in teil:
+            if _lokal(el) == "AppliedFont" and "euro" in (el.text or "").casefold():
+                return True
+    return False
+
+
 def _absatz_teile(psr) -> list["str | TableData"]:
     """Die Absaetze eines Formatbereichs, Tabellen an ihrer Stelle.
 
@@ -255,7 +280,9 @@ def _absatz_teile(psr) -> list["str | TableData"]:
                     teile.append(tabelle)
                 continue
             if tag == "Content" and node.text:
-                laufend.append(node.text)
+                laufend.append(
+                    _EURO_ZEICHEN.sub("€", node.text) if _euroschrift(node) else node.text
+                )
             elif tag == "Br":
                 abschliessen()
             gehen(node)
@@ -452,10 +479,10 @@ def extract_idml_blocks(
             absaetze: list[tuple[str, str]] = []
             # Je Absatz die Tabelle, falls der Absatz eine ist; sonst None.
             tabellen: list[TableData | None] = []
-            # Je Absatz: stand davor eine Leerzeile? Zwei Bildunterschriften in
-            # einem Rahmen trennt der Setzer so (ZUERST! 3/2026 S. 57).
-            leer_davor: list[bool] = []
-            leer = False
+            # Je Absatz seine Absatzgruppe: ein leerer Absatz (zwei `<Br/>`
+            # hintereinander) beginnt eine neue (SourceBlock.absatzgruppe).
+            gruppen: list[int] = []
+            gruppe = 0
             for psr in root.iter("{*}ParagraphStyleRange"):
                 # Die Absaetze in Tabellenzellen gehoeren zur Tabelle. Frueher
                 # kamen sie hier ein zweites Mal als einzelne Absaetze heraus.
@@ -468,21 +495,29 @@ def extract_idml_blocks(
                 # werden sie durch `<Br/>`. Frueher landete der ganze Bereich
                 # als ein Block — 150.000 Zeichen Mengentext in fuenf Kloetzen,
                 # im Reader eine Wand ohne Absaetze.
-                for teil in _absatz_teile(psr):
+                teile = _absatz_teile(psr)
+                for nr, teil in enumerate(teile):
                     if isinstance(teil, TableData):
                         absaetze.append((teil.as_text(), style))
                         tabellen.append(teil)
-                        leer_davor.append(leer)
-                        leer = False
+                        gruppen.append(gruppe)
                         continue
                     text = clean_text(teil)
                     if not text:
-                        leer = bool(absaetze)
+                        # Der letzte Teil eines Formatbereichs ist nur der
+                        # Rest hinter dem abschliessenden `<Br/>`; leer
+                        # bedeutet dort nichts. Davor ist er ein leerer Absatz.
+                        if (
+                            nr < len(teile) - 1
+                            and not isinstance(teile[nr + 1], TableData)
+                            and gruppen
+                            and gruppen[-1] == gruppe
+                        ):
+                            gruppe += 1
                         continue
                     absaetze.append((text, style))
                     tabellen.append(None)
-                    leer_davor.append(leer)
-                    leer = False
+                    gruppen.append(gruppe)
 
             if not absaetze:
                 continue
@@ -494,9 +529,9 @@ def extract_idml_blocks(
                 # gehoeren nicht in die Ausgabe.
                 continue
             lagen = _verteile_auf_rahmen(absaetze, rahmen)
-            for (text, style), tabelle, nach_leer, (
+            for (text, style), tabelle, absatzgruppe, (
                 seite, x0, y0, x1, y1, frame_id, kasten
-            ) in zip(absaetze, tabellen, leer_davor, lagen):
+            ) in zip(absaetze, tabellen, gruppen, lagen):
                 if _ist_beiwerk(style):
                     continue
                 blocks.append(
@@ -514,8 +549,8 @@ def extract_idml_blocks(
                         frame_id=frame_id or None,
                         style_name=style or None,
                         frame_box=kasten,
+                        absatzgruppe=absatzgruppe,
                         frame_groups=gruppen_je_rahmen.get(frame_id or "", ()),
-                        after_blank=nach_leer,
                     )
                 )
     return blocks
@@ -576,6 +611,10 @@ class IdmlImageFrame:
     gruppen: tuple[str, ...] = ()
     # Teile des Rahmens auf anderen Seiten des Bogens: (Seite, x0, y0, x1, y1).
     auslaeufer: tuple[tuple[int, float, float, float, float], ...] = ()
+    # Aus wie vielen getrennten Umrissen die Rahmenform besteht. Ein Foto hat
+    # einen; ein in Umrisse gewandelter Schriftzug, durch den ein Bild
+    # scheint ("KOLUMNE" mit der Flagge darin), einen je Buchstaben.
+    teilpfade: int = 1
 
 
 def _matrix(value: str | None) -> tuple[float, float, float, float, float, float]:
@@ -691,6 +730,17 @@ def _graphic_crop(
     return (u0, v0, u1, v1)
 
 
+def _teilpfade(rahmen) -> int:
+    """Zahl der getrennten Umrisse der Rahmenform (`GeometryPathType`)."""
+    for teil in rahmen:
+        if _lokal(teil) != "Properties":
+            continue
+        for geometrie in teil:
+            if _lokal(geometrie) == "PathGeometry":
+                return max(1, sum(1 for p in geometrie if _lokal(p) == "GeometryPathType"))
+    return 1
+
+
 def _spread_order(zf: zipfile.ZipFile) -> list[str]:
     """Reihenfolge der Druckbogen aus `designmap.xml`.
 
@@ -767,6 +817,7 @@ def extract_idml_frames(
                     str | None,
                     tuple[float, float, float, float] | None,
                     tuple[str, ...],
+                    int,
                 ]
             ] = []
             textrahmen: list[
@@ -827,7 +878,7 @@ def extract_idml_frames(
                         None,
                     )
                     bildrahmen.append(
-                        (*box, link, _graphic_crop(grafik, eigene, box), gruppen)
+                        (*box, link, _graphic_crop(grafik, eigene, box), gruppen, _teilpfade(kind))
                     )
 
             walk(root.find("{*}Spread") if root.find("{*}Spread") is not None else root,
@@ -875,7 +926,7 @@ def extract_idml_frames(
                         min(1.0, (y1 - seite[1]) / hoehe),
                     )
 
-                for nummer, (x0, y0, x1, y1, link, crop, gruppen) in enumerate(bildrahmen):
+                for nummer, (x0, y0, x1, y1, link, crop, gruppen, teilpfade) in enumerate(bildrahmen):
                     box = auf_seite(x0, y0, x1, y1)
                     if box is None:
                         teil = auf_seite_geschnitten(x0, y0, x1, y1)
@@ -891,6 +942,7 @@ def extract_idml_frames(
                         link=link,
                         crop=crop,
                         gruppen=gruppen,
+                        teilpfade=teilpfade,
                     )
                     bilder.append(frame)
                     je_nummer[nummer] = frame
@@ -998,6 +1050,39 @@ def _auf_pdf_seite(teil, kanonisch: dict, trims: dict):
         min(1.0, trim[0] + x1 * tw),
         min(1.0, trim[1] + y1 * th),
     )
+def textrahmen_auf_seiten(
+    frames: list[IdmlTextFrame],
+    page_map: list[tuple[int, int]],
+    trims: dict[int, tuple[float, float, float, float]],
+) -> list[IdmlTextFrame]:
+    """Textrahmen auf die Leserseite umrechnen, wie `frames_to_blocks`.
+
+    `page_number` ist danach die kanonische Leserseite. Gebraucht werden die
+    Rahmen selbst, nicht nur die Bloecke: ein Fortsetzungsrahmen, in den die
+    Schaetzung keinen Absatz gelegt hat, steht trotzdem auf der Seite.
+    """
+    kanonisch = dict(page_map)
+    out: list[IdmlTextFrame] = []
+    for f in frames:
+        page_index = kanonisch.get(f.page_number)
+        if page_index is None:
+            continue
+        trim = trims.get(page_index, (0.0, 0.0, 1.0, 1.0))
+        tw = trim[2] - trim[0]
+        th = trim[3] - trim[1]
+        if tw <= 0 or th <= 0:
+            continue
+        out.append(
+            replace(
+                f,
+                page_number=page_index,
+                x0=max(0.0, trim[0] + f.x0 * tw),
+                y0=max(0.0, trim[1] + f.y0 * th),
+                x1=min(1.0, trim[0] + f.x1 * tw),
+                y1=min(1.0, trim[1] + f.y1 * th),
+            )
+        )
+    return out
 
 
 def story_of_frames(idml_bytes: bytes) -> dict[str, list[str]]:

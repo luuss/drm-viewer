@@ -180,6 +180,11 @@ def flow_text_blocks(blocks: list[SourceBlock]) -> list[SourceBlock]:
     Originalbloecke erhalten. Nur die Artikelansicht bekommt hier je Seite
     einen lesbaren Absatz in Spaltenreihenfolge.
     """
+    if blocks and all(block.origin == "idml" for block in blocks):
+        # Ein Artikel aus dem Satz steht schon in Lesereihenfolge; nach Seiten
+        # neu sortiert, kaeme ein Kasten, der bewusst ans Ende gestellt ist
+        # (die Kurzbiografie zum Interview), zurueck zwischen Frage und Antwort.
+        return list(blocks)
     out: list[SourceBlock] = []
     pages = sorted({block.page_index for block in blocks})
     for page in pages:

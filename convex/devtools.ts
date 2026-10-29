@@ -7,6 +7,8 @@ import { audit, rolesOf } from "./roles";
 import { rebuildSearchText } from "./articles";
 import { deleteLinksForBlock } from "./articleProducts";
 import { heftStueckeLoeschen, sucheVormerken } from "./suche";
+import { textBereinigen, titelBereinigen } from "./textBereinigung";
+import { erscheinungAusBezeichnung } from "./erscheinung";
 
 /**
  * Hilfen fuer Entwicklung und Integrationspruefung.
@@ -297,6 +299,171 @@ export const setArticleStatusInternal = internalMutation({
  * Bildunterschrift, erbt es die des entfernten. Die Bilddateien selbst
  * bleiben im Medienspeicher liegen.
  */
+/**
+ * Text einer Ausgabe nachbessern, ohne Neuimport (convex/textBereinigung.ts):
+ * Strich vor Woertern, Doppelstrich, Eurozeichen als "t", Symbolzeichen,
+ * abgesetzte Akzente, umbrochene Titelzeilen. Betrifft Absaetze und
+ * Tabellenzellen, Titel, Untertitel, Autor, Vorspann, Bildunterschriften und
+ * Verzeichniseintraege. Freigaben bleiben; der Suchtext wird neu gebildet.
+ * Mit `probelauf` wird nur gezaehlt und gezeigt.
+ */
+export const textBereinigenInternal = internalMutation({
+  args: { issueId: v.id("issues"), probelauf: v.optional(v.boolean()) },
+  returns: v.object({
+    bloecke: v.number(),
+    artikel: v.number(),
+    unterschriften: v.number(),
+    verzeichnis: v.number(),
+    beispiele: v.array(v.string()),
+    probelauf: v.boolean(),
+  }),
+  handler: async (ctx, { issueId, probelauf }) => {
+    const nurZaehlen = probelauf ?? false;
+    const beispiele: string[] = [];
+    const merken = (alt: string, neu: string) => {
+      if (beispiele.length < 25) beispiele.push(`${alt.slice(0, 90)} => ${neu.slice(0, 90)}`);
+    };
+    const geaendert = new Set<Id<"articles">>();
+    let bloecke = 0;
+    let artikelZahl = 0;
+    let unterschriften = 0;
+    let verzeichnis = 0;
+
+    const artikel = await ctx.db
+      .query("articles")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    for (const a of artikel) {
+      const patch: Record<string, string> = {};
+      const felder = [
+        ["title", titelBereinigen],
+        ["subtitle", titelBereinigen],
+        ["author", textBereinigen],
+        ["teaser", textBereinigen],
+      ] as const;
+      for (const [feld, regel] of felder) {
+        const alt = a[feld];
+        if (!alt) continue;
+        const neu = regel(alt);
+        if (neu !== alt && neu) {
+          patch[feld] = neu;
+          merken(alt, neu);
+        }
+      }
+      if (Object.keys(patch).length) {
+        artikelZahl++;
+        geaendert.add(a._id);
+        if (!nurZaehlen) await ctx.db.patch(a._id, patch);
+      }
+
+      const rows = await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_article", (q) => q.eq("articleId", a._id))
+        .collect();
+      for (const b of rows) {
+        const text = textBereinigen(b.text);
+        let table = b.table;
+        let tabelleNeu = false;
+        if (table) {
+          const zeilen = table.rows.map((zeile) =>
+            zeile.map((zelle) => {
+              const t = textBereinigen(zelle.text);
+              if (t !== zelle.text) tabelleNeu = true;
+              return { ...zelle, text: t };
+            }),
+          );
+          if (tabelleNeu) table = { ...table, rows: zeilen };
+        }
+        if (text === b.text && !tabelleNeu) continue;
+        bloecke++;
+        geaendert.add(a._id);
+        if (text !== b.text) merken(b.text, text);
+        if (!nurZaehlen) await ctx.db.patch(b._id, { text, ...(tabelleNeu ? { table } : {}) });
+      }
+
+      const bilder = await ctx.db
+        .query("articleAssets")
+        .withIndex("by_article", (q) => q.eq("articleId", a._id))
+        .collect();
+      for (const bild of bilder) {
+        if (!bild.caption) continue;
+        const neu = textBereinigen(bild.caption);
+        if (neu === bild.caption) continue;
+        unterschriften++;
+        merken(bild.caption, neu);
+        if (!nurZaehlen) await ctx.db.patch(bild._id, { caption: neu || undefined });
+      }
+    }
+
+    const eintraege = await ctx.db
+      .query("tocEntries")
+      .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+      .collect();
+    for (const t of eintraege) {
+      const neu = titelBereinigen(t.label);
+      if (neu === t.label || !neu) continue;
+      verzeichnis++;
+      merken(t.label, neu);
+      if (!nurZaehlen) await ctx.db.patch(t._id, { label: neu });
+    }
+
+    if (!nurZaehlen) {
+      for (const id of geaendert) await rebuildSearchText(ctx, id);
+      if (geaendert.size || unterschriften || verzeichnis) {
+        await audit(
+          ctx,
+          "issue.textBereinigen",
+          issueId,
+          `${bloecke} Absaetze, ${artikelZahl} Artikel, ${unterschriften} Unterschriften, ${verzeichnis} Verzeichniseintraege (Kommandozeile)`,
+        );
+      }
+    }
+    return {
+      bloecke,
+      artikel: artikelZahl,
+      unterschriften,
+      verzeichnis,
+      beispiele,
+      probelauf: nurZaehlen,
+    };
+  },
+});
+
+/**
+ * Erscheinungsdatum fuer Hefte nachtragen, die keins haben, aus den Angaben
+ * des Ladens (shopDesignation, shopSubtitle, shopTitle). Ein gesetztes Datum
+ * bleibt. Mit `probelauf` wird nur gezeigt, was gesetzt wuerde.
+ */
+export const erscheinungNachtragenInternal = internalMutation({
+  args: { probelauf: v.optional(v.boolean()) },
+  returns: v.array(
+    v.object({ heft: v.string(), datum: v.union(v.string(), v.null()), quelle: v.string() }),
+  ),
+  handler: async (ctx, { probelauf }) => {
+    const out = [];
+    for await (const issue of ctx.db.query("issues")) {
+      if (issue.publicationDate) continue;
+      const datum = erscheinungAusBezeichnung(
+        issue.shopDesignation,
+        issue.shopSubtitle,
+        issue.shopTitle,
+      );
+      out.push({
+        heft: issue.title,
+        datum: datum ? new Date(datum).toISOString().slice(0, 10) : null,
+        quelle: [issue.shopDesignation, issue.shopSubtitle].filter(Boolean).join(" / "),
+      });
+      if (datum && !probelauf) {
+        await ctx.db.patch(issue._id, { publicationDate: datum, updatedAt: Date.now() });
+      }
+    }
+    if (!probelauf && out.some((o) => o.datum)) {
+      await audit(ctx, "issue.erscheinungNachtragen", "issues", `${out.filter((o) => o.datum).length} Hefte (Kommandozeile)`);
+    }
+    return out;
+  },
+});
+
 export const removeArticleImagesInternal = internalMutation({
   args: {
     issueId: v.id("issues"),
@@ -646,5 +813,18 @@ export const requeueJob = internalMutation({
       progress: 0,
     });
     return { ok: true };
+  },
+});
+
+/** Konten mit Rollen auflisten, wahlweise nach einem Teil der Adresse. */
+export const usersWithRolesInternal = internalQuery({
+  args: { suche: v.optional(v.string()) },
+  handler: async (ctx, { suche }) => {
+    const teil = (suche ?? "").trim().toLowerCase();
+    const users = await ctx.db.query("users").collect();
+    return users
+      .filter((u) => !teil || (u.email ?? "").toLowerCase().includes(teil) || ((u as any).name ?? "").toLowerCase().includes(teil))
+      .map((u) => ({ email: u.email ?? null, name: (u as any).name ?? null, roles: rolesOf(u) }))
+      .filter((u) => !!teil || u.roles.some((r) => r !== "customer"));
   },
 });

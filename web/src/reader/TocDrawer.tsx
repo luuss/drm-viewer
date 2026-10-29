@@ -15,6 +15,8 @@ type Props = {
   onClose: () => void;
   onPage: (pageIndex: number) => void;
   onArticle: (articleId: Id<"articles">) => void;
+  /** Zur gedruckten Inhaltsseite des Heftes; fehlt, wenn das Heft keine hat. */
+  onInhaltsseite?: () => void;
   mode: "page" | "article";
   /** Artikel, bei dem der Leser gerade steht. */
   currentArticleId: Id<"articles"> | null;
@@ -56,8 +58,9 @@ function currentEntryId(
 
 /**
  * Inhaltsverzeichnis als Schublade — aus beiden Modi mit demselben Knopf
- * erreichbar. Kennt ein Eintrag nur eine Seite, springt der Artikelmodus
- * zur Seite; kennt er einen Artikel, oeffnet ihn der Seitenmodus dort.
+ * erreichbar. Kennt ein Eintrag nur eine Seite, oeffnet der Artikelmodus den
+ * Artikel dieser Seite, sonst geht es zur Seite (`onPage`, ReaderShell);
+ * kennt er einen Artikel, oeffnet ihn der Seitenmodus dort.
  */
 export default function TocDrawer({
   issueId,
@@ -67,6 +70,7 @@ export default function TocDrawer({
   onClose,
   onPage,
   onArticle,
+  onInhaltsseite,
   mode,
   currentArticleId,
   currentPages,
@@ -81,8 +85,11 @@ export default function TocDrawer({
 
   // Ein Heft hat achtzig Eintraege: der aktuelle steht beim Oeffnen in der
   // Mitte der Liste, sonst laege die Hervorhebung meist unter dem Rand. Die
-  // feste Liste folgt dem Blaettern, nimmt aber nicht den Fokus: sonst
-  // gehoerten die Pfeiltasten danach der Liste statt dem Heft.
+  // feste Liste folgt jedem Blaettern, auch innerhalb desselben Eintrags
+  // (Meldungsseiten, lange Artikel), nachdem der Leser sie von Hand
+  // weggescrollt hat. Den Fokus nimmt sie nicht: sonst gehoerten die
+  // Pfeiltasten danach der Liste statt dem Heft.
+  const seitenSchluessel = currentPages.join(",");
   useEffect(() => {
     if (!visible || !currentId || !list.current) return;
     const box = list.current;
@@ -92,7 +99,7 @@ export default function TocDrawer({
     if (docked && offset >= 0 && offset + entry.offsetHeight <= box.clientHeight) return;
     box.scrollTop += offset - (box.clientHeight - entry.offsetHeight) / 2;
     if (!docked) entry.focus({ preventScroll: true });
-  }, [visible, docked, currentId, entries]);
+  }, [visible, docked, currentId, entries, currentArticleId, seitenSchluessel]);
 
   if (!visible) return null;
 
@@ -105,7 +112,22 @@ export default function TocDrawer({
       <header>
         <div className="toc-title">
           {issueTitle && <span className="kicker">{issueTitle}</span>}
-          <h2>Inhalt</h2>
+          {onInhaltsseite ? (
+            <h2>
+              <button
+                className="toc-heading-link"
+                onClick={() => {
+                  onInhaltsseite();
+                  if (!docked) onClose();
+                }}
+                title="Zum Inhaltsverzeichnis im Heft"
+              >
+                Inhalt
+              </button>
+            </h2>
+          ) : (
+            <h2>Inhalt</h2>
+          )}
         </div>
         <button
           className="btn quiet small"

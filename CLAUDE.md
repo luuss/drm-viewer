@@ -23,6 +23,38 @@ denselben Stand haben:
   aus einem Stand, der committet und gepusht ist. Vor einem Convex-Deploy
   mit dem Server abgleichen (HANDOVER 1e, Falle `stripeModus`).
 * Commits ohne Session-Links oder Co-Authored-By-Zeilen.
+* **Vor jedem Push und jedem Deploy alles holen und zusammenfuehren**
+  (Anweisung 27.10.2026): `git fetch --all`, dann `origin/main` und jeden
+  anderen Arbeitsbranch des zweiten Rechners in `claude/digital` mergen,
+  Konflikte loesen, Tests + `vite build` laufen lassen, erst dann pushen
+  und ausrollen. Live steht immer der **gemeinsame** Stand beider Rechner,
+  nie nur der eigene, sonst ueberschreibt ein Deploy die Arbeit
+  (Design, Seiten) des anderen.
+* **Convex-Deploy darf Claude selbst ausfuehren** (Freigabe 28.10.2026):
+  `npx convex deploy|run --env-file _scratch/verlag-direkt.env`. Der Hook
+  `~/.claude/hooks/no-env-read.py` laesst genau diese Form durch (nur dieser
+  Dateiname, nur `--env-file`, nur deploy/run). Auf einem Rechner ohne diese
+  Hook-Ausnahme den Befehl per `!` vom User ausfuehren lassen.
+* Bei CSS-Konflikten: Klassennamen des Readers bleiben die kurzen
+  (`rv`, `fb`, `fb-c`, `gx`, siehe Kopierschutz in HANDOVER), neue Regeln
+  von `main` werden angehaengt, nicht verworfen.
+
+## Import: keine Ausnahmen fuer ein einzelnes Heft (Anweisung 28.10.2026)
+
+Jede Regel im Import (`extract-service`, vor allem `publication_profiles.py`)
+laeuft bei **jedem** Heft der Reihe mit, auch wenn sie an einem Musterheft
+gemessen ist.
+
+* **Nichts erfinden, was nicht im Heft steht:** kein fester Bildrahmen,
+  keine feste Bildunterschrift, kein fester Titel. Eine Regel, die etwas aus
+  der Seite ausschneidet oder benennt, prueft vorher einen Beleg aus genau
+  diesem Heft (Text auf der Seite, Absatzformat, Bilddatei).
+* **Zwei Tests je Regel:** sie greift im Heft, fuer das sie gedacht ist, und
+  sie greift **nicht** in einem anderen Heft derselben Reihe.
+* Nach einem Import mit neuer Regel ein zweites Heft der Reihe ansehen.
+* Warnendes Beispiel: der feste Kartenrahmen "Deutsche Gebietsverluste
+  1919/1945" fuer ZUERST! 3/2026 schnitt in sechs anderen Heften ein Stueck
+  Text aus Seite 9 und stellte es als Karte in den Titelartikel (f85f3dd).
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker

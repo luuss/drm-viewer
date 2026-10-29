@@ -4,7 +4,8 @@ import { api } from "../lib/api";
 import FolderImport from "./FolderImport";
 
 /**
- * Rahmen der Redaktion: Hefte, ein Heft, Einstellungen.
+ * Rahmen der Redaktion: Hefte, ein Heft, Einstellungen, Personen. Die
+ * Navigation steht links neben dem Inhalt, auf schmalen Schirmen oben.
  *
  * Der Ordnerimport haengt hier und nicht an der Heftliste. So laeuft ein
  * Import weiter, waehrend die Redaktion schon in ein Heft schaut; ausserhalb
@@ -31,10 +32,13 @@ export default function AdminLayout() {
         <NavLink to="/admin" end>
           Hefte
         </NavLink>
+        {me.isAdmin && <NavLink to="/admin/personen">Personen</NavLink>}
         {me.isAdmin && <NavLink to="/admin/einstellungen">Einstellungen</NavLink>}
       </nav>
-      <FolderImport kompakt={!aufListe} />
-      <Outlet />
+      <div className="admin-inhalt">
+        <FolderImport kompakt={!aufListe} />
+        <Outlet />
+      </div>
     </div>
   );
 }

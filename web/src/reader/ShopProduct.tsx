@@ -63,7 +63,7 @@ export function ShopProductLink({
       </span>
       <span className="btn shop-produkt-knopf">
         <Icon name="cart" />
-        Im Shop bestellen
+        Buch im Shop kaufen
       </span>
     </a>
   );
@@ -73,8 +73,9 @@ export function ShopProductLink({
 const ARM_MS = 350;
 
 /**
- * Auswahl im Seitenmodus: wer auf eine Anzeige tippt, kann das Buch im Laden
- * bestellen oder den Anzeigentext lesen.
+ * Auswahl im Seitenmodus, nur wenn das Ziel offen ist: ein Tipp auf einen
+ * Umschlag einer Anzeige mit mehreren Buechern (tippZiel.ts). Der Leser
+ * waehlt das Buch oder liest den Anzeigentext.
  */
 export function ProductChoice({
   products,
@@ -110,7 +111,7 @@ export function ProductChoice({
         className="frage produkt-wahl"
         role="dialog"
         aria-modal="true"
-        aria-label="Bestellen oder lesen"
+        aria-label="Welches Buch?"
         ref={box}
       >
         <div className="produkt-wahl-kopf">

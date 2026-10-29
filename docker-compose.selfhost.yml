@@ -117,8 +117,8 @@ services:
       DISABLE_BEACON: "true"
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-convexminio}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      MAX_PAGES_PER_MIN: ${MAX_PAGES_PER_MIN:-80}
-      MAX_TILES_PER_MIN: ${MAX_TILES_PER_MIN:-1200}
+      MAX_PAGES_PER_MIN: ${MAX_PAGES_PER_MIN:-300}
+      MAX_TILES_PER_MIN: ${MAX_TILES_PER_MIN:-6000}
     restart: unless-stopped
 
   # Der Worker ist ein eigener Prozess im selben Abbild: er holt Auftraege aus

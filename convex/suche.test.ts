@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ausschnitt, passt, suchwoerter } from "./suche";
+import { ausschnitt, ganzeWoerter, passt, suchwoerter, trefferRang } from "./suche";
 
 describe("suchwoerter", () => {
   it("laesst einzelne Buchstaben aus dem Index", () => {
@@ -37,5 +37,24 @@ describe("ausschnitt", () => {
     const a = ausschnitt(lang, "homo");
     expect(a.startsWith("...")).toBe(true);
     expect(a).toContain("Homo-Ehen");
+  });
+});
+
+describe("ganzeWoerter und trefferRang", () => {
+  it("Euro ist nicht Europa, Trump nicht Trumpf", () => {
+    expect(ganzeWoerter("Der Euro fällt", "euro")).toBe(true);
+    expect(ganzeWoerter("Europa wächst", "euro")).toBe(false);
+    expect(ganzeWoerter("Sein letzter Trumpf", "Trump")).toBe(false);
+    expect(ganzeWoerter("Trump, der Präsident", "trump")).toBe(true);
+    expect(ganzeWoerter("Polen und Trump", "trump polen")).toBe(true);
+  });
+  it("Titel vor Text vor Wortanfang", () => {
+    expect(trefferRang("Der Euro wankt", "…", "euro")).toBe(0);
+    expect(trefferRang("Schulden", "Der Euro verliert", "euro")).toBe(1);
+    expect(trefferRang("Brüssel", "Europa wächst", "euro")).toBe(2);
+  });
+  it("der Ausschnitt zeigt das ganze Wort, nicht den ersten Wortanfang", () => {
+    const text = "Europa " + "x ".repeat(150) + "Der Euro fällt.";
+    expect(ausschnitt(text, "euro")).toContain("Der Euro fällt");
   });
 });

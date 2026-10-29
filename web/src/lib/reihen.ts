@@ -10,6 +10,10 @@
 export type Kontakt = {
   /** Eigene Internetseite; nur wenn sie die Zeitschrift auch zeigt. */
   web?: string;
+  /** Ueberschrift ueber der Internetseite, sonst "Internet". */
+  webLabel?: string;
+  /** Bild der Internetseite (Screenshot oder Werbegrafik) fuer ihre Kachel. */
+  webBild?: string;
   mails: { label: string; adresse: string }[];
   tel: string;
   social: { name: string; url: string }[];
@@ -28,6 +32,8 @@ export type Reihe = {
   farbe: string;
   /** Kategorie der Reihe im Netzladen (Druckhefte, Sonderhefte). */
   laden: string;
+  /** Werbegrafik fuer die Netzladen-Kachel; ohne sie zeigt die Kachel die neuesten Umschlaege. */
+  ladenBild?: string;
   kontakt: Kontakt;
 };
 
@@ -43,6 +49,8 @@ export const REIHEN: Reihe[] = [
     laden: "https://lesenundschenken.de/1327-zuerst",
     kontakt: {
       web: "https://zuerst.de",
+      webLabel: "Nachrichtenseite",
+      webBild: "/img/zuerst-web.jpg",
       mails: [
         { label: "Redaktion", adresse: "redaktion@zuerst.de" },
         { label: "Verlag", adresse: "verlag@zuerst.de" },

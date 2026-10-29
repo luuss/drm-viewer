@@ -31,6 +31,7 @@ import re
 from dataclasses import dataclass
 
 from .model import SourceBlock, SourceImage
+from .textutil import zeilen_verbinden
 
 # Senkrechter Abstand zwischen Bildkante und Unterschriftrahmen (Anteil der
 # Seitenhoehe). Gemessen ueber 13 Hefte (1.216 Unterschriften): ueber und
@@ -61,7 +62,12 @@ LAENGE = 1500
 
 SATZENDE = re.compile(r"[.!?:)\]“”\"»«]\s*$")
 
-QUELLE = ("foto:", "fotos:", "bild:", "bilder:", "grafik:", "abb.:", "quelle:")
+# Eine "Unterschrift", die nur den Nachweis nennt, ist keine.
+NACHWEIS = re.compile(
+    r"^\s*(?:alle\s+)?(?:fotos?|bilder?|abb\.?|abbildungen?|grafiken?|graphiken?|karten?|"
+    r"zeichnungen?|illustrationen?|quellen?|repro|montage)\b[^:]{0,40}:",
+    re.I,
+)
 
 
 @dataclass
@@ -83,7 +89,8 @@ def unterschriften(blocks: list[SourceBlock]) -> list[Unterschrift]:
     ("Durch die Zwangskollektivierung" / "wurde vielen Kleinbauern ..."); sie
     bilden zusammen eine Unterschrift. Eine Leerzeile trennt dagegen zwei
     Unterschriften im selben Rahmen, die eine fuer das Bild darueber, die
-    andere fuer das darunter (ZUERST! 3/2026 S. 57). Der Rahmen wird dann nach
+    andere fuer das darunter (ZUERST! 3/2026 S. 57; `SourceBlock.absatzgruppe`).
+    Der Rahmen wird dann nach
     der Textmenge in Streifen geteilt, damit jede ihr Bild findet.
     """
     teile: dict[tuple, list[list[SourceBlock]]] = {}
@@ -97,7 +104,8 @@ def unterschriften(blocks: list[SourceBlock]) -> list[Unterschrift]:
         # Nur nach einem Satzende: steht die Leerzeile mitten im Satz ("Vor
         # allem auf viele" / "Mitteldeutsche wirkt ..."), ist es eine
         # Unterschrift mit Luft darin.
-        if not liste or (b.after_blank and SATZENDE.search(liste[-1][-1].text)):
+        neue_gruppe = bool(liste) and b.absatzgruppe != liste[-1][-1].absatzgruppe
+        if not liste or (neue_gruppe and SATZENDE.search(liste[-1][-1].text)):
             liste.append([])
         liste[-1].append(b)
     out: list[Unterschrift] = []
@@ -111,7 +119,7 @@ def unterschriften(blocks: list[SourceBlock]) -> list[Unterschrift]:
             out.append(
                 Unterschrift(
                     teil[0].page_index,
-                    " ".join(b.text.strip() for b in teil),
+                    zeilen_verbinden(b.text for b in teil),
                     (box[0], oben, box[2], oben + hoehe),
                     teil[0].frame_groups,
                 )
@@ -300,12 +308,12 @@ def zuordnen(
                 wert += 2.0
             # Bei zwei Bildern uebereinander das kleinere, engere.
             wert -= 0.01 * (box[2] - box[0]) * (box[3] - box[1])
-            paare.append((wert, ui, bi, img, art))
+            paare.append((wert, ui, bi, img, art, box))
 
     paare.sort(key=lambda p: -p[0])
     vergeben: dict[int, tuple[SourceImage, str]] = {}
     belegt: set[int] = set()
-    for _wert, ui, _bi, img, art in paare:
+    for _wert, ui, _bi, img, art, _box in paare:
         if ui in vergeben or id(img) in belegt:
             continue
         vergeben[ui] = (img, art)
@@ -313,10 +321,34 @@ def zuordnen(
     # Zweiter Durchgang: eine Unterschrift, deren Bild schon eine hat, haengt
     # sich dazu, wenn sie wirklich an ihm steht. Ein Bild kann zwei tragen,
     # eine auf dem Foto und eine darueber (ZUERST! 3/2025 S. 14).
-    for _wert, ui, _bi, img, art in paare:
+    for _wert, ui, _bi, img, art, _box in paare:
         if ui in vergeben or art == "gruppe":
             continue
         vergeben[ui] = (img, art)
+    # Dritter Durchgang: eine Unterschrift unter (oder ueber) mehreren Bildern
+    # nebeneinander, die ueber alle reicht, gehoert allen, die sonst keine
+    # haben ("Klaus Schwab (links) ... Brabeck-Letmathe (rechts)", ZUERST!
+    # 6/2025 S. 50; drei Fahndungsfotos "von links", ZUERST! 5/2025 S. 34).
+    dazu: dict[int, list[SourceImage]] = {}
+    for ui, (img, art) in vergeben.items():
+        if art not in ("unter", "ueber"):
+            continue
+        eigene = [p for p in paare if p[1] == ui]
+        bester = next(p for p in eigene if p[3] is img)
+        gewaehlt = [bester[5]]
+        for wert, _ui, _bi, anderes, art2, box in eigene:
+            if anderes is img or art2 != art or id(anderes) in belegt:
+                continue
+            if bester[0] - wert > 0.3:
+                continue
+            c = alle[ui].box
+            if min(box[2], c[2]) - max(box[0], c[0]) < 0.8 * (box[2] - box[0]):
+                continue
+            if any(min(box[2], g[2]) - max(box[0], g[0]) > 0 for g in gewaehlt):
+                continue
+            gewaehlt.append(box)
+            dazu.setdefault(ui, []).append(anderes)
+            belegt.add(id(anderes))
 
     ergebnis: list[tuple[Unterschrift, SourceImage | None, str]] = []
     texte: dict[int, list[tuple[float, str]]] = {}
@@ -327,10 +359,11 @@ def zuordnen(
             continue
         img, art = vergeben[ui]
         ergebnis.append((u, img, art))
-        if u.text.lower().startswith(QUELLE):
+        if NACHWEIS.match(u.text):
             continue
-        texte.setdefault(id(img), []).append((u.box[1], u.text))
-        bilder[id(img)] = img
+        for ziel in (img, *dazu.get(ui, [])):
+            texte.setdefault(id(ziel), []).append((u.box[1], u.text))
+            bilder[id(ziel)] = ziel
     for schluessel, liste in texte.items():
         img = bilder[schluessel]
         if img.caption is None:

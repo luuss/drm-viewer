@@ -29,6 +29,8 @@ export type ShopAction =
   | "withdraw_digital"
   // Anmeldelink per Shop-Mail (magicLink.ts)
   | "send_mail"
+  // Ankuendigung eines neuen Hefts an die Kaeufer (heftAnkuendigung.ts)
+  | "heft_mail"
   // Kartenkauf im Leser (leserZahlung.ts)
   | "quote"
   | "create_order"

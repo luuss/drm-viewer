@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import { registerRoutes } from "@convex-dev/stripe";
 import { auth } from "./auth";
 import { requestLinkHttp } from "./magicLink";
+import { einKlickHttp } from "./heftAnkuendigung";
 import { checkExtractSecret, checkTileSecret, checkShopSignature } from "./serviceAuth";
 import { stripeWebhook } from "./leserWebhook";
 
@@ -13,6 +14,11 @@ auth.addHttpRoutes(http);
 
 // Anmeldelink anfordern (magicLink.ts). Von aussen: /hooks/auth/link.
 http.route({ path: "/auth/link", method: "POST", handler: requestLinkHttp });
+
+// Ein-Klick-Abmelden aus Heft-Mails (heftAnkuendigung.ts, Kopf
+// List-Unsubscribe). Von aussen: /hooks/mail/abbestellen.
+http.route({ path: "/mail/abbestellen", method: "POST", handler: einKlickHttp });
+http.route({ path: "/mail/abbestellen", method: "GET", handler: einKlickHttp });
 
 function secs(ts: number | null | undefined): number | undefined {
   return ts == null ? undefined : ts * 1000;
@@ -260,6 +266,16 @@ workerRoute("/service/jobs/merge", (ctx, body) =>
     remove: body.remove ?? [],
     insert: body.insert ?? [],
     orders: body.orders ?? [],
+  }),
+);
+
+workerRoute("/service/jobs/bilder", (ctx, body) =>
+  ctx.runMutation(internal.bildnachtrag.ersetzenInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    issueId: body.issueId,
+    probe: body.probe === true,
+    articles: body.articles ?? [],
   }),
 );
 

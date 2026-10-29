@@ -8,6 +8,9 @@ import { heftStatus, MeldungZeile, useMeldung } from "./adminUi";
 type Heft = FunctionReturnType<typeof api.issues.overviewForEditors>[number];
 type Filter = "alle" | "entwurf" | "live" | "probleme";
 
+/** Stand, an dem ein Heft ohne Eingriff nicht weiterkommt. */
+const PROBLEME = new Set(["fehler", "seiten", "unvollstaendig"]);
+
 /**
  * Startseite der Redaktion: alle Hefte mit ihrem Stand. Je Zeile genau ein
  * Knopf fuer den naechsten Schritt; alles Weitere steht im Heft selbst.
@@ -26,14 +29,13 @@ export default function AdminPage() {
       const s = heftStatus(i);
       if (filter === "entwurf") return !i.isPublished;
       if (filter === "live") return i.isPublished;
-      if (filter === "probleme") return s.schritt === "fehler" || s.schritt === "seiten";
+      if (filter === "probleme") return PROBLEME.has(s.schritt);
       return true;
     });
   }, [issues, reihe, filter]);
 
   const probleme = (issues ?? []).filter((i) => {
-    const s = heftStatus(i).schritt;
-    return s === "fehler" || s === "seiten";
+    return PROBLEME.has(heftStatus(i).schritt);
   }).length;
 
   return (

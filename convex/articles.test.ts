@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { istListenzeile, zitatDoppelt } from "./articles";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -178,6 +179,56 @@ describe("Artikeloperationen", () => {
     expect(counts.titles).toEqual(["Neu", "Neu2"]);
     expect(counts.blocks).toBe(4);
     expect(counts.regions).toBe(2);
+  });
+
+  test("Neuer Lauf ueber ein freigegebenes Heft behaelt Freigabe und Lesestand", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, editorId } = await base(t);
+    const jobId = await t.run(async (ctx: any) =>
+      ctx.db.insert("importJobs", {
+        issueId,
+        kind: "full",
+        status: "running",
+        attempts: 1,
+        workerId: "w1",
+        createdAt: Date.now(),
+      }),
+    );
+    const lauf = (articles: any[]) =>
+      t.mutation(internal.imports.activateResultInternal, { jobId, workerId: "w1", issueId, articles });
+    const artikel = () =>
+      t.run(async (ctx: any) =>
+        ctx.db
+          .query("articles")
+          .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+          .collect(),
+      );
+
+    await lauf([article(1, 0, ["Alt", "Alttext"]), article(2, 1, ["Alt2", "Mehr"])]);
+    const erste = await artikel();
+    // Halb freigegeben: der naechste Lauf bringt wieder Entwuerfe.
+    await t.run(async (ctx: any) => ctx.db.patch(erste[0]._id, { reviewStatus: "approved" }));
+    await lauf([article(1, 0, ["Neu", "Neutext"]), article(2, 1, ["Neu2", "Mehr"])]);
+    expect((await artikel()).map((a: any) => a.reviewStatus)).toEqual(["pending", "pending"]);
+
+    // Ganz freigegeben, ein Leser steht im zweiten Artikel: der Lauf ist eine Korrektur.
+    const zweite = await artikel();
+    await t.run(async (ctx: any) => {
+      for (const a of zweite) await ctx.db.patch(a._id, { reviewStatus: "approved" });
+      await ctx.db.insert("readingProgress", {
+        userId: editorId,
+        issueId,
+        mode: "article",
+        pageIndex: 1,
+        articleId: zweite[1]._id,
+        updatedAt: Date.now(),
+      });
+    });
+    await lauf([article(1, 0, ["Korrigiert", "Text"]), article(2, 1, ["Korrigiert2", "Mehr"])]);
+    const dritte = await artikel();
+    expect(dritte.map((a: any) => a.reviewStatus)).toEqual(["approved", "approved"]);
+    const stand = await t.run(async (ctx: any) => ctx.db.query("readingProgress").first());
+    expect(stand.articleId).toBe(dritte.find((a: any) => a.title === "Korrigiert2")._id);
   });
 
   test("Trennen an der Blockgrenze verteilt Bloecke und Regionen", async () => {
@@ -607,8 +658,87 @@ describe("Artikeloperationen", () => {
     ).rejects.toThrow(/ohne Entscheidung/i);
 
     await asPublisher.mutation(api.articles.approveAllPending, { issueId });
+    // Freigegeben, aber ohne Inhaltsverzeichnis: noch gesperrt.
+    await expect(
+      asPublisher.mutation(api.issues.setPublished, { issueId, isPublished: true }),
+    ).rejects.toThrow(/Kein Inhaltsverzeichnis/);
+    await t.run(async (ctx: any) => {
+      const [artikel] = await ctx.db
+        .query("articles")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect();
+      await ctx.db.insert("tocEntries", {
+        issueId,
+        order: 1,
+        label: "Offen",
+        pageIndex: 0,
+        articleId: artikel._id,
+        level: 1,
+      });
+    });
     await asPublisher.mutation(api.issues.setPublished, { issueId, isPublished: true });
     const issue = await t.run(async (ctx: any) => await ctx.db.get(issueId));
     expect(issue.isPublished).toBe(true);
+  });
+
+  test("ein Heft ohne freigegebenen Artikel wird nicht veroeffentlicht", async () => {
+    // ZUERST! 12/2025 stand mit null Artikeln im Kiosk: nur Seitenbilder,
+    // keine Artikelansicht, keine Suche.
+    const t = convexTest(schema, modules);
+    const { issueId, editorId } = await base(t);
+    await t.run(async (ctx: any) => {
+      const now = Date.now();
+      await ctx.db.insert("articles", {
+        issueId,
+        order: 1,
+        title: "Ausgeschlossen",
+        source: "pdf",
+        reviewStatus: "excluded",
+        primaryPageIndex: 0,
+        pageStart: 0,
+        pageEnd: 0,
+        searchText: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("tocEntries", { issueId, order: 1, label: "Editorial", level: 1 });
+    });
+    const { api } = await import("./_generated/api");
+    const asPublisher = t.withIdentity({ subject: editorId, email: "redaktion@example.de" });
+    await expect(
+      asPublisher.mutation(api.issues.setPublished, { issueId, isPublished: true }),
+    ).rejects.toThrow(/Kein Artikel freigegeben/);
+    const issue = await t.run(async (ctx: any) => await ctx.db.get(issueId));
+    expect(issue.isPublished).toBe(false);
+  });
+});
+
+describe("istListenzeile", () => {
+  test("Zeilen mit Spiegelstrich oder Punkt am Anfang", () => {
+    expect(istListenzeile("– Eisernes Kreuz II. Klasse")).toBe(true);
+    expect(istListenzeile("• 3. Kompanie")).toBe(true);
+    expect(istListenzeile("- Panzerjäger-Abteilung 128")).toBe(true);
+  });
+  test("Fliesstext, Bindestrichwoerter und Zahlen sind keine Liste", () => {
+    expect(istListenzeile("Die Division kämpfte – wie schon 1943 – an der Narwa.")).toBe(false);
+    expect(istListenzeile("-Direktor")).toBe(false);
+    expect(istListenzeile("1944 begann der Aufstand.")).toBe(false);
+  });
+});
+
+describe("zitatDoppelt", () => {
+  const absaetze = [
+    "Hanna Reitsch erinnerte sich später: „Greim war der einzige, der bis zuletzt an seinem Platz blieb.“ Dann verstummte sie.",
+    "Ein anderer Absatz.",
+  ];
+  test("ein Zitatkasten, der wortgleich im Text steht, ist doppelt", () => {
+    expect(zitatDoppelt("„Greim war der einzige, der bis zuletzt an seinem Platz blieb.“", absaetze)).toBe(true);
+    // Weiche Trennstriche und Zeilenumbrueche aus dem Satz stoeren nicht.
+    expect(zitatDoppelt("Greim war der ein\u00adzige, der bis zuletzt\nan seinem Platz blieb", absaetze)).toBe(true);
+  });
+  test("gekuerzt, abweichend oder zu kurz: der Kasten bleibt", () => {
+    expect(zitatDoppelt("„Greim war der einzige […] an seinem Platz.“", absaetze)).toBe(false);
+    expect(zitatDoppelt("Ritterkreuz mit Eichenlaub und Schwertern, verliehen 1944", absaetze)).toBe(false);
+    expect(zitatDoppelt("Ein anderer Absatz.", absaetze)).toBe(false);
   });
 });

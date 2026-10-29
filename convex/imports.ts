@@ -30,7 +30,9 @@ export const jobKind = v.union(
   v.literal("toc"),
   // Den Satz neu lesen und nur die Artikel einsetzen oder ersetzen, die sich
   // dabei aendern (mergeResultInternal). Alles andere bleibt stehen, auch
-  // Freigaben. Mit payload "probe" wird nur gezaehlt.
+  // Freigaben. Mit payload "probe" wird nur gezaehlt. Mit payload "bilder"
+  // ("bilder-probe") nur Bilder und Unterschriften der bleibenden Artikel neu
+  // (bildnachtrag.ts), Text und Freigaben unberuehrt.
   v.literal("nachtrag"),
 );
 
@@ -598,6 +600,12 @@ export const activateResultInternal = internalMutation({
       .query("articles")
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
+    // Ein neuer Lauf ueber ein ganz freigegebenes Heft ist eine Korrektur:
+    // seine Artikel bleiben freigegeben, sonst stuende ein veroeffentlichtes
+    // Heft bis zur erneuten Durchsicht ohne Artikel da (wie beim Nachtrag).
+    const warFreigegeben =
+      oldArticles.length > 0 && oldArticles.every((a) => a.reviewStatus === "approved");
+    const alteSeite = new Map<string, number>(oldArticles.map((a) => [a._id, a.pageStart]));
     for (const a of oldArticles) {
       for (const table of ["articleBlocks", "articleRegions", "articleAssets"] as const) {
         const rows = await ctx.db
@@ -621,7 +629,27 @@ export const activateResultInternal = internalMutation({
     const now = Date.now();
     const byOrder = new Map<number, Id<"articles">>();
     for (const a of articles) {
-      byOrder.set(a.order, await insertArticle(ctx, issueId, a, "pending", now));
+      byOrder.set(
+        a.order,
+        await insertArticle(ctx, issueId, a, warFreigegeben ? "approved" : "pending", now),
+      );
+    }
+
+    // Lesestaende auf einen ersetzten Artikel zeigen auf den neuen Artikel,
+    // der auf derselben Seite beginnt, sonst auf den, der die Seite abdeckt.
+    if (alteSeite.size) {
+      const neue = articles
+        .map((a) => ({ id: byOrder.get(a.order)!, a }))
+        .sort((x, y) => x.a.order - y.a.order);
+      const progress = await ctx.db.query("readingProgress").collect();
+      for (const p of progress) {
+        if (p.issueId !== issueId || !p.articleId || !alteSeite.has(p.articleId)) continue;
+        const seite = alteSeite.get(p.articleId)!;
+        const ziel =
+          neue.find((n) => n.a.pageStart === seite) ??
+          neue.find((n) => n.a.pageStart <= p.pageIndex && p.pageIndex <= n.a.pageEnd);
+        await ctx.db.patch(p._id, { articleId: ziel?.id });
+      }
     }
 
     const toc =

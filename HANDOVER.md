@@ -213,6 +213,24 @@ danach `account:purgeByEmailInternal`).
   jetzt mit dem CrowdSec-Block vom Server). Neue Gateway-Pfade unter `/api`
   muessen dort eingetragen werden, sonst landen sie bei Convex (404).
 
+## 1f. Mails zu neuen Heften (28.10.2026)
+
+* Wer ein Digitalheft gekauft hat (Laden, auch Gast, oder Leser), bekommt
+  beim ersten Veroeffentlichen eines Hefts eine Werbemail in der Hausfarbe
+  der Reihe, 30 min spaeter und nie nachts. Je Reihe abbestellbar (Link in
+  der Mail, Ein-Klick-Kopf, Konto). Einzelheiten:
+  `docs/shop-integration.md`, Abschnitt „Mails zu neuen Heften“.
+* Convex: `heftAnkuendigung.ts`, `heftMail.ts`, Tabellen
+  `heftAnkuendigungen`, `heftAnkuendigungEmpfaenger`, `mailEinstellungen`.
+  Abschalten: `HEFT_ANKUENDIGUNG=aus`.
+* Versand ueber das Shop-Modul `lusdigital` (Aktion `heft_mail`, Hook
+  `actionMailAlterMessageBeforeSend`), Dateien und Diffs in
+  `deploy/shop-lusdigital/`. Ohne diesen Modulstand bleibt jede Mail als
+  Stoerung haengen und wird bis zu 12-mal versucht.
+* Redaktion: Heft → Uebersicht → „Mail an die Kaeufer“ (Stand, Probe an
+  mich, sofort senden, anhalten). Die vor dem 28.10. veroeffentlichten Hefte
+  sind nicht angekuendigt; dort steht „Jetzt ankuendigen“.
+
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 
 Der Leser heisst seit 19.10.2026 **https://digital.lesenundschenken.de**
@@ -440,6 +458,20 @@ Abschnitt „Buchanzeigen im Heft".
 * Geprüft im Betrieb am 30.09. (Wegwerfkonto, danach gelöscht), Rechner und
   Telefonbreite mit Berührung: Knopf im Artikel öffnet den Shop im neuen Tab,
   Auswahl im Seitenmodus, „Text lesen", Esc; Redaktionskasten und Suche.
+* **Seit 29.10.2026 (Bead drm-viewer-18n):** Tipp auf den Umschlag öffnet
+  das Produkt, Tipp auf den Text den Text, ohne Auswahl
+  (`web/src/reader/tippZiel.ts`); die Auswahl kommt nur noch bei mehreren
+  Büchern unter einer gemeinsamen Fläche. Knopf heißt „Buch im Shop kaufen".
+  Zuordnung verbessert („Autor: Titel", doppelte Treffer, fremder Verfasser,
+  Rückfall auf `articleProducts`, kein Ziel statt leerer Suchseite).
+  Durchsicht aller Hefte, Zahlen, zwei Fehlzuordnungen und die 19 live
+  eingetragenen Ziele: `docs/shop-integration.md`, „Tipp auf Umschlag oder
+  Text". Werkzeuge: `tools/buchzuordnung_dump.sh` (Stand lesen, als
+  Redakteur per `--identity`), `tools/buchzuordnung_sim.ts` (neuer Code gegen
+  den Laden, schreibt nichts), `tools/buchzuordnung_anwenden.py`.
+  Falle: `npx convex run … --identity '{"subject":"<userId>|x","issuer":"x"}'`
+  ruft auch öffentliche Abfragen mit Redakteursrechten auf; so kommt man ohne
+  eigene Dump-Funktion an `listForEditors`.
 * Offen: In den DMZ-Texten steht „t" statt „€" („Art. 102474 t 29,80"); die
   Preiserkennung kommt damit zurecht, der Lesetext zeigt es aber so.
 
@@ -773,95 +805,176 @@ eine Zeile im Inhaltsverzeichnis.
   schwertertraeger.de zeigen fremden Inhalt („Nachtleben“, „Lust am
   Programmieren“, Stand 05.10.2026), deshalb dort kein Internet-Link.
 
-## 4l. Bildunterschriften nach der Satzstruktur (seit 29.10.2026)
+## 4l. Fremdanzeigen nicht als Artikelbild (seit 29.10.2026)
+
+In ZUERST! 6/2025 stand auf S. 32 die Anzeige der AfD-Fraktionszeitung
+„Aufbruch“ als erstes Bild über „„Staatenlose“ Jugendliche terrorisieren
+Bremen“ — in der Artikelansicht oben im Text (Bead drm-viewer-7mf).
+
+* **Ursache:** Die Anzeige ist im Satz ein gewöhnlicher Bildrahmen mit
+  platzierter PDF. Kein Filter (`ohne_unterlagen`, `ohne_vorschaubilder`,
+  `ohne_schriftzuege`) kannte Anzeigen, also ordnete `_image_score` sie dem
+  nächsten Artikel derselben Seite zu. Der Text der Anzeige steckt nur in der
+  PDF, deshalb kam kein Text in den Artikel, nur das Bild.
+* **Regel:** `anzeigenrahmen`/`ohne_anzeigen` in `extractor/idml_articles.py`,
+  im Worker in `_from_idml` nach `ohne_vorschaubilder`. Ein Bildrahmen ist
+  Anzeige, wenn (a) der Dateiname der Verknüpfung ein Wort mit „Anzeige“
+  beginnt („Anzeige_Zuerst Magazin_….pdf“, „SMS Anzeige_A4.pdf“; nicht
+  „Dienstanzug“, „Strafanzeige“, „Panzer“) oder (b) ein Textrahmen, dessen
+  ganzer Text „Anzeige“ ist, höchstens 0,02 Seitenbreite neben ihm steht
+  (die Pflichtkennzeichnung; ZUERST! 2/2025: „Stellenangebot ….tif“ mit
+  „Anzeige“ am Eck). Bei (b) zählt nur das nächste Bild. Die Anzeige bleibt auf
+  der Druckseite; Artikel bekommt sie keine. Tests in
+  `tests/test_idml_articles.py` (greift in ZUERST! 6/2025 und 2/2025, greift
+  nicht bei Redaktionsbildern mit „anz“ im Namen).
+* **Bestand** (alle 13 Hefte mit Satzdatei geprüft): 11 Anzeigenbilder in 9
+  Heften, je auf der Meldungsseite neben „Innere Sicherheit“: ZUERST! 1/2025
+  S. 30, 2/2025 S. 30 + Stellenangebote S. 41 und S. 69, 3/2025 S. 28, 4/2025
+  S. 32, 5/2025 S. 38, 6/2025 S. 32, 7/2025 S. 24, 8-9/2025 S. 32, 10/2025
+  S. 30. DMZ 170 S. 41 (ganzseitig „SMS“) traf die Regel, war aber schon kein
+  Artikelbild. Greim 36, ZUERST! 3/2026, DMZ 170, DMZ-Zeitgeschichte 80: nichts.
+  Am 29.10. mit `devtools:removeArticleImagesInternal` entfernt (Probelauf,
+  dann echt), ohne Neuimport; Freigaben, Text und Bilddateien unverändert.
+  Werkzeuge und Sicherung: `_scratch/anzeige-im-text/` (`plan.py` rechnet den
+  Plan aus Satz + Bestand, `anwenden.py [--echt]`, Zeilen vorher in
+  `vorher/articleAssets.jsonl`, Artikel/Seiten je Heft in `vorher/`).
+  Zurückholen ginge nur über eine Einfüge-Mutation (gibt es noch nicht) oder
+  einen Nachtrag-Import.
+* **Fundstelle: Kennungen der Artikelbilder.** Keine Convex-Funktion gibt die
+  `_id` von `articleAssets` heraus (`listForEditors` liefert Bilder ohne
+  `_id`, `npx convex data` sperrt der Hook). Lesend geht es über Postgres auf
+  dem Verlagsserver: `docker exec -i code-postgres-1 sh -c 'psql -U
+  "$POSTGRES_USER" -d emagazin -At' < _scratch/anzeige-im-text/dump.sql`
+  (jüngste Fassung je Dokument, `json_value` enthält `_id`; Tabelle
+  `articleAssets` = `table_id` `70efedbd8be2ef2610c2ea2111e550f2`). Der
+  Bildschlüssel `images/<leserseite>-<x0·1000>-<y0·1000>.jpg` sagt, wo das Bild
+  auf der Seite beginnt — so lässt es sich einem Satzrahmen zuordnen.
+  Redaktionsabfragen mit Admin-Kennung von der Kommandozeile:
+  `npx convex run --env-file _scratch/verlag-direkt.env --identity
+  '{"subject":"<userId>|cli"}' articles:listForEditors '{"issueId":"…"}'`
+  (userId aus `devtools:usersByEmailPartInternal`). Die IDML eines Hefts holt
+  man aus MinIO über den Container `code-import-worker-1` (boto3, Schlüssel
+  `uploads/<issueId>/…idml`); die Dateien unter `files/minio/` sind wegen der
+  Bitrot-Prüfsummen nicht direkt lesbar.
+
+## 4m. Bildunterschriften nach der Satzstruktur, Bilder-Nachtrag (seit 29.10.2026)
 
 Anlass: ZUERST! 6/2025 Druckseite 34 („Den Blick nach vorn richten“): das
 Schülerfoto stand ohne Unterschrift. Die weiße Unterschrift liegt im Satz
 *auf* dem Foto. Die alte Regel (`pdf_extract.attach_captions`) suchte nur
 dicht *unter* dem Bild und mindestens halb so breit wie das Bild. Sie verlor
-damit alles auf dem Foto, darüber und daneben, und nahm von mehrzeiligen
-Unterschriften nur die erste Zeile.
+damit alles auf dem Foto, darüber und daneben und nahm von mehrzeiligen
+Unterschriften nur die erste Zeile. Sie gilt jetzt nur noch für Bilder, die
+der Satz nicht kennt (`satz_geprueft`).
 
-Neu: `extractor/bildunterschriften.py`, aufgerufen in `worker._from_idml`
-(die Naeheregel laeuft fuer Satzseiten nicht mehr). Reihenfolge der Belege:
+**Eine Zuordnung:** `extractor/bildunterschriften.py`. `satzbilder.py`
+(Beleg, Schmuck, Anzeige, Zugehörigkeit, Klickflächen) ruft sie über
+`unterschriften_zuordnen` auf; die zweite, parallel entstandene Zuordnung in
+`satzbilder.py` ist ersetzt (Vergleich unten). Reihenfolge der Belege:
 
-* **Gruppe** (`Group/@Self`, jetzt an Bild- und Textrahmen:
-  `IdmlImageFrame.gruppen`, `SourceImage.groups`, `SourceBlock.frame_groups`).
+* **Gruppe** (`Group/@Self` an Bild- und Textrahmen: `IdmlImageFrame.gruppen`,
+  `SourceImage.groups`, `SourceBlock.frame_groups`).
 * **Im Bild** (Rahmen zu ≥ 80 % im Bildrahmen), dann **unter**, **über**,
-  **neben** (Abstand ≤ 0,02 Seitenhöhe bzw. 0,04 Breite, gemessen an
-  1.216 Unterschriften: fast alle bündig), zuletzt **halb** (≥ 30 % auf dem Bild).
-* Bild im Bild (Detailaufnahme auf dem großen Foto) schlägt das große Bild;
+  **neben** (Abstand ≤ 0,02 Seitenhöhe bzw. 0,04 Breite, gemessen an 1.216
+  Unterschriften: fast alle bündig), zuletzt **halb** (≥ 30 % auf dem Bild).
+* Bild im Bild (Detailaufnahme auf dem großen Foto) schlägt das große;
   „Links:“/„Rechts:“ am Anfang zeigt die Richtung; gestaffelte Blätter: das
   bündige, ganz breite gewinnt.
-* Je Rahmen eine Unterschrift; eine **Leerzeile nach Satzende** trennt zwei
-  (Rahmen zwischen zwei Fotos, ZUERST! 3/2026 S. 57) — `SourceBlock.after_blank`.
-* Eins zu eins, danach darf sich eine zweite Unterschrift an ein Bild hängen,
-  wenn sie wirklich daran steht. Länge bis 1.500 Zeichen (vorher 400).
-* Ein „Unterschrift“-Rahmen, der selbst ein Foto umschließt, ist ein Kasten
+* Je Rahmen eine Unterschrift; eine Leerzeile (`SourceBlock.absatzgruppe`)
+  **nach Satzende** trennt zwei (Rahmen zwischen zwei Fotos, ZUERST! 3/2026
+  S. 57). Zeilen werden mit `zeilen_verbinden` verbunden (Silbentrennung).
+* Eins zu eins; danach darf sich eine zweite Unterschrift an ein Bild hängen,
+  wenn sie wirklich daran steht; eine Unterschrift über mehrere Bilder
+  nebeneinander gehört allen („Klaus Schwab (links) … (rechts)“). Länge bis
+  1.500 Zeichen (vorher 400).
+* Ein Unterschrift-Rahmen, der selbst ein Foto umschließt, ist ein Kasten
   (ZUERST! 3/2025 „Szenario 1–3“): `kaesten_im_unterschriftformat` → Rolle
-  `kasten`, steht jetzt im Lesetext statt als Unterschrift am Nachbarfoto.
-* Kleinstbilder (< 0,4 % der Seite: Signets, Logos) bekommen keine Unterschrift;
-  kleine Bilder unter 0,8 % (Briefmarke) fangen ihre Unterschrift noch ab,
-  werden aber weiterhin kein Artikelbild.
+  `kasten`, steht im Lesetext statt als Unterschrift am Nachbarfoto.
+* Kleinstbilder (< 0,4 % der Seite: Signets, Logos, Fußzeilenlogo) bekommen
+  keine Unterschrift. Kleine Bilder (Briefmarke) fangen ihre noch ab; Artikelbild
+  wird ein Rahmen erst ab `BILD_MINDESTFLAECHE` (0,8 %), gefiltert erst nach
+  `bilder_im_satz`.
 * Ein Bild über die Doppelseite kennt seinen Teil auf der Nachbarseite
   (`IdmlImageFrame.auslaeufer`, `SourceImage.spread_parts`), dort darf seine
   Unterschrift stehen (DMZ 170 S. 16).
 
-**Mitgefunden, Fehler im Rahmenlesen** (`idml_extract._path_bounds`): ein
+**Fehler im Rahmenlesen** (`idml_extract._path_bounds`, drm-viewer-3oi): ein
 freigestelltes Bild trägt in `Image/Properties/TextWrapPreference` eine eigene
-Kontur im System des Bildes. Sie zählte mit, der Rahmen wurde riesig, seine Mitte
-lag neben der Seite, und das Bild fiel weg oder kam als Riesenausschnitt.
+Kontur im System des Bildes. Sie zählte mit, der Rahmen wurde riesig, seine
+Mitte lag neben der Seite, und das Bild fiel weg oder kam als Riesenausschnitt.
 Jetzt zählt nur `Properties/PathGeometry` des Rahmens. Betroffen u. a.: Wappen
-Wallensteins (DMZ 170 S. 70, drm-viewer-6bb), Pour le Mérite und Eichenlaub
-(Greim), Poseidon, EMP-44-Abweiser (vorher halbseitiger Ausschnitt). Dadurch
-kommen auch die leeren **Buchmodelle** der Besprechungsseiten zum Vorschein
-(„01_buch test 1.tif“, „buch 3d.tif“); der Umschlag füllt sie zu 58–70 %, deshalb
-`BILD_UNTERLAGE_ANTEIL` 0,60 → 0,55 (Aufmacher mit Einklinker: höchstens 46 %).
+Wallensteins (DMZ 170 S. 70), Pour le Mérite und Eichenlaub (Greim), Poseidon,
+EMP-44-Abweiser. Dadurch kommen die leeren **Buchmodelle** der
+Besprechungsseiten zum Vorschein („01_buch test 1.tif“, „buch 3d.tif“); der
+Umschlag füllt sie zu 58–70 %, deshalb `BILD_UNTERLAGE_ANTEIL` 0,60 → 0,55
+(Aufmacher mit Einklinker: höchstens 46 %).
 
-**Zeilen statt Absätze** (`idml_articles.zeilen_zusammenfuehren`, drm-viewer-5x0):
-InDesign bricht Anrede, Überschrift, Unterzeile und Zwischentitel mit einer
-Absatzschaltung um. „Verehrter“ / „Leser,“ (DMZ 170 S. 3) wird „Verehrter
-Leser,“; zusammengeführt wird nur, wenn die zweite Zeile klein anfängt, die
-erste eine Anrede ist oder ein Zitat offen lässt. Verfasser/Titel einer
-Buchanzeige bleiben zwei Zeilen, Mengentext bleibt unberührt. Der Nachweis
-„Titelseite: …“ neben dem Editorial (`TITELNACHWEIS`) ist Beiwerk und steht
-nicht mehr im Lesetext.
+**Editorial** (drm-viewer-5x0): die Anrede „Verehrter“ / „Leser,“ zieht schon
+`_anrede_zusammenziehen` zusammen. Dazu `zeilen_zusammenfuehren`: umbrochene
+Überschrift, Unterzeile, Zwischentitel werden ein Absatz, wenn die zweite Zeile
+klein anfängt, die erste eine Anrede ist oder ein Zitat offen lässt;
+Verfasser/Titel einer Buchanzeige bleiben zwei Zeilen, Mengentext unberührt.
+Der Nachweis „Titelseite: …“ neben dem Editorial (`TITELNACHWEIS`) ist Beiwerk.
 
-**Zahlen** (13 Hefte: ZUERST! 1–10/2025 und 3/2026, DMZ 170,
-DMZ-Zeitgeschichte 80, Greim; 1.212 Unterschriften im Satz ohne „xxx“-Platzhalter):
+**Zahlen** (gemergter Stand; 13 Hefte: ZUERST! 1–10/2025 und 3/2026, DMZ 170,
+DMZ-Zeitgeschichte 80, Greim; 1.212 Unterschriften im Satz ohne „xxx“):
 
 | | alte Regel (nachgerechnet) | live | neu |
 |---|---|---|---|
-| am richtigen Bild, vollständig | 557 | 380 | 1.203 |
-| am falschen Bild | 5 | – | 0 in rund 60 am Druckbild geprüften |
-| nur erste Zeile / gekürzt | – | 166 | 0 |
-| fehlt | 650 | 657 | 9 |
+| am richtigen Bild, vollständig | 557 | 383 | 1.202 |
+| am falschen Bild | 5 | – | 0 in rund 70 am Druckbild geprüften |
+| nur erste Zeile / gekürzt | – | 163 | 0 |
+| fehlt | 650 | 656 | 10 |
 | fremder Text als Unterschrift | – | 25 | 0 |
 
-Die 9 ohne Bild stehen an Diagrammen, die im Satz gezeichnet sind (kein
-Bildrahmen: Bevölkerungskurven ZUERST! 7/2025, Umfragebalken), und an einer
-Unterschrift ohne Bild auf der Seite (ZUERST! 10/2025, Satzseite 41, Albanien). Geprüft am
-gerenderten Druckbild mit eingezeichneter Zuordnung (`_scratch/bu/overlay.py`),
-alle Abweichungen alt/neu und eine Zufallsseite je Heft.
+Die 10 ohne Bild: Diagramme, die InDesign selbst zeichnet (kein Bildrahmen),
+eine Unterschrift ohne Bild auf der Seite (ZUERST! 10/2025, Satzseite 41) und
+eine an einem Bildschirmfoto, das `ohne_schmuck` aussortiert (ZUERST! 3/2025).
+Vergleich mit der parallelen Zuordnung aus `satzbilder.py`: 1.186 statt 1.208
+Bilder mit Unterschrift, 47 Bilder verschieden. Von den Abweichungen am
+Druckbild nachgesehen: in allen geprüften Fällen lag die neue richtig
+(Unterschrift ans Fußzeilenlogo statt ans Foto, Nachbarspalte, Doppelseite,
+gestaffelte Blätter); übernommen von dort die Mehrbild-Regel, das
+Nachweis-Muster und `zeilen_verbinden`.
 
-Werkzeuge (in `_scratch/bildunterschriften-2026-10-29/` im Hauptordner):
-`vergleich.py` (alt gegen neu über den echten Worker-Weg), `live_vergleich.py`
-(Bestand gegen Satz), `overlay.py <heft> <idml-seite>` (Zuordnung aufs
-Seitenbild, Seitenbild = `seite-(idml+1)`), `seite_holen.sh` (Seitenbild aus MinIO
-über den Container `code-import-worker-1`), `artikel.py` (Artikel einer Seite
-wie im Import). Die Skripte erwarten ihre Dateien unter `_scratch/bu/` und die
-IDMLs als `_scratch/bu/idml/<issueId>.idml`; die IDMLs liegen in MinIO unter
-`uploads/<issueId>/…idml` (holen wie in `seite_holen.sh`).
-Redakteursansicht von der Kommandozeile: `npx convex run --env-file
-_scratch/verlag-direkt.env --identity '{"subject":"<userId>|x","issuer":"x"}'
-articles:listForEditors '{"issueId":"…"}'` (userId des Testkontos über
-`devtools:usersByEmailPartInternal`).
+**Bilder-Nachtrag ohne Freigabeverlust** (drm-viewer-jmm): Auftrag `nachtrag`
+mit payload `bilder` (Probelauf `bilder-probe`). Der Worker baut die Artikel
+aus dem Satz, nimmt nur die, deren Stories im Bestand genau ein Artikel trägt,
+und ersetzt dort Bildzeilen, Unterschriften und Bildflächen
+(`bildnachtrag.ersetzenInternal`, Route `/service/jobs/bilder`). Text, Titel,
+Freigabe, Lesestand, Verzeichnis bleiben. Der Bildanker geht über den
+Absatzanfang (`anchorText`), nicht über die Nummer: die Redaktion kann Absätze
+geändert haben; findet er ihn nicht, steht das Bild nach seiner Lage. Die neuen
+Bilddateien heißen `…-n<job>.jpg`, die alten bleiben im Speicher. Rückweg:
+`bildnachtrag:bestandInternal` vorher sichern,
+`bildnachtrag:wiederherstellenInternal` setzt genau diese Zeilen zurück.
 
-**Bestand:** nicht geändert. Der Fix greift beim nächsten Import. Ein
-Neuimport verwirft die Freigaben, der Auftrag „nachtrag“ lässt unveränderte
-Artikel samt Bildern stehen — beides holt die Unterschriften nicht sauber nach.
-Offen: Bilder-Nachtrag, der je Artikel nur `articleAssets` neu baut
-(drm-viewer-jmm). Zustand vorher gesichert: `live-<issueId>.json` im Ordner oben.
+```
+# 1. ausrollen (Convex + import-worker), siehe 1b
+# 2. je Heft sichern, Probelauf, Nachtrag
+npx convex run --env-file _scratch/verlag-direkt.env bildnachtrag:bestandInternal \
+  '{"issueId":"<id>"}' > _scratch/bildnachtrag/vorher-<id>.json
+npx convex run --env-file _scratch/verlag-direkt.env imports:enqueueInternal \
+  '{"issueId":"<id>","kind":"nachtrag","payload":"bilder-probe"}'
+npx convex run --env-file _scratch/verlag-direkt.env devtools:jobStatusInternal '{"jobId":"<job>"}'
+npx convex run --env-file _scratch/verlag-direkt.env imports:enqueueInternal \
+  '{"issueId":"<id>","kind":"nachtrag","payload":"bilder"}'
+# 3. Rueckweg: {"issueId":…, "bilder":[…], "flaechen":[…]} aus der Sicherung
+npx convex run --env-file _scratch/verlag-direkt.env bildnachtrag:wiederherstellenInternal "$(cat …)"
+```
+
+Werkzeuge (Hauptordner `_scratch/bildunterschriften-2026-10-29/`, erwarten ihre
+Dateien unter `_scratch/bu/` und die IDMLs als `_scratch/bu/idml/<issueId>.idml`;
+die IDMLs liegen in MinIO unter `uploads/<issueId>/…idml`, holen wie in
+`seite_holen.sh` über den Container `code-import-worker-1`): `vergleich.py` (alt
+gegen neu über den echten Worker-Weg), `beide.py` (die zwei Zuordnungen
+gegeneinander), `live_vergleich.py` (Bestand gegen Satz), `overlay.py <heft>
+<satzseite>` (Zuordnung aufs Seitenbild, Seitenbild = `seite-(satzseite+1)`),
+`artikel.py` (Artikel einer Seite wie im Import). Redakteursansicht von der
+Kommandozeile: `npx convex run --env-file _scratch/verlag-direkt.env --identity
+'{"subject":"<userId>|x","issuer":"x"}' articles:listForEditors '{"issueId":"…"}'`
+(userId des Testkontos über `devtools:usersByEmailPartInternal`). Stand live vor
+dem Fix: `live-<issueId>.json` dort.
 
 ---
 

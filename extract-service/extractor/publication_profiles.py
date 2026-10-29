@@ -318,10 +318,15 @@ def _apply_zuerst(
     # eingebetteten Rasterbilder auf. Als belegte Heft-Ausnahme wird ihr
     # sichtbarer Rahmen wie ein normales Bild aus der gerenderten Seite
     # ausgeschnitten. Die Ueberdeckungspruefung verhindert eine Dublette, falls
-    # ein spaeterer Export die Karte doch als Bild liefert.
+    # ein spaeterer Export die Karte doch als Bild liefert. Der Rahmen gilt nur
+    # fuer das Heft mit der Karte (3/2026): ihre Unterschrift muss auf der Seite
+    # stehen. Sonst schnitt er in jedem ZUERST! ein Stueck Text aus Seite 9 und
+    # nannte es "Deutsche Gebietsverluste".
     printed_page_nine = numeric.get(9)
     page_nine_present = printed_page_nine is not None and any(
-        block.page_index == printed_page_nine for block in blocks
+        block.page_index == printed_page_nine
+        and "Gebietsverluste 1919/1945" in " ".join(block.text.split())
+        for block in blocks
     )
     has_page_nine_map = any(
         image.page_index == printed_page_nine

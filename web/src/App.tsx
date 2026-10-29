@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
+import { Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { AuthLoading, Authenticated, Unauthenticated, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import LoginPage from "./pages/LoginPage";
@@ -16,11 +16,16 @@ import AdminPage from "./admin/AdminPage";
 import AdminLayout from "./admin/AdminLayout";
 import IssueWorkspace from "./admin/IssueWorkspace";
 import Settings from "./admin/Settings";
+import { Personen } from "./admin/Settings";
 import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
 import LegalPage from "./pages/LegalPage";
 import AppShell from "./components/AppShell";
 import WarenkorbPage from "./pages/WarenkorbPage";
+import AbbestellenPage from "./pages/AbbestellenPage";
+import NichtGefunden from "./components/NichtGefunden";
+import Fangnetz from "./components/Fangnetz";
+import { istKennung } from "./lib/kennung";
 
 export default function App() {
   return (
@@ -47,7 +52,13 @@ export default function App() {
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
           <Route path="/datenschutz" element={<Shell><LegalPage doc="datenschutz" /></Shell>} />
-          <Route path="*" element={<LoginPage />} />
+          {/* Abmeldelink aus den Mails zu neuen Heften, mit und ohne Anmeldung. */}
+          <Route path="/abbestellen" element={<Shell><AbbestellenPage /></Shell>} />
+          {/* Nur mit Konto: erst anmelden, danach geht es dorthin weiter. */}
+          {["/library", "/account", "/reader/:issueId", "/admin/*"].map((pfad) => (
+            <Route key={pfad} path={pfad} element={<LoginPage />} />
+          ))}
+          <Route path="*" element={<Shell><NichtGefunden /></Shell>} />
         </Routes>
       </Unauthenticated>
 
@@ -55,7 +66,7 @@ export default function App() {
         <Anmeldewaechter />
         <Routes>
           {/* Der Reader laeuft ohne Rahmen, damit die Seite den Schirm fuellt. */}
-          <Route path="/reader/:issueId" element={<ReaderShell />} />
+          <Route path="/reader/:issueId" element={<LeserEingang />} />
           <Route path="/" element={<Shell><KioskPage /></Shell>} />
           <Route path="/kiosk" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<NachAnmeldung />} />
@@ -74,12 +85,15 @@ export default function App() {
             <Route path="heft/:issueId" element={<IssueWorkspace />} />
             <Route path="heft/:issueId/:reiter" element={<IssueWorkspace />} />
             <Route path="einstellungen" element={<Settings />} />
+            <Route path="personen" element={<Personen />} />
           </Route>
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />
           <Route path="/widerruf" element={<Shell><LegalPage doc="widerruf" /></Shell>} />
           <Route path="/datenschutz" element={<Shell><LegalPage doc="datenschutz" /></Shell>} />
-          <Route path="*" element={<Navigate to="/library" replace />} />
+          {/* Abmeldelink aus den Mails zu neuen Heften, mit und ohne Anmeldung. */}
+          <Route path="/abbestellen" element={<Shell><AbbestellenPage /></Shell>} />
+          <Route path="*" element={<Shell><NichtGefunden /></Shell>} />
         </Routes>
       </Authenticated>
     </>
@@ -88,6 +102,21 @@ export default function App() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AppShell>{children}</AppShell>;
+}
+
+/**
+ * Der Leser nur mit einer Kennung, die eine sein kann. Eine kaputte ging
+ * sonst an Convex, und die Seite blieb leer (ArgumentValidationError). Die
+ * Kennung eines anderen Datensatzes faengt das Fangnetz.
+ */
+function LeserEingang() {
+  const { issueId } = useParams();
+  if (!istKennung(issueId)) return <Shell><NichtGefunden /></Shell>;
+  return (
+    <Fangnetz key={issueId} ersatz={<Shell><NichtGefunden /></Shell>}>
+      <ReaderShell />
+    </Fangnetz>
+  );
 }
 
 /** Nach der Anmeldung zurueck auf die Seite, von der der Gast kam. */

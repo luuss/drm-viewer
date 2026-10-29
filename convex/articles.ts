@@ -7,15 +7,23 @@ import {
   MutationCtx,
   mutation,
   query,
+  QueryCtx,
 } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, requirePublisher, audit } from "./roles";
-import { hasIssueAccess, accessibleIssueIds } from "./access";
+import { hasIssueAccess, accessibleIssueIds, istRedaktion } from "./access";
 import { blockType, tableData } from "./schema";
 import { assetUrl } from "./assets";
 import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
 import { internal } from "./_generated/api";
-import { ausschnitt, passt, suchwoerter, sucheVormerken } from "./suche";
+import {
+  ausschnitt,
+  ganzeWoerter,
+  passt,
+  suchwoerter,
+  sucheVormerken,
+  trefferRang,
+} from "./suche";
 import { Doc, Id } from "./_generated/dataModel";
 
 const regionInput = v.object({
@@ -258,6 +266,7 @@ export const regionsForReader = query({
       targetPageIndex: number | null;
     };
     const navigation: ReaderRegion[] = [];
+    const bilder: ReaderRegion[] = [];
     const articleAreas = new Map<string, ReaderRegion[]>();
     for (const r of regions) {
       const key = r.articleId as string;
@@ -297,6 +306,10 @@ export const regionsForReader = query({
       // wachsen zusammen, entfernte bleiben getrennt. Ein einziger Kasten je
       // Artikel und Seite wuerde sonst bei zwei Artikeln auf einer Seite die
       // ganze Seite belegen und den Nachbarn verdecken.
+      // Bilder zusaetzlich einzeln: der Reader unterscheidet damit den Tipp
+      // auf ein Umschlagbild (Buch im Laden) vom Tipp auf den Text (Artikel).
+      // Sie sind keine eigene Klickflaeche, nur Teil des Treffertests.
+      if (r.kind === "image") bilder.push(normalized);
       const areaKey = `${r.articleId}:${r.pageIndex}`;
       const bisher = articleAreas.get(areaKey);
       if (bisher) bisher.push({ ...normalized, kind: "body" });
@@ -306,9 +319,44 @@ export const regionsForReader = query({
     for (const rohe of articleAreas.values()) {
       for (const teil of verschmelzen(rohe)) flaechen.push(teil);
     }
-    return [...navigation, ...flaechen];
+    return [...navigation, ...flaechen, ...bilder];
   },
 });
+
+/**
+ * Zeile einer Aufzaehlung ("– Eisernes Kreuz", "• 3. Kompanie"). Der Leser
+ * sieht den Text nur verschluesselt und erkennt das Zeichen am Anfang nicht;
+ * er bekommt die Angabe mit und stellt kein Bild mitten in eine Liste
+ * (`web/src/reader/bildfolge.ts`).
+ */
+export function istListenzeile(text: string): boolean {
+  return /^\s*[–—•·▪■●◦‣\-*]\s/u.test(text);
+}
+
+/** Text fuer den Vergleich von Kasten und Fliesstext: ohne Anfuehrungszeichen,
+ * weiche Trennstriche und doppelte Leerzeichen, klein geschrieben. */
+function vergleichstext(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/\u00ad/g, "")
+    .replace(/[„“”"‚‘’'«»‹›]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Kuerzere Kaesten ("Info", "Zur Person") stehen zufaellig auch im Text. */
+const ZITAT_MIN = 30;
+
+/**
+ * Steht der Text eines Zitatkastens vollstaendig in einem Absatz desselben
+ * Artikels? Dann ist er ein herausgestelltes Zitat, und der Leser zeigt es
+ * nicht noch einmal. In Greim stand so jedes Randzitat doppelt da.
+ */
+export function zitatDoppelt(kasten: string, absaetze: string[]): boolean {
+  const k = vergleichstext(kasten).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  if (k.length < ZITAT_MIN) return false;
+  return absaetze.some((a) => vergleichstext(a).includes(k));
+}
 
 export const getForReader = query({
   args: { articleId: v.id("articles"), sessionToken: v.optional(v.string()) },
@@ -337,10 +385,15 @@ export const getForReader = query({
     if (!(await hasIssueAccess(ctx, userId as Id<"users">, article.issueId))) {
       return null;
     }
-    // Sichtbar sind freigegebene Artikel veroeffentlichter Ausgaben.
+    // Sichtbar sind freigegebene Artikel veroeffentlichter Ausgaben. Die
+    // Redaktion sieht ein frisch hochgeladenes Heft schon vor der
+    // Veroeffentlichung; Seiten und Artikelliste zeigt der Reader ihr ohnehin.
     if (article.reviewStatus !== "approved") return null;
     const issue = await ctx.db.get(article.issueId);
-    if (!issue?.isPublished) return null;
+    if (!issue) return null;
+    if (!issue.isPublished && !(await istRedaktion(ctx, userId as Id<"users">))) {
+      return null;
+    }
 
     const blocks = await ctx.db
       .query("articleBlocks")
@@ -370,6 +423,9 @@ export const getForReader = query({
         });
       }
     }
+    const fliesstext = blocks
+      .filter((b) => b.type === "paragraph" || b.type === "lead")
+      .map((b) => b.text);
     return {
       _id: article._id,
       issueId: article.issueId,
@@ -386,6 +442,9 @@ export const getForReader = query({
         order: b.order,
         type: b.type,
         text: enc(b.text),
+        liste: istListenzeile(b.text),
+        // Kasten oder Zitat, das schon im Fliesstext steht: nicht noch einmal.
+        doppelt: (b.type === "box" || b.type === "quote") && zitatDoppelt(b.text, fliesstext),
         page: b.sourcePageIndex ?? null,
         sourceY: b.sourceY ?? null,
         // Zahlen bleiben in Tabellen lesbar: daran erkennt der Reader
@@ -405,18 +464,70 @@ export const getForReader = query({
   },
 });
 
+/** Treffer je Abruf; "Weitere Treffer" holt die naechsten dazu. */
+const SUCHE_SEITE = 25;
+/**
+ * So viele Stuecke liest eine Suche hoechstens. Gerankt wird ueber alle, damit
+ * "Weitere Treffer" die Reihenfolge der schon gezeigten nicht umstellt.
+ */
+const SUCHE_TIEFE = 256;
+
+/**
+ * Wo im Artikel der Begriff steht: der erste Absatz mit allen Teilen als
+ * ganze Woerter, sonst der erste, der ueberhaupt passt. Der Titel steht im
+ * Kopf des Artikels und ist keine Fundstelle. Null, wenn nur Titel oder
+ * Unterzeile passen.
+ */
+async function fundstelle(ctx: QueryCtx, articleId: Id<"articles">, begriff: string) {
+  let erster = true;
+  let ungefaehr: Doc<"articleBlocks"> | null = null;
+  // Kaesten und Zitate zuletzt: ein Randzitat wiederholt oft einen Absatz
+  // und wird dann im Leser gar nicht gezeigt (getForReader, `doppelt`).
+  let kasten: Doc<"articleBlocks"> | null = null;
+  for await (const b of ctx.db
+    .query("articleBlocks")
+    .withIndex("by_article_order", (q) => q.eq("articleId", articleId))) {
+    const titel = erster && b.type === "heading";
+    erster = false;
+    if (titel) continue;
+    if (b.type === "box" || b.type === "quote") {
+      if (!kasten && passt(b.text, begriff)) kasten = b;
+      continue;
+    }
+    if (ganzeWoerter(b.text, begriff)) return b;
+    if (!ungefaehr && passt(b.text, begriff)) ungefaehr = b;
+  }
+  return ungefaehr ?? kasten;
+}
+
 /**
  * Volltext der Hefte, auf die der Leser Zugriff hat, mit Ausschnitt. Gesucht
  * wird in den Stuecken aus `suche.ts`, nicht in den Artikeln selbst.
+ *
+ * Reihenfolge: erst ganze Woerter im Titel, dann ganze Woerter im Text, dann
+ * Wortanfaenge ("Euro" vor "Europa", `trefferRang`); im selben Rang das
+ * neuere Heft zuerst, dann die Relevanz aus dem Suchindex. Jeder Treffer
+ * nennt den Absatz der Fundstelle (`stelle`), der Leser springt dorthin.
+ * Bis `limit` Treffer, `gesamt` zaehlt alle gefundenen; `vollstaendig` ist
+ * falsch, wenn die Suche an ihre Tiefe stiess und es noch mehr geben kann.
  */
 export const search = query({
-  args: { term: v.string(), issueId: v.optional(v.id("issues")) },
-  handler: async (ctx, { term, issueId }) => {
+  args: {
+    term: v.string(),
+    issueId: v.optional(v.id("issues")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { term, issueId, limit }) => {
     const userId = await getAuthUserId(ctx);
     const begriff = term.trim();
     const woerter = suchwoerter(begriff);
-    if (!userId || begriff.length < 3 || !woerter) return [];
+    if (!userId || begriff.length < 3 || !woerter) {
+      return { treffer: [], gesamt: 0, vollstaendig: true };
+    }
     const allowed = await accessibleIssueIds(ctx, userId as Id<"users">);
+    // Jeder Aufrufer darf `limit` setzen; mehr als vier Seiten auf einmal liest
+    // die Suche nicht (je Treffer werden die Absaetze fuer die Fundstelle gelesen).
+    const anzahl = Math.max(1, Math.min(4 * SUCHE_SEITE, Math.floor(limit ?? SUCHE_SEITE)));
 
     const hits = await ctx.db
       .query("searchChunks")
@@ -424,29 +535,55 @@ export const search = query({
         const base = q.search("text", woerter);
         return issueId ? base.eq("issueId", issueId) : base;
       })
-      .take(64);
+      .take(SUCHE_TIEFE);
 
     const hefte = new Map<string, Doc<"issues"> | null>();
-    const gesehen = new Set<string>();
-    const out = [];
-    for (const c of hits) {
-      if (!allowed.has(c.issueId as string)) continue;
-      if (gesehen.has(c.articleId as string) || !passt(c.text, begriff)) continue;
+    // Je Artikel das beste Stueck: niedrigster Rang, bei Gleichstand das
+    // relevantere (fruehere) aus dem Index.
+    const beste = new Map<string, { c: Doc<"searchChunks">; rang: number; pos: number }>();
+    for (const [pos, c] of hits.entries()) {
+      if (!allowed.has(c.issueId as string) || !passt(c.text, begriff)) continue;
       if (!hefte.has(c.issueId as string)) hefte.set(c.issueId as string, await ctx.db.get(c.issueId));
-      const issue = hefte.get(c.issueId as string);
-      if (!issue?.isPublished) continue;
-      gesehen.add(c.articleId as string);
-      out.push({
+      if (!hefte.get(c.issueId as string)?.isPublished) continue;
+      const rang = trefferRang(c.title, c.text, begriff);
+      const bisher = beste.get(c.articleId as string);
+      if (!bisher) beste.set(c.articleId as string, { c, rang, pos });
+      else if (rang < bisher.rang) beste.set(c.articleId as string, { c, rang, pos: bisher.pos });
+    }
+    const datum = (i: Doc<"issues">) => i.publicationDate ?? i.publishedAt ?? i.createdAt;
+    const sortiert = [...beste.values()].sort(
+      (a, b) =>
+        a.rang - b.rang ||
+        datum(hefte.get(b.c.issueId as string)!) - datum(hefte.get(a.c.issueId as string)!) ||
+        a.pos - b.pos,
+    );
+
+    const treffer = [];
+    for (const { c } of sortiert.slice(0, anzahl)) {
+      const issue = hefte.get(c.issueId as string)!;
+      const stelle = await fundstelle(ctx, c.articleId, begriff);
+      const pageIndex = stelle?.sourcePageIndex ?? c.pageIndex;
+      // Gedruckte Seitenzahl, nicht die Stelle in der Leserfolge.
+      const seite = await ctx.db
+        .query("issuePages")
+        .withIndex("by_issue_index", (q) => q.eq("issueId", c.issueId).eq("index", pageIndex))
+        .unique();
+      treffer.push({
         _id: c.articleId,
         issueId: c.issueId,
         issueTitle: issue.title,
         title: c.title,
-        pageIndex: c.pageIndex,
-        snippet: ausschnitt(c.text, begriff),
+        pageIndex,
+        page: seite?.printedLabel || String(pageIndex + 1),
+        stelle: stelle?.order ?? null,
+        snippet: ausschnitt(stelle?.text ?? c.text, begriff),
       });
-      if (out.length >= 25) break;
     }
-    return out;
+    return {
+      treffer,
+      gesamt: sortiert.length,
+      vollstaendig: hits.length < SUCHE_TIEFE,
+    };
   },
 });
 

@@ -219,6 +219,7 @@ aktiv ist. Nach `withdraw_digital` steht `id_product_attribute: null`,
 | `create_order` | siehe „Kartenkauf im Leser“ | `{"ok":true,"id_order":291,"reference":"CRGATIWJM","state":2,"paid":true,"total_cents":1380,"repeated":false}` |
 | `refund_order` | `{"action":"refund_order","mode":"live","payment_intent":"pi_…","ts":…}` | `{"ok":true,"state":7,"refunded_cents":1380,"full":true}` |
 | `send_mail` | `{"action":"send_mail","template":"lusdigital_login","to":"kunde@example.de","link":"https://digital.lesenundschenken.de/anmelden?t=…","ts":…}` | `{"ok":true}`; 400 `bad_template`/`bad_email`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
+| `heft_mail` | `{"action":"heft_mail","to":"kunde@example.de","subject":"DMZ Nr. 170 ist erschienen: Fernspäher","html":"<!DOCTYPE html>…","text":"…","from_name":"Deutsche Militärzeitschrift · Lesen & Schenken","unsubscribe":"https://digital.lesenundschenken.de/hooks/mail/abbestellen?t=…&r=dmz","ts":…}` | `{"ok":true}`; 400 `bad_email`/`bad_subject`/`bad_content`/`bad_link`, 429 `rate_limited`, 502 `mail_failed` |
 
 **Suche.** Jedes Wort muss in Name, Referenz, Hersteller, Merkmal „Ausgabe“
 oder einem Kategorienamen vorkommen. Reine Zahlen zaehlen nur als ganze Zahl
@@ -270,8 +271,9 @@ Stand und Betrieb des Moduls: `../../docs/digital-verkauf-shop.md`.
 Die Hefte tragen Anzeigen fuer Buecher aus dem eigenen Laden und
 Buchbesprechungen. Der Import macht daraus kurze Artikel. Der Leser verbindet
 sie mit dem Produkt im Laden: im Artikel steht unter dem Anzeigentext der
-Knopf "Im Shop bestellen", im Seitenmodus oeffnet ein Tipp auf die Anzeige die
-Auswahl "bestellen oder Text lesen". Der Knopf fuehrt auf die Produktseite,
+Knopf "Buch im Shop kaufen", im Seitenmodus oeffnet ein Tipp auf den Umschlag
+das Produkt, ein Tipp auf den Text den Text (Regeln unten, "Tipp auf Umschlag
+oder Text"). Der Knopf fuehrt auf die Produktseite,
 immer in einem neuen Tab. Fremdanzeigen haben kein Produkt im Laden und
 bleiben ohne Knopf.
 
@@ -397,6 +399,64 @@ Buecher, die der Laden nicht fuehrt, und Titel mit mehreren Baenden oder
 Ausgaben gleichen Namens ("Unbekannt – April 1945", "Veteranen der Waffen-SS
 berichten", "Militaerflugzeuge des Kalten Krieges"): dort zeigt die
 Suchseite alle. Greim hat keine Buecherseite.
+
+### Tipp auf Umschlag oder Text, Durchsicht aller Hefte (seit 29.10.2026)
+
+Regel im Seitenmodus (`web/src/reader/tippZiel.ts`, Tests daneben):
+
+* **Umschlagbild** → Produkt im Laden, neuer Tab, ohne Frage. Umschlag ist
+  eine Buchflaeche oder ein Bild eines Artikels (`regionsForReader` liefert
+  Bilder jetzt zusaetzlich einzeln mit `kind: "image"`, nur fuer den
+  Treffertest). Liegt der Umschlag in einer Anzeige mit mehreren Buechern und
+  nur unter einer gemeinsamen Flaeche, fragt die Auswahl, welches Buch.
+* **Text** → der Artikel beim angetippten Absatz, ohne Frage. Liegt eine
+  Buchflaeche ganz im Text (Umschlag in der Besprechungsspalte), gewinnt die
+  kleinere Flaeche. Im Artikel steht unter der Anzeige "Buch im Shop kaufen".
+* Abo-Aufruf, Sammelanzeige, Umschlag-Anzeige: immer nach draussen.
+
+Der Import legt die Buchflaeche jetzt nur auf das Umschlagbild (ohne
+Umschlag weiter auf den Rahmen) und teilt einen Rahmen mit zwei Buechern
+(`_buecher_im_rahmen`, Kopfzeile nach einer Beschreibung mit Preis); dann
+gilt nur ein Bild, dessen Dateiname den Titel nennt. "Autor: Titel" in einer
+Zeile wird Verfasser und Titel (`_autor_vor_doppelpunkt`, Backend
+`splitBookLabel`), aber nicht "Kalender: …" oder "2025: …".
+
+Aufloesung (`chooseBook`, `chooseFromAd`, `openBookTarget`):
+
+* Treffer mehrerer Anfragen zaehlen je Produkt einmal (vorher war die
+  Artikelnummer doppelt und damit "nicht eindeutig").
+* Mit Artikelnummer nur dieses Produkt.
+* Nennt der Laden einen anderen Verfasser (Herstellerfeld), ist es ein
+  anderes Buch. Gleicher Name und gleicher Verfasser zweimal (neue Auflage):
+  die hoehere Produktnummer. Teil nach "Wort. " zaehlt mit Verfasser
+  ("Endspiel. Der Multikulticrash").
+* Rueckfall: das Produkt, das `articleProducts` der Anzeige unter der Flaeche
+  gegeben hat, wenn sein Name zum Titel passt oder ganz darin steht.
+* Kein Produkt: Suchseite nur, wenn der Laden Buecher dieses Namens vom selben
+  Verfasser fuehrt; sonst kein Ziel (`resolvedAt` ohne `url`), der Tipp
+  oeffnet dann die Anzeige. Buchflaechen mit Suchseite gelten als offen und
+  laufen bei jedem `resolveInternal` mit. `matchInternal` stoesst am Ende
+  `pageLinks.resolveInternal` an (auch nachts fuer Hefte mit offenen
+  Anzeigen). Das Protokoll `pageLinks.resolved` nennt die offenen Buecher
+  (`openBooks`), `articleProducts.note` den Grund je Anzeige.
+
+Durchsicht 29.10.2026 (`tools/buchzuordnung_dump.sh`,
+`tools/buchzuordnung_sim.ts`, 13 Hefte, 248 Buchflaechen, 267
+Anzeigenzeilen): live 196 Buchflaechen auf der Produktseite, 52 auf der
+Suchseite. Mit dem neuen Code 212 Produkt, 1 Suche (DMZ 170 "Unbekannt –
+April 1945": zwei Baende),
+35 ohne Ziel (Buch nicht im Laden). Falsch zugeordnet waren 2 Buchflaechen:
+DMZ-Zeitgeschichte 80 S. 64 "Soldatenköpfe" (Art. 460721) auf "Wolfgang
+Willrich" statt "Soldatenköpfe 2026", 9/2025 S. 93 "Endspiel" (Werner
+Reichel) auf "Endspiel Europa" (Guérot). `articleProducts`: 209 zugeordnet,
+keine Fehlzuordnung gefunden, 58 offen (meist nicht im Laden). Die 19
+Ziele sind live mit `pageLinks:setFieldsInternal` eingetragen
+(`tools/buchzuordnung_anwenden.py <plan> --echt`, zurueck mit `--zurueck`);
+Plan und Stand vorher: `_scratch/buchzuordnung/`.
+
+Bestand: die Flaechen der Hefte 2025 bleiben Umschlag plus Rahmen, bis sie
+neu importiert oder nachgeruestet werden (die IDML liegen nicht auf diesem
+Rechner). Der Treffertest im Leser trennt Text und Umschlag trotzdem.
 
 Schon importierte Hefte nachruesten, ohne neuen Import (Artikel und Freigaben
 bleiben): `extract-service/tools/buecher_nachruesten.py <issueId> <idml>`
@@ -701,3 +761,52 @@ Stripe-Kunde aus `leserKarten`, Webhook `/hooks/stripe/webhook` (Endpunkt
   Stripe-Kundenportal mit eigener Konfiguration (`metadata.source`).
 * Andere Webhook-Empfaenger im selben Konto (zuerst.de, weltkrieg-online.de)
   bekommen die Abo-Ereignisse ebenfalls.
+
+## Mails zu neuen Heften (seit 28.10.2026)
+
+Wer schon einmal ein Digitalheft oder ein Digital-Abo gekauft hat (im Laden,
+auch als Gast, oder im Leser), bekommt eine Mail, sobald ein neues Heft im
+Leser erscheint. Je Zeitschrift abbestellbar. Code: `convex/heftAnkuendigung.ts`
+(Ablauf, Abbestellen), `convex/heftMail.ts` (Betreff, HTML, Text, Regeln).
+
+* **Wann.** Beim ersten Veroeffentlichen eines Hefts plant `publishIssue` die
+  Ankuendigung 30 Minuten spaeter, nie zwischen 21 und 8 Uhr (dann um 8 Uhr).
+  Zurueckziehen haelt sie an, erneutes Veroeffentlichen setzt sie fort. Ein
+  Heft geht hoechstens einmal an dieselbe Adresse. Hefte, die vor dem
+  28.10.2026 veroeffentlicht waren, werden nicht von selbst angekuendigt.
+* **An wen.** Adressen aus `shopAccess` (nicht widerrufen), Konten mit
+  gekaufter Freischaltung (`entitlements`: purchase, claim, external_shop,
+  subscription; nicht gift/admin), Kartenkaeufe im Leser (`leserKaeufe`
+  bestellt, live), alte Stripe-Kaeufe. Abbestellte Reihen
+  (`mailEinstellungen`) fallen heraus, auch noch kurz vor dem Versand.
+* **Inhalt.** Schriftzug und Hausfarbe der Reihe, Umschlag, Titelthema, bis
+  zu fuenf Beitraege aus dem Inhaltsverzeichnis (ohne Editorial, Impressum,
+  Kalenderblatt usw.). Wer das Heft schon lesen darf (Abo, Kauf), bekommt
+  „Jetzt lesen“, sonst „Heft ansehen“ mit Preis und, wenn es eines gibt, den
+  Hinweis auf das Digital-Abo. Alle Links fuehren auf den Leser.
+* **Versand.** Ueber die Shop-API `heft_mail` (Modul `lusdigital`, Klasse
+  `LusdigitalHeftMail`, Vorlage `lusdigital_heft.{html,txt}` mit nur
+  `{inhalt_html}` bzw. `{inhalt_text}`), Absender
+  `bestellung-netzladen@`, Absendername „<Reihe> · Lesen & Schenken“, DKIM
+  vom Laden. Der Hook `actionMailAlterMessageBeforeSend` nimmt das Praefix
+  „[Lesen und Schenken]“ aus dem Betreff und setzt `List-Unsubscribe` und
+  `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. Der Laden prueft:
+  jedes `href`/`src` auf den Leser, keine Skripte/Formulare, hoechstens
+  6 Heft-Mails je Adresse und Tag. Zehn Mails je Stapel, 2 s Pause; bei
+  einer Stoerung 5 min Pause, bis zu 12 Versuche je Adresse; ungueltige
+  Adresse oder `rate_limited` gilt sofort als Fehler.
+* **Abbestellen.** Link in jeder Mail auf `/abbestellen?t=<schluessel>&r=<reihe>`
+  (Knopf fuer die Reihe, darunter alle Reihen als Haken), Ein-Klick aus dem
+  Mailprogramm `POST /hooks/mail/abbestellen` (ein GET fuehrt nur auf die
+  Seite), Konto → „E-Mails zu neuen Heften“. „Alle abbestellen“ gilt auch fuer
+  spaeter dazukommende Reihen. Kontoloeschung bestellt alles ab;
+  `account:purgeByEmailInternal` loescht Einstellungen und Versandzeilen.
+* **Redaktion.** Heft → Uebersicht → „Mail an die Kaeufer“: Stand, „Probe an
+  mich“, „Sofort senden“ / „Nicht senden“ / „Anhalten“ / „Weiter senden“,
+  bei aelteren Heften „Jetzt ankuendigen“.
+* **Aufpasser.** Cron alle 10 min: verpasste Starts, stehengebliebene Laeufe
+  (Adressen, deren Mail beim Absturz unterwegs war, gelten als Fehler statt
+  doppelt zu gehen), Versandzeilen nach 60 Tagen loeschen.
+* **Abschalten:** Convex-Umgebung `HEFT_ANKUENDIGUNG=aus`.
+* Die Shop-Dateien liegen als Kopie bzw. Diff unter `deploy/shop-lusdigital/`.
+

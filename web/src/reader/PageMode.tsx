@@ -4,6 +4,9 @@ import OpenSeadragon from "openseadragon";
 import { TILE_SERVICE_URL, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import { kachelSeed, mitTicket, zusammensetzen } from "./schutz";
+import { mitWiederholung } from "./nachladen";
+import { kachelLader } from "./kachelLaden";
+import { tippZiel, type TippAnzeige } from "./tippZiel";
 
 /** Wo auf der Seite getippt wurde, normiert auf 0..1. */
 export type Klickpunkt = { pageIndex: number; x: number; y: number };
@@ -15,6 +18,8 @@ type Region = {
   y0: number;
   x1: number;
   y1: number;
+  /** "image": Bild des Artikels, nur fuer den Treffertest (Umschlag oder Text). */
+  kind?: string;
   targetPageIndex: number | null;
 };
 
@@ -38,6 +43,14 @@ type Props = {
   schutzKey: number;
   regions: Region[];
   links: PageLink[];
+  /** Buchanzeigen mit Produkten im Laden (articleProducts.forReader), je Artikel. */
+  anzeigen?: ReadonlyMap<Id<"articles">, TippAnzeige>;
+  /** Umschlag einer Anzeige mit mehreren Buechern: welches Buch? */
+  onChooseProduct?: (
+    articleId: Id<"articles">,
+    fromPageIndex?: number,
+    punkt?: Klickpunkt,
+  ) => void;
   watermark: string;
   onOpenArticle: (
     articleId: Id<"articles">,
@@ -51,7 +64,8 @@ type Props = {
   canNext: boolean;
 };
 
-type PageNotice = { text: string; tone: "retry" | "error" };
+/** `nochmal`: der Hinweis traegt den Knopf "Erneut versuchen". */
+type PageNotice = { text: string; tone: "retry" | "error"; nochmal?: boolean };
 type PageInfo = {
   width: number;
   height: number;
@@ -61,8 +75,17 @@ type PageInfo = {
 
 /** Schnell ueberblaetterte Seiten sollen keine unnoetigen Anfragen ausloesen. */
 const SETTLE_MS = 180;
-const RETRY_MS = 2500;
-const MAX_RETRIES = 4;
+/**
+ * So lange darf eine Kachel samt Neuversuchen nach 429 dauern. Danach gibt
+ * OpenSeadragon den Auftrag ohnehin auf (Zeitlimit 30 s) und versucht es
+ * selbst noch einmal.
+ */
+const KACHEL_FRIST_MS = 20_000;
+const NICHT_GELADEN: PageNotice = {
+  text: "Seite konnte nicht geladen werden.",
+  tone: "error",
+  nochmal: true,
+};
 
 /**
  * Originalgetreue Einzel- oder Doppelseite. Eine Doppelseite lebt in genau
@@ -77,6 +100,8 @@ export default function PageMode({
   schutzKey,
   regions,
   links,
+  anzeigen,
+  onChooseProduct,
   watermark,
   onOpenArticle,
   onNavigatePage,
@@ -93,11 +118,17 @@ export default function PageMode({
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<PageNotice | null>(null);
   const [ready, setReady] = useState(false);
+  // Zaehlt "Erneut versuchen": jeder Druck laedt die Seite neu.
+  const [nochmal, setNochmal] = useState(0);
   const readyRef = useRef(false);
   const openedPagesRef = useRef<number[]>([]);
   const regionsRef = useRef(regions);
   const linksRef = useRef(links);
   const openArticleRef = useRef(onOpenArticle);
+  const anzeigenRef = useRef(anzeigen);
+  const chooseProductRef = useRef(onChooseProduct);
+  anzeigenRef.current = anzeigen;
+  chooseProductRef.current = onChooseProduct;
   const navigatePageRef = useRef(onNavigatePage);
   regionsRef.current = regions;
   linksRef.current = links;
@@ -153,20 +184,46 @@ export default function PageMode({
       springStiffness: 8,
       tileRetryMax: 3,
       tileRetryDelay: 1000,
+      // Groessenaenderungen behandelt der Beobachter unten. OpenSeadragon
+      // selbst rechnete den Zoom nach dem Seitenverhaeltnis um: nach dem
+      // Ausblenden des Inhaltsverzeichnisses stand die Doppelseite
+      // vergroessert da, Kopf, Fuss und rechte Seite abgeschnitten.
+      autoResize: false,
     });
     viewerRef.current = viewer;
     setOverlayHost(viewer.canvas as HTMLElement);
+    // Steht die ganze Seite im Bild (wie nach dem Oeffnen), wird sie nach
+    // jeder Groessenaenderung der Leseflaeche neu eingepasst. Hat der Leser
+    // hineingezoomt, bleibt sein Ausschnitt.
+    let eingepasst = true;
     viewer.addHandler("open", () => {
       readyRef.current = true;
       setReady(true);
       setNotice(null);
       viewer.viewport.goHome(true);
+      eingepasst = true;
       syncLayers();
     });
+    viewer.addHandler("animation-finish", () => {
+      const vp = viewer.viewport;
+      eingepasst = Math.abs(vp.getZoom(true) / vp.getHomeZoom() - 1) < 0.01;
+    });
+    const beobachter = new ResizeObserver(() => {
+      const flaeche = viewer.container as HTMLElement;
+      if (!flaeche.clientWidth || !flaeche.clientHeight) return;
+      viewer.viewport.resize(
+        new OpenSeadragon.Point(flaeche.clientWidth, flaeche.clientHeight),
+        true,
+      );
+      if (eingepasst) viewer.viewport.goHome(true);
+      viewer.forceRedraw();
+      syncLayers();
+    });
+    beobachter.observe(hostRef.current);
     viewer.addHandler("open-failed", () => {
       readyRef.current = false;
       setReady(false);
-      setNotice({ text: "Seite konnte nicht geladen werden.", tone: "error" });
+      setNotice(NICHT_GELADEN);
     });
     viewer.addHandler("update-viewport", syncLayers);
     viewer.addHandler("resize", syncLayers);
@@ -174,9 +231,6 @@ export default function PageMode({
     viewer.addHandler("canvas-click", (event: any) => {
       if (!event.quick || !readyRef.current) return;
       const viewportPoint = viewer.viewport.pointFromPixel(event.position, true);
-      let best: Region | null = null;
-      let bestArea = Infinity;
-      let bestPunkt: Klickpunkt | undefined;
 
       for (let slot = 0; slot < viewer.world.getItemCount(); slot += 1) {
         const item = viewer.world.getItemAt(slot);
@@ -186,39 +240,26 @@ export default function PageMode({
         const ny = point.y / size.y;
         if (nx < 0 || nx > 1 || ny < 0 || ny > 1) continue;
         const pageIndex = openedPagesRef.current[slot];
-        // Flaechen nach draussen gehen vor. Der Knopf darunter bekommt den
-        // Klick nie: OpenSeadragon bricht ihn an der Zeichenflaeche ab,
-        // bevor er bei React ankommt.
-        const link = linksRef.current.find(
-          (l) =>
-            l.pageIndex === pageIndex &&
-            nx >= l.x0 &&
-            nx <= l.x1 &&
-            ny >= l.y0 &&
-            ny <= l.y1,
+        const punkt: Klickpunkt = { pageIndex, x: nx, y: ny };
+        // Der Knopf darunter bekommt den Klick nie: OpenSeadragon bricht ihn
+        // an der Zeichenflaeche ab, bevor er bei React ankommt. Was der Tipp
+        // oeffnet (Laden, Text, Auswahl), entscheidet `tippZiel`.
+        const ziel = tippZiel(
+          punkt,
+          linksRef.current,
+          regionsRef.current,
+          anzeigenRef.current ?? new Map(),
         );
-        if (link) {
-          nachDraussen(link.url);
-          return;
+        if (!ziel) return;
+        if (ziel.art === "laden") nachDraussen(ziel.url);
+        else if (ziel.art === "seite") navigatePageRef.current(ziel.pageIndex);
+        else if (ziel.art === "auswahl" && chooseProductRef.current) {
+          chooseProductRef.current(ziel.articleId, pageIndex, punkt);
+        } else {
+          // Mit Seite und Punkt: der Artikel oeffnet beim angetippten Absatz.
+          openArticleRef.current(ziel.articleId, pageIndex, punkt);
         }
-        for (const region of regionsRef.current) {
-          if (region.pageIndex !== pageIndex) continue;
-          if (nx < region.x0 || nx > region.x1 || ny < region.y0 || ny > region.y1) {
-            continue;
-          }
-          const area = (region.x1 - region.x0) * (region.y1 - region.y0);
-          if (area < bestArea) {
-            best = region;
-            bestArea = area;
-            bestPunkt = { pageIndex, x: nx, y: ny };
-          }
-        }
-      }
-
-      if (best) {
-        if (best.targetPageIndex !== null) navigatePageRef.current(best.targetPageIndex);
-        // Mit Seite und Punkt: der Artikel oeffnet beim angetippten Absatz.
-        else openArticleRef.current(best.articleId, best.pageIndex, bestPunkt);
+        return;
       }
     });
     viewer.addHandler("tile-load-failed", (event: any) => {
@@ -230,11 +271,12 @@ export default function PageMode({
         event.tiledImage &&
         viewer.world.getIndexOfItem(event.tiledImage) !== -1
       ) {
-        setNotice({ text: "Seite konnte nicht geladen werden.", tone: "error" });
+        setNotice(NICHT_GELADEN);
       }
     });
 
     return () => {
+      beobachter.disconnect();
       setOverlayHost(null);
       viewer.destroy();
       viewerRef.current = null;
@@ -247,8 +289,30 @@ export default function PageMode({
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
-    let attempt = 0;
     const abortController = new AbortController();
+    // Alle Ladeketten dieser Seiten; beim Blaettern bricht der Aufraeumer sie
+    // ab (kachelLaden.ts).
+    const kacheln = kachelLader(async (src, signal, aktuell) => {
+      const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(src);
+      // Je Versuch ein frisches Ticket; gebremste Kacheln kommen nach einer
+      // kurzen Pause von selbst, solange die Kachel noch gefragt ist.
+      const res = await mitWiederholung(
+        () => {
+          if (!aktuell()) throw new DOMException("Kachel nicht mehr gefragt", "AbortError");
+          return mitTicket(src, sessionToken, issueId, signal);
+        },
+        signal,
+        undefined,
+        { bisMs: KACHEL_FRIST_MS },
+      );
+      if (!res.ok) throw new Error(`Kachel ${res.status}`);
+      const bild = await createImageBitmap(await res.blob());
+      const canvas = zusammensetzen(
+        bild,
+        kachelSeed(schutzKeyRef.current, issueId, teile![1], teile![2], teile![3], teile![4]),
+      );
+      return canvas.getContext("2d");
+    });
     readyRef.current = false;
     openedPagesRef.current = [];
     setReady(false);
@@ -260,33 +324,32 @@ export default function PageMode({
 
     async function load() {
       try {
+        // Gebremst (429) wartet der Leser und fragt selbst nach; bei einem
+        // Netz- oder Serverfehler einmal (nachladen.ts).
         const responses = await Promise.all(
           shown.map((pageIndex) =>
-            fetch(`${TILE_SERVICE_URL}/api/issue/${issueId}/page/${pageIndex}/info`, {
-              headers: { "X-Tile-Session": sessionToken },
-              signal: abortController.signal,
-            }),
+            mitWiederholung(
+              () =>
+                fetch(`${TILE_SERVICE_URL}/api/issue/${issueId}/page/${pageIndex}/info`, {
+                  headers: { "X-Tile-Session": sessionToken },
+                  signal: abortController.signal,
+                }),
+              abortController.signal,
+              () => {
+                if (!cancelled) setNotice({ text: "Seite wird gleich geladen …", tone: "retry" });
+              },
+            ),
           ),
         );
         if (cancelled) return;
 
-        if (responses.some((response) => response.status === 429) && attempt < MAX_RETRIES) {
-          attempt += 1;
-          setNotice({ text: "Seite wird gleich geladen …", tone: "retry" });
-          timer = window.setTimeout(() => void load(), RETRY_MS);
-          return;
-        }
         const failed = responses.find((response) => !response.ok);
         if (failed) {
-          setNotice({
-            text:
-              failed.status === 409
-                ? "Diese Seite ist noch nicht aufbereitet."
-                : failed.status === 429
-                  ? "Die Seite braucht gerade etwas länger. Bitte kurz warten."
-                  : "Seite konnte nicht geladen werden.",
-            tone: "error",
-          });
+          setNotice(
+            failed.status === 409
+              ? { text: "Diese Seite ist noch nicht aufbereitet.", tone: "error" }
+              : NICHT_GELADEN,
+          );
           return;
         }
 
@@ -314,26 +377,8 @@ export default function PageMode({
             `${base}/tile/${info.maxLevel - level}/${x}/${y}.jpg`;
           // Kacheln kommen verwuerfelt (`tile-service/schutz.py`) und werden
           // erst hier auf einer Zeichenflaeche zusammengesetzt.
-          tileSource.downloadTileStart = (job: any) => {
-            const abbruch = new AbortController();
-            job.userData.abbruch = abbruch;
-            const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(job.src);
-            mitTicket(job.src, sessionToken, issueId, abbruch.signal)
-              .then((res) => {
-                if (!res.ok) throw new Error(`Kachel ${res.status}`);
-                return res.blob();
-              })
-              .then((blob) => createImageBitmap(blob))
-              .then((bild) => {
-                const canvas = zusammensetzen(
-                  bild,
-                  kachelSeed(schutzKeyRef.current, issueId, teile![1], teile![2], teile![3], teile![4]),
-                );
-                job.finish(canvas.getContext("2d"), null, "context2d");
-              })
-              .catch((error) => job.fail(String(error), null));
-          };
-          tileSource.downloadTileAbort = (job: any) => job.userData.abbruch?.abort();
+          tileSource.downloadTileStart = (job: any) => kacheln.start(job);
+          tileSource.downloadTileAbort = (job: any) => kacheln.abbrechen(job);
           const spec = { x: worldX, y: 0, width: worldWidth, tileSource };
           worldX += worldWidth;
           return spec;
@@ -343,9 +388,7 @@ export default function PageMode({
         openedPagesRef.current = [...shown];
         viewerRef.current.open(tileSources);
       } catch (error) {
-        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
-          setNotice({ text: "Seite konnte nicht geladen werden.", tone: "error" });
-        }
+        if (!cancelled && !abortController.signal.aborted) setNotice(NICHT_GELADEN);
       }
     }
 
@@ -353,10 +396,11 @@ export default function PageMode({
     return () => {
       cancelled = true;
       abortController.abort();
+      kacheln.alleAbbrechen();
       window.clearTimeout(timer);
     };
     // Die konkrete Folge ist absichtlich Teil der Abhaengigkeit.
-  }, [issueId, sessionToken, pageIndexes.join(",")]);
+  }, [issueId, sessionToken, pageIndexes.join(","), nochmal]);
 
   return (
     <div className={`page-mode ${spread ? "spread" : "single"} ${hasTwoPages ? "two-pages" : "one-page"}`}>
@@ -370,6 +414,18 @@ export default function PageMode({
             aria-live="polite"
           >
             {notice.text}
+            {notice.nochmal && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="btn quiet small"
+                  onClick={() => setNochmal((n) => n + 1)}
+                >
+                  Erneut versuchen
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -377,7 +433,9 @@ export default function PageMode({
           createPortal(
             <>
               {shown.map((pageIndex, slot) => {
-                const pageRegions = regions.filter((region) => region.pageIndex === pageIndex);
+                const pageRegions = regions.filter(
+                  (region) => region.pageIndex === pageIndex && region.kind !== "image",
+                );
                 const pageLinks = links.filter((link) => link.pageIndex === pageIndex);
                 return (
                   <div

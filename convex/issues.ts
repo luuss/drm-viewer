@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
   internalMutation,
   internalQuery,
@@ -20,6 +20,7 @@ import { seriesFor } from "./shopCovers";
 import { internal } from "./_generated/api";
 import { tocImages } from "./tocPreview";
 import { heftStueckeLoeschen } from "./suche";
+import { ankuendigungAnhalten, ankuendigungPlanen } from "./heftAnkuendigung";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -127,6 +128,12 @@ export const getPublic = query({
   },
 });
 
+/**
+ * Kennung zum Slug der Heftseite. Ein Heft im Entwurf kennt nur, wer es lesen
+ * darf (Redaktion, Kaeufer); fuer alle anderen sieht es aus wie ein
+ * unbekanntes. Frueher verriet "nicht gefunden" statt "Laden..." seine
+ * Existenz.
+ */
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) => {
@@ -134,7 +141,13 @@ export const getBySlug = query({
       .query("issues")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first();
-    return issue?._id ?? null;
+    if (!issue) return null;
+    if (issue.isPublished) return issue._id;
+    const userId = await getAuthUserId(ctx);
+    if (userId && (await hasIssueAccess(ctx, userId as Id<"users">, issue._id))) {
+      return issue._id;
+    }
+    return null;
   },
 });
 
@@ -284,6 +297,10 @@ export const overviewForEditors = query({
           .withIndex("by_issue", (q) => q.eq("issueId", i._id))
           .order("desc")
           .first();
+        const verzeichnis = await ctx.db
+          .query("tocEntries")
+          .withIndex("by_issue", (q) => q.eq("issueId", i._id))
+          .first();
         const pubKey = i.publicationId as string;
         if (!names.has(pubKey)) {
           names.set(pubKey, (await ctx.db.get(i.publicationId))?.name ?? null);
@@ -302,6 +319,8 @@ export const overviewForEditors = query({
           shopOffered: i.shopDigital?.offered ?? false,
           articleCount: articles.length,
           pendingArticles: articles.filter((a) => a.reviewStatus === "pending").length,
+          approvedArticles: articles.filter((a) => a.reviewStatus === "approved").length,
+          hasToc: verzeichnis !== null,
           coverUrl: await assetUrl(ctx, i.coverAssetId),
           lastJob: job
             ? {
@@ -478,7 +497,14 @@ export const ensureFromFolder = mutation({
     const gepflegt = seriesFor(args.publicationSlug)?.name;
     let title = args.title;
     if (!publication) {
-      await requireAdmin(ctx);
+      // Neue Reihen legt nur ein Admin an. Wer sonst hier landet, hat meist
+      // einen Ordnernamen, der falsch gelesen wurde; das soll er sehen.
+      await requireAdmin(ctx).catch(() => {
+        throw new ConvexError(
+          `Die Reihe "${args.publicationName}" gibt es noch nicht. Bitte den Ordnernamen ` +
+            `pruefen (z. B. "zuerst 8-9-2025"); neue Reihen legt ein Admin an.`,
+        );
+      });
       const name = gepflegt ?? args.publicationName;
       if (title.startsWith(`${args.publicationName} `)) {
         title = name + title.slice(args.publicationName.length);
@@ -639,6 +665,23 @@ export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
       `Noch ${pending} Artikel ohne Entscheidung. Erst freigeben oder ausschließen.`,
     );
   }
+  // Ein Heft ohne freigegebenen Artikel und ohne Verzeichnis ist nur ein
+  // Bildarchiv: keine Artikelansicht, keine Suche, Tipps ins Leere. So stand
+  // ZUERST! 12/2025 verkauft im Kiosk.
+  if (!articles.some((a) => a.reviewStatus === "approved")) {
+    throw new Error(
+      "Kein Artikel freigegeben. Ohne Artikel kann nicht veröffentlicht werden.",
+    );
+  }
+  const verzeichnis = await ctx.db
+    .query("tocEntries")
+    .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+    .first();
+  if (!verzeichnis) {
+    throw new Error(
+      "Kein Inhaltsverzeichnis. Ohne Verzeichnis kann nicht veröffentlicht werden.",
+    );
+  }
   await ctx.db.patch(issueId, {
     isPublished: true,
     publishedAt: issue.publishedAt ?? Date.now(),
@@ -647,6 +690,8 @@ export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
   await audit(ctx, "issue.publish", issueId);
   // Volltextsuche: die Stuecke des Hefts anlegen.
   await ctx.scheduler.runAfter(0, internal.suche.heftNeu, { issueId });
+  // Kaeufer per Mail auf das neue Heft hinweisen (heftAnkuendigung.ts).
+  await ankuendigungPlanen(ctx, issue, issue.publishedAt === undefined);
 
   // Neue Ausgabe: laufende Abos der Publikation bekommen sie dauerhaft.
   const subs = await ctx.db.query("subscriptions").collect();
@@ -670,6 +715,7 @@ export const setPublished = mutation({
     await ctx.db.patch(issueId, { isPublished: false, updatedAt: Date.now() });
     await audit(ctx, "issue.unpublish", issueId);
     await heftStueckeLoeschen(ctx, issueId);
+    await ankuendigungAnhalten(ctx, issueId);
   },
 });
 

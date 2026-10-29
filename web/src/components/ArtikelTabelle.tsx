@@ -23,9 +23,12 @@ import {
 export default function ArtikelTabelle({
   table,
   sourcePage,
+  order,
 }: {
   table: Tabelle;
   sourcePage?: number;
+  /** Nummer des Blocks: Ziel fuer Spruenge zur Fundstelle. */
+  order?: number;
 }) {
   const kopf = table.rows.slice(0, table.headerRows);
   const koerper = table.rows.slice(table.headerRows);
@@ -69,6 +72,7 @@ export default function ArtikelTabelle({
       aria-label={tabellenName(table)}
       tabIndex={0}
       data-source-page={sourcePage}
+      data-order={order}
     >
       <table style={stil}>
         {kopf.length > 0 && (

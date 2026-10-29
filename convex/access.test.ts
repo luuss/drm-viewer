@@ -226,4 +226,68 @@ describe("Admins", () => {
     expect(ergebnis.kunde).toBe(false);
     expect(ergebnis.bibliothek).toEqual([offen, entwurf].map(String).sort());
   });
+
+  test("Rolle reader liest jedes veroeffentlichte Heft, auch spaetere", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, publicationId } = await setup(t);
+    await t.run(async (ctx: any) => ctx.db.patch(userId, { roles: ["reader"] }));
+    const alt = await addIssue(t, publicationId);
+    const entwurf = await addIssue(t, publicationId, { published: false });
+    const neu = await addIssue(t, publicationId);
+    const r = await t.run(async (ctx: any) => {
+      const { hasIssueAccess, accessibleIssueIds } = await import("./access");
+      const ids = await accessibleIssueIds(ctx, userId);
+      return {
+        alt: await hasIssueAccess(ctx, userId, alt),
+        neu: await hasIssueAccess(ctx, userId, neu),
+        entwurf: await hasIssueAccess(ctx, userId, entwurf),
+        liste: [ids.has(alt), ids.has(neu), ids.has(entwurf)],
+      };
+    });
+    expect(r).toEqual({ alt: true, neu: true, entwurf: false, liste: [true, true, false] });
+  });
+});
+
+describe("Rollen vergeben", () => {
+  test("nur die ausgewaehlten Konten, nicht jeder Admin", async () => {
+    const t = convexTest(schema, modules);
+    const { api } = await import("./_generated/api");
+    const ids = await t.run(async (ctx: any) => ({
+      erlaubt: await ctx.db.insert("users", { email: "an@ammerlin.de", roles: ["admin"] }),
+      admin: await ctx.db.insert("users", { email: "admin@example.de", roles: ["admin"] }),
+      leser: await ctx.db.insert("users", { email: "leser@example.de" }),
+    }));
+    await expect(
+      t
+        .withIdentity({ subject: ids.admin })
+        .mutation(api.users.setRoles, { userId: ids.leser, roles: ["reader"] }),
+    ).rejects.toThrow();
+    await t
+      .withIdentity({ subject: ids.erlaubt })
+      .mutation(api.users.setRoles, { userId: ids.leser, roles: ["reader"] });
+    const leser = await t.run(async (ctx: any) => ctx.db.get(ids.leser));
+    expect(leser.roles).toEqual(["reader"]);
+  });
+});
+
+describe("Konten loeschen", () => {
+  test("Konto mit Freischaltung verschwindet, fremde bleiben", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, publicationId } = await setup(t);
+    const issueId = await addIssue(t, publicationId);
+    await t.mutation(internal.entitlements.grantInternal, { userId, issueId, source: "purchase" });
+    const andere = await t.run(async (ctx: any) => ctx.db.insert("users", { email: "bleibt@example.de" }));
+    const r = await t.mutation(internal.users.loeschenInternal, {
+      emails: ["Leser@example.de", "gibtsnicht@example.de"],
+    });
+    expect(r.map((x: any) => x.geloescht)).toEqual([true, false]);
+    const rest = await t.run(async (ctx: any) => ({
+      user: await ctx.db.get(userId),
+      ents: (await ctx.db.query("entitlements").collect()).length,
+      andere: await ctx.db.get(andere),
+    }));
+    expect(rest.user).toBeNull();
+    expect(rest.ents).toBe(0);
+    expect(rest.andere).not.toBeNull();
+  });
 });

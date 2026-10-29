@@ -169,6 +169,9 @@
 }
 
 :root {
+  /* Die Seite ist nur hell. Ohne das malt ein dunkles System die offenen
+     Auswahllisten dunkel, die Schrift bleibt aber dunkel: unlesbar. */
+  color-scheme: light;
   /* Farben des Verlagsshops lesenundschenken.de. */
   --paper: #f4f4f4;         /* Seitengrund, helles Grau */
   --paper-sunk: #ececec;    /* abgesetzte Flaechen */
@@ -602,7 +605,7 @@ main {
 }
 .footer-main {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1.2fr;
+  grid-template-columns: auto 0.8fr 1.2fr auto;
   gap: 40px;
   align-items: start;
   padding-top: 44px;
@@ -648,6 +651,14 @@ main {
 .footer-links { display: flex; flex-direction: column; gap: 9px; }
 .footer-links h4 { margin-bottom: 7px; }
 .footer-col p { line-height: 1.7; }
+/* QR-Code der offenen Seite; nur am Rechner, auf dem Handy sinnlos. */
+.footer-qr-zeile { display: flex; align-items: flex-start; gap: 14px; max-width: 15rem; }
+.footer-qr-code { flex: 0 0 auto; width: 96px; height: 96px; padding: 6px; background: #fff; }
+.footer-qr-code svg { display: block; width: 100%; height: 100%; }
+.footer-qr p { margin: 0; font-size: 13px; line-height: 1.5; }
+@media (max-width: 56.25rem) {
+  .footer-qr { display: none; }
+}
 .copyright {
   background: var(--copyright);
   color: var(--copyright-text);
@@ -745,6 +756,7 @@ label {
   text-transform: uppercase;
 }
 
+option { background: var(--surface); color: var(--ink); }
 input, select, textarea {
   padding: 0 var(--s3);
   min-height: var(--ctl-h);
@@ -1100,10 +1112,8 @@ button.small, .btn.small {
    Kiosk, Bibliothek
    ============================================================ */
 
-/* Reihen als Kacheln: links der Schriftzug, rechts die neuesten Umschlaege,
-   die von unten ins Bild ragen wie im Zeitschriftenregal. Die Buehne ist zur
-   Seite der Umschlaege hin zart in der Hausfarbe getoent. Unten eine leichte
-   Fusszeile mit Anzahl und Weiter-Pfeil in der Hausfarbe. */
+/* Reihen als Kacheln mit Schriftzug, wie die Kategorien im Netzladen:
+   weisse Karten, eckig. Unten eine Fusszeile mit Anzahl und Weiter-Pfeil. */
 .reihen-kacheln {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1115,12 +1125,12 @@ button.small, .btn.small {
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-top: 3px solid var(--reihe, var(--ink));
+  border-radius: 0;
   box-shadow: var(--shadow);
   overflow: hidden;
   color: var(--ink);
   cursor: pointer;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
 }
 .reihen-kachel:hover {
   color: var(--ink);
@@ -1128,62 +1138,29 @@ button.small, .btn.small {
   transform: translateY(-3px);
 }
 a.reihen-kachel { text-decoration: none; }
-.reihen-buehne {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  align-items: center;
-  height: 13rem;
-  overflow: hidden;
-  background: linear-gradient(
-    105deg,
-    var(--surface) 40%,
-    color-mix(in srgb, var(--reihe, var(--ink)) 13%, var(--surface)) 100%
-  );
-}
 .reihen-kachel .reihen-logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  padding: var(--s5);
+  height: 11rem;
+  padding: var(--s5) var(--s6);
 }
-.reihen-kachel .reihen-logo img {
+.reihen-kachel img {
   display: block;
   max-width: 100%;
-  max-height: 4.25rem;
   width: auto;
-  height: auto;
+  height: 5.25rem;
   object-fit: contain;
 }
-.reihen-kachel.reihe-dmz .reihen-logo img { max-height: 5.5rem; }
-.reihen-kachel.reihe-schwertertraeger .reihen-logo img { max-height: 3.5rem; }
-/* Umschlaege: unten angeschnitten, das vordere gerade, das hintere schraeg. */
-.reihen-umschlaege {
-  position: relative;
-  align-self: stretch;
-}
-.reihen-umschlaege img {
-  position: absolute;
-  bottom: -2.5rem;
-  width: 8.75rem;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
-  object-position: top;
-  background: var(--surface);
-  box-shadow: 0 6px 18px rgba(20, 14, 10, 0.22), 0 1px 3px rgba(20, 14, 10, 0.15);
-  transition: transform 0.25s ease;
-}
-.reihen-umschlaege img.vorn { right: 1.5rem; transform: rotate(2deg); }
-.reihen-umschlaege img.hinten {
-  right: 6rem;
-  bottom: -1.75rem;
-  transform: rotate(-7deg);
-  filter: brightness(0.94);
-}
-.reihen-umschlaege img:only-child { right: 2.5rem; }
-.reihen-kachel:hover .reihen-umschlaege img.vorn { transform: translateY(-0.6rem) rotate(0deg); }
-.reihen-kachel:hover .reihen-umschlaege img.hinten { transform: translateY(-0.3rem) rotate(-10deg); }
+/* Die Schriftzuege haben sehr verschiedene Seitenverhaeltnisse. Gleiche Hoehe
+   liesse ZUERST! riesig und die DMZ winzig wirken; diese Hoehen geben allen
+   etwa dieselbe Flaeche. */
+.reihen-kachel.reihe-zuerst img { height: 5.5rem; }
+.reihen-kachel.reihe-dmz img { height: 7rem; }
+.reihen-kachel.reihe-dmz-zeitgeschichte img { height: 5rem; }
+.reihen-kachel.reihe-schwertertraeger img { height: 4.5rem; }
+/* Fussleiste schwarz fuer alle Reihen, wie ein Balken auf dem Heftruecken.
+   Bunte Hausfarben (Rot, einmal Blau) wirkten nebeneinander unruhig. */
 .reihen-fuss {
   display: flex;
   align-items: center;
@@ -1191,15 +1168,15 @@ a.reihen-kachel { text-decoration: none; }
   gap: var(--s3);
   margin-top: auto;
   padding: var(--s3) var(--s5);
-  border-top: 1px solid var(--rule);
-  background: var(--surface);
+  background: #1c1c1c;
+  color: #fff;
 }
 .reihen-kachel .reihen-anzahl {
   font-size: var(--fs-mini);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.85);
 }
 .reihen-weiter {
   display: inline-flex;
@@ -1208,17 +1185,16 @@ a.reihen-kachel { text-decoration: none; }
   flex: 0 0 auto;
   font-size: var(--fs-sub);
   font-weight: 700;
-  color: var(--reihe, var(--accent));
+  color: #fff;
 }
 .reihen-weiter .icon { transition: transform 0.15s ease; }
 .reihen-kachel:hover .reihen-weiter .icon { transform: translateX(var(--s1)); }
 
-/* Kleine Fassung: nur Schriftzug, ohne Umschlaege. */
+/* Kleine Fassung unten auf der Seite einer Zeitschrift. */
 .reihen-kacheln.klein { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--s3); margin: 0; }
-.reihen-kacheln.klein .reihen-buehne { display: flex; height: 6rem; background: var(--surface); }
-.reihen-kacheln.klein .reihen-umschlaege { display: none; }
-.reihen-kacheln.klein .reihen-logo { width: 100%; padding: var(--s3) var(--s4); }
-.reihen-kacheln.klein .reihen-logo img { max-height: 3rem; }
+.reihen-kacheln.klein .reihen-logo { height: 6rem; padding: var(--s3) var(--s4); }
+.reihen-kacheln.klein img { height: 3rem; }
+.reihen-kacheln.klein .reihe-dmz img { height: 4rem; }
 .reihen-kacheln.klein .reihen-fuss { padding: var(--s2) var(--s3); }
 .reihen-kacheln.klein .reihen-weiter-text { display: none; }
 
@@ -1389,60 +1365,211 @@ body:has(.reihe-seite) { overflow-x: clip; }
   justify-content: space-between;
   gap: var(--s5);
   padding: var(--s5) var(--s6);
-  background: var(--reihe);
-  color: #fff;
+  background: #efe6d6;
+  border-left: 4px solid var(--reihe);
+  color: var(--ink);
   text-decoration: none;
 }
-.reihe-abo-karte:hover { color: #fff; filter: brightness(1.06); }
-.reihe-abo-titel { font-family: var(--serif); font-size: var(--fs-h3); font-weight: 700; }
-.reihe-abo-text { opacity: 0.9; }
-.reihe-abo-karte .btn { background: #fff; color: var(--reihe); border-color: #fff; border-radius: 0; flex: 0 0 auto; }
-.reihe-kontakt-raster {
+.reihe-abo-karte:hover { color: var(--ink); background: #ebe0cd; }
+.reihe-abo-titel { font-family: var(--serif); font-size: var(--fs-h3); font-weight: 700; color: var(--reihe); }
+.reihe-abo-text { color: var(--ink-soft, #4a4a4a); }
+.reihe-abo-karte .btn { background: var(--reihe); color: #fff; border-color: var(--reihe); border-radius: 0; flex: 0 0 auto; }
+/* Zwei grosse Kacheln: Netzladen und Internetseite, oben Bild, unten Band in der Hausfarbe. */
+.page > section.reihe-wege {
   display: grid;
-  /* auto-fit: Mail und Telefon fuellen die Zeile, statt eine leere Spalte zu lassen. */
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: var(--s3);
-}
-.reihe-kontakt-raster > div {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s1);
-  padding: var(--s4);
-  background: var(--surface);
-  border: 1px solid var(--rule);
-}
-/* Erste Reihe des Kontakts: Netzladen und Website, ganze Flaeche klickbar. */
-.reihe-kontakt-wege {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s3);
-  margin-bottom: var(--s3);
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--s4);
+  margin-bottom: var(--s6);
 }
 .reihe-weg {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  padding: var(--s5);
-  background: #1c1c1c;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--reihe);
   color: #fff;
   text-decoration: none;
   box-shadow: var(--shadow-sm);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.reihe-weg > span { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
-.reihe-weg .reihe-kontakt-art { color: rgba(255, 255, 255, 0.65); }
+.reihe-weg-bild {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--reihe) 14%, #f4f1ec);
+}
+.reihe-weg-seite img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  transition: transform 0.3s ease;
+}
+/* Umschlaege leicht gefaechert, der neueste vorn in der Mitte. */
+.reihe-weg-hefte { display: flex; align-items: center; justify-content: center; }
+.reihe-weg-hefte img {
+  height: 80%;
+  width: auto;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  transition: transform 0.3s ease;
+}
+.reihe-weg-hefte img:nth-child(1) { order: 2; z-index: 2; }
+.reihe-weg-hefte img:nth-child(2) { order: 1; margin-right: -3rem; transform: rotate(-6deg) scale(0.9); }
+.reihe-weg-hefte img:nth-child(3) { order: 3; margin-left: -3rem; transform: rotate(6deg) scale(0.9); }
+.reihe-weg:hover .reihe-weg-hefte img:nth-child(1) { transform: translateY(-4px); }
+/* Eigene Werbegrafik fuellt die Flaeche. */
+.reihe-weg-hefte img:not([style]) { height: 100%; width: 100%; object-fit: cover; box-shadow: none; }
+.reihe-weg-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+}
+.reihe-weg-text > span { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
+.reihe-weg-art {
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
 .reihe-weg-ziel {
   font-family: var(--serif);
   font-size: var(--fs-h4);
-  font-weight: 600;
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 .reihe-weg .icon { flex: 0 0 auto; transition: transform 0.15s ease; }
-.reihe-weg:hover { color: #fff; transform: translateY(-2px); box-shadow: var(--shadow); }
+.reihe-weg:hover { color: #fff; transform: translateY(-3px); box-shadow: var(--shadow); }
 .reihe-weg:hover .icon { transform: translateX(var(--s1)); }
+.reihe-weg:hover .reihe-weg-seite img { transform: scale(1.03); }
+/* Mit Netzen: drei Spalten, aussen gleich schmal, die Internetseite in der
+   Mitte breit. Alle drei gleich hoch; die Bilder fuellen den Platz. */
+.page > section.reihe-wege.mit-netzen { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); }
+.reihe-wege.mit-netzen .reihe-weg-bild { flex: 1; aspect-ratio: auto; min-height: 15rem; }
+/* Fuellende Bilder liegen absolut, sonst bestimmt ihre eigene Hoehe die Zeile. */
+.reihe-wege.mit-netzen .reihe-weg-seite img,
+.reihe-wege.mit-netzen .reihe-weg-hefte img:not([style]) { position: absolute; inset: 0; }
+.reihe-wege.mit-netzen .reihe-weg-web .reihe-weg-bild { aspect-ratio: 16 / 9; }
+.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img[style] { height: 11rem; }
+.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(2) { margin-right: -2.5rem; }
+.reihe-wege.mit-netzen .reihe-weg-laden .reihe-weg-hefte img:nth-child(3) { margin-left: -2.5rem; }
+/* Baender unten im Beige der Abo-Karte statt in der Hausfarbe, Schrift dunkel. */
+.reihe-wege.mit-netzen .reihe-weg { background: #efe6d6; color: var(--ink); }
+.reihe-wege.mit-netzen .reihe-weg:hover { color: var(--ink); }
+.reihe-wege.mit-netzen .reihe-weg-art { color: var(--muted); }
+.reihe-wege.mit-netzen .reihe-weg .icon { color: var(--reihe); }
+.reihe-wege.mit-netzen .reihe-weg-bild { background: #f7f2e9; }
+/* Die Internetseite als Bildschirmbild mit Rahmen, nicht randlos. */
+.reihe-wege.mit-netzen .reihe-weg-seite img {
+  inset: var(--s4);
+  width: calc(100% - 2 * var(--s4));
+  height: calc(100% - 2 * var(--s4));
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow-sm);
+  background: #fff;
+}
+.reihe-netze {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow-sm);
+}
+.reihe-inhalt .reihe-netze h3 { margin: 0; padding: 0; border: 0; font-size: var(--fs-h4); }
+.reihe-netze-raster {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: center;
+  gap: var(--s3);
+}
+.reihe-netz {
+  --netz: var(--reihe);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s1);
+  height: 4.25rem;
+  background: var(--netz);
+  color: #fff;
+  font-size: var(--fs-mini);
+  font-weight: 600;
+  text-decoration: none;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.reihe-netz:hover { color: #fff; filter: brightness(1.1); transform: translateY(-2px); }
+.reihe-netz[data-netz="telegram"] { --netz: #26a5e4; }
+.reihe-netz[data-netz="facebook"] { --netz: #0866ff; }
+.reihe-netz[data-netz="instagram"] { background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }
+.reihe-netz[data-netz="x"] { --netz: #000; }
+/* Mittelbreit: Internetseite oben ueber die ganze Breite, darunter Laden und Netze. */
+@media (max-width: 62rem) {
+  .page > section.reihe-wege.mit-netzen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reihe-wege.mit-netzen .reihe-weg-web { grid-column: 1 / -1; order: -1; }
+}
 @media (max-width: 40rem) {
-  .reihe-kontakt-wege { grid-template-columns: 1fr; }
+  .page > section.reihe-wege.mit-netzen { grid-template-columns: minmax(0, 1fr); }
+}
+/* Kontakt: eine kompakte Karte, Eintraege untereinander, jeder klickbar. */
+/* Kontakt: eine flache Leiste ueber die ganze Breite. Links "Kontakt", dann die
+   Eintraege nebeneinander, rechts die Netze; schmal bricht sie in Zeilen um. */
+.reihe-kontakt-karte {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3) var(--s5);
+  padding: var(--s3) var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--reihe);
+}
+.reihe-inhalt .reihe-kontakt-karte h3 { margin: 0; padding: 0; border: 0; font-size: var(--fs-h4); }
+/* Die Eintraege teilen sich die ganze Breite der Leiste gleichmaessig. */
+.reihe-kontakt-liste {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  gap: var(--s2) var(--s5);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reihe-kontakt-liste a {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.reihe-kontakt-liste a > span { display: flex; align-items: baseline; gap: var(--s2); }
+.reihe-kontakt-liste .icon { flex: 0 0 auto; color: var(--reihe); }
+.reihe-kontakt-liste a:hover { color: var(--reihe); }
+.reihe-kontakt-karte .reihe-social { margin: 0 0 0 auto; }
+/* Passt die Leiste nicht in eine Zeile, stehen die Netze links unter den Eintraegen. */
+@media (max-width: 72rem) {
+  .reihe-kontakt-karte .reihe-social { margin-left: 0; }
+}
+@media (max-width: 40rem) {
+  .reihe-kontakt-karte { flex-direction: column; align-items: flex-start; }
+  .reihe-kontakt-liste { flex-direction: column; align-self: stretch; min-width: 0; }
+  .reihe-kontakt-liste .reihe-kontakt-art { width: 5.5rem; flex: 0 0 auto; white-space: nowrap; }
+  /* Lange Adressen ruecken schmal unter ihre Bezeichnung und brechen, wenn
+     noetig, vor "@" oder "." um (wbr), notfalls irgendwo. Vorher ragten sie
+     hinaus, und die Reihenseite rollte auf dem Telefon seitlich (459 statt
+     390 px). */
+  .reihe-kontakt-liste a { white-space: normal; }
+  .reihe-kontakt-liste a,
+  .reihe-kontakt-liste a > span { min-width: 0; }
+  .reihe-kontakt-liste a > span { flex-wrap: wrap; column-gap: var(--s2); row-gap: 0; }
+  .reihe-kontakt-wert { overflow-wrap: anywhere; }
 }
 .reihe-kontakt-art {
   font-size: var(--fs-mini);
@@ -1451,9 +1578,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
   text-transform: uppercase;
   color: var(--muted);
 }
-.reihe-kontakt-raster a { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
-.reihe-kontakt-raster a:hover { color: var(--reihe); }
-.reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
+.reihe-social { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .reihe-social-link {
   display: inline-flex;
   align-items: center;
@@ -1466,6 +1591,14 @@ body:has(.reihe-seite) { overflow-x: clip; }
   text-decoration: none;
 }
 .reihe-social-link:hover { background: var(--reihe); color: #fff; }
+/* Markenfarben der Netze: gefuellte Flaeche, Zeichen und Schrift weiss */
+.reihe-social-link[data-netz] { --netz: var(--reihe); border: 0; padding: 0; width: 2.25rem; height: 2.25rem; justify-content: center; background: var(--netz); color: #fff; }
+.reihe-social-link[data-netz="telegram"] { --netz: #26a5e4; }
+.reihe-social-link[data-netz="facebook"] { --netz: #0866ff; }
+.reihe-social-link[data-netz="instagram"] { --netz: #e4405f; background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }
+.reihe-social-link[data-netz="x"] { --netz: #000; }
+.reihe-social-link[data-netz]:hover { background: var(--netz); filter: brightness(1.1); }
+.reihe-social-link[data-netz="instagram"]:hover { background: linear-gradient(45deg, #f09433, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888); }
 .reihe-seite .issue-card-body .card-action,
 .reihe-seite .issue-card-body .cta .go,
 .reihe-seite .issue-card-body .price { color: var(--reihe); }
@@ -1476,20 +1609,16 @@ body:has(.reihe-seite) { overflow-x: clip; }
   .reihe-kopf-info { align-items: flex-start; text-align: left; }
   .reihe-abo-karte { flex-direction: column; align-items: flex-start; padding: var(--s4); }
 }
-@media (max-width: 48rem) {
-  .reihen-kacheln { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
-}
 @media (max-width: 32rem) {
-  .reihen-buehne { height: 9.5rem; }
-  .reihen-kachel .reihen-logo { padding: var(--s3) var(--s4); }
-  .reihen-kachel .reihen-logo img { max-height: 3rem; }
-  .reihen-kachel.reihe-dmz .reihen-logo img { max-height: 3.75rem; }
-  .reihen-kachel.reihe-schwertertraeger .reihen-logo img { max-height: 2.5rem; }
-  .reihen-umschlaege img { width: 5.5rem; bottom: -1.75rem; }
-  .reihen-umschlaege img.vorn { right: 1rem; }
-  .reihen-umschlaege img.hinten { right: 3rem; bottom: -1.25rem; }
-  .reihen-umschlaege img:only-child { right: 1.5rem; }
-  .reihen-fuss { padding: var(--s2) var(--s4); }
+  .reihen-kacheln { gap: var(--s3); }
+  .reihen-kachel .reihen-logo { height: 6.5rem; padding: var(--s3); }
+  .reihen-kachel img { height: 2.6rem; }
+  .reihen-kachel.reihe-zuerst img { height: 2.75rem; }
+  .reihen-kachel.reihe-dmz img { height: 3.6rem; }
+  .reihen-kachel.reihe-dmz-zeitgeschichte img { height: 2.6rem; }
+  .reihen-kachel.reihe-schwertertraeger img { height: 2.1rem; }
+  .reihen-fuss { padding: var(--s2) var(--s3); }
+  .reihen-weiter-text { display: none; }
 }
 
 .issue-grid {
@@ -1788,17 +1917,22 @@ body:has(.reihe-seite) { overflow-x: clip; }
   object-position: top;
 }
 
-/* Lupe: Vollbild ueber allem, dunkel wie die Leseansicht. */
+/* Lupe: Vollbild ueber allem, dunkel wie die Leseansicht. Die Leiste mit
+   Miniaturen und Zoom steht unter dem Bild, nicht darauf; sonst verdeckte
+   sie die Unterzeile des Titelbilds. */
 .bild-lupe {
   position: fixed;
   inset: 0;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
   background: rgba(12, 13, 17, 0.96);
   color: var(--bar-text);
 }
 .bild-lupe .lupe-bild {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 .bild-lupe .lupe-knopf {
   display: grid;
@@ -1820,19 +1954,20 @@ body:has(.reihe-seite) { overflow-x: clip; }
   top: var(--s4);
   right: var(--s4);
 }
+/* Mittig ohne transform: die allgemeine Regel fuer gedrueckte Knoepfe
+   (button:active, translateY(1px)) ersetzte das translateY(-50%). Der
+   Knopf sprang beim Druecken um die halbe Hoehe nach unten, das Loslassen
+   landete auf dem Bild darunter, und es gab keinen Klick. */
 .bild-lupe .lupe-zurueck,
 .bild-lupe .lupe-weiter {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: calc(50% - var(--ctl-h) / 2);
 }
 .bild-lupe .lupe-zurueck { left: var(--s4); }
 .bild-lupe .lupe-weiter { right: var(--s4); }
 .bild-lupe .lupe-leiste {
-  position: absolute;
-  left: 50%;
-  bottom: var(--s4);
-  transform: translateX(-50%);
+  align-self: center;
+  margin: var(--s2) var(--s4) var(--s4);
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -2085,6 +2220,11 @@ body:has(.reihe-seite) { overflow-x: clip; }
 }
 .profile .session-list li:last-child { border-bottom: 0; }
 .profile .sub-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
+
+/* Mails zu neuen Heften: je Zeitschrift ein Haken (Konto, Abmeldeseite). */
+.heftmail-wahl { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
+.heftmail-reihen { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.heftmail-reihen label { display: flex; align-items: center; gap: var(--s2); cursor: pointer; }
 
 /* Rechtstexte sind ein durchlaufender Text, kein Stapel aus Abschnitten:
    die Luecke ist enger als zwischen den Abschnitten einer Bedienansicht. */
@@ -2627,9 +2767,10 @@ body:has(.reihe-seite) { overflow-x: clip; }
   font-size: var(--fs-sub);
   font-weight: 500;
 }
-.mode-switch button:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.mode-switch button:hover:not(:disabled):not([aria-disabled="true"]):not(.active) { background: rgba(255, 255, 255, 0.07); color: #fff; }
 .mode-switch button.active { background: var(--accent); color: #fff; }
-.mode-switch button:disabled { background: transparent; border: 0; color: var(--night-muted); opacity: 0.35; cursor: not-allowed; }
+.mode-switch button:disabled,
+.mode-switch button[aria-disabled="true"] { background: transparent; border: 0; color: var(--night-muted); opacity: 0.35; cursor: not-allowed; }
 .page-layout-switch button {
   display: inline-flex;
   align-items: center;
@@ -2784,7 +2925,6 @@ body:has(.reihe-seite) { overflow-x: clip; }
 }
 
 .article-mode { overflow: auto; background: var(--paper); color: var(--ink); }
-.article-mode .watermark { color: rgba(44, 30, 20, 0.28); position: fixed; }
 .article-body {
   box-sizing: border-box;
   width: min(100%, 46rem);
@@ -2818,6 +2958,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
   border-bottom: 1px solid var(--rule);
 }
 .article-body .lead { font-size: 1.2rem; color: var(--ink-soft); }
+.article-body .fq { font-style: italic; font-weight: 600; }
 .article-body p { color: var(--ink); }
 .article-body blockquote {
   border-left: 3px solid var(--accent-soft);
@@ -2826,6 +2967,19 @@ body:has(.reihe-seite) { overflow-x: clip; }
   color: var(--ink-soft);
   font-style: italic;
 }
+/* Kasten aus dem Heft (Info-, Zitatkasten): ruhig abgesetzt, etwas kleiner.
+   Folgen mehrere Absaetze eines Kastens aufeinander, stehen sie in einer
+   Flaeche. Vorher sahen Kaesten aus wie Fliesstext. */
+.article-body .kasten {
+  display: block;
+  margin: var(--s5) 0;
+  padding: var(--s3) var(--s4);
+  background: rgba(60, 45, 20, 0.05);
+  border-left: 3px solid var(--rule);
+  font-size: 0.95em;
+  line-height: 1.55;
+}
+.article-body .kasten + .kasten { margin-top: calc(-1 * var(--s5)); padding-top: 0; }
 .article-body figure {
   width: 100%;
   margin: clamp(1.5rem, 4vw, 2.5rem) 0;
@@ -3016,6 +3170,20 @@ body:has(.reihe-seite) { overflow-x: clip; }
   white-space: nowrap;
 }
 .toc-drawer .hint { padding: var(--s4) var(--s5); }
+/* "Inhalt" fuehrt zur gedruckten Inhaltsseite; sieht aus wie die Ueberschrift. */
+.toc-heading-link {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+}
+.toc-heading-link:hover,
+.toc-heading-link:focus-visible { text-decoration-color: currentColor; }
 .toc-list {
   flex: 1;
   overflow-y: auto;
@@ -3593,22 +3761,48 @@ body:has(.reihe-seite) { overflow-x: clip; }
 
 .page.admin { gap: var(--s6); }
 
-/* Unternavigation der Redaktion: wie die Reiter, nur als Links. */
+/* Die Redaktion: Navigation links neben dem Inhalt, auf schmalen Schirmen
+   oben als Reiter. Text ist hier markierbar (sonst gilt user-select: none). */
+.page.admin {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  align-items: start;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.admin-inhalt { display: flex; flex-direction: column; gap: var(--s6); min-width: 0; }
 .admin-nav {
+  position: sticky;
+  top: var(--s5);
   display: flex;
-  gap: var(--s5);
-  border-bottom: 1px solid var(--rule);
+  flex-direction: column;
+  gap: 2px;
+  padding-right: var(--s4);
+  border-right: 1px solid var(--rule);
 }
 .admin-nav a {
-  padding: var(--s2) 0;
-  margin-bottom: -1px;
-  border-bottom: 2px solid transparent;
+  padding: var(--s2) var(--s3);
+  border-left: 3px solid transparent;
   font-size: var(--fs-sub);
   font-weight: 600;
   color: var(--ink-soft);
 }
-.admin-nav a:hover { color: var(--ink); }
-.admin-nav a.active { color: var(--ink); border-bottom-color: var(--accent); }
+.admin-nav a:hover { color: var(--ink); background: var(--paper-sunk); }
+.admin-nav a.active { color: var(--ink); border-left-color: var(--accent); background: var(--paper-sunk); }
+@media (max-width: 62rem) {
+  .page.admin { grid-template-columns: minmax(0, 1fr); }
+  .admin-nav {
+    position: static;
+    flex-direction: row;
+    gap: var(--s5);
+    padding-right: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .admin-nav a { padding: var(--s2) 0; margin-bottom: -1px; border-left: 0; border-bottom: 2px solid transparent; background: none; }
+  .admin-nav a:hover { background: none; }
+  .admin-nav a.active { border-bottom-color: var(--accent); background: none; }
+}
 
 /* Zuklappbares: Optionen, Protokoll, Werkzeuge. */
 .aufklapp > summary {
@@ -3828,6 +4022,8 @@ body:has(.reihe-seite) { overflow-x: clip; }
 .pruefliste li.sperrt .zeichen { background: var(--warn-soft); color: var(--warn); }
 .pruefliste li.sperrt .text { color: var(--ink); font-weight: 600; }
 .pruefliste .aktion { display: flex; flex-wrap: wrap; gap: var(--s1); justify-content: flex-end; }
+.heft-seite-spalte { display: flex; flex-direction: column; gap: var(--s5); min-width: 0; }
+.knopfreihe { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
 .pruefliste-fuss { align-self: stretch; display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; justify-content: flex-end; padding-top: var(--s2); }
 
 .auftraege { list-style: none; padding: 0; margin: 0; align-self: stretch; display: flex; flex-direction: column; }
@@ -3970,18 +4166,34 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 .karte-kopf { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s3); align-self: stretch; }
 .karte-kopf .schalter { margin-left: auto; font-size: var(--fs-sub); }
 .karte h4 { font-family: var(--sans); font-size: var(--fs-sub); color: var(--ink-soft); }
-.personen { list-style: none; padding: 0; margin: 0; align-self: stretch; display: flex; flex-direction: column; }
-.personen li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2) var(--s4);
-  padding: var(--s2) 0;
-  border-bottom: 1px solid var(--rule-soft);
+.personen-seite { display: flex; flex-direction: column; gap: var(--s3); }
+.personen-kopf { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); }
+.personen-kopf input { flex: 0 1 22rem; min-width: 0; }
+.personen-tabelle { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); background: var(--surface); border: 1px solid var(--rule); }
+.personen-tabelle th {
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  font-size: var(--fs-mini);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule);
 }
-.personen li:last-child { border-bottom: 0; }
-.personen .wer { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-sub); }
-.personen select { width: auto; max-width: 100%; min-height: var(--ctl-h-sm); font-size: var(--fs-sub); }
+.personen-tabelle td { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--rule-soft); vertical-align: middle; }
+.personen-tabelle tr:last-child td { border-bottom: 0; }
+.personen-tabelle td.mail { font-weight: 600; overflow-wrap: anywhere; }
+.personen-tabelle select { width: auto; min-height: var(--ctl-h-sm); font-size: var(--fs-sub); }
+.rollen-legende { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--s2) var(--s4); margin: var(--s3) 0 0; font-size: var(--fs-mini); color: var(--muted); }
+.rollen-legende dt { font-weight: 700; color: var(--ink-soft); }
+.rollen-legende dd { margin: 0; }
+@media (max-width: 40rem) {
+  .personen-tabelle thead { display: none; }
+  .personen-tabelle tr { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--s3); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--rule-soft); }
+  .personen-tabelle td { padding: 0; border: 0; }
+  .personen-tabelle td:nth-child(2) { grid-row: 2; color: var(--muted); }
+  .personen-tabelle td:nth-child(3) { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+}
 
 @media (max-width: 62rem) {
   .heft-uebersicht, .heft-angaben, .links-split { grid-template-columns: 1fr; }
@@ -4064,12 +4276,13 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   background: rgba(255, 252, 240, 0.45);
 }
 .reader-screen .mode-switch button { color: var(--papier-leise); }
-.reader-screen .mode-switch button:hover:not(:disabled):not(.active) {
+.reader-screen .mode-switch button:hover:not(:disabled):not([aria-disabled="true"]):not(.active) {
   background: rgba(60, 45, 20, 0.07);
   color: var(--papier-tinte);
 }
 .reader-screen .mode-switch button.active { background: var(--accent); color: #fff; }
-.reader-screen .mode-switch button:disabled { color: var(--papier-leise); }
+.reader-screen .mode-switch button:disabled,
+.reader-screen .mode-switch button[aria-disabled="true"] { color: var(--papier-leise); }
 
 /* Hinweise und Wasserzeichen auf hellem Grund */
 .reader-screen .page-hint { color: var(--papier-leise); }
@@ -4274,14 +4487,23 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   min-width: 1.75rem;
   padding: var(--s2) var(--s1);
   height: calc(var(--heft-b) * 4 / 3);
-  margin-left: var(--s3);
   background: var(--paper-sunk);
   border-left: 2px solid var(--ink-soft);
   color: var(--ink-soft);
   text-decoration: none;
   overflow: hidden;
 }
-.kompakt-trenner:first-child { margin-left: 0; }
+/* Streifen und erstes Heft einer Zeitschrift als ein Stueck, damit der
+   Streifen nie allein am Zeilenende steht. */
+.kompakt-anfang {
+  display: flex;
+  align-items: flex-start;
+  column-gap: var(--s3);
+}
+/* Mehr Luft vor einer neuen Zeitschrift, als Abstand hinter dem letzten
+   Heft der vorigen: am Zeilenende faellt er nicht auf, am Anfang wuerde er
+   als Einrueckung stehen. */
+.kompakt-raster > :has(+ .kompakt-anfang) { margin-right: var(--s3); }
 .kompakt-trenner:hover { color: var(--ink); background: var(--rule); }
 .kompakt-trenner span {
   writing-mode: vertical-rl;
@@ -4293,6 +4515,7 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 }
 @media (max-width: 600px) {
   .kompakt-raster { --heft-b: 5.75rem; gap: var(--s3) var(--s2); }
+  .kompakt-anfang { column-gap: var(--s2); }
   .kompakt-trenner span { font-size: 0.6875rem; }
 }
 .kompakt-heft {

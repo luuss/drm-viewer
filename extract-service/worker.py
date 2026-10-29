@@ -44,12 +44,14 @@ from extractor.idml_extract import (
     frames_to_images,
     idml_reading_order,
     link_name,
+    textrahmen_auf_seiten,
     toc_from_idml,
 )
 from extractor.image_regions import read_trim_boxes
-from extractor.issue_meta import publication_date, read_issue_meta
+from extractor.issue_meta import erscheinung_aus_umschlag, publication_date, read_issue_meta
 from extractor.model import SourceBlock
 from extractor.pdf_extract import (
+    attach_captions,
     blocks_from_text_layer,
     extract_pdf_pages,
     mark_furniture,
@@ -57,18 +59,32 @@ from extractor.pdf_extract import (
 )
 from extractor.idml_articles import (
     artikel_aus_satz,
+    initialen_zurueck,
+    ohne_anzeigen,
     ohne_unterlagen,
     ohne_vorschaubilder,
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
+from extractor.satzbilder import (
+    anzeigen_stories,
+    anzeigenflaechen,
+    bilder_im_satz,
+    ist_anzeigenartikel,
+    ohne_schriftzuege,
+    teaserflaechen,
+)
 from extractor.rubriken import (
+    TITEL_SEITENABSTAND,
     kopfzeilen,
     seitenrubriken,
     stehende_rubrik,
     titel_bereinigen,
+    titel_nennt_artikel,
+    verfasser_aus_eintrag,
     verzeichnis_doppelseite,
 )
+from extractor.textutil import normalize_compare
 from extractor.titel_anreisser import titel_anreisser
 from extractor.toc_layout import (
     refine_toc_hints,
@@ -233,7 +249,11 @@ class Job:
                 verzeichnis=verzeichnis.get(seite),
                 erster_auf_seite=seite not in gesehen,
             )
+            erster_auf_seite = seite not in gesehen
             gesehen.add(seite)
+            if not a.author and erster_auf_seite:
+                # Die Kolumne nennt ihren Verfasser nur im Verzeichnis.
+                a.author = verfasser_aus_eintrag(verzeichnis.get(seite))
             if neu != a.title:
                 kern = (stehende_rubrik(neu) or neu).lower()
                 if (seite, kern) in vergeben:
@@ -262,6 +282,7 @@ class Job:
             duplicatesDropped=getattr(self, "_doppelt", 0),
         )
         toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
+        self._teaserflaechen(toc_hints, articles, payload_articles)
         self._toc_eintraege = len(toc_hints)
         # Erst nach dem Verzeichnis: das zaehlt die Artikel nach ihrer Stelle.
         payload_articles, page_links = self._seitenlinks(payload_articles)
@@ -461,6 +482,13 @@ class Job:
         meta: dict = {}
         if innen is not None:
             meta.update(read_issue_meta(blobs[innen["assetId"]]))
+        # Der Erscheinungsmonat steht in der Kopfzeile der Titelseite; deren
+        # Textebene laedt der Browser mit hoch ("textebene-umschlag.json").
+        for quelle in sources:
+            if "monthFrom" in meta:
+                break
+            if quelle["kind"] == "text" and blobs.get(quelle["assetId"]):
+                meta.update(erscheinung_aus_umschlag(blobs[quelle["assetId"]]))
         # Nur das Impressum, und nur als erster Anhaltspunkt: dort steht
         # gelegentlich noch der Preis der Vorauflage. Den Verkaufspreis fuehrt
         # der Netzladen, und von dort holt ihn der taegliche Abgleich — er
@@ -610,6 +638,12 @@ class Job:
                 )
         self._halves_by_asset = halves_by_asset
 
+        # Seitenverhaeltnis je Leserseite, fuer schmale Streifen im Satz.
+        self._seitenaspekte = {
+            p["index"]: p["width"] / p["height"]
+            for p in pages
+            if p.get("width") and p.get("height")
+        }
         idml_source = next((s for s in sources if s["kind"] == "idml"), None)
         idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
         # Die Textebene der Innenseiten, vom Browser beim Import gelesen. Sie
@@ -770,10 +804,12 @@ class Job:
         nach Schriftgroesse entfaellt — das Absatzformat hat sie schon gesagt.
         """
         mark_furniture(blocks, page_count)
-        # Die Bildunterschriften des Satzes haengen schon an ihren Bildern
-        # (`_from_idml`, nach der Satzstruktur). Die Naeheregel fuer PDF-Seiten
-        # liefe hier nur ein zweites Mal und faende falsche Paare.
-        return idml_reading_order([b for b in blocks if not b.drop])
+        ordered = idml_reading_order([b for b in blocks if not b.drop])
+        # Bilder aus dem Satz haben ihre Unterschrift schon aus ihrer Story
+        # (satzbilder.unterschriften_zuordnen); die Schaetzung nach Lage gilt
+        # nur noch fuer Bilder, die der Satz nicht kennt.
+        attach_captions([i for i in images if not i.satz_geprueft], ordered)
+        return ordered
 
     def _from_idml(self, idml_bytes, pdf_bytes, page_map, halves):
         """Bloecke und Bildbereiche aus der Satzdatei.
@@ -797,25 +833,43 @@ class Job:
         # Bildbereiche der Druckseite werden.
         gefiltert = ohne_unterlagen(bildrahmen, textrahmen, rollen)
         gefiltert = ohne_vorschaubilder(gefiltert, textrahmen, rohe_blocks)
+        # Fremdanzeigen (Datei "Anzeige …" oder Kennzeichnung am Rahmen) sind
+        # kein Artikelbild; auf der Druckseite bleiben sie stehen.
+        gefiltert = ohne_anzeigen(gefiltert, textrahmen, rohe_blocks)
+        gefiltert = ohne_schriftzuege(gefiltert)
         if len(gefiltert) != len(bildrahmen):
             log(
                 "job.unterlagen",
                 jobId=self.job_id,
                 entfernt=len(bildrahmen) - len(gefiltert),
             )
-        satz_blocks = frames_to_blocks(rohe_blocks, page_map, trims)
+        # Die ausgelagerte Initiale zurueck an ihren Absatz, bevor das
+        # Aussortieren sie als Beiwerk (zwei Zeichen) verwirft.
+        satz_blocks = initialen_zurueck(frames_to_blocks(rohe_blocks, page_map, trims))
         # Erst alle Bildrahmen, auch die kleinen: eine Unterschrift unter einer
-        # Briefmarke soll an ihr haengen und nicht zum grossen Nachbarn wandern.
-        alle_bilder = frames_to_images(gefiltert, page_map, trims, min_area=0)
-        zuordnung = bildunterschriften.zuordnen(alle_bilder, satz_blocks)
-        log(
-            "job.bildunterschriften",
-            jobId=self.job_id,
-            gesamt=len(zuordnung),
-            ohneBild=sum(1 for _u, img, _a in zuordnung if img is None),
-        )
+        # Briefmarke soll an ihr haengen und nicht zum grossen Nachbarn
+        # wandern. Artikelbild wird ein Rahmen erst ab BILD_MINDESTFLAECHE.
+        satz_images = frames_to_images(gefiltert, page_map, trims, min_area=0)
+        # Unterschrift, Beleg, Schmuck, Anzeige und Story jedes Bildes aus dem
+        # Satz (extractor/satzbilder.py, Unterschriften in bildunterschriften.py).
+        try:
+            satz_images, bilanz = bilder_im_satz(
+                satz_images,
+                satz_blocks,
+                textrahmen_auf_seiten(textrahmen, page_map, trims),
+                getattr(self, "_seitenaspekte", None),
+            )
+            log("job.satzbilder", jobId=self.job_id, **bilanz)
+            # Welche Stories Anzeigen sind: fuer ihre Klickflaechen.
+            self._anzeigen_ids = anzeigen_stories(satz_blocks) | {
+                i.story_id for i in satz_images if i.anzeige and i.story_id
+            }
+        except Exception as exc:
+            log("job.satzbilderFailed", jobId=self.job_id, error=str(exc)[:200])
+            for img in satz_images:
+                img.satz_geprueft = False
         satz_images = [
-            i for i in alle_bilder if (i.x1 - i.x0) * (i.y1 - i.y0) >= BILD_MINDESTFLAECHE
+            i for i in satz_images if (i.x1 - i.x0) * (i.y1 - i.y0) >= BILD_MINDESTFLAECHE
         ]
         return satz_blocks, satz_images
 
@@ -897,6 +951,12 @@ class Job:
         wurde: die Flaechen wandern auf die gedruckten Zeilen, ohne dass das
         Heft neu aufbereitet wird.
         """
+        # Seitenverhaeltnis je Leserseite, fuer schmale Streifen im Satz.
+        self._seitenaspekte = {
+            p["index"]: p["width"] / p["height"]
+            for p in pages
+            if p.get("width") and p.get("height")
+        }
         idml_source = next((s for s in sources if s["kind"] == "idml"), None)
         idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
         if not idml_bytes:
@@ -1023,7 +1083,10 @@ class Job:
         tragen, werden durch sie ersetzt. Artikel ohne Satz (Umschlag) bleiben
         ausser Betracht. Mit payload "probe" wird nur gezaehlt.
         """
-        probe = (self.data.get("payload") or "") == "probe"
+        payload = self.data.get("payload") or ""
+        if payload in ("bilder", "bilder-probe"):
+            return self._bilder_nachtrag(articles, page_images, payload == "bilder-probe")
+        probe = payload == "probe"
         live = self.convex.post("/service/jobs/articles", {"issueId": self.issue_id})
         bestand = {
             frozenset(a["stories"]): a for a in live if a["stories"]
@@ -1081,6 +1144,102 @@ class Job:
             f"{len(result.get('inserted', []))} neu. Weg: {weg} | Neu: {neu}"
         )[:4000]
 
+    def _bilder_nachtrag(self, articles, page_images, probe: bool) -> tuple[str, str]:
+        """Nur Bilder und Unterschriften der bleibenden Artikel neu (drm-viewer-jmm).
+
+        Ein Artikel aus dem Satz, dessen Stories genau ein Artikel im Bestand
+        traegt, bekommt seine Bilder neu: Bildzeilen, Unterschriften, Anker im
+        Text und die Bildflaechen auf der Seite. Text, Titel, Freigabe und
+        Lesestand bleiben. Artikel, die sich im Satz anders schneiden, werden
+        nur gezaehlt — dafuer ist der gewoehnliche Nachtrag da.
+
+        Die Bilddateien kommen unter eigenem Namen in den Medienspeicher
+        (`_bild_zusatz`), damit die alten Zeilen bis zum Ruecksetzen gueltig
+        bleiben (bildnachtrag.wiederherstellenInternal).
+        """
+        live = self.convex.post("/service/jobs/articles", {"issueId": self.issue_id})
+        bestand = {frozenset(a["stories"]): a for a in live if a["stories"]}
+
+        def stories(article) -> frozenset:
+            bloecke = _ohne_kopfzeilen(flow_text_blocks(article.blocks), article)
+            return frozenset(b.story_id for b in bloecke if b.story_id)
+
+        self._bild_zusatz = f"-n{str(self.job_id)[-6:]}"
+        self._ohne_bilder = probe
+        eingaben: list[dict] = []
+        ohne_partner: list[str] = []
+        for article in articles:
+            if any(b.origin != "idml" for b in article.blocks):
+                continue
+            eigene = stories(article)
+            if not eigene:
+                continue
+            gleich = bestand.get(eigene)
+            if gleich is None:
+                ohne_partner.append(f"{article.pages[0]}: {article.title[:50]}")
+                continue
+            reader_blocks = _ohne_kopfzeilen(flow_text_blocks(article.blocks), article)
+            if probe:
+                bilder = [
+                    {
+                        "assetId": "probe",
+                        "sourcePageIndex": img.page_index,
+                        **({"caption": img.caption} if img.caption else {}),
+                    }
+                    for img in article.images
+                ]
+            else:
+                bilder = self._store_images(article, page_images, reader_blocks)
+                for entry in bilder:
+                    stelle = entry.get("afterBlockOrder")
+                    if stelle and 0 < stelle <= len(reader_blocks):
+                        entry["anchorText"] = reader_blocks[stelle - 1].text[:160]
+            eingaben.append(
+                {
+                    "articleId": gleich["articleId"],
+                    "images": bilder,
+                    "imageRegions": [
+                        {
+                            "pageIndex": img.page_index,
+                            "x0": round(max(0.0, img.x0), 5),
+                            "y0": round(max(0.0, img.y0), 5),
+                            "x1": round(min(1.0, img.x1), 5),
+                            "y1": round(min(1.0, img.y1), 5),
+                        }
+                        for img in article.images
+                    ],
+                }
+            )
+        summe: dict[str, int] = {}
+        if probe:
+            # Der Probelauf zaehlt nur; Convex sieht keine erfundenen Asset-Ids.
+            summe = {
+                "artikel": len(eingaben),
+                "bilderNachher": sum(len(e["images"]) for e in eingaben),
+                "unterschriftenNachher": sum(
+                    1 for e in eingaben for i in e["images"] if i.get("caption")
+                ),
+            }
+        else:
+            for start in range(0, len(eingaben), BILDNACHTRAG_STAPEL):
+                teil = self.convex.post(
+                    "/service/jobs/bilder",
+                    {
+                        "jobId": self.job_id,
+                        "workerId": WORKER_ID,
+                        "issueId": self.issue_id,
+                        "probe": False,
+                        "articles": eingaben[start : start + BILDNACHTRAG_STAPEL],
+                    },
+                )
+                for k, wert in (teil or {}).items():
+                    summe[k] = summe.get(k, 0) + int(wert)
+        log("job.bildnachtrag", jobId=self.job_id, probe=probe, ohnePartner=len(ohne_partner), **summe)
+        kopf = "Probelauf Bilder" if probe else "Bilder nachgetragen"
+        teile = ", ".join(f"{k} {v}" for k, v in summe.items())
+        rest = f"; ohne Gegenstueck im Bestand: {len(ohne_partner)}" if ohne_partner else ""
+        return "done", f"{kopf}: {teile}{rest}"[:900]
+
     def _build_payload(self, articles, page_images: dict[int, bytes]) -> list[dict]:
         payload = []
         for order, article in enumerate(articles, start=1):
@@ -1089,7 +1248,7 @@ class Job:
                 {
                     "order": i + 1,
                     "type": b.kind if b.kind in
-                    ("heading", "subheading", "lead", "paragraph", "quote", "caption", "box")
+                    ("heading", "subheading", "lead", "paragraph", "question", "quote", "caption", "box")
                     or (b.kind == "table" and b.table is not None)
                     else "other",
                     "text": b.text,
@@ -1124,6 +1283,10 @@ class Job:
                 }
                 for img in article.images
             )
+            if ist_anzeigenartikel(article, getattr(self, "_anzeigen_ids", set())):
+                # Eine Anzeige ist auf der Seite eine Flaeche: Text, Titelzeilen
+                # und Umschlagbild zusammen.
+                regions.extend(anzeigenflaechen(article.blocks, article.images))
             images = self._store_images(article, page_images, reader_blocks)
             pages = article.pages
             payload.append(
@@ -1149,6 +1312,7 @@ class Job:
         """Gedruckten Inhalt mit Artikeln und Seitensprung-Regionen verbinden."""
         out = []
         ziele = {h.page_index for h in hints}
+        gesehen: dict[tuple[int, str], dict] = {}
 
         def artikel_ab(seite: int) -> int | None:
             return next(
@@ -1160,13 +1324,31 @@ class Job:
                 None,
             )
 
-        for order, hint in enumerate(hints, start=1):
-            article_order = artikel_ab(hint.page_index)
+        def artikel_zum_eintrag(label: str, seite: int) -> int | None:
+            # Zuerst der Titel: nennt der Eintrag einen Artikel, der in der
+            # Naehe der Seite beginnt, ist es dieser — auch wenn sich die
+            # Seitenbereiche verschoben haben ("Leserbriefe/Impressum" zeigt
+            # auf die Seite nach dem Anfang der Briefe).
+            passend = [
+                (abs(article.pages[0] - seite), index + 1)
+                for index, article in enumerate(articles)
+                if article.pages
+                and abs(article.pages[0] - seite) <= TITEL_SEITENABSTAND
+                and titel_nennt_artikel(label, article.title)
+            ]
+            if passend:
+                return min(passend)[1]
+            # Sonst die Seite: der erste Artikel, der dort beginnt.
+            article_order = artikel_ab(seite)
             # Aufmacherseite: das Verzeichnis nennt die Seite mit Bild und
             # Titel, der Text der Story beginnt erst auf der naechsten. Die
             # Folgeseite zaehlt nur, wenn kein eigener Eintrag auf sie zeigt.
-            if article_order is None and hint.page_index + 1 not in ziele:
-                article_order = artikel_ab(hint.page_index + 1)
+            if article_order is None and seite + 1 not in ziele:
+                article_order = artikel_ab(seite + 1)
+            return article_order
+
+        for order, hint in enumerate(hints, start=1):
+            article_order = artikel_zum_eintrag(hint.label, hint.page_index)
             entry = {
                 "order": order,
                 "label": hint.label,
@@ -1191,15 +1373,25 @@ class Job:
                         "targetPageIndex": hint.page_index,
                     }
                 )
+            # Nennt das Verzeichnis einen Titel zweimal (ZUERST!: Bildanreisser
+            # neben der Rubrikliste), bleiben beide Zeilen klickbar, im Inhalt
+            # steht er einmal — mit Rubrik und der volleren Schreibweise.
+            schluessel = (hint.page_index, normalize_compare(hint.label))
+            alt = gesehen.get(schluessel)
+            if alt is not None:
+                if "section" in entry and "section" not in alt:
+                    alt["section"] = entry["section"]
+                if len(hint.label) > len(alt["label"]):
+                    alt["label"] = hint.label
+                continue
+            gesehen[schluessel] = entry
             out.append(entry)
 
         # Die Anreisser der Titelseite fuehren zum selben Artikel wie die
         # Verzeichniszeile, auf deren Seite sie zeigen.
         for region in Job._anreisser_regionen(self, hints):
             ziel = region["targetPageIndex"]
-            article_order = artikel_ab(ziel)
-            if article_order is None and ziel + 1 not in ziele:
-                article_order = artikel_ab(ziel + 1)
+            article_order = artikel_zum_eintrag(region.get("label") or "", ziel)
             if article_order is None:
                 continue
             region = {k: v for k, v in region.items() if k != "label"}
@@ -1238,6 +1430,29 @@ class Job:
         for i, e in enumerate(out, start=1):
             e["order"] = i
         return out
+
+    def _teaserflaechen(self, hints, articles, payload_articles) -> None:
+        """Bild-Anreisser im gedruckten Verzeichnis fuehren zu ihrem Artikel.
+
+        Neben den Zeilen zeigt das Verzeichnis Bilder aus den Artikeln (ZUERST!,
+        DMZ); dieselbe Datei steht im Artikel. Ein Tipp auf das Bild springt
+        auf die erste Seite des Artikels wie die Zeile daneben.
+        """
+        seiten = {h.toc_page_index for h in hints if h.toc_page_index is not None}
+        satz = getattr(self, "_satz_fuer_buecher", None)
+        if not seiten or not satz:
+            return
+        bilder = [i for i in satz[1] if i.page_index in seiten]
+        artikel_bilder = [
+            (nummer, a.pages[0], [i for i in a.images if i.page_index not in seiten])
+            for nummer, a in enumerate(articles, start=1)
+            if a.images
+        ]
+        flaechen = teaserflaechen(bilder, artikel_bilder)
+        for nummer, region in flaechen:
+            payload_articles[nummer - 1]["regions"].append(region)
+        if flaechen:
+            log("job.teaser", jobId=getattr(self, "job_id", None), flaechen=len(flaechen))
 
     # Bildrahmen und platziertes Bild duerfen sich im Seitenverhaeltnis um
     # diesen Anteil unterscheiden und gelten noch als deckungsgleich.
@@ -1345,7 +1560,8 @@ class Job:
                 self.publication_id,
                 self.issue_id,
                 "images",
-                f"{img.page_index}-{int(img.x0 * 1000)}-{int(img.y0 * 1000)}.jpg",
+                f"{img.page_index}-{int(img.x0 * 1000)}-{int(img.y0 * 1000)}"
+                f"{getattr(self, '_bild_zusatz', '')}.jpg",
             )
             stored = self.storage.put(key, cropped, "image/jpeg")
             try:
@@ -1394,6 +1610,10 @@ class Job:
             if abdruck is not None:
                 gesehen.append((abdruck, entry))
         return out
+
+
+# So viele Artikel je Aufruf an Convex (bildnachtrag.ersetzenInternal).
+BILDNACHTRAG_STAPEL = 15
 
 
 def run_once(convex: ConvexClient, storage: Storage) -> bool:

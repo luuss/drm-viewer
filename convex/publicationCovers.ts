@@ -3,6 +3,7 @@ import { action, internalAction, internalMutation, internalQuery } from "./_gene
 import { requireEditor } from "./roles";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { erscheinungAusBezeichnung } from "./erscheinung";
 import {
   canonicalSeriesName,
   SHOP_URL,
@@ -176,7 +177,14 @@ export const setIssueShopLabelsInternal = internalMutation({
             stripePriceId: undefined,
           }
         : {};
+    // Ohne Erscheinungsdatum sortierte die Reihenseite nach dem Importtag.
+    // Der Laden nennt den Monat ("April 2025", "Ausgabe März/April 2026");
+    // ein schon gesetztes Datum (Heft, Redaktion) bleibt.
+    const erschienen = issue?.publicationDate
+      ? null
+      : erscheinungAusBezeichnung(designation, subtitle, title);
     await ctx.db.patch(issueId, {
+      ...(erschienen ? { publicationDate: erschienen } : {}),
       shopTitle: title,
       shopDesignation: designation,
       shopSubtitle: subtitle,

@@ -5,13 +5,19 @@ import ReaderTurnButton from "./ReaderTurnButton";
 import ArtikelTabelle from "../components/ArtikelTabelle";
 import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
 import { meldungsfolge } from "./meldungsfolge";
-import { bildAlsCanvas, schriftenLaden } from "./schutz";
+import { bildfolge } from "./bildfolge";
+import { bildAlsCanvas, schriftenLaden, ticketVorrat } from "./schutz";
+import { bildschlange } from "./bildschlange";
 import type { Klickpunkt } from "./PageMode";
 
 /**
  * Artikelbild ohne Adresse: ueber Sitzung und Einmal-Ticket geholt, im
  * Browser zusammengesetzt und auf eine Zeichenflaeche gemalt. Kein `img`,
  * also nichts fuer Bildlupen oder "Bild speichern".
+ *
+ * Geholt wird erst, wenn das Bild in die Naehe des sichtbaren Bereichs
+ * kommt, und dann ueber die gemeinsame Warteschlange (`bildschlange.ts`):
+ * wenige zugleich, oben im Artikel zuerst. `rang` ist die Stelle im Artikel.
  */
 function SchutzBild({
   url,
@@ -20,6 +26,7 @@ function SchutzBild({
   schutzKey,
   width,
   height,
+  rang,
 }: {
   url: string;
   sessionToken: string | null | undefined;
@@ -27,13 +34,44 @@ function SchutzBild({
   schutzKey: number | null;
   width?: number;
   height?: number;
+  rang: number;
 }) {
   const halter = useRef<HTMLSpanElement>(null);
   const [fertig, setFertig] = useState(false);
+  // Fuer welche Adresse das Bild nah genug am Bildschirm ist. Die Knoten
+  // werden beim Blaettern fuer den naechsten Artikel weiterverwendet.
+  const [nahFuer, setNahFuer] = useState<string | null>(null);
+  const nah = nahFuer === url;
+  const rangRef = useRef(rang);
+  rangRef.current = rang;
   useEffect(() => {
-    if (!url || !sessionToken || !issueId || schutzKey === null) return;
+    const el = halter.current;
+    if (!el || nah) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setNahFuer(url);
+      return;
+    }
+    // Der Artikel rollt in seinem eigenen Kasten; anderthalb Hoehen davor
+    // und dahinter gelten als nah.
+    const beobachter = new IntersectionObserver(
+      (eintraege) => {
+        if (eintraege.some((e) => e.isIntersecting)) setNahFuer(url);
+      },
+      { root: el.closest(".article-mode"), rootMargin: "150% 0px" },
+    );
+    beobachter.observe(el);
+    return () => beobachter.disconnect();
+  }, [url, nah]);
+  useEffect(() => {
+    if (!nah || !url || !sessionToken || !issueId || schutzKey === null) return;
     const abbruch = new AbortController();
-    bildAlsCanvas(url, sessionToken, issueId, schutzKey, abbruch.signal)
+    let frei: (() => void) | null = null;
+    bildschlange
+      .platz(rangRef.current, abbruch.signal)
+      .then((freigabe) => {
+        frei = freigabe;
+        return bildAlsCanvas(url, sessionToken, issueId, schutzKey, abbruch.signal);
+      })
       .then((canvas) => {
         if (abbruch.signal.aborted || !halter.current) return;
         canvas.className = "fb-c";
@@ -41,13 +79,14 @@ function SchutzBild({
         halter.current.replaceChildren(canvas);
         setFertig(true);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => frei?.());
     return () => {
       abbruch.abort();
       halter.current?.replaceChildren();
       setFertig(false);
     };
-  }, [url, sessionToken, issueId, schutzKey]);
+  }, [nah, url, sessionToken, issueId, schutzKey]);
   // Bis das Bild steht, haelt ein leerer Rahmen in Bildgroesse den Platz.
   return (
     <span
@@ -97,7 +136,6 @@ type Props = {
   articleId: Id<"articles"> | null;
   /** Bestellbare Produkte zu Anzeigen in diesem Artikel. */
   products?: ReaderProduct[];
-  watermark: string;
   /** Gedruckte Seitenzahl zu einer Leseseite (U1 statt 1 auf dem Umschlag). */
   pageLabel: (index: number) => string;
   onPrev: () => void;
@@ -114,6 +152,8 @@ type Props = {
   fromPageIndex?: number | null;
   /** Angetippter Punkt der Druckseite: dorthin springt der Lesetext. */
   einstiegPunkt?: (Klickpunkt & { n: number }) | null;
+  /** Absatz der Fundstelle aus der Suche (`order`): dorthin, kurz markiert. */
+  stelle?: number | null;
   /** Schluessel zum Zusammensetzen der Artikelbilder. */
   schutzKey: number | null;
 };
@@ -122,7 +162,6 @@ type Props = {
 export default function ArticleMode({
   articleId,
   products = [],
-  watermark,
   pageLabel,
   onPrev,
   onNext,
@@ -131,6 +170,7 @@ export default function ArticleMode({
   sessionToken,
   fromPageIndex,
   einstiegPunkt,
+  stelle = null,
   schutzKey,
 }: Props) {
   // Text gibt es nur zu einer Lesesitzung, und nur verschluesselt.
@@ -139,6 +179,11 @@ export default function ArticleMode({
     articleId && sessionToken ? { articleId, sessionToken } : "skip",
   );
   const schrift = useSchutzSchrift(sessionToken, article?.issueId ?? null);
+  // Tickets fuer die Bilder schon holen, waehrend die Schrift laedt.
+  const artikelHeft = article?.issueId ?? null;
+  useEffect(() => {
+    if (sessionToken && artikelHeft) ticketVorrat(sessionToken, artikelHeft).vorbereiten();
+  }, [sessionToken, artikelHeft]);
   const schriftBereit = schrift.stand === "bereit";
   const koerper = useRef<HTMLElement>(null);
   const zielAbsatz = useQuery(
@@ -157,13 +202,21 @@ export default function ArticleMode({
   // und jedes Bild traegt seine Druckseite; die erste Marke der Seite ist der
   // Einstieg. Auf der Anfangsseite bleibt es beim Artikelkopf. Mit einem
   // Tipppunkt geht es genauer: zum Absatz unter dem Finger.
+  // Eine Fundstelle aus der Suche geht vor, ebenso genau.
   const geladen = article ?? null;
-  const punktOffen = einstiegPunkt != null && zielAbsatz === undefined;
+  const punktOffen = stelle === null && einstiegPunkt != null && zielAbsatz === undefined;
+  const zielOrder = stelle ?? (zielAbsatz && einstiegPunkt ? zielAbsatz.order : null);
+  // Jeder Einstieg springt einmal. Laedt der Artikel spaeter neu (die Abfrage
+  // ist reaktiv), bleibt der Leser, wo er inzwischen gelesen hat.
+  const gesprungen = useRef<string | null>(null);
   useEffect(() => {
     if (!geladen || !schriftBereit || punktOffen) return;
+    const einstieg = `${articleId}|${zielOrder}|${einstiegPunkt?.n}|${fromPageIndex}`;
+    if (gesprungen.current === einstieg) return;
+    gesprungen.current = einstieg;
     const absatz =
-      zielAbsatz && einstiegPunkt
-        ? koerper.current?.querySelector<HTMLElement>(`[data-order="${zielAbsatz.order}"]`)
+      zielOrder !== null
+        ? koerper.current?.querySelector<HTMLElement>(`[data-order="${zielOrder}"]`)
         : null;
     if (absatz) {
       absatz.scrollIntoView({ block: "center" });
@@ -181,7 +234,7 @@ export default function ArticleMode({
           );
     if (ziel) ziel.scrollIntoView({ block: "start" });
     else koerper.current?.scrollIntoView({ block: "start" });
-  }, [geladen, fromPageIndex, articleId, schriftBereit, punktOffen, zielAbsatz, einstiegPunkt?.n]);
+  }, [geladen, fromPageIndex, articleId, schriftBereit, punktOffen, zielOrder, einstiegPunkt?.n]);
 
   if (!articleId) {
     return (
@@ -234,46 +287,61 @@ export default function ArticleMode({
     y: image.sourceY ?? 0.5,
     afterBlockOrder: image.afterBlockOrder ?? null,
   }));
-  const flow = [...new Set([
+  type FlowItem = (typeof visibleBlocks)[number] | (typeof visibleImages)[number];
+  const flow: FlowItem[] = [];
+  // Seiten ohne Anker und ohne Meldungen verteilen ihre Bilder gemeinsam
+  // (bildfolge.ts): so kann ein Bild auch in den Text der Nachbarseite
+  // ruecken, wenn seine eigene zu wenig Absaetze hat.
+  let frei: { blocks: typeof visibleBlocks; images: typeof visibleImages } = {
+    blocks: [],
+    images: [],
+  };
+  const freiAbschliessen = () => {
+    flow.push(...bildfolge(frei.blocks, frei.images));
+    frei = { blocks: [], images: [] };
+  };
+  const pages = [...new Set([
     ...visibleBlocks.map((item) => item.page),
     ...visibleImages.map((item) => item.page),
-  ])]
-    .sort((a, b) => a - b)
-    .flatMap((page) => {
-      // Ein KI-geprueftes Bild traegt einen exakten Absatzanker. Nur alte,
-      // ungepruefte Importe fallen auf die geometrische Seitenlogik zurueck.
-      const blocks = visibleBlocks.filter((item) => item.page === page);
-      const images = visibleImages
-        .filter((item) => item.page === page)
-        .sort((a, b) => a.y - b.y || a.index - b.index);
-      const anchored = images.filter((item) => item.afterBlockOrder !== null);
-      if (anchored.length) {
-        const hiddenTitleOrder = article.blocks[0]?.type === "heading" ? 1 : null;
-        const before = anchored.filter((item) => {
-          const anchor = item.afterBlockOrder ?? 0;
-          return anchor === 0 || anchor === hiddenTitleOrder;
-        });
-        const after = new Map<number, typeof anchored>();
-        for (const image of anchored) {
-          const anchor = image.afterBlockOrder ?? 0;
-          if (anchor === 0 || anchor === hiddenTitleOrder) continue;
-          after.set(anchor, [...(after.get(anchor) ?? []), image]);
-        }
-        return [
-          ...before,
-          ...blocks.flatMap((block) => [block, ...(after.get(block.order) ?? [])]),
-          ...images.filter((item) => item.afterBlockOrder === null),
-        ];
+  ])].sort((a, b) => a - b);
+  for (const page of pages) {
+    // Ein KI-geprueftes Bild traegt einen exakten Absatzanker. Nur alte,
+    // ungepruefte Importe fallen auf die geometrische Seitenlogik zurueck.
+    const blocks = visibleBlocks.filter((item) => item.page === page);
+    const images = visibleImages
+      .filter((item) => item.page === page)
+      .sort((a, b) => a.y - b.y || a.index - b.index);
+    const anchored = images.filter((item) => item.afterBlockOrder !== null);
+    if (anchored.length) {
+      const hiddenTitleOrder = article.blocks[0]?.type === "heading" ? 1 : null;
+      const before = anchored.filter((item) => {
+        const anchor = item.afterBlockOrder ?? 0;
+        return anchor === 0 || anchor === hiddenTitleOrder;
+      });
+      const after = new Map<number, typeof anchored>();
+      for (const image of anchored) {
+        const anchor = image.afterBlockOrder ?? 0;
+        if (anchor === 0 || anchor === hiddenTitleOrder) continue;
+        after.set(anchor, [...(after.get(anchor) ?? []), image]);
       }
-      const meldungen = meldungsfolge(blocks, images);
-      if (meldungen) return meldungen;
-      const firstTextY = Math.min(...blocks.map((item) => item.y), 1);
-      return [
-        ...images.filter((item) => item.y < firstTextY),
-        ...blocks,
-        ...images.filter((item) => item.y >= firstTextY),
-      ];
-    });
+      freiAbschliessen();
+      flow.push(
+        ...before,
+        ...blocks.flatMap((block) => [block, ...(after.get(block.order) ?? [])]),
+        ...images.filter((item) => item.afterBlockOrder === null),
+      );
+      continue;
+    }
+    const meldungen = meldungsfolge(blocks, images);
+    if (meldungen) {
+      freiAbschliessen();
+      flow.push(...meldungen);
+      continue;
+    }
+    frei.blocks.push(...blocks);
+    frei.images.push(...images);
+  }
+  freiAbschliessen();
 
   // Der Bestellknopf steht unter dem Absatz der Anzeige, zu dem er gehoert.
   // Was keinen sichtbaren Absatz findet (der Titel steht schon im Kopf), kommt
@@ -309,7 +377,7 @@ export default function ArticleMode({
             ? `–${pageLabel(article.pageEnd)}`
             : ""}
         </p>
-        {flow.map((item) => {
+        {flow.map((item, stelleImFluss) => {
           if (item.kind === "image") {
             const img = item.image;
             return (
@@ -319,6 +387,7 @@ export default function ArticleMode({
                   sessionToken={sessionToken}
                   issueId={article.issueId}
                   schutzKey={schutzKey}
+                  rang={stelleImFluss}
                   // Die eigene Groesse haelt das Bild davon ab, auf
                   // Spaltenbreite hochgezogen zu werden, und haelt waehrend
                   // des Ladens den Platz frei.
@@ -332,15 +401,25 @@ export default function ArticleMode({
           }
           const b = item.block;
           const key = `block-${item.index}`;
-          const block =
-            b.type === "heading" || b.type === "subheading" ? (
+          // Ein Kasten oder Zitat, das schon im Fliesstext steht, faellt weg
+          // (`zitatDoppelt`); Bilder und Bestellknoepfe dahinter bleiben.
+          const block = b.doppelt ? null : b.type === "heading" || b.type === "subheading" ? (
               <h2 data-source-page={item.page} data-order={b.order}>{b.text}</h2>
+            ) : b.type === "box" ? (
+              // Kasten aus dem Heft (Info-, Zitatkasten): abgesetzt vom
+              // Fliesstext. Mehrere Absaetze eines Kastens stehen beisammen.
+              <aside className="kasten" data-source-page={item.page} data-order={b.order}>
+                {b.text}
+              </aside>
             ) : b.type === "quote" ? (
               <blockquote data-source-page={item.page} data-order={b.order}>{b.text}</blockquote>
             ) : b.type === "lead" ? (
               <p className="lead" data-source-page={item.page} data-order={b.order}>{b.text}</p>
+            ) : b.type === "question" ? (
+              // Interviewfrage: im Druck kursiv abgesetzt.
+              <p className="fq" data-source-page={item.page} data-order={b.order}>{b.text}</p>
             ) : b.type === "table" && b.table ? (
-              <ArtikelTabelle table={b.table} sourcePage={item.page} />
+              <ArtikelTabelle table={b.table} sourcePage={item.page} order={b.order} />
             ) : b.type === "caption" ? (
               <p className="caption" data-source-page={item.page} data-order={b.order}>{b.text}</p>
             ) : (
@@ -357,7 +436,6 @@ export default function ArticleMode({
           <ShopProductLink key={productKey(product)} product={product} />
         ))}
       </article>
-      {watermark && <div className="watermark">{watermark}</div>}
     </div>
   );
 }

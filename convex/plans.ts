@@ -80,6 +80,18 @@ export function kaeuflich(plan: Doc<"subscriptionPlans">): boolean {
   return stripeCheckoutEnabled();
 }
 
+/** Hat die Reihe ein Abo zu kaufen? Dieselbe Bedingung wie im Kiosk (`offerFor`). */
+export function aboKaeuflich(
+  publication: Doc<"publications">,
+  plans: Doc<"subscriptionPlans">[],
+): boolean {
+  if (!publication.isActive) return false;
+  return (
+    groupPlans(plans.filter(kaeuflich)) !== null ||
+    !!(publication.shopSubscriptionSku || publication.shopSubscriptionUrl)
+  );
+}
+
 async function offerFor(
   ctx: QueryCtx,
   publication: Doc<"publications">,

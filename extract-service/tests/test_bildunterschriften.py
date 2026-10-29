@@ -20,11 +20,11 @@ def bild(x0, y0, x1, y1, link="foto.tif", seite=0, gruppen=(), teile=()):
     )
 
 
-def bu_block(text, box, seite=0, rahmen="f1", gruppen=(), nach_leer=False, stil="Bildunterschrift weiß"):
+def bu_block(text, box, seite=0, rahmen="f1", gruppen=(), absatz=0, stil="Bildunterschrift weiß"):
     return SourceBlock(
         page_index=seite, text=text, x0=box[0], y0=box[1], x1=box[2], y1=box[3],
         kind="caption", origin="idml", story_id="s-" + rahmen, frame_id=rahmen,
-        style_name=stil, frame_box=box, frame_groups=gruppen, after_blank=nach_leer,
+        style_name=stil, frame_box=box, frame_groups=gruppen, absatzgruppe=absatz,
     )
 
 
@@ -141,8 +141,8 @@ def test_leerzeile_trennt_zwei_unterschriften_im_selben_rahmen():
     blocks = [
         bu_block("Aufnahme von Versuchsfahrten in Monza 1955 mit dem", box),
         bu_block("Formel-1-Rennwagen W 196 R.", box),
-        bu_block("Hans Herrmann mit seinen Mannschaftskollegen,", box, nach_leer=True),
-        bu_block("Fangio und Kling (v.l.).", box),
+        bu_block("Hans Herrmann mit seinen Mannschaftskollegen,", box, absatz=1),
+        bu_block("Fangio und Kling (v.l.).", box, absatz=1),
     ]
     bu.zuordnen([oben, unten], blocks)
     assert oben.caption == "Aufnahme von Versuchsfahrten in Monza 1955 mit dem Formel-1-Rennwagen W 196 R."
@@ -154,7 +154,7 @@ def test_leerzeile_mitten_im_satz_trennt_nicht():
     foto = bild(0.357, 0.3, 0.952, 0.6)
     blocks = [
         bu_block("Hinterlassenschaft des Sozialismus: Vor allem auf viele", box),
-        bu_block("Mitteldeutsche wirkt der Brückenschlag fremd.", box, nach_leer=True),
+        bu_block("Mitteldeutsche wirkt der Brückenschlag fremd.", box, absatz=1),
     ]
     ergebnis = bu.zuordnen([foto], blocks)
     assert len(ergebnis) == 1

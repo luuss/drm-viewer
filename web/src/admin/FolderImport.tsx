@@ -13,7 +13,7 @@ import {
   type ParsedName,
   type ScannedFile,
 } from "./folderScan";
-import { readDirectoryInput, readDroppedFolder } from "./folderDrop";
+import { aufteilen, readDirectoryInput, readDroppedFolders, type DroppedFolder } from "./folderDrop";
 import { FAEDEN, ImageConverter } from "./convertClient";
 import { jpegName } from "./imageConvert";
 import { Ladeschlange } from "./ladeschlange";
@@ -104,6 +104,17 @@ export default function FolderImport({
   const gestartet = useRef(0);
   const naechsteId = useRef(0);
   const abbrechen = useRef(false);
+  /**
+   * Weitere Ordner aus demselben Drop (oder waehrend eines Laufs
+   * nachgeschoben). Sie laufen nacheinander: jeder rendert seine PDFs im
+   * Browser, mehrere zugleich sprengen den Speicher.
+   */
+  const schlange = useRef<DroppedFolder[]>([]);
+  const [wartend, setWartend] = useState<string[]>([]);
+  /** Erledigte Hefte dieser Sitzung, fuer die Liste unter dem Balken. */
+  const [erledigtListe, setErledigtListe] = useState<
+    { titel: string; issueId?: Id<"issues">; fehler?: string }[]
+  >([]);
 
   const laeuft = aktiv;
 
@@ -148,9 +159,11 @@ export default function FolderImport({
     if (!plan || !name) return;
     gestartet.current = ordner.id;
     if (!plan.inner) {
-      setErr(
-        "Kein Innenteil-PDF im Ordner. Ohne den Innenteil laesst sich nichts importieren.",
-      );
+      const fehler =
+        "Kein Innenteil-PDF im Ordner. Ohne den Innenteil laesst sich nichts importieren.";
+      setErr(fehler);
+      setErledigtListe((alt) => [...alt, { titel: ordner.folderName, fehler }]);
+      naechster();
       return;
     }
     void starten(plan, name);
@@ -163,19 +176,32 @@ export default function FolderImport({
     setProtokoll((alt) => [...alt, zeile]);
   }
 
-  function uebernehmen(gelesen: Awaited<ReturnType<typeof readDroppedFolder>>) {
-    if (laeuft) return;
-    if (!gelesen) {
-      setErr("Das war kein Ordner. Bitte den ganzen Heftordner fallen lassen.");
-      return;
-    }
+  /** Den naechsten Ordner aus der Warteschlange anstossen. */
+  function naechster() {
+    const weiter = schlange.current.shift();
+    setWartend(schlange.current.map((o) => o.folderName));
+    if (!weiter) return;
     setErr(null);
     setErgebnis(null);
     setHeft(null);
     setProtokoll([]);
     setLauf(null);
     abbrechen.current = false;
-    setOrdner({ id: ++naechsteId.current, ...gelesen });
+    setOrdner({ id: ++naechsteId.current, ...weiter });
+  }
+
+  function uebernehmen(liste: DroppedFolder[]) {
+    if (!liste.length) {
+      setErr("Das war kein Ordner. Bitte den ganzen Heftordner fallen lassen.");
+      return;
+    }
+    schlange.current.push(...liste);
+    if (laeuft) {
+      setWartend(schlange.current.map((o) => o.folderName));
+      return;
+    }
+    setErledigtListe([]);
+    naechster();
   }
 
   async function starten(plan: FolderPlan, name: Heftname) {
@@ -707,6 +733,7 @@ export default function FolderImport({
       abhaken("aufbereitung");
 
       setLauf({ text: "Fertig", prozent: 100 });
+      setErledigtListe((alt) => [...alt, { titel: name.issueTitle, issueId }]);
       setErgebnis({
         issueId,
         titel: name.issueTitle,
@@ -723,16 +750,20 @@ export default function FolderImport({
         prozent: alt?.prozent ?? 0,
         fehler: true,
       }));
-      if (e instanceof Abgebrochen) {
-        setErr("Abgebrochen. Was bis dahin hochging, steht schon am Heft.");
-      } else {
-        setErr(cleanError(e) ?? "Fehler");
-      }
+      const fehler =
+        e instanceof Abgebrochen
+          ? "Abgebrochen. Was bis dahin hochging, steht schon am Heft."
+          : (cleanError(e) ?? "Fehler");
+      setErr(fehler);
+      setErledigtListe((alt) => [...alt, { titel: name.issueTitle, fehler }]);
+      // Abbrechen haelt die ganze Warteschlange an, nicht nur dieses Heft.
+      if (e instanceof Abgebrochen) schlange.current = [];
     } finally {
       await innenPdf?.schliessen().catch(() => {});
       wandler.dispose();
       setAktiv(false);
       abbrechen.current = false;
+      naechster();
     }
   }
 
@@ -783,7 +814,6 @@ export default function FolderImport({
       <div
         className={`dropzone${ueber ? " over" : ""}${laeuft ? " busy" : ""}`}
         onDragOver={(e) => {
-          if (laeuft) return;
           e.preventDefault();
           setUeber(true);
         }}
@@ -791,9 +821,8 @@ export default function FolderImport({
         onDrop={async (e) => {
           e.preventDefault();
           setUeber(false);
-          if (laeuft) return;
           try {
-            uebernehmen(await readDroppedFolder(e.dataTransfer.items));
+            uebernehmen(await readDroppedFolders(e.dataTransfer.items));
           } catch (ex: any) {
             setErr(`Ordner liess sich nicht lesen: ${ex?.message ?? ex}`);
           }
@@ -809,12 +838,12 @@ export default function FolderImport({
         }}
       >
         <strong>
-          {laeuft ? "Import läuft — bitte warten" : "Heftordner hierher ziehen"}
+          {laeuft ? "Import läuft — weitere Ordner können dazu" : "Heftordner hierher ziehen"}
         </strong>
         <span className="hint">
           {laeuft
-            ? "Der nächste Ordner kann gleich danach fallen gelassen werden."
-            : "oder klicken, um ihn auszuwählen. Reihe und Heftnummer stehen im Ordnernamen; der Import beginnt sofort."}
+            ? "Sie kommen in die Warteschlange und laufen danach von selbst."
+            : "Auch mehrere auf einmal oder ein Ordner voller Heftordner. Oder klicken, um einen auszuwählen. Reihe und Heftnummer stehen im Ordnernamen; der Import beginnt sofort."}
         </span>
         <input
           ref={feld}
@@ -824,7 +853,8 @@ export default function FolderImport({
           // Ohne Drag-and-Drop: Ordner ueber das Dateifeld waehlen.
           {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
           onChange={(e) => {
-            if (e.target.files) uebernehmen(readDirectoryInput(e.target.files));
+            const gelesen = e.target.files ? readDirectoryInput(e.target.files) : null;
+            uebernehmen(gelesen ? aufteilen(gelesen) : []);
             e.target.value = "";
           }}
         />
@@ -858,6 +888,36 @@ export default function FolderImport({
       </details>
 
       {balken}
+
+      {(wartend.length > 0 || erledigtListe.length > 1 || (erledigtListe.length === 1 && wartend.length + (aktiv ? 1 : 0) > 0)) && (
+        <div className="import-schlange">
+          {erledigtListe.length > 0 && (
+            <ul className="source-list">
+              {erledigtListe.map((h, i) => (
+                <li key={i} className={h.fehler ? "err" : undefined}>
+                  {h.issueId ? <Link to={`/admin/heft/${h.issueId}`}>{h.titel}</Link> : h.titel}
+                  {h.fehler ? ` – ${h.fehler}` : " – hochgeladen"}
+                </li>
+              ))}
+            </ul>
+          )}
+          {wartend.length > 0 && (
+            <p className="hint">
+              Warteschlange ({wartend.length}): {wartend.join(", ")}{" "}
+              <button
+                type="button"
+                className="btn quiet small"
+                onClick={() => {
+                  schlange.current = [];
+                  setWartend([]);
+                }}
+              >
+                Leeren
+              </button>
+            </p>
+          )}
+        </div>
+      )}
 
       {plan && name && (
         <div className="plan">

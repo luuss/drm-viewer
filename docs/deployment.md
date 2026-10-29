@@ -231,3 +231,19 @@ Die Dateien in MinIO lassen sich mit `mc mirror` auf ein zweites Ziel spiegeln.
 `docker-compose.selfhost.yml` bleibt fuer den Aufbau auf dem eigenen Rechner:
 dieselben Dienste, aber mit Host-Ports und Caddy statt Dokploy-Domains. Er ist
 zum Ausprobieren da, nicht fuer den Betrieb.
+
+## Fehlersuche Live (TLDHost, 62.108.44.118)
+
+Gefunden am 28.10.2026 beim Suchen nach Upload-Fehlern:
+
+| Was | Wo |
+|---|---|
+| Aufbereitung je Heft (`job.claimed` … `job.activated`) | `docker logs -t code-import-worker-1` |
+| Gateway: Kacheln, Bilder, Schriften, Tickets (403/401) | `docker logs -t code-tile-service-1` |
+| Alle Anfragen mit Status, auch Uploads in den Speicher (`PUT /medien/…`) | `/var/www/vhosts/system/digital.lesenundschenken.de/logs/access_ssl_log` |
+| Abgerissene Uploads ("read request body failed", Proxy-Fehler) | `/var/www/vhosts/system/digital.lesenundschenken.de/logs/error_log` |
+| Convex-Deploys und Backend-Warnungen | `docker logs -t code-convex-backend-1` |
+
+`docker compose ps` braucht `--env-file /opt/hefte-digital/.env`, sonst bricht es
+ab; `docker ps` geht ohne. Die Zeiten in den Containerlogs sind UTC, im
+Apache-Log Ortszeit.

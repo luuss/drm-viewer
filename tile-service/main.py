@@ -17,6 +17,7 @@ import hmac
 import io
 import secrets
 import os
+import re
 import time
 from collections import OrderedDict, defaultdict, deque
 from typing import Any
@@ -46,8 +47,14 @@ TILE_SIZE = int(os.environ.get("TILE_SIZE", "512"))
 PAGE_CACHE = int(os.environ.get("PAGE_CACHE", "24"))
 SESSION_CACHE_TTL = 60
 USAGE_FLUSH_SECONDS = int(os.environ.get("USAGE_FLUSH_SECONDS", "30"))
-MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "80"))
-MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "1200"))
+# Bremse je Leser und Heft. Zuegiges Blaettern eines Menschen bleibt
+# darunter: Doppelseiten im Sekundentakt sind 120 Seiten und einige tausend
+# Kacheln in der Minute (scharfe Schirme laden je Seite bis 35 Kacheln). Mit
+# 80 Seiten und 1200 Kacheln blieben beim Blaettern Seiten bis zu einer
+# Minute leer (Pruefung 28.10.2026). Wer ein Heft maschinell abzieht, wird
+# weiter gebremst; der Leser wartet bei 429 und fragt selbst nach.
+MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "300"))
+MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "6000"))
 
 # Medienspeicher. Liegen die Bilder in einem Eimer statt in der Convex-Ablage,
 # hat Convex keine Adresse fuer den Browser — dieser Dienst hat den Zugang und
@@ -65,12 +72,11 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-V"],
+    expose_headers=["X-V", "Retry-After"],
 )
 
 _client = httpx.AsyncClient(timeout=60.0, follow_redirects=False)
-_page_cache: "OrderedDict[str, Image.Image]" = OrderedDict()
-_page_meta: dict[str, dict] = {}
+_page_cache: "OrderedDict[str, tuple[float, Image.Image, dict]]" = OrderedDict()
 _session_cache: dict[str, tuple[float, dict]] = {}
 _rate: dict[str, deque[float]] = defaultdict(deque)
 _usage: dict[str, int] = defaultdict(int)
@@ -185,6 +191,28 @@ def wasserzeichen_feld(session: dict) -> Image.Image | None:
     return _felder[schluessel]
 
 
+def redaktion_erlaubt(asset_id: str, r: str | None) -> bool:
+    """Unterschrift aus `convex/assets.ts` (`redaktionsAssetUrl`) pruefen.
+
+    Die Redaktion zeigt Seitenvorschauen als schlichte `<img>`, ohne
+    Lesesitzung. Convex gibt solche Adressen nur nach `requireEditor` aus.
+    """
+    if not r or "." not in r:
+        return False
+    ablauf, signatur = r.split(".", 1)
+    try:
+        if int(ablauf) < time.time():
+            return False
+    except ValueError:
+        return False
+    erwartet = hmac.new(
+        TILE_SERVICE_SECRET.encode(),
+        f"redaktion:{asset_id}:{ablauf}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(signatur, erwartet)
+
+
 def require_fetch(request: Request) -> None:
     """Nur `fetch` aus der eigenen Seite.
 
@@ -206,7 +234,12 @@ def check_rate(key: str, limit: int, what: str) -> None:
     while hits and now - hits[0] > 60:
         hits.popleft()
     if len(hits) >= limit:
-        raise HTTPException(429, f"Zu viele {what} pro Minute")
+        # Wann der aelteste Zugriff aus dem Fenster faellt: so lange wartet
+        # der Leser, bevor er von selbst nachfragt (`web/src/reader/nachladen.ts`).
+        frei = max(1, int(60 - (now - hits[0])) + 1)
+        raise HTTPException(
+            429, f"Zu viele {what} pro Minute", headers={"Retry-After": str(frei)}
+        )
     hits.append(now)
 
 
@@ -238,45 +271,129 @@ async def require_session(token: str | None, issue_id: str | None = None) -> dic
 # und der alte Schluessel lieferte sonst weiter das alte Bild (DMZ 170 zeigte
 # am 30.09. als Titel noch eine Anzeige aus dem ersten Lauf).
 RESOLVE_TTL = 30
-_resolve_cache: dict[str, tuple[float, dict]] = {}
+
+
+class Merkliste:
+    """Kurzzeitspeicher mit fester Groesse: was laenger nicht gefragt wurde,
+    faellt als erstes heraus, und jeder Eintrag hat eine Ablaufzeit.
+
+    Frueher durchsuchte jeder neue Eintrag ab 4096 den ganzen Speicher nach
+    Abgelaufenem; wer Unsinn-Kennungen schickte, brachte so die Ereignis-
+    schleife ins Stocken.
+    """
+
+    def __init__(self, groesse: int) -> None:
+        self.groesse = groesse
+        self._daten: "OrderedDict[str, tuple[float, Any]]" = OrderedDict()
+
+    def hole(self, key: str) -> tuple[bool, Any]:
+        hit = self._daten.get(key)
+        if hit is None:
+            return False, None
+        if hit[0] <= time.monotonic():
+            self._daten.pop(key, None)
+            return False, None
+        self._daten.move_to_end(key)
+        return True, hit[1]
+
+    def lege(self, key: str, wert: Any, ttl: float) -> None:
+        self._daten[key] = (time.monotonic() + ttl, wert)
+        self._daten.move_to_end(key)
+        while len(self._daten) > self.groesse:
+            self._daten.popitem(last=False)
+
+    def __len__(self) -> int:
+        return len(self._daten)
+
+    def clear(self) -> None:
+        self._daten.clear()
+
+# Auch der Speicherschluessel reicht allein nicht: der Import legt Seiten und
+# Artikelbilder unter festen Namen ab (`images/{seite}-{x0}-{y0}.jpg`) und
+# ueberschreibt sie beim Neuimport. Darum gehoert der Stand aus Convex
+# (Zeitpunkt und Groesse, `assetStand`) mit in den Schluessel, und kein
+# Eintrag lebt laenger als fuenf Minuten.
+DATEI_TTL = 300
+
+
+def speicher_schluessel(info: dict) -> str:
+    ort = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
+    return f"{ort}#{info.get('stand') or ''}"
+_resolve_cache = Merkliste(4096)
 
 
 async def resolve_page(issue_id: str, index: int) -> dict:
     rkey = f"{issue_id}:{index}"
-    now = time.monotonic()
-    hit = _resolve_cache.get(rkey)
-    if hit and hit[0] > now:
-        return hit[1]
+    da, info = _resolve_cache.hole(rkey)
+    if da:
+        return info
     info = await service_call(
         "/service/page/resolve", {"issueId": issue_id, "index": index}
     )
     if not info or not info.get("ready"):
         raise HTTPException(409, "Seite ist noch nicht aufbereitet")
-    _resolve_cache[rkey] = (now + RESOLVE_TTL, info)
-    if len(_resolve_cache) > 4096:
-        for k, (exp, _) in list(_resolve_cache.items()):
-            if exp <= now:
-                _resolve_cache.pop(k, None)
+    _resolve_cache.lege(rkey, info, RESOLVE_TTL)
     return info
+
+
+# Artikelbilder: wohin eine Kennung zeigt und die Bytes dahinter, kurz
+# gemerkt. Ein bildreicher Artikel fragte sonst je Bild erst Convex und dann
+# den Medienspeicher, und wer zwischen Artikeln hin und her blaettert, holte
+# dieselben Bilder jedes Mal neu. Verwuerfelt wird weiter je Sitzung.
+ASSET_TTL = 30
+BILD_CACHE = int(os.environ.get("BILD_CACHE", "48"))
+# Eine unbekannte Kennung nur kurz: sie kam vor jeder Sitzungspruefung.
+UNBEKANNT_TTL = 5
+# Form einer Convex-Kennung (Crockford-Base32); alles andere fragt Convex gar
+# nicht erst (`web/src/lib/kennung.ts`).
+KENNUNG = re.compile(r"^[0-9a-hjkmnp-tv-z]{31,37}$")
+_asset_cache = Merkliste(2048)
+_bild_cache: "OrderedDict[str, tuple[float, bytes]]" = OrderedDict()
+
+
+async def resolve_asset(asset_id: str) -> dict | None:
+    if not KENNUNG.match(asset_id):
+        return None
+    da, info = _asset_cache.hole(asset_id)
+    if da:
+        return info
+    info = await service_call("/service/asset/resolve", {"assetId": asset_id})
+    _asset_cache.lege(asset_id, info, ASSET_TTL if info else UNBEKANNT_TTL)
+    return info
+
+
+async def load_bild(info: dict) -> bytes:
+    key = speicher_schluessel(info)
+    now = time.monotonic()
+    hit = _bild_cache.get(key)
+    if hit and hit[0] > now:
+        _bild_cache.move_to_end(key)
+        return hit[1]
+    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    _bild_cache[key] = (now + DATEI_TTL, daten)
+    _bild_cache.move_to_end(key)
+    while len(_bild_cache) > BILD_CACHE:
+        _bild_cache.popitem(last=False)
+    return daten
 
 
 async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
     info = await resolve_page(issue_id, index)
-    key = f"{info.get('bucket')}/{info.get('key')}" if info.get("key") else str(info.get("url"))
+    key = speicher_schluessel(info)
     async with _lock:
-        if key in _page_cache:
+        hit = _page_cache.get(key)
+        if hit and hit[0] > time.monotonic():
             _page_cache.move_to_end(key)
-            return _page_cache[key], _page_meta[key]
+            return hit[1], hit[2]
 
     daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
     image = Image.open(io.BytesIO(daten)).convert("RGB")
     meta = {"width": image.width, "height": image.height}
     async with _lock:
-        _page_cache[key] = image
-        _page_meta[key] = meta
+        _page_cache[key] = (time.monotonic() + DATEI_TTL, image, meta)
+        _page_cache.move_to_end(key)
         while len(_page_cache) > PAGE_CACHE:
-            old, _ = _page_cache.popitem(last=False)
-            _page_meta.pop(old, None)
+            _page_cache.popitem(last=False)
     return image, meta
 
 
@@ -373,7 +490,7 @@ async def asset(
     es mit der Sitzung im Kopf, setzt es zusammen und malt es auf eine Flaeche.
     Die Sitzung in der Adresse (`?s=`) gibt es nicht mehr.
     """
-    info = await service_call("/service/asset/resolve", {"assetId": asset_id})
+    info = await resolve_asset(asset_id)
     if not info:
         raise HTTPException(404, "Unbekanntes Bild")
     if info.get("public"):
@@ -383,15 +500,24 @@ async def asset(
             media_type=info.get("contentType") or "image/jpeg",
             headers={"Cache-Control": "private, max-age=3600"},
         )
+    if redaktion_erlaubt(asset_id, request.query_params.get("r")):
+        daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+        return Response(
+            content=daten,
+            media_type=info.get("contentType") or "image/jpeg",
+            headers={"Cache-Control": "private, no-store"},
+        )
     require_fetch(request)
     session = await require_session(x_tile_session, info.get("issueId"))
-    require_ticket(x_tile_session or "", x_ticket)
+    # Erst bremsen, dann das Ticket verbrauchen: ein 429 kostete sonst ein
+    # Ticket, und jeder Neuversuch des Lesers leerte seinen Vorrat weiter.
     check_rate(
         f'assets:{session.get("userId")}:{info.get("issueId")}',
         MAX_TILES_PER_MIN,
         "Bilder",
     )
-    daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
+    require_ticket(x_tile_session or "", x_ticket)
+    daten = await load_bild(info)
     seed = schutz.fnv1a32(f'{session.get("kachelSchluessel", 0)}:asset:{asset_id}')
 
     feld = wasserzeichen_feld(session)
@@ -469,12 +595,14 @@ async def tile(
 ) -> Response:
     require_fetch(request)
     session = await require_session(x_tile_session, issue_id)
-    require_ticket(x_tile_session or "", x_ticket)
+    # Wie bei den Bildern: die Bremse vor dem Ticket (der Schluessel haengt
+    # an der schon geprueften Sitzung).
     check_rate(
         f'tiles:{session.get("userId")}:{issue_id}',
         MAX_TILES_PER_MIN,
         "Kacheln",
     )
+    require_ticket(x_tile_session or "", x_ticket)
     _usage[x_tile_session or ""] += 1
 
     image, meta = await load_page(issue_id, index)

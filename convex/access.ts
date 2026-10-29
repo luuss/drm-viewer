@@ -23,7 +23,9 @@ export async function hasIssueAccess(
   userId: Id<"users">,
   issueId: Id<"issues">,
 ): Promise<boolean> {
-  if (await isEditor(ctx, userId)) return true;
+  const rolle = await leseRolle(ctx, userId);
+  if (rolle === "editor") return true;
+  if (rolle === "reader") return (await ctx.db.get(issueId))?.isPublished === true;
   const now = Date.now();
   // Alle Zeilen pruefen: neben einer abgelaufenen Freischaltung kann eine
   // gueltige liegen.
@@ -45,8 +47,16 @@ export async function accessibleIssueIds(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<Set<string>> {
-  if (await isEditor(ctx, userId)) {
+  const rolle = await leseRolle(ctx, userId);
+  if (rolle === "editor") {
     const all = await ctx.db.query("issues").take(5000);
+    return new Set(all.map((i) => i._id as string));
+  }
+  if (rolle === "reader") {
+    const all = await ctx.db
+      .query("issues")
+      .withIndex("by_published", (q) => q.eq("isPublished", true))
+      .take(5000);
     return new Set(all.map((i) => i._id as string));
   }
   const now = Date.now();
@@ -87,10 +97,29 @@ export async function accessibleIssueIds(
   return ids;
 }
 
-/** Die Redaktion (und damit jeder Admin) liest jedes Heft, auch ein unveroeffentlichtes. */
-async function isEditor(ctx: QueryCtx | MutationCtx, userId: Id<"users">): Promise<boolean> {
+/**
+ * Die Redaktion (und damit jeder Admin) liest jedes Heft, auch ein
+ * unveroeffentlichtes. Die Rolle `reader` liest jedes veroeffentlichte Heft,
+ * auch jedes kuenftige, ohne Kauf.
+ */
+/** Redaktion: liest auch unveroeffentlichte Hefte (Vorschau vor der Freigabe). */
+export async function istRedaktion(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<boolean> {
+  return (await leseRolle(ctx, userId)) === "editor";
+}
+
+async function leseRolle(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<"editor" | "reader" | null> {
   const user = await ctx.db.get(userId);
-  return !!user && rolesOf(user).includes("editor");
+  if (!user) return null;
+  const roles = rolesOf(user);
+  if (roles.includes("editor")) return "editor";
+  if (roles.includes("reader")) return "reader";
+  return null;
 }
 
 
@@ -144,7 +173,33 @@ async function hasShopAccess(
 ): Promise<boolean> {
   const email = await emailOfUser(ctx, userId);
   if (!email) return false;
+  return await hasShopAccessByEmail(ctx, email, issueId, now);
+}
 
+/**
+ * Zugriff einer Adresse, auch ohne Konto: das Konto dieser Adresse wie im
+ * Leser, sonst die Kaeufe im Laden. Fuer Mails an Kaeufer, die sich noch nie
+ * angemeldet haben.
+ */
+export async function hasAccessByEmail(
+  ctx: QueryCtx | MutationCtx,
+  email: string,
+  issueId: Id<"issues">,
+): Promise<boolean> {
+  const user = await ctx.db
+    .query("users")
+    .withIndex("email", (q) => q.eq("email", email))
+    .first();
+  if (user) return await hasIssueAccess(ctx, user._id, issueId);
+  return await hasShopAccessByEmail(ctx, email, issueId, Date.now());
+}
+
+async function hasShopAccessByEmail(
+  ctx: QueryCtx | MutationCtx,
+  email: string,
+  issueId: Id<"issues">,
+  now: number,
+): Promise<boolean> {
   const single = await ctx.db
     .query("shopAccess")
     .withIndex("by_email_issue", (q) =>

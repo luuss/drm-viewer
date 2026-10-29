@@ -5,6 +5,7 @@ import { getAuthUserId, invalidateSessions } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
 import { endAuthSession } from "./sessions";
 import { leserDatenLoeschen } from "./leserKasse";
+import { alleAbbestellen } from "./heftAnkuendigung";
 
 export const setName = mutation({
   args: { name: v.string() },
@@ -135,6 +136,9 @@ async function purgeUser(ctx: MutationCtx, userId: Id<"users">) {
 
   // Anmeldelinks tragen die Adresse; sie gehen mit.
   const email = ((await ctx.db.get(userId))?.email ?? "").toLowerCase();
+  // Kaeufe im Laden bleiben an der Adresse haengen; ohne Konto soll trotzdem
+  // keine Werbung mehr kommen.
+  if (email) await alleAbbestellen(ctx, email);
   if (email) {
     const links = await ctx.db
       .query("magicLinks")
@@ -188,6 +192,20 @@ export const purgeByEmailInternal = internalMutation({
       .withIndex("by_email_and_createdAt", (q) => q.eq("email", e))
       .take(500);
     for (const l of links) await ctx.db.delete(l._id);
+    // Heft-Mails: Einstellungen und Versandzeilen. Ohne Kaeufe bekommt die
+    // Adresse ohnehin keine Mail mehr.
+    for (const row of await ctx.db
+      .query("mailEinstellungen")
+      .withIndex("by_email", (q) => q.eq("email", e))
+      .take(10)) {
+      await ctx.db.delete(row._id);
+    }
+    for (const row of await ctx.db
+      .query("heftAnkuendigungEmpfaenger")
+      .withIndex("by_email", (q) => q.eq("email", e))
+      .take(500)) {
+      await ctx.db.delete(row._id);
+    }
     return { users: users.length, shop, links: links.length };
   },
 });

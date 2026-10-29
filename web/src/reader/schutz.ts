@@ -10,6 +10,7 @@
 import { TILE_SERVICE_URL } from "../lib/api";
 
 import { fnv1a32, umformungen, vertauschung } from "./schutzRechnen";
+import { mitWiederholung } from "./nachladen";
 
 export { fnv1a32 };
 
@@ -97,18 +98,27 @@ export function kachelSeed(
 }
 
 /**
+ * So lange nach dem Holen gilt ein Ticket hier als frisch. Das Gateway nimmt
+ * es zehn Minuten lang an (`TICKET_TTL`); die Spanne davor deckt Uhren und
+ * Wege ab. Aeltere Tickets fliegen vor der Ausgabe aus dem Vorrat: nach einer
+ * Lesepause bekamen sonst die naechsten Kacheln und Bilder 403.
+ */
+const TICKET_FRISCH_MS = 8 * 60 * 1000;
+
+/**
  * Einmal-Tickets fuer Kacheln und Bilder. Das Gateway nimmt jedes Ticket nur
  * einmal an (`tile-service/main.py`, `require_ticket`, Kopf `X-Req`); eine nachgeschickte
  * Anfrage mit demselben Ticket bekommt 403. Der Vorrat wird in Buendeln
  * nachgefuellt, bevor er leer ist.
  */
 export class TicketVorrat {
-  private vorrat: string[] = [];
+  private vorrat: { t: string; bis: number }[] = [];
   private laden: Promise<void> | null = null;
 
   constructor(
     private sessionToken: string,
     private issueId: string,
+    private jetzt: () => number = Date.now,
   ) {}
 
   private nachfuellen(): Promise<void> {
@@ -117,7 +127,8 @@ export class TicketVorrat {
     })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Tickets ${res.status}`);
-        this.vorrat.push(...((await res.json()).t as string[]));
+        const bis = this.jetzt() + TICKET_FRISCH_MS;
+        this.vorrat.push(...((await res.json()).t as string[]).map((t) => ({ t, bis })));
       })
       .finally(() => {
         this.laden = null;
@@ -125,9 +136,28 @@ export class TicketVorrat {
     return this.laden;
   }
 
+  private abgelaufeneWeg() {
+    const jetzt = this.jetzt();
+    const frisch = this.vorrat.findIndex((e) => e.bis > jetzt);
+    this.vorrat.splice(0, frisch < 0 ? this.vorrat.length : frisch);
+  }
+
+  /**
+   * Vorrat schon fuellen, bevor das erste Bild ihn braucht: der Artikel
+   * oeffnet, und die Bilder warten nicht noch auf das Buendel.
+   */
+  vorbereiten() {
+    this.abgelaufeneWeg();
+    if (this.vorrat.length < 16) void this.nachfuellen().catch(() => undefined);
+  }
+
   async ticket(): Promise<string> {
-    while (this.vorrat.length === 0) await this.nachfuellen();
-    const t = this.vorrat.shift()!;
+    this.abgelaufeneWeg();
+    while (this.vorrat.length === 0) {
+      await this.nachfuellen();
+      this.abgelaufeneWeg();
+    }
+    const { t } = this.vorrat.shift()!;
     if (this.vorrat.length < 16) void this.nachfuellen().catch(() => undefined);
     return t;
   }
@@ -171,7 +201,12 @@ export async function bildAlsCanvas(
   k: number,
   signal: AbortSignal,
 ): Promise<HTMLCanvasElement> {
-  const res = await mitTicket(url, sessionToken, issueId, signal);
+  // Gebremst (429) oder ein Serverfehler: von selbst noch einmal, je Versuch
+  // mit frischem Ticket.
+  const res = await mitWiederholung(
+    () => mitTicket(url, sessionToken, issueId, signal),
+    signal,
+  );
   if (!res.ok) throw new Error(`Bild ${res.status}`);
   const bild = await createImageBitmap(await res.blob());
   const assetId = /\/api\/asset\/([^/?.]+)\.jpg/.exec(url)?.[1];
