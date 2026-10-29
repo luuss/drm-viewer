@@ -35,7 +35,9 @@ from extractor.anzeige import (
 )
 from extractor.article_assembler import assemble, assemble_cover_pages, flow_text_blocks
 from extractor.buecher import buecher_der_seiten
+from extractor import bildunterschriften
 from extractor.idml_extract import (
+    BILD_MINDESTFLAECHE,
     extract_idml_blocks,
     extract_idml_frames,
     frames_to_blocks,
@@ -48,7 +50,6 @@ from extractor.image_regions import read_trim_boxes
 from extractor.issue_meta import publication_date, read_issue_meta
 from extractor.model import SourceBlock
 from extractor.pdf_extract import (
-    attach_captions,
     blocks_from_text_layer,
     extract_pdf_pages,
     mark_furniture,
@@ -769,9 +770,10 @@ class Job:
         nach Schriftgroesse entfaellt — das Absatzformat hat sie schon gesagt.
         """
         mark_furniture(blocks, page_count)
-        ordered = idml_reading_order([b for b in blocks if not b.drop])
-        attach_captions(images, ordered)
-        return ordered
+        # Die Bildunterschriften des Satzes haengen schon an ihren Bildern
+        # (`_from_idml`, nach der Satzstruktur). Die Naeheregel fuer PDF-Seiten
+        # liefe hier nur ein zweites Mal und faende falsche Paare.
+        return idml_reading_order([b for b in blocks if not b.drop])
 
     def _from_idml(self, idml_bytes, pdf_bytes, page_map, halves):
         """Bloecke und Bildbereiche aus der Satzdatei.
@@ -784,11 +786,16 @@ class Job:
         bildrahmen, textrahmen = extract_idml_frames(idml_bytes)
         trims = read_trim_boxes(pdf_bytes, page_map, halves) if pdf_bytes else {}
         rohe_blocks = extract_idml_blocks(idml_bytes, textrahmen)
+        rollen = rollen_je_story(rohe_blocks)
+        # Ein Kasten im Unterschriftformat (Text um ein Foto herum) ist keine
+        # Unterschrift, sondern Lesetext.
+        bildunterschriften.als_kasten(
+            rohe_blocks,
+            bildunterschriften.kaesten_im_unterschriftformat(bildrahmen, rohe_blocks),
+        )
         # Schmuckflaechen fallen im Netzformat des Satzes weg, bevor daraus
         # Bildbereiche der Druckseite werden.
-        gefiltert = ohne_unterlagen(
-            bildrahmen, textrahmen, rollen_je_story(rohe_blocks)
-        )
+        gefiltert = ohne_unterlagen(bildrahmen, textrahmen, rollen)
         gefiltert = ohne_vorschaubilder(gefiltert, textrahmen, rohe_blocks)
         if len(gefiltert) != len(bildrahmen):
             log(
@@ -797,7 +804,19 @@ class Job:
                 entfernt=len(bildrahmen) - len(gefiltert),
             )
         satz_blocks = frames_to_blocks(rohe_blocks, page_map, trims)
-        satz_images = frames_to_images(gefiltert, page_map, trims)
+        # Erst alle Bildrahmen, auch die kleinen: eine Unterschrift unter einer
+        # Briefmarke soll an ihr haengen und nicht zum grossen Nachbarn wandern.
+        alle_bilder = frames_to_images(gefiltert, page_map, trims, min_area=0)
+        zuordnung = bildunterschriften.zuordnen(alle_bilder, satz_blocks)
+        log(
+            "job.bildunterschriften",
+            jobId=self.job_id,
+            gesamt=len(zuordnung),
+            ohneBild=sum(1 for _u, img, _a in zuordnung if img is None),
+        )
+        satz_images = [
+            i for i in alle_bilder if (i.x1 - i.x0) * (i.y1 - i.y0) >= BILD_MINDESTFLAECHE
+        ]
         return satz_blocks, satz_images
 
     def _verzeichnis_platzieren(

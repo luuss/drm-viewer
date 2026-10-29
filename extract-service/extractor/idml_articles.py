@@ -133,8 +133,11 @@ UNTERLAGE_ROLLEN = (
 # Unterlage das Foto ein zweites Mal — oder, aus der verknuepften Datei, nur
 # den leeren Rahmen. An den vier Musterheften gemessen fuellt das Foto seinen
 # Rahmen zu 73 bis 88 Prozent; ein Aufmacher mit eingeklinktem Bild kommt auf
-# hoechstens 46.
-BILD_UNTERLAGE_ANTEIL = 0.60
+# hoechstens 46. Seit die Rahmen freigestellter Bilder richtig gelesen werden
+# (`idml_extract._path_bounds`, 10/2026), kommen die Buchmodelle der
+# ZUERST!-Besprechungsseiten dazu: dort fuellt der Umschlag das Modell zu 58
+# bis 70 Prozent (13 Hefte gemessen).
+BILD_UNTERLAGE_ANTEIL = 0.55
 BILD_UNTERLAGE_RAND = 0.01
 
 
@@ -298,10 +301,93 @@ class Story:
         gewicht: dict[str, int] = {}
         for b in self.blocks:
             r = rolle_fuer(b.style_name, len(b.text))
+            if r == "bildunterschrift" and b.kind == "box":
+                # Ein Kasten im Unterschriftformat, an der Satzstruktur erkannt
+                # (`bildunterschriften.kaesten_im_unterschriftformat`).
+                r = "kasten"
             gewicht[r] = gewicht.get(r, 0) + len(b.text)
         if not gewicht:
             return "beiwerk"
-        return max(gewicht.items(), key=lambda kv: kv[1])[0]
+        rolle = max(gewicht.items(), key=lambda kv: kv[1])[0]
+        if (
+            rolle == "mengentext"
+            and self.zeichen < ARTIKEL_MINDESTZEICHEN
+            and TITELNACHWEIS.match(self.blocks[0].text)
+        ):
+            # "Titelseite: Deutsche Elite hinter feindlichen Linien ... Foto:"
+            # erklaert das Umschlagbild und steht neben dem Editorial. Im
+            # Lesetext des Editorials war es ein loser Schlussabsatz (DMZ 170
+            # S. 3).
+            return "beiwerk"
+        return rolle
+
+
+# Der Nachweis zum Umschlagbild: "Titelseite: ...", "Titelbild: ...".
+TITELNACHWEIS = re.compile(r"^\s*(?:titelseite|titelbild|titelfoto|zum titelbild)\s*:", re.I)
+
+# Rollen, deren Absaetze im Satz nur Zeilen sind: InDesign bricht Ueberschrift,
+# Unterzeile, Zwischentitel und die Anrede "Verehrter / Leser," mit einer
+# Absatzschaltung um, damit die Zeile auf der Druckseite schoen faellt. Im
+# Lesetext sind das keine zwei Absaetze.
+ZEILEN_ROLLEN = ("ueberschrift", "unterzeile", "einleitung", "zwischentitel", "beiwerk", "autor")
+ZEILE_HOECHSTLAENGE = 80
+_ZEILENENDE = re.compile(r"[.!?:;…]\s*$")
+
+
+_ANREDE = re.compile(r"^\s*(?:verehrte[rn]?|liebe[rn]?|sehr geehrte[rn]?)\b", re.I)
+
+
+def _laeuft_weiter(erste: str, zweite: str) -> bool:
+    """Setzt die zweite Zeile den Satz der ersten fort?
+
+    Ja, wenn sie klein anfaengt ("Mehr Qubits" / "müssen her!"), wenn die
+    erste eine Anrede beginnt ("Verehrter" / "Leser,") oder ein Zitat
+    oeffnet, das sie nicht schliesst. Verfasser und Titel einer Buchanzeige
+    ("Stefan Scheil" / "Die russische Verschwörung") bleiben zwei Zeilen.
+    """
+    if zweite[:1].islower():
+        return True
+    if _ANREDE.match(erste):
+        return True
+    return erste.count("„") > erste.count("“")
+
+
+def zeilen_zusammenfuehren(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Umbrochene Zeilen eines Absatzes wieder zu einem Absatz machen.
+
+    Zusammengefuehrt werden nur Nachbarn derselben Story, desselben Formats
+    und derselben Seite, wenn das Format eine der `ZEILEN_ROLLEN` hat und die
+    erste Zeile kurz ist und nicht mit einem Satzzeichen endet. Mengentext
+    bleibt unberuehrt: dort ist jede Absatzschaltung ein Absatz.
+    """
+    from dataclasses import replace
+
+    out: list[SourceBlock] = []
+    for b in blocks:
+        vorher = out[-1] if out else None
+        if (
+            vorher is not None
+            and vorher.story_id
+            and vorher.story_id == b.story_id
+            and vorher.style_name == b.style_name
+            and vorher.kind == b.kind
+            and vorher.page_index == b.page_index
+            and vorher.table is None
+            and b.table is None
+            and rolle_fuer(b.style_name, len(b.text)) in ZEILEN_ROLLEN
+            and len(vorher.text) <= ZEILE_HOECHSTLAENGE
+            and not _ZEILENENDE.search(vorher.text)
+            and _laeuft_weiter(vorher.text, b.text)
+        ):
+            erste = vorher.text.rstrip()
+            if erste.endswith("-") and b.text[:1].islower():
+                text = erste[:-1] + b.text.lstrip()
+            else:
+                text = f"{erste} {b.text.lstrip()}"
+            out[-1] = replace(vorher, text=text, y1=max(vorher.y1, b.y1))
+            continue
+        out.append(b)
+    return out
 
 
 # Ein Anfangsbuchstabe steht oft in einem eigenen kleinen Rahmen neben dem
@@ -809,6 +895,9 @@ def artikel_aus_satz(
         neue = [b if b.kind == "table" else _als(b, art) for b in rest.blocks]
         stelle = _letzte_stelle(ziel.blocks, rest.erste_seite)
         ziel.blocks[stelle:stelle] = neue
+
+    for stueck in artikel:
+        stueck.blocks = zeilen_zusammenfuehren(stueck.blocks)
 
     if images:
         # Die Zuordnung der Bilder ist dieselbe wie beim PDF-Weg: Spalte,

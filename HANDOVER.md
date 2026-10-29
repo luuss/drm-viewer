@@ -773,6 +773,96 @@ eine Zeile im Inhaltsverzeichnis.
   schwertertraeger.de zeigen fremden Inhalt („Nachtleben“, „Lust am
   Programmieren“, Stand 05.10.2026), deshalb dort kein Internet-Link.
 
+## 4l. Bildunterschriften nach der Satzstruktur (seit 29.10.2026)
+
+Anlass: ZUERST! 6/2025 Druckseite 34 („Den Blick nach vorn richten“): das
+Schülerfoto stand ohne Unterschrift. Die weiße Unterschrift liegt im Satz
+*auf* dem Foto. Die alte Regel (`pdf_extract.attach_captions`) suchte nur
+dicht *unter* dem Bild und mindestens halb so breit wie das Bild. Sie verlor
+damit alles auf dem Foto, darüber und daneben, und nahm von mehrzeiligen
+Unterschriften nur die erste Zeile.
+
+Neu: `extractor/bildunterschriften.py`, aufgerufen in `worker._from_idml`
+(die Naeheregel laeuft fuer Satzseiten nicht mehr). Reihenfolge der Belege:
+
+* **Gruppe** (`Group/@Self`, jetzt an Bild- und Textrahmen:
+  `IdmlImageFrame.gruppen`, `SourceImage.groups`, `SourceBlock.frame_groups`).
+* **Im Bild** (Rahmen zu ≥ 80 % im Bildrahmen), dann **unter**, **über**,
+  **neben** (Abstand ≤ 0,02 Seitenhöhe bzw. 0,04 Breite, gemessen an
+  1.216 Unterschriften: fast alle bündig), zuletzt **halb** (≥ 30 % auf dem Bild).
+* Bild im Bild (Detailaufnahme auf dem großen Foto) schlägt das große Bild;
+  „Links:“/„Rechts:“ am Anfang zeigt die Richtung; gestaffelte Blätter: das
+  bündige, ganz breite gewinnt.
+* Je Rahmen eine Unterschrift; eine **Leerzeile nach Satzende** trennt zwei
+  (Rahmen zwischen zwei Fotos, ZUERST! 3/2026 S. 57) — `SourceBlock.after_blank`.
+* Eins zu eins, danach darf sich eine zweite Unterschrift an ein Bild hängen,
+  wenn sie wirklich daran steht. Länge bis 1.500 Zeichen (vorher 400).
+* Ein „Unterschrift“-Rahmen, der selbst ein Foto umschließt, ist ein Kasten
+  (ZUERST! 3/2025 „Szenario 1–3“): `kaesten_im_unterschriftformat` → Rolle
+  `kasten`, steht jetzt im Lesetext statt als Unterschrift am Nachbarfoto.
+* Kleinstbilder (< 0,4 % der Seite: Signets, Logos) bekommen keine Unterschrift;
+  kleine Bilder unter 0,8 % (Briefmarke) fangen ihre Unterschrift noch ab,
+  werden aber weiterhin kein Artikelbild.
+* Ein Bild über die Doppelseite kennt seinen Teil auf der Nachbarseite
+  (`IdmlImageFrame.auslaeufer`, `SourceImage.spread_parts`), dort darf seine
+  Unterschrift stehen (DMZ 170 S. 16).
+
+**Mitgefunden, Fehler im Rahmenlesen** (`idml_extract._path_bounds`): ein
+freigestelltes Bild trägt in `Image/Properties/TextWrapPreference` eine eigene
+Kontur im System des Bildes. Sie zählte mit, der Rahmen wurde riesig, seine Mitte
+lag neben der Seite, und das Bild fiel weg oder kam als Riesenausschnitt.
+Jetzt zählt nur `Properties/PathGeometry` des Rahmens. Betroffen u. a.: Wappen
+Wallensteins (DMZ 170 S. 70, drm-viewer-6bb), Pour le Mérite und Eichenlaub
+(Greim), Poseidon, EMP-44-Abweiser (vorher halbseitiger Ausschnitt). Dadurch
+kommen auch die leeren **Buchmodelle** der Besprechungsseiten zum Vorschein
+(„01_buch test 1.tif“, „buch 3d.tif“); der Umschlag füllt sie zu 58–70 %, deshalb
+`BILD_UNTERLAGE_ANTEIL` 0,60 → 0,55 (Aufmacher mit Einklinker: höchstens 46 %).
+
+**Zeilen statt Absätze** (`idml_articles.zeilen_zusammenfuehren`, drm-viewer-5x0):
+InDesign bricht Anrede, Überschrift, Unterzeile und Zwischentitel mit einer
+Absatzschaltung um. „Verehrter“ / „Leser,“ (DMZ 170 S. 3) wird „Verehrter
+Leser,“; zusammengeführt wird nur, wenn die zweite Zeile klein anfängt, die
+erste eine Anrede ist oder ein Zitat offen lässt. Verfasser/Titel einer
+Buchanzeige bleiben zwei Zeilen, Mengentext bleibt unberührt. Der Nachweis
+„Titelseite: …“ neben dem Editorial (`TITELNACHWEIS`) ist Beiwerk und steht
+nicht mehr im Lesetext.
+
+**Zahlen** (13 Hefte: ZUERST! 1–10/2025 und 3/2026, DMZ 170,
+DMZ-Zeitgeschichte 80, Greim; 1.212 Unterschriften im Satz ohne „xxx“-Platzhalter):
+
+| | alte Regel (nachgerechnet) | live | neu |
+|---|---|---|---|
+| am richtigen Bild, vollständig | 557 | 380 | 1.203 |
+| am falschen Bild | 5 | – | 0 in rund 60 am Druckbild geprüften |
+| nur erste Zeile / gekürzt | – | 166 | 0 |
+| fehlt | 650 | 657 | 9 |
+| fremder Text als Unterschrift | – | 25 | 0 |
+
+Die 9 ohne Bild stehen an Diagrammen, die im Satz gezeichnet sind (kein
+Bildrahmen: Bevölkerungskurven ZUERST! 7/2025, Umfragebalken), und an einer
+Unterschrift ohne Bild auf der Seite (ZUERST! 10/2025, Satzseite 41, Albanien). Geprüft am
+gerenderten Druckbild mit eingezeichneter Zuordnung (`_scratch/bu/overlay.py`),
+alle Abweichungen alt/neu und eine Zufallsseite je Heft.
+
+Werkzeuge (in `_scratch/bildunterschriften-2026-10-29/` im Hauptordner):
+`vergleich.py` (alt gegen neu über den echten Worker-Weg), `live_vergleich.py`
+(Bestand gegen Satz), `overlay.py <heft> <idml-seite>` (Zuordnung aufs
+Seitenbild, Seitenbild = `seite-(idml+1)`), `seite_holen.sh` (Seitenbild aus MinIO
+über den Container `code-import-worker-1`), `artikel.py` (Artikel einer Seite
+wie im Import). Die Skripte erwarten ihre Dateien unter `_scratch/bu/` und die
+IDMLs als `_scratch/bu/idml/<issueId>.idml`; die IDMLs liegen in MinIO unter
+`uploads/<issueId>/…idml` (holen wie in `seite_holen.sh`).
+Redakteursansicht von der Kommandozeile: `npx convex run --env-file
+_scratch/verlag-direkt.env --identity '{"subject":"<userId>|x","issuer":"x"}'
+articles:listForEditors '{"issueId":"…"}'` (userId des Testkontos über
+`devtools:usersByEmailPartInternal`).
+
+**Bestand:** nicht geändert. Der Fix greift beim nächsten Import. Ein
+Neuimport verwirft die Freigaben, der Auftrag „nachtrag“ lässt unveränderte
+Artikel samt Bildern stehen — beides holt die Unterschriften nicht sauber nach.
+Offen: Bilder-Nachtrag, der je Artikel nur `articleAssets` neu baut
+(drm-viewer-jmm). Zustand vorher gesichert: `live-<issueId>.json` im Ordner oben.
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde

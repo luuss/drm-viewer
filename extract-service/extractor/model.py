@@ -137,6 +137,12 @@ class SourceBlock:
     # sitzt, weiss die IDML nicht — der Rahmen selbst dagegen steht fest, und
     # er ist die richtige Trefferflaeche fuer den Sprung in den Artikel.
     frame_box: tuple[float, float, float, float] | None = None
+    # Nur bei Bloecken aus dem Satz: die InDesign-Gruppen um den Textrahmen,
+    # von aussen nach innen. Damit findet eine Bildunterschrift ihr Bild,
+    # wenn der Setzer beide gruppiert hat.
+    frame_groups: tuple[str, ...] = ()
+    # Nur aus dem Satz: vor diesem Absatz steht eine Leerzeile in der Story.
+    after_blank: bool = False
     column: int = 0
     drop: bool = False        # Beiwerk: Seitenzahl, Kolumnentitel, Slug
     confidence: float = 1.0
@@ -169,6 +175,12 @@ class SourceImage:
     # Welcher Teil der verknuepften Datei im Rahmen steht (u0, v0, u1, v1 als
     # Anteile des Originals). None heisst: ganzes Bild oder unbekannt.
     crop: tuple[float, float, float, float] | None = None
+    # Nur aus dem Satz: InDesign-Gruppen um den Bildrahmen, aussen nach innen.
+    groups: tuple[str, ...] = ()
+    # Nur aus dem Satz: was ein Bild ueber die Doppelseite auf die
+    # Nachbarseite hinueberreicht, als (Seite, x0, y0, x1, y1). Dort kann seine
+    # Unterschrift stehen.
+    spread_parts: tuple[tuple[int, float, float, float, float], ...] = ()
     # 1-basierte Position des Reader-Blocks, nach dem das Bild stehen soll.
     # None laesst die bisherige geometrische Rueckfalllogik aktiv.
     after_block_order: int | None = None

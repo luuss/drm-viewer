@@ -438,6 +438,7 @@ def extract_idml_blocks(
         rahmen_je_story.setdefault(f.story_id, []).append(f)
     for kennung, liste in rahmen_je_story.items():
         rahmen_je_story[kennung] = _kette_ordnen(liste)
+    gruppen_je_rahmen = {f.self_id: f.gruppen for f in text_frames or []}
 
     with zipfile.ZipFile(io.BytesIO(idml_bytes)) as zf:
         for name in _safe_members(zf, "Stories/"):
@@ -451,6 +452,10 @@ def extract_idml_blocks(
             absaetze: list[tuple[str, str]] = []
             # Je Absatz die Tabelle, falls der Absatz eine ist; sonst None.
             tabellen: list[TableData | None] = []
+            # Je Absatz: stand davor eine Leerzeile? Zwei Bildunterschriften in
+            # einem Rahmen trennt der Setzer so (ZUERST! 3/2026 S. 57).
+            leer_davor: list[bool] = []
+            leer = False
             for psr in root.iter("{*}ParagraphStyleRange"):
                 # Die Absaetze in Tabellenzellen gehoeren zur Tabelle. Frueher
                 # kamen sie hier ein zweites Mal als einzelne Absaetze heraus.
@@ -467,12 +472,17 @@ def extract_idml_blocks(
                     if isinstance(teil, TableData):
                         absaetze.append((teil.as_text(), style))
                         tabellen.append(teil)
+                        leer_davor.append(leer)
+                        leer = False
                         continue
                     text = clean_text(teil)
                     if not text:
+                        leer = bool(absaetze)
                         continue
                     absaetze.append((text, style))
                     tabellen.append(None)
+                    leer_davor.append(leer)
+                    leer = False
 
             if not absaetze:
                 continue
@@ -484,9 +494,9 @@ def extract_idml_blocks(
                 # gehoeren nicht in die Ausgabe.
                 continue
             lagen = _verteile_auf_rahmen(absaetze, rahmen)
-            for (text, style), tabelle, (seite, x0, y0, x1, y1, frame_id, kasten) in zip(
-                absaetze, tabellen, lagen
-            ):
+            for (text, style), tabelle, nach_leer, (
+                seite, x0, y0, x1, y1, frame_id, kasten
+            ) in zip(absaetze, tabellen, leer_davor, lagen):
                 if _ist_beiwerk(style):
                     continue
                 blocks.append(
@@ -504,6 +514,8 @@ def extract_idml_blocks(
                         frame_id=frame_id or None,
                         style_name=style or None,
                         frame_box=kasten,
+                        frame_groups=gruppen_je_rahmen.get(frame_id or "", ()),
+                        after_blank=nach_leer,
                     )
                 )
     return blocks
@@ -531,6 +543,10 @@ class IdmlTextFrame:
     self_id: str
     previous: str | None = None
     next: str | None = None
+    # Die InDesign-Gruppen, in denen der Rahmen steckt, von aussen nach innen
+    # (`Group/@Self`). Bild und Unterschrift, die der Setzer zusammen
+    # gruppiert hat, gehoeren sicher zusammen.
+    gruppen: tuple[str, ...] = ()
 
     @property
     def flaeche(self) -> float:
@@ -556,6 +572,10 @@ class IdmlImageFrame:
     # (u0, v0, u1, v1) des Originalbildes. None heisst: ganzes Bild, oder der
     # Satz hat es gedreht bzw. gespiegelt, dann traegt der Seitenausschnitt.
     crop: tuple[float, float, float, float] | None = None
+    # Gruppen von aussen nach innen, siehe `IdmlTextFrame.gruppen`.
+    gruppen: tuple[str, ...] = ()
+    # Teile des Rahmens auf anderen Seiten des Bogens: (Seite, x0, y0, x1, y1).
+    auslaeufer: tuple[tuple[int, float, float, float, float], ...] = ()
 
 
 def _matrix(value: str | None) -> tuple[float, float, float, float, float, float]:
@@ -600,7 +620,15 @@ def _path_bounds(element, matrix) -> tuple[float, float, float, float] | None:
     """
     xs: list[float] = []
     ys: list[float] = []
-    for punkt in element.iter("{*}PathPointType"):
+    # Nur die eigene Kontur (`Properties/PathGeometry` direkt am Rahmen). Ein
+    # freigestelltes Bild traegt in seiner Konturfuehrung (`TextWrapPreference`)
+    # weitere Pfadpunkte, im System des Bildes statt des Rahmens. Frueher
+    # zaehlten sie mit, der Rahmen wurde riesig, seine Mitte lag neben der
+    # Seite, und das Bild fiel weg (DMZ 170 S. 70: das Wappen Wallensteins).
+    eigene = element.find("{*}Properties/{*}PathGeometry")
+    if eigene is None:
+        return None
+    for punkt in eigene.iter("{*}PathPointType"):
         anchor = punkt.get("Anchor")
         if not anchor:
             continue
@@ -738,18 +766,21 @@ def extract_idml_frames(
                     float,
                     str | None,
                     tuple[float, float, float, float] | None,
+                    tuple[str, ...],
                 ]
             ] = []
-            textrahmen: list[tuple[float, float, float, float, str, str, str | None, str | None]] = []
+            textrahmen: list[
+                tuple[float, float, float, float, str, str, str | None, str | None, tuple[str, ...]]
+            ] = []
 
-            def walk(element, matrix) -> None:
+            def walk(element, matrix, gruppen: tuple[str, ...] = ()) -> None:
                 for kind in element:
                     tag = etree.QName(kind).localname
                     if tag == "Properties":
                         continue
                     eigene = _multiply(matrix, _matrix(kind.get("ItemTransform")))
                     if tag == "Group":
-                        walk(kind, eigene)
+                        walk(kind, eigene, (*gruppen, kind.get("Self") or ""))
                         continue
                     if tag == "TextFrame":
                         story = kind.get("ParentStory")
@@ -766,6 +797,7 @@ def extract_idml_frames(
                                     kind.get("Self") or "",
                                     _kette(kind.get("PreviousTextFrame")),
                                     _kette(kind.get("NextTextFrame")),
+                                    gruppen,
                                 )
                             )
                         continue
@@ -781,7 +813,7 @@ def extract_idml_frames(
                     )
                     if grafik is None:
                         # Leerer Rahmen oder Farbflaeche: kein Bild.
-                        walk(kind, eigene)
+                        walk(kind, eigene, gruppen)
                         continue
                     box = _path_bounds(kind, eigene)
                     if box is None:
@@ -794,17 +826,38 @@ def extract_idml_frames(
                         ),
                         None,
                     )
-                    bildrahmen.append((*box, link, _graphic_crop(grafik, eigene, box)))
+                    bildrahmen.append(
+                        (*box, link, _graphic_crop(grafik, eigene, box), gruppen)
+                    )
 
             walk(root.find("{*}Spread") if root.find("{*}Spread") is not None else root,
                  (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
 
+            # Ein Bild ueber die Doppelseite gehoert der Seite seiner Mitte. Was
+            # es auf die Nachbarseite hinueberreicht, merkt es sich als
+            # `auslaeufer` — dort kann seine Unterschrift stehen (DMZ 170
+            # S. 16: "Seitenansichten der Erma EMP 44").
+            je_nummer: dict[int, IdmlImageFrame] = {}
+            auslaeufer: list[tuple[int, int, tuple[float, float, float, float]]] = []
             for _mitte, seite in seiten:
                 breite = seite[2] - seite[0]
                 hoehe = seite[3] - seite[1]
                 if breite <= 0 or hoehe <= 0:
                     seitenzaehler += 1
                     continue
+
+                def auf_seite_geschnitten(x0: float, y0: float, x1: float, y1: float):
+                    """Der Teil eines Rahmens, der auf diese Seite hinueberreicht."""
+                    if min(x1, seite[2]) - max(x0, seite[0]) <= 0.01 * breite:
+                        return None
+                    if min(y1, seite[3]) - max(y0, seite[1]) <= 0.01 * hoehe:
+                        return None
+                    return (
+                        max(0.0, (x0 - seite[0]) / breite),
+                        max(0.0, (y0 - seite[1]) / hoehe),
+                        min(1.0, (x1 - seite[0]) / breite),
+                        min(1.0, (y1 - seite[1]) / hoehe),
+                    )
 
                 def auf_seite(x0: float, y0: float, x1: float, y1: float):
                     """Rahmen auf die Seite normieren, sofern sein Mitte dort liegt.
@@ -822,22 +875,26 @@ def extract_idml_frames(
                         min(1.0, (y1 - seite[1]) / hoehe),
                     )
 
-                for x0, y0, x1, y1, link, crop in bildrahmen:
+                for nummer, (x0, y0, x1, y1, link, crop, gruppen) in enumerate(bildrahmen):
                     box = auf_seite(x0, y0, x1, y1)
                     if box is None:
+                        teil = auf_seite_geschnitten(x0, y0, x1, y1)
+                        if teil is not None:
+                            auslaeufer.append((nummer, seitenzaehler, teil))
                         continue
-                    bilder.append(
-                        IdmlImageFrame(
-                            page_number=seitenzaehler,
-                            x0=box[0],
-                            y0=box[1],
-                            x1=box[2],
-                            y1=box[3],
-                            link=link,
-                            crop=crop,
-                        )
+                    frame = IdmlImageFrame(
+                        page_number=seitenzaehler,
+                        x0=box[0],
+                        y0=box[1],
+                        x1=box[2],
+                        y1=box[3],
+                        link=link,
+                        crop=crop,
+                        gruppen=gruppen,
                     )
-                for x0, y0, x1, y1, story, self_id, vorher, nachher in textrahmen:
+                    bilder.append(frame)
+                    je_nummer[nummer] = frame
+                for x0, y0, x1, y1, story, self_id, vorher, nachher, gruppen in textrahmen:
                     box = auf_seite(x0, y0, x1, y1)
                     if box is None:
                         continue
@@ -852,9 +909,14 @@ def extract_idml_frames(
                             self_id=self_id,
                             previous=vorher,
                             next=nachher,
+                            gruppen=gruppen,
                         )
                     )
                 seitenzaehler += 1
+            for nummer, seite_nr, teil in auslaeufer:
+                frame = je_nummer.get(nummer)
+                if frame is not None:
+                    frame.auslaeufer = (*frame.auslaeufer, (seite_nr, *teil))
     return bilder, texte
 
 
@@ -863,11 +925,16 @@ def extract_idml_image_frames(idml_bytes: bytes) -> list[IdmlImageFrame]:
     return extract_idml_frames(idml_bytes)[0]
 
 
+# Kleinere Bildrahmen (Signets, Linien, Fusszeilenlogo) werden keine
+# Artikelbilder.
+BILD_MINDESTFLAECHE = 0.008
+
+
 def frames_to_images(
     frames: list[IdmlImageFrame],
     page_map: list[tuple[int, int]],
     trims: dict[int, tuple[float, float, float, float]],
-    min_area: float = 0.008,
+    min_area: float = BILD_MINDESTFLAECHE,
 ) -> list[SourceImage]:
     """IDML-Rahmen auf die gerenderte PDF-Seite umrechnen.
 
@@ -901,10 +968,36 @@ def frames_to_images(
                 y1=min(1.0, y1),
                 link=frame.link,
                 crop=frame.crop,
+                groups=frame.gruppen,
+                spread_parts=tuple(
+                    teil
+                    for teil in (
+                        _auf_pdf_seite(rest, kanonisch, trims) for rest in frame.auslaeufer
+                    )
+                    if teil is not None
+                ),
             )
         )
     out.sort(key=lambda i: (i.page_index, round(i.y0, 3), i.x0))
     return out
+
+
+def _auf_pdf_seite(teil, kanonisch: dict, trims: dict):
+    """Ein Auslaeufer (Satzseite, Netzformat) auf der gerenderten Seite."""
+    seite, x0, y0, x1, y1 = teil
+    page_index = kanonisch.get(seite)
+    if page_index is None:
+        return None
+    trim = trims.get(page_index, (0.0, 0.0, 1.0, 1.0))
+    tw = trim[2] - trim[0]
+    th = trim[3] - trim[1]
+    return (
+        page_index,
+        max(0.0, trim[0] + x0 * tw),
+        max(0.0, trim[1] + y0 * th),
+        min(1.0, trim[0] + x1 * tw),
+        min(1.0, trim[1] + y1 * th),
+    )
 
 
 def story_of_frames(idml_bytes: bytes) -> dict[str, list[str]]:
