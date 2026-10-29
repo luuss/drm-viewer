@@ -2959,6 +2959,7 @@ body:has(.reihe-seite) { overflow-x: clip; }
   border-bottom: 1px solid var(--rule);
 }
 .article-body .lead { font-size: 1.2rem; color: var(--ink-soft); }
+.article-body .fq { font-style: italic; font-weight: 600; }
 .article-body p { color: var(--ink); }
 .article-body blockquote {
   border-left: 3px solid var(--accent-soft);

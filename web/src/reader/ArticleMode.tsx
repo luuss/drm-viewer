@@ -417,6 +417,9 @@ export default function ArticleMode({
               <blockquote data-source-page={item.page} data-order={b.order}>{b.text}</blockquote>
             ) : b.type === "lead" ? (
               <p className="lead" data-source-page={item.page} data-order={b.order}>{b.text}</p>
+            ) : b.type === "question" ? (
+              // Interviewfrage: im Druck kursiv abgesetzt.
+              <p className="fq" data-source-page={item.page} data-order={b.order}>{b.text}</p>
             ) : b.type === "table" && b.table ? (
               <ArtikelTabelle table={b.table} sourcePage={item.page} order={b.order} />
             ) : b.type === "caption" ? (
