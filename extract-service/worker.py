@@ -42,6 +42,7 @@ from extractor.idml_extract import (
     frames_to_images,
     idml_reading_order,
     link_name,
+    textrahmen_auf_seiten,
     toc_from_idml,
 )
 from extractor.image_regions import read_trim_boxes
@@ -62,6 +63,14 @@ from extractor.idml_articles import (
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
+from extractor.satzbilder import (
+    anzeigen_stories,
+    anzeigenflaechen,
+    bilder_im_satz,
+    ist_anzeigenartikel,
+    ohne_schriftzuege,
+    teaserflaechen,
+)
 from extractor.rubriken import (
     TITEL_SEITENABSTAND,
     kopfzeilen,
@@ -270,6 +279,7 @@ class Job:
             duplicatesDropped=getattr(self, "_doppelt", 0),
         )
         toc_entries = self._build_toc_entries(toc_hints, articles, payload_articles)
+        self._teaserflaechen(toc_hints, articles, payload_articles)
         self._toc_eintraege = len(toc_hints)
         # Erst nach dem Verzeichnis: das zaehlt die Artikel nach ihrer Stelle.
         payload_articles, page_links = self._seitenlinks(payload_articles)
@@ -625,6 +635,12 @@ class Job:
                 )
         self._halves_by_asset = halves_by_asset
 
+        # Seitenverhaeltnis je Leserseite, fuer schmale Streifen im Satz.
+        self._seitenaspekte = {
+            p["index"]: p["width"] / p["height"]
+            for p in pages
+            if p.get("width") and p.get("height")
+        }
         idml_source = next((s for s in sources if s["kind"] == "idml"), None)
         idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
         # Die Textebene der Innenseiten, vom Browser beim Import gelesen. Sie
@@ -786,7 +802,10 @@ class Job:
         """
         mark_furniture(blocks, page_count)
         ordered = idml_reading_order([b for b in blocks if not b.drop])
-        attach_captions(images, ordered)
+        # Bilder aus dem Satz haben ihre Unterschrift schon aus ihrer Story
+        # (satzbilder.unterschriften_zuordnen); die Schaetzung nach Lage gilt
+        # nur noch fuer Bilder, die der Satz nicht kennt.
+        attach_captions([i for i in images if not i.satz_geprueft], ordered)
         return ordered
 
     def _from_idml(self, idml_bytes, pdf_bytes, page_map, halves):
@@ -806,6 +825,7 @@ class Job:
             bildrahmen, textrahmen, rollen_je_story(rohe_blocks)
         )
         gefiltert = ohne_vorschaubilder(gefiltert, textrahmen, rohe_blocks)
+        gefiltert = ohne_schriftzuege(gefiltert)
         if len(gefiltert) != len(bildrahmen):
             log(
                 "job.unterlagen",
@@ -816,6 +836,24 @@ class Job:
         # Aussortieren sie als Beiwerk (zwei Zeichen) verwirft.
         satz_blocks = initialen_zurueck(frames_to_blocks(rohe_blocks, page_map, trims))
         satz_images = frames_to_images(gefiltert, page_map, trims)
+        # Unterschrift, Beleg, Schmuck, Anzeige und Story jedes Bildes aus dem
+        # Satz (extractor/satzbilder.py).
+        try:
+            satz_images, bilanz = bilder_im_satz(
+                satz_images,
+                satz_blocks,
+                textrahmen_auf_seiten(textrahmen, page_map, trims),
+                getattr(self, "_seitenaspekte", None),
+            )
+            log("job.satzbilder", jobId=self.job_id, **bilanz)
+            # Welche Stories Anzeigen sind: fuer ihre Klickflaechen.
+            self._anzeigen_ids = anzeigen_stories(satz_blocks) | {
+                i.story_id for i in satz_images if i.anzeige and i.story_id
+            }
+        except Exception as exc:
+            log("job.satzbilderFailed", jobId=self.job_id, error=str(exc)[:200])
+            for img in satz_images:
+                img.satz_geprueft = False
         return satz_blocks, satz_images
 
     def _verzeichnis_platzieren(
@@ -896,6 +934,12 @@ class Job:
         wurde: die Flaechen wandern auf die gedruckten Zeilen, ohne dass das
         Heft neu aufbereitet wird.
         """
+        # Seitenverhaeltnis je Leserseite, fuer schmale Streifen im Satz.
+        self._seitenaspekte = {
+            p["index"]: p["width"] / p["height"]
+            for p in pages
+            if p.get("width") and p.get("height")
+        }
         idml_source = next((s for s in sources if s["kind"] == "idml"), None)
         idml_bytes = blobs.get(idml_source["assetId"]) if idml_source else None
         if not idml_bytes:
@@ -1123,6 +1167,10 @@ class Job:
                 }
                 for img in article.images
             )
+            if ist_anzeigenartikel(article, getattr(self, "_anzeigen_ids", set())):
+                # Eine Anzeige ist auf der Seite eine Flaeche: Text, Titelzeilen
+                # und Umschlagbild zusammen.
+                regions.extend(anzeigenflaechen(article.blocks, article.images))
             images = self._store_images(article, page_images, reader_blocks)
             pages = article.pages
             payload.append(
@@ -1266,6 +1314,29 @@ class Job:
         for i, e in enumerate(out, start=1):
             e["order"] = i
         return out
+
+    def _teaserflaechen(self, hints, articles, payload_articles) -> None:
+        """Bild-Anreisser im gedruckten Verzeichnis fuehren zu ihrem Artikel.
+
+        Neben den Zeilen zeigt das Verzeichnis Bilder aus den Artikeln (ZUERST!,
+        DMZ); dieselbe Datei steht im Artikel. Ein Tipp auf das Bild springt
+        auf die erste Seite des Artikels wie die Zeile daneben.
+        """
+        seiten = {h.toc_page_index for h in hints if h.toc_page_index is not None}
+        satz = getattr(self, "_satz_fuer_buecher", None)
+        if not seiten or not satz:
+            return
+        bilder = [i for i in satz[1] if i.page_index in seiten]
+        artikel_bilder = [
+            (nummer, a.pages[0], [i for i in a.images if i.page_index not in seiten])
+            for nummer, a in enumerate(articles, start=1)
+            if a.images
+        ]
+        flaechen = teaserflaechen(bilder, artikel_bilder)
+        for nummer, region in flaechen:
+            payload_articles[nummer - 1]["regions"].append(region)
+        if flaechen:
+            log("job.teaser", jobId=getattr(self, "job_id", None), flaechen=len(flaechen))
 
     # Bildrahmen und platziertes Bild duerfen sich im Seitenverhaeltnis um
     # diesen Anteil unterscheiden und gelten noch als deckungsgleich.

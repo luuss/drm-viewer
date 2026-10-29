@@ -103,9 +103,11 @@ TITELRAHMEN_LUECKE = 0.015
 TITELRAHMEN_UEBERLAPPUNG = 0.01
 TITELRAHMEN_BREITE = 1.5
 TITELRAHMEN_HOECHSTZAHL = 3
-# Umfang einer Buchbeschreibung ("400 S.,", "256 Seiten,"); mit einem Preis
-# daneben ist der Text ein Buchangebot.
-_UMFANG = re.compile(r"(?<![\d.,])(?:\d{2,3}|\d\.\d{3})\s?(?:S\.|Seiten)\s?,")
+# Umfang einer Buchbeschreibung ("400 S.,", "256 Seiten,", "432 S. € 36,50");
+# mit einem Preis daneben ist der Text ein Buchangebot.
+_UMFANG = re.compile(
+    r"(?<![\d.,])(?:\d{2,3}|\d\.\d{3})\s?(?:S\.|Seiten)\s?(?:,|(?=€|EUR\b))"
+)
 
 
 def rolle_fuer(style: str | None, text_laenge: int = 0) -> str:
@@ -1255,11 +1257,12 @@ def artikel_aus_satz(
         ziel.blocks[stelle:stelle] = neue
 
     if images:
-        # Die Zuordnung der Bilder ist dieselbe wie beim PDF-Weg: Spalte,
-        # Textmenge auf der Seite, sonst der Artikel, der die Seite traegt.
-        from .article_assembler import _attach_images
+        # Was der Satz ueber die Bilder weiss (Story, Anzeige, Beleg), steht
+        # schon an ihnen (satzbilder.bilder_im_satz); sonst entscheidet die
+        # Lage wie beim PDF-Weg.
+        from .satzbilder import bilder_verteilen
 
-        _attach_images(artikel, images)
+        bilder_verteilen(artikel, images, stories)
     return artikel
 
 
