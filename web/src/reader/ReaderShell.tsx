@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api, TILE_SERVICE_URL, type Id } from "../lib/api";
 import PageMode, { type Klickpunkt } from "./PageMode";
@@ -59,6 +65,8 @@ export default function ReaderShell() {
   const { issueId: issueParam } = useParams();
   const issueId = issueParam as Id<"issues">;
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const access = useQuery(api.issues.hasAccess, { issueId });
@@ -93,6 +101,9 @@ export default function ReaderShell() {
   }, [devtools, sessionToken, sperrenWegenDevtools]);
   const [watermark, setWatermark] = useState("");
   const [mode, setMode] = useState<Mode>("page");
+  // Zuletzt verarbeiteter Verlaufsschritt, damit nur Zurueck/Vor die Ansicht
+  // aus der Adresse neu setzt.
+  const adresseKey = useRef<string | null>(null);
   const [pageLayout, setPageLayout] = useState<PageLayout>(() =>
     window.localStorage.getItem("reader-page-layout") === "spread" ? "spread" : "single",
   );
@@ -184,13 +195,28 @@ export default function ReaderShell() {
       if (Number.isInteger(absatz) && absatz > 0) setStelle({ articleId: deepLink, order: absatz });
       const hit = articles.find((a) => a._id === deepLink);
       if (hit) setPageIndex(hit.primaryPageIndex);
-    } else if (progress) {
-      setMode(progress.mode);
-      setPageIndex(progress.pageIndex);
-      setArticleId((progress.articleId as Id<"articles"> | null) ?? null);
+    } else if (seiteAusAdresse(searchParams) != null) {
+      setMode("page");
+      setPageIndex(seiteAusAdresse(searchParams)!);
+    } else {
+      const gemerkt = progress?.articleId as Id<"articles"> | undefined;
+      const imArtikel =
+        progress?.mode === "article" && !!gemerkt && articles.some((a) => a._id === gemerkt);
+      if (progress) {
+        setMode(imArtikel ? "article" : "page");
+        setPageIndex(progress.pageIndex);
+        setArticleId(gemerkt ?? null);
+      }
+      // Die Startansicht in die Adresse schreiben, damit "Zurück" aus der
+      // naechsten Ansicht genau hierher findet.
+      const next = new URLSearchParams(searchParams);
+      if (imArtikel) next.set("article", gemerkt as string);
+      else next.set("seite", String((progress?.pageIndex ?? 0) + 1));
+      setSearchParams(next, { replace: true });
     }
+    adresseKey.current = location.key;
     setRestored(true);
-  }, [restored, progress, articles, searchParams]);
+  }, [restored, progress, articles, searchParams, setSearchParams, location.key]);
 
   const articleList = articles ?? [];
   const ohneArtikel = articles !== undefined && articles.length === 0;
@@ -270,13 +296,71 @@ export default function ReaderShell() {
     [issueId, saveProgress],
   );
 
+  /**
+   * Ansicht und Seite stehen in der Adresse: `?article=<id>` im Artikelmodus,
+   * sonst `?seite=<n>`. `neu` legt einen Schritt im Verlauf an (Wechsel der
+   * Ansicht), sonst wird der aktuelle ersetzt (Blaettern).
+   */
+  const adresse = useCallback(
+    (ziel: { article?: Id<"articles"> | null; seite?: number }, neu: boolean) => {
+      const next = new URLSearchParams(searchParams);
+      next.delete("article");
+      next.delete("stelle");
+      next.delete("seite");
+      if (ziel.article) next.set("article", ziel.article as string);
+      else if (ziel.seite != null) next.set("seite", String(ziel.seite + 1));
+      if (next.toString() === searchParams.toString()) return;
+      setSearchParams(next, { replace: !neu });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // Zurueck/Vor im Browser: die Ansicht folgt der Adresse. Eigene Wechsel
+  // setzen Zustand und Adresse zugleich und kommen hier nicht an (PUSH/REPLACE).
+  useEffect(() => {
+    if (!restored || adresseKey.current === location.key) return;
+    adresseKey.current = location.key;
+    if (navigationType !== "POP") return;
+    const id = searchParams.get("article") as Id<"articles"> | null;
+    const hit = id ? articleList.find((a) => a._id === id) : undefined;
+    if (hit) {
+      setMode("article");
+      setArticleId(hit._id);
+      setStelle(null);
+      setArtikelEinstieg(null);
+      setEinstiegPunkt(null);
+      const covers = pageIndex >= hit.pageStart && pageIndex <= hit.pageEnd;
+      const target = covers ? pageIndex : hit.primaryPageIndex;
+      setPageIndex(target);
+      persist({ mode: "article", pageIndex: target, articleId: hit._id });
+      return;
+    }
+    const seite = seiteAusAdresse(searchParams);
+    const target =
+      seite != null ? Math.min(seite, Math.max(0, pageCount - 1)) : pageIndex;
+    setMode("page");
+    setPageIndex(target);
+    persist({ mode: "page", pageIndex: target, articleId });
+  }, [
+    restored,
+    location.key,
+    navigationType,
+    searchParams,
+    articleList,
+    pageIndex,
+    pageCount,
+    persist,
+    articleId,
+  ]);
+
   const goPage = useCallback(
     (index: number) => {
       const clamped = Math.max(0, Math.min(index, Math.max(0, pageCount - 1)));
       setPageIndex(clamped);
+      adresse({ seite: clamped }, false);
       persist({ mode: "page", pageIndex: clamped, articleId });
     },
-    [pageCount, persist, articleId],
+    [pageCount, persist, articleId, adresse],
   );
 
   const openArticle = useCallback(
@@ -295,14 +379,13 @@ export default function ReaderShell() {
         hit != null && pageIndex >= hit.pageStart && pageIndex <= hit.pageEnd;
       const target = covers ? pageIndex : (hit?.primaryPageIndex ?? pageIndex);
       setPageIndex(target);
-      const next = new URLSearchParams(searchParams);
-      if (id) next.set("article", id as string);
-      else next.delete("article");
-      next.delete("stelle");
-      setSearchParams(next, { replace: true });
+      // Der Wechsel aus der Seitenansicht ist ein neuer Schritt im Verlauf:
+      // "Zurück" fuehrt wieder auf die Seite. Von Artikel zu Artikel wird
+      // nur ersetzt, sonst stapelte jedes Weiterblaettern einen Schritt.
+      adresse({ article: id, seite: target }, mode !== "article");
       persist({ mode: "article", pageIndex: target, articleId: id });
     },
-    [articleList, pageIndex, persist, searchParams, setSearchParams],
+    [articleList, pageIndex, persist, adresse, mode],
   );
 
   const productsByArticle = useMemo(
@@ -362,20 +445,9 @@ export default function ReaderShell() {
     openArticle(nearest._id, pageIndex);
   }, [articleList, pageIndex, openArticle]);
 
-  // Im Seitenmodus gehoert kein Artikel in die Adresse; sonst oeffnete ein
-  // Neuladen wieder den alten Artikel.
-  const adresseOhneArtikel = useCallback(() => {
-    if (!searchParams.has("article") && !searchParams.has("stelle")) return;
-    const next = new URLSearchParams(searchParams);
-    next.delete("article");
-    next.delete("stelle");
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
-
   const switchToPages = useCallback(() => {
     const current = articleList.find((a) => a._id === articleId);
     setMode("page");
-    adresseOhneArtikel();
     // Steht der Leser schon auf einer Seite des Artikels, bleibt er dort.
     // Nur wenn die gemerkte Seite nicht zum Artikel gehoert, wird auf seinen
     // Anfang gesprungen.
@@ -383,8 +455,9 @@ export default function ReaderShell() {
       current != null && pageIndex >= current.pageStart && pageIndex <= current.pageEnd;
     const target = covers ? pageIndex : (current?.primaryPageIndex ?? pageIndex);
     setPageIndex(target);
+    adresse({ seite: target }, mode !== "page");
     persist({ mode: "page", pageIndex: target, articleId });
-  }, [articleList, articleId, pageIndex, persist, adresseOhneArtikel]);
+  }, [articleList, articleId, pageIndex, persist, adresse, mode]);
 
   /**
    * Ein Eintrag im Inhaltsverzeichnis, der nur eine Seite kennt. Im
@@ -398,11 +471,13 @@ export default function ReaderShell() {
         openArticle(deckt._id, p);
         return;
       }
+      const clamped = Math.max(0, Math.min(p, Math.max(0, pageCount - 1)));
       setMode("page");
-      adresseOhneArtikel();
-      goPage(p);
+      setPageIndex(clamped);
+      adresse({ seite: clamped }, mode !== "page");
+      persist({ mode: "page", pageIndex: clamped, articleId });
     },
-    [mode, articleList, openArticle, adresseOhneArtikel, goPage],
+    [mode, articleList, openArticle, pageCount, adresse, persist, articleId],
   );
 
   const prev = useCallback(() => {
@@ -603,9 +678,15 @@ export default function ReaderShell() {
       className={verdeckt ? "reader-screen rv-on" : "reader-screen"}
     >
       <header className="reader-bar">
-        <button className="btn quiet small" onClick={() => navigate("/library")}>
+        <button
+          className="btn quiet small"
+          // Wie der Zurueck-Knopf des Browsers: einen Schritt zurueck, also
+          // aus dem Artikel auf die Seite und von dort dahin, woher der Leser
+          // kam. Nur ohne Vorgeschichte (Link von aussen) in die Bibliothek.
+          onClick={() => (location.key !== "default" ? navigate(-1) : navigate("/library"))}
+        >
           <Icon name="arrow-left" />
-          <span className="button-label">Bibliothek</span>
+          <span className="button-label">Zurück</span>
         </button>
         {logo && (
           <img
@@ -780,4 +861,10 @@ export default function ReaderShell() {
       )}
     </div>
   );
+}
+
+/** `?seite=<n>` (ab 1) als Seitenindex, sonst null. */
+function seiteAusAdresse(params: URLSearchParams): number | null {
+  const n = Number(params.get("seite"));
+  return Number.isInteger(n) && n >= 1 ? n - 1 : null;
 }
