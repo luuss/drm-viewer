@@ -465,8 +465,9 @@ export default function ReaderShell() {
    * nur wenn keiner sie abdeckt, geht es in den Seitenmodus.
    */
   const zuVerzeichnisSeite = useCallback(
-    (p: number) => {
-      const deckt = mode === "article" ? artikelAufSeite(articleList, p) : null;
+    (p: number, alsSeite = false) => {
+      const deckt =
+        mode === "article" && !alsSeite ? artikelAufSeite(articleList, p) : null;
       if (deckt) {
         openArticle(deckt._id, p);
         return;
@@ -479,6 +480,17 @@ export default function ReaderShell() {
     },
     [mode, articleList, openArticle, pageCount, adresse, persist, articleId],
   );
+
+  /**
+   * Die gedruckte Inhaltsseite: dort liegen die Klickflaechen der
+   * Verzeichniszeilen (`targetPageIndex`). Ohne sie gibt es kein Ziel.
+   */
+  const inhaltsseite = useMemo(() => {
+    const seiten = (regions ?? [])
+      .filter((r) => r.targetPageIndex != null)
+      .map((r) => r.pageIndex);
+    return seiten.length ? Math.min(...seiten) : null;
+  }, [regions]);
 
   const prev = useCallback(() => {
     if (mode === "article") {
@@ -831,6 +843,9 @@ export default function ReaderShell() {
           onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
           onPage={zuVerzeichnisSeite}
           onArticle={openArticle}
+          onInhaltsseite={
+            inhaltsseite == null ? undefined : () => zuVerzeichnisSeite(inhaltsseite, true)
+          }
         />
       </div>
 

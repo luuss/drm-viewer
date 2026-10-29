@@ -3171,6 +3171,20 @@ body:has(.reihe-seite) { overflow-x: clip; }
   white-space: nowrap;
 }
 .toc-drawer .hint { padding: var(--s4) var(--s5); }
+/* "Inhalt" fuehrt zur gedruckten Inhaltsseite; sieht aus wie die Ueberschrift. */
+.toc-heading-link {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+}
+.toc-heading-link:hover,
+.toc-heading-link:focus-visible { text-decoration-color: currentColor; }
 .toc-list {
   flex: 1;
   overflow-y: auto;
