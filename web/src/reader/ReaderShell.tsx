@@ -353,18 +353,28 @@ export default function ReaderShell() {
     articleId,
   ]);
 
+  /**
+   * `sprung`: ein Sprung (Verzeichnis, Regler, Klickflaeche mit Zielseite)
+   * ist ein eigener Schritt im Verlauf, damit "Zurück" dorthin fuehrt, wo der
+   * Leser vorher war. Blaettern ersetzt nur den aktuellen Schritt.
+   */
   const goPage = useCallback(
-    (index: number) => {
+    (index: number, sprung = false) => {
       const clamped = Math.max(0, Math.min(index, Math.max(0, pageCount - 1)));
       setPageIndex(clamped);
-      adresse({ seite: clamped }, false);
+      adresse({ seite: clamped }, sprung);
       persist({ mode: "page", pageIndex: clamped, articleId });
     },
     [pageCount, persist, articleId, adresse],
   );
 
   const openArticle = useCallback(
-    (id: Id<"articles"> | null, fromPageIndex?: number, punkt?: Klickpunkt) => {
+    (
+      id: Id<"articles"> | null,
+      fromPageIndex?: number,
+      punkt?: Klickpunkt,
+      sprung = false,
+    ) => {
       setArticleId(id);
       setStelle(null);
       setArtikelEinstieg(fromPageIndex ?? null);
@@ -379,10 +389,10 @@ export default function ReaderShell() {
         hit != null && pageIndex >= hit.pageStart && pageIndex <= hit.pageEnd;
       const target = covers ? pageIndex : (hit?.primaryPageIndex ?? pageIndex);
       setPageIndex(target);
-      // Der Wechsel aus der Seitenansicht ist ein neuer Schritt im Verlauf:
-      // "Zurück" fuehrt wieder auf die Seite. Von Artikel zu Artikel wird
-      // nur ersetzt, sonst stapelte jedes Weiterblaettern einen Schritt.
-      adresse({ article: id, seite: target }, mode !== "article");
+      // Der Wechsel aus der Seitenansicht und jeder Sprung (Verzeichnis,
+      // Regler) ist ein neuer Schritt im Verlauf: "Zurück" fuehrt dorthin
+      // zurueck. Weiterblaettern von Artikel zu Artikel ersetzt nur.
+      adresse({ article: id, seite: target }, sprung || mode !== "article");
       persist({ mode: "article", pageIndex: target, articleId: id });
     },
     [articleList, pageIndex, persist, adresse, mode],
@@ -416,10 +426,10 @@ export default function ReaderShell() {
   );
 
   const goArticle = useCallback(
-    (index: number) => {
+    (index: number, sprung = false) => {
       const clamped = Math.max(0, Math.min(index, articleList.length - 1));
       const target = articleList[clamped];
-      if (target) openArticle(target._id);
+      if (target) openArticle(target._id, undefined, undefined, sprung);
     },
     [articleList, openArticle],
   );
@@ -466,13 +476,13 @@ export default function ReaderShell() {
       const deckt =
         mode === "article" && !alsSeite ? artikelAufSeite(articleList, p) : null;
       if (deckt) {
-        openArticle(deckt._id, p);
+        openArticle(deckt._id, p, undefined, true);
         return;
       }
       const clamped = Math.max(0, Math.min(p, Math.max(0, pageCount - 1)));
       setMode("page");
       setPageIndex(clamped);
-      adresse({ seite: clamped }, mode !== "page");
+      adresse({ seite: clamped }, true);
       persist({ mode: "page", pageIndex: clamped, articleId });
     },
     [mode, articleList, openArticle, pageCount, adresse, persist, articleId],
@@ -792,7 +802,7 @@ export default function ReaderShell() {
                 anzeigen={productsByArticle}
                 onChooseProduct={openFromPage}
                 onOpenArticle={openArticle}
-                onNavigatePage={goPage}
+                onNavigatePage={(p) => goPage(p, true)}
                 onPrev={prev}
                 onNext={next}
                 canPrev={canPrev}
@@ -849,7 +859,7 @@ export default function ReaderShell() {
           pageLabel={pageLabel}
           onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
           onPage={zuVerzeichnisSeite}
-          onArticle={openArticle}
+          onArticle={(id) => openArticle(id, undefined, undefined, true)}
           onInhaltsseite={
             inhaltsseite == null ? undefined : () => zuVerzeichnisSeite(inhaltsseite, true)
           }
@@ -861,7 +871,7 @@ export default function ReaderShell() {
         position={mode === "page" ? pageIndex : Math.max(0, articleIndex)}
         total={mode === "page" ? pageCount : articleList.length}
         label={label}
-        onSeek={(p) => (mode === "page" ? goPage(p) : goArticle(p))}
+        onSeek={(p) => (mode === "page" ? goPage(p, true) : goArticle(p, true))}
       />
 
       {verdeckt && (
