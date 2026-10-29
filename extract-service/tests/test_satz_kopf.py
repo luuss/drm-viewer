@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import os
 import sys
-from types import SimpleNamespace as NS
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import worker  # noqa: E402
 from extractor.idml_articles import artikel_aus_satz, rolle_fuer  # noqa: E402
-from extractor.model import AssembledArticle, SourceBlock, TocHint  # noqa: E402
+from extractor.model import SourceImage, AssembledArticle, SourceBlock, TocHint  # noqa: E402
 
 SPALTE_1 = (0.048, 0.061, 0.333, 0.943)
 SPALTE_2 = (0.357, 0.061, 0.643, 0.943)
@@ -60,7 +59,7 @@ def zuerst_artikel(n: str, page: int, titel: list[str], einleitung: list[str], t
 def _wahlkarte(page: int) -> tuple[list[SourceBlock], list]:
     """ZUERST! 4/2025, S. 45: Wahlkarte Belgiens mit Beschriftung im Format
     "Einleitungstext", darunter der Rest eines Artikels der Vorseite."""
-    karte = NS(page_index=page, x0=0.357, y0=0.0, x1=0.952, y1=0.263)
+    karte = SourceImage(page_index=page, x0=0.357, y0=0.0, x1=0.952, y1=0.263)
     etiketten = [
         ("Stimmenstärkste Parteien", (0.73, 0.019, 0.941, 0.046)),
         ("N-VA", (0.839, 0.056, 0.964, 0.066)),
@@ -101,7 +100,7 @@ def test_zeile_und_einleitung_auf_dem_aufmacherfoto_bleiben():
 
     Zwei Rahmen und eine Bildunterschrift machen aus dem Foto keine Karte.
     """
-    foto = NS(page_index=7, x0=0.0, y0=0.0, x1=1.0, y1=0.5)
+    foto = SourceImage(page_index=7, x0=0.0, y0=0.0, x1=1.0, y1=0.5)
     blocks = [
         rb("Vergiftete", "k", "Hauptüberschrift", 7, (0.048, 0.33, 0.643, 0.438)),
         rb("Nachbarschaft", "k", "Hauptüberschrift", 7, (0.048, 0.33, 0.643, 0.438)),
