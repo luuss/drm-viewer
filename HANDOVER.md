@@ -791,6 +791,58 @@ eine Zeile im Inhaltsverzeichnis.
   schwertertraeger.de zeigen fremden Inhalt („Nachtleben“, „Lust am
   Programmieren“, Stand 05.10.2026), deshalb dort kein Internet-Link.
 
+## 4l. Fremdanzeigen nicht als Artikelbild (seit 29.10.2026)
+
+In ZUERST! 6/2025 stand auf S. 32 die Anzeige der AfD-Fraktionszeitung
+„Aufbruch“ als erstes Bild über „„Staatenlose“ Jugendliche terrorisieren
+Bremen“ — in der Artikelansicht oben im Text (Bead drm-viewer-7mf).
+
+* **Ursache:** Die Anzeige ist im Satz ein gewöhnlicher Bildrahmen mit
+  platzierter PDF. Kein Filter (`ohne_unterlagen`, `ohne_vorschaubilder`,
+  `ohne_schriftzuege`) kannte Anzeigen, also ordnete `_image_score` sie dem
+  nächsten Artikel derselben Seite zu. Der Text der Anzeige steckt nur in der
+  PDF, deshalb kam kein Text in den Artikel, nur das Bild.
+* **Regel:** `anzeigenrahmen`/`ohne_anzeigen` in `extractor/idml_articles.py`,
+  im Worker in `_from_idml` nach `ohne_vorschaubilder`. Ein Bildrahmen ist
+  Anzeige, wenn (a) der Dateiname der Verknüpfung ein Wort mit „Anzeige“
+  beginnt („Anzeige_Zuerst Magazin_….pdf“, „SMS Anzeige_A4.pdf“; nicht
+  „Dienstanzug“, „Strafanzeige“, „Panzer“) oder (b) ein Textrahmen, dessen
+  ganzer Text „Anzeige“ ist, höchstens 0,02 Seitenbreite neben ihm steht
+  (die Pflichtkennzeichnung; ZUERST! 2/2025: „Stellenangebot ….tif“ mit
+  „Anzeige“ am Eck). Bei (b) zählt nur das nächste Bild. Die Anzeige bleibt auf
+  der Druckseite; Artikel bekommt sie keine. Tests in
+  `tests/test_idml_articles.py` (greift in ZUERST! 6/2025 und 2/2025, greift
+  nicht bei Redaktionsbildern mit „anz“ im Namen).
+* **Bestand** (alle 13 Hefte mit Satzdatei geprüft): 11 Anzeigenbilder in 9
+  Heften, je auf der Meldungsseite neben „Innere Sicherheit“: ZUERST! 1/2025
+  S. 30, 2/2025 S. 30 + Stellenangebote S. 41 und S. 69, 3/2025 S. 28, 4/2025
+  S. 32, 5/2025 S. 38, 6/2025 S. 32, 7/2025 S. 24, 8-9/2025 S. 32, 10/2025
+  S. 30. DMZ 170 S. 41 (ganzseitig „SMS“) traf die Regel, war aber schon kein
+  Artikelbild. Greim 36, ZUERST! 3/2026, DMZ 170, DMZ-Zeitgeschichte 80: nichts.
+  Am 29.10. mit `devtools:removeArticleImagesInternal` entfernt (Probelauf,
+  dann echt), ohne Neuimport; Freigaben, Text und Bilddateien unverändert.
+  Werkzeuge und Sicherung: `_scratch/anzeige-im-text/` (`plan.py` rechnet den
+  Plan aus Satz + Bestand, `anwenden.py [--echt]`, Zeilen vorher in
+  `vorher/articleAssets.jsonl`, Artikel/Seiten je Heft in `vorher/`).
+  Zurückholen ginge nur über eine Einfüge-Mutation (gibt es noch nicht) oder
+  einen Nachtrag-Import.
+* **Fundstelle: Kennungen der Artikelbilder.** Keine Convex-Funktion gibt die
+  `_id` von `articleAssets` heraus (`listForEditors` liefert Bilder ohne
+  `_id`, `npx convex data` sperrt der Hook). Lesend geht es über Postgres auf
+  dem Verlagsserver: `docker exec -i code-postgres-1 sh -c 'psql -U
+  "$POSTGRES_USER" -d emagazin -At' < _scratch/anzeige-im-text/dump.sql`
+  (jüngste Fassung je Dokument, `json_value` enthält `_id`; Tabelle
+  `articleAssets` = `table_id` `70efedbd8be2ef2610c2ea2111e550f2`). Der
+  Bildschlüssel `images/<leserseite>-<x0·1000>-<y0·1000>.jpg` sagt, wo das Bild
+  auf der Seite beginnt — so lässt es sich einem Satzrahmen zuordnen.
+  Redaktionsabfragen mit Admin-Kennung von der Kommandozeile:
+  `npx convex run --env-file _scratch/verlag-direkt.env --identity
+  '{"subject":"<userId>|cli"}' articles:listForEditors '{"issueId":"…"}'`
+  (userId aus `devtools:usersByEmailPartInternal`). Die IDML eines Hefts holt
+  man aus MinIO über den Container `code-import-worker-1` (boto3, Schlüssel
+  `uploads/<issueId>/…idml`); die Dateien unter `files/minio/` sind wegen der
+  Bitrot-Prüfsummen nicht direkt lesbar.
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde

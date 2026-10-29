@@ -568,3 +568,73 @@ def test_titelbild_der_vorschau_ist_kein_artikelbild():
     vorschau = NS(page_number=48, x0=0.086, y0=0.607, x1=0.357, y1=0.872)
     foto = NS(page_number=48, x0=0.036, y0=0.045, x1=0.482, y1=0.42)
     assert ohne_vorschaubilder([vorschau, foto], text, blocks) == [foto]
+
+
+def test_fremdanzeige_ist_kein_artikelbild():
+    from types import SimpleNamespace as NS
+
+    from extractor.idml_articles import ohne_anzeigen
+
+    # ZUERST! 6/2025, S. 32: links die Anzeige der Fraktionszeitung als
+    # platzierte PDF, daneben "Anzeige" am Rand, rechts drei Meldungen.
+    # Ohne Regel stand die Anzeige als erstes Bild ueber "Staatenlose
+    # Jugendliche terrorisieren Bremen".
+    blocks = [
+        rahmen("Anzeige", story="marke", style="Bildquelle", box=(0.49, 0.04, 0.505, 0.064)),
+        rahmen("Die Bremer Polizei hat " + "x" * 600, story="t", style="Mengentext",
+               box=(0.521, 0.109, 0.943, 0.417)),
+    ]
+    text = [
+        NS(page_number=29, x0=0.49, y0=0.04, x1=0.505, y1=0.064, story_id="marke"),
+        NS(page_number=29, x0=0.521, y0=0.109, x1=0.943, y1=0.417, story_id="t"),
+    ]
+    anzeige = NS(page_number=29, x0=0.048, y0=0.034, x1=0.488, y1=0.936,
+                 link="Anzeige Zuerst Magazin_ Aufbruch 7 Ausgabe 2024_2025.pdf")
+    foto = NS(page_number=29, x0=0.524, y0=0.108, x1=0.695, y1=0.25, link="GleiseBSAG.tif")
+    assert ohne_anzeigen([anzeige, foto], text, blocks) == [foto]
+    # Dieselbe Anzeige ohne sprechenden Dateinamen: die Kennzeichnung reicht.
+    anzeige.link = "aufbruch7.pdf"
+    assert ohne_anzeigen([anzeige, foto], text, blocks) == [foto]
+    # Und der Dateiname allein reicht auch (DMZ 170, S. 41: "SMS Anzeige_A4.pdf").
+    ganz = NS(page_number=38, x0=0.0, y0=0.0, x1=1.0, y1=1.0, link="SMS Anzeige_A4.pdf")
+    assert ohne_anzeigen([ganz], [], []) == []
+
+
+def test_stellenanzeige_mit_kennzeichnung_am_eck():
+    from types import SimpleNamespace as NS
+
+    from extractor.idml_articles import ohne_anzeigen
+
+    # ZUERST! 2/2025, S. 41: "Anzeige" rechts am oberen Eck des
+    # Stellenangebots; das Foto des Artikels oben bleibt.
+    blocks = [rahmen("Anzeige", story="marke", style="Bildquelle", box=(0.954, 0.646, 0.968, 0.668))]
+    text = [NS(page_number=38, x0=0.954, y0=0.646, x1=0.968, y1=0.668, story_id="marke")]
+    stelle = NS(page_number=38, x0=0.048, y0=0.646, x1=0.952, y1=0.936,
+                link="Stellenangebot Pressereferent.tif")
+    foto = NS(page_number=38, x0=0.357, y0=0.061, x1=0.952, y1=0.384,
+              link="Zapolyarnoye_Field_Novy_Urengoy.tif")
+    assert ohne_anzeigen([stelle, foto], text, blocks) == [foto]
+
+
+def test_redaktionsbilder_bleiben_ohne_beleg():
+    from types import SimpleNamespace as NS
+
+    from extractor.idml_articles import ohne_anzeigen
+
+    # Woerter mit "anz" im Dateinamen sind keine Anzeige (DMZ 170,
+    # ZUERST! 2/2025), und ein "Anzeige"-Rahmen weit weg vom Bild oder auf
+    # einer anderen Seite zaehlt nicht.
+    bilder = [
+        NS(page_number=62, x0=0.772, y0=0.762, x1=0.952, y1=0.93,
+           link="generalleutnant-andre-bodemann-im-dienstanzug.tif"),
+        NS(page_number=10, x0=0.048, y0=0.061, x1=0.406, y1=0.33, link="9 Habeck Anzug.tif"),
+        NS(page_number=60, x0=0.511, y0=0.344, x1=0.955, y1=0.561,
+           link="5 AT-Hund und Panzer III Ausf B - farbig.tif"),
+        NS(page_number=13, x0=0.0, y0=0.0, x1=0.333, y1=0.316, link="Strafanzeige gegen Unbekannt.tif"),
+        NS(page_number=38, x0=0.357, y0=0.061, x1=0.952, y1=0.384,
+           link="Zapolyarnoye_Field_Novy_Urengoy.tif"),
+        NS(page_number=39, x0=0.048, y0=0.646, x1=0.952, y1=0.936, link="foto.tif"),
+    ]
+    blocks = [rahmen("Anzeige", story="marke", style="Bildquelle", box=(0.954, 0.646, 0.968, 0.668))]
+    text = [NS(page_number=38, x0=0.954, y0=0.646, x1=0.968, y1=0.668, story_id="marke")]
+    assert ohne_anzeigen(bilder, text, blocks) == bilder
