@@ -820,7 +820,6 @@ export default function ReaderShell() {
                   : null
               }
               schutzKey={schutzKey}
-              watermark={watermark}
               pageLabel={pageLabel}
               onPrev={prev}
               onNext={next}
@@ -829,6 +828,9 @@ export default function ReaderShell() {
               sessionToken={sessionToken}
             />
           )}
+          {/* Im Artikelmodus an derselben Stelle wie auf der Seite: unten
+              rechts in der Leseflaeche, nicht im Regler darunter. */}
+          {mode === "article" && watermark && <div className="watermark">{watermark}</div>}
         </main>
 
         <TocDrawer

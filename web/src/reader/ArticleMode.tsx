@@ -136,7 +136,6 @@ type Props = {
   articleId: Id<"articles"> | null;
   /** Bestellbare Produkte zu Anzeigen in diesem Artikel. */
   products?: ReaderProduct[];
-  watermark: string;
   /** Gedruckte Seitenzahl zu einer Leseseite (U1 statt 1 auf dem Umschlag). */
   pageLabel: (index: number) => string;
   onPrev: () => void;
@@ -163,7 +162,6 @@ type Props = {
 export default function ArticleMode({
   articleId,
   products = [],
-  watermark,
   pageLabel,
   onPrev,
   onNext,
@@ -438,7 +436,6 @@ export default function ArticleMode({
           <ShopProductLink key={productKey(product)} product={product} />
         ))}
       </article>
-      {watermark && <div className="watermark">{watermark}</div>}
     </div>
   );
 }

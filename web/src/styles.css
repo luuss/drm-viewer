@@ -2925,7 +2925,6 @@ body:has(.reihe-seite) { overflow-x: clip; }
 }
 
 .article-mode { overflow: auto; background: var(--paper); color: var(--ink); }
-.article-mode .watermark { color: rgba(44, 30, 20, 0.28); position: fixed; }
 .article-body {
   box-sizing: border-box;
   width: min(100%, 46rem);
