@@ -44,6 +44,10 @@ ROLLEN_REGELN: tuple[tuple[tuple[str, ...], str], ...] = (
     # sagt, worum es auf der Seite geht. Steht vor "kasten" und "autor", damit
     # "Zitatkasten" und "Zitat Autor" hier landen.
     (("zungentext", "zitat", "quote"), "schmuckzitat"),
+    # Beschriftung einer Karte oder Grafik ("Text in der Karte": Ortsnamen,
+    # Prozentwerte, Achsen). Ohne die Zeichnung ist sie kein Lesetext; im
+    # Artikel stand sie als zwanzig lose Absaetze ("32 %", "2025", "Madrid").
+    (("text in der karte", "text in der grafik", "kartentext", "grafiktext"), "grafik"),
     (("autorenname", "autor", "verfasser", "byline"), "autor"),
     (("zwischen", "rubrikname", "dachzeile", "kicker"), "zwischentitel"),
     (
@@ -325,41 +329,96 @@ def _abstand(a: SourceBlock, b: SourceBlock) -> float:
     return abs(ka[0] - kb[0]) + abs(ka[1] - kb[1])
 
 
+# Die Initiale steht im Textrahmen ihres Absatzes (der Text laeuft um sie
+# herum) oder knapp davor. Ohne Rahmenangabe zaehlt der Abstand der Ecken.
+INITIALE_RAND = 0.02
+INITIALE_ABSTAND = 0.05
+
+
+def _initiale_passt(initiale: SourceBlock, absatz: SourceBlock) -> bool:
+    if initiale.page_index != absatz.page_index:
+        return False
+    i = initiale.frame_box or (initiale.x0, initiale.y0, initiale.x1, initiale.y1)
+    if absatz.frame_box is None:
+        return _abstand(initiale, absatz) <= INITIALE_ABSTAND
+    x0, y0, x1, y1 = absatz.frame_box
+    mx, my = (i[0] + i[2]) / 2, (i[1] + i[3]) / 2
+    return (
+        x0 - INITIALE_RAND <= mx <= x1 + INITIALE_RAND
+        and y0 - INITIALE_RAND <= my <= y1 + INITIALE_RAND
+    )
+
+
 def initialen_einsetzen(stories: list["Story"]) -> list["Story"]:
     """Den ausgelagerten Anfangsbuchstaben an seinen Absatz zurueckgeben.
 
     Der Setzer legt die Initiale gern in einen eigenen Rahmen, damit sie frei
     ueber mehrere Zeilen stehen kann. Im Satz fehlt sie dem Absatz dann am
-    Anfang: "ridolin Rudolf ..." statt "Fridolin Rudolf ...". Gesucht wird der
-    naechstgelegene freie Buchstabe auf derselben Seite.
+    Anfang: "ridolin Rudolf ..." statt "Fridolin Rudolf ...". Ein Absatz, der
+    klein beginnt, bekommt den Buchstaben, der in seinem Textrahmen steht;
+    stehen mehrere zur Wahl (drei Buchbesprechungen auf einer Seite), gehen
+    die naechstgelegenen Paare zuerst zusammen. Ein Absatz ohne Initiale in
+    seinem Rahmen bleibt, wie er ist — das Editorial von ZUERST! beginnt nach
+    der Anrede bewusst klein ("nicht selten sind …").
     """
     from dataclasses import replace
 
     initialen = [s for s in stories if _ist_initiale(s)]
     if not initialen:
         return stories
+    offen = [
+        s
+        for s in stories
+        if s.blocks
+        and not _ist_initiale(s)
+        and s.blocks[0].text.lstrip()[:1].islower()
+    ]
+    paare = sorted(
+        (
+            (_abstand(i.blocks[0], s.blocks[0]), n, m)
+            for n, i in enumerate(initialen)
+            for m, s in enumerate(offen)
+            if i.blocks and _initiale_passt(i.blocks[0], s.blocks[0])
+        ),
+        key=lambda p: p[0],
+    )
     vergeben: set[str] = set()
-    for story in stories:
-        if not story.blocks or _ist_initiale(story):
+    versorgt: set[int] = set()
+    for _abst, n, m in paare:
+        initiale, story = initialen[n], offen[m]
+        if initiale.story_id in vergeben or m in versorgt:
             continue
+        vergeben.add(initiale.story_id)
+        versorgt.add(m)
         erster = story.blocks[0]
-        text = erster.text.lstrip()
-        if not text or not text[0].islower():
-            continue
-        moeglich = [
-            i
-            for i in initialen
-            if i.story_id not in vergeben
-            and i.blocks
-            and i.blocks[0].page_index == erster.page_index
-        ]
-        if not moeglich:
-            continue
-        treffer = min(moeglich, key=lambda i: _abstand(i.blocks[0], erster))
-        vergeben.add(treffer.story_id)
-        buchstabe = "".join(b.text for b in treffer.blocks).strip()
+        buchstabe = "".join(b.text for b in initiale.blocks).strip()
         story.blocks[0] = replace(erster, text=f"{buchstabe}{erster.text}")
     return [s for s in stories if s.story_id not in vergeben]
+
+
+def initialen_zurueck(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """`initialen_einsetzen` auf der flachen Blockliste, in ihrer Reihenfolge.
+
+    Muss laufen, bevor Beiwerk aussortiert wird: `mark_furniture` verwirft
+    jeden Block mit hoechstens zwei Zeichen — auch die Initiale. Danach fehlte
+    sie in DMZ 170 einundzwanzig Artikeln ("ie Schlacht von Waterloo").
+    """
+    stories = stories_bilden(blocks)
+    erste = {s.story_id: s.blocks[0] for s in stories if s.blocks}
+    uebrig = initialen_einsetzen(stories)
+    if len(uebrig) == len(stories):
+        return blocks
+    weg = {s.story_id for s in stories} - {s.story_id for s in uebrig}
+    ersatz = {
+        id(erste[s.story_id]): s.blocks[0]
+        for s in uebrig
+        if s.blocks and s.blocks[0] is not erste[s.story_id]
+    }
+    return [
+        ersatz.get(id(b), b)
+        for b in blocks
+        if not (b.origin == "idml" and b.story_id in weg)
+    ]
 
 
 def stories_bilden(blocks: list[SourceBlock]) -> list[Story]:
@@ -401,36 +460,87 @@ def _kopf_zuordnen(
     Texte in zwei Spalten; die Zeile links oben und der Text rechts oben
     liegen in der Hoehe naeher beieinander als Zeile und Text derselben
     Spalte. Der Text einer Zeile beginnt in ihrer Spalte, unter ihr.
-    """
-    zuordnung: dict[str, Story] = {}
-    for kopf in sorted(kandidaten, key=lambda s: (s.erste_seite, s.oben, s.links)):
-        moeglich = [
-            k
-            for k in koerper
-            if k.story_id not in zuordnung
-            and 0 <= k.erste_seite - kopf.erste_seite <= VORLAUF_SEITEN
-        ]
-        if not moeglich:
-            continue
 
-        def passt(k: Story) -> tuple:
-            gleiche_seite = k.erste_seite == kopf.erste_seite
+    Vergeben wird nach Guete, nicht nach der Reihenfolge der Zeilen: erst
+    alle Paare auf derselben Seite und in derselben Spalte, dann der Rest.
+    Frueher nahm sich jede Zeile der Reihe nach den besten freien Text; eine
+    verirrte Zeile auf der Seite davor (die Kartenbeschriftung in 4/2025,
+    S. 45) nahm so dem naechsten Artikel seine Einleitung weg, und jede
+    folgende Einleitung rutschte einen Artikel weiter — samt Seitenbereich.
+    """
+    paare: list[tuple[tuple, int, int]] = []
+    for n, kopf in enumerate(kandidaten):
+        for m, k in enumerate(koerper):
+            vorlauf = k.erste_seite - kopf.erste_seite
+            if not 0 <= vorlauf <= VORLAUF_SEITEN:
+                continue
             # Dieselbe Spalte: der Text beginnt (fast) buendig mit der Zeile
             # und nicht ueber ihr.
             gleiche_spalte = (
-                gleiche_seite
+                vorlauf == 0
                 and abs(k.links - kopf.links) <= SPALTEN_TOLERANZ
                 and k.oben >= kopf.oben - SPALTEN_TOLERANZ
             )
-            return (
-                k.erste_seite - kopf.erste_seite,
+            guete = (
+                vorlauf,
                 0 if gleiche_spalte else 1,
                 abs(k.oben - kopf.oben) + abs(k.links - kopf.links),
             )
-
-        ziel = min(moeglich, key=passt)
-        zuordnung[ziel.story_id] = kopf
+            paare.append((guete, n, m))
+    paare.sort(key=lambda p: p[0])
+    zuordnung: dict[str, Story] = {}
+    vergeben: set[int] = set()
+    for _guete, n, m in paare:
+        if n in vergeben or koerper[m].story_id in zuordnung:
+            continue
+        vergeben.add(n)
+        zuordnung[koerper[m].story_id] = kandidaten[n]
     return zuordnung
+
+
+# So viele kurze Textrahmen in einem Bildrahmen machen ihn zur Karte oder
+# Grafik; ihre Beschriftung ("N-VA", "Flandern", "Wallonien") ist kein
+# Lesetext. Ein Aufmacherfoto traegt hoechstens Zeile und Einleitung.
+GRAFIK_MINDESTRAHMEN = 3
+GRAFIK_HOECHSTLAENGE = 60
+# Rollen, die eine Beschriftung haben kann. Ueberschrift, Bildunterschrift
+# ("Bildunterschrift weiss" steht auf dem Foto) und Autor bleiben, was sie sind.
+GRAFIK_ROLLEN = ("einleitung", "unterzeile", "kasten", "mengentext", "beiwerk")
+
+
+def grafikbeschriftungen(stories: list[Story], bilder: list | None) -> set[str]:
+    """Stories, die als Beschriftung in einer Karte oder Grafik stehen.
+
+    Ein Bildrahmen, in dem mindestens drei kurze Textrahmen stehen, ist eine
+    Karte oder Grafik: die Wahlkarte Belgiens in ZUERST! 4/2025 traegt zwoelf
+    Parteinamen und Landesteile, gesetzt im Format "Einleitungstext". Als
+    Einleitung kamen sie an den naechsten Artikel. Was dagegen ein eigenes
+    Format fuer Kartentext hat ("Text in der Karte"), erkennt schon
+    `rolle_fuer`.
+    """
+    if not bilder:
+        return set()
+    kurz = [
+        s
+        for s in stories
+        if s.blocks
+        and len(s.seiten) == 1
+        and s.zeichen <= GRAFIK_HOECHSTLAENGE
+        and s.rolle() in GRAFIK_ROLLEN
+    ]
+    out: set[str] = set()
+    for bild in bilder:
+        drin = []
+        for s in kurz:
+            if s.erste_seite != bild.page_index:
+                continue
+            x0, y0, x1, y1 = s.rahmen
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            if bild.x0 <= mx <= bild.x1 and bild.y0 <= my <= bild.y1:
+                drin.append(s.story_id)
+        if len(drin) >= GRAFIK_MINDESTRAHMEN:
+            out.update(drin)
+    return out
 
 
 def _text(story: Story) -> str:
@@ -614,27 +724,276 @@ def _meldungsseiten(
     return out
 
 
+# Absatzformate der Anzeigen und Buecherseiten ("Mengentext Katalog",
+# "Autorenname Katalog", "werbeseite titel", "Bücherseite Text 2023").
+ANZEIGEN_FORMATE = ("katalog", "werbeseite", "anzeige", "bücherseite", "buecherseite")
+
+
+def _anzeigenformat(story: Story) -> bool:
+    """Ist die Story ueberwiegend in den Formaten einer Anzeige gesetzt?"""
+    gesamt = sum(len(b.text) for b in story.blocks) or 1
+    werbung = sum(
+        len(b.text)
+        for b in story.blocks
+        if any(f in (b.style_name or "").lower() for f in ANZEIGEN_FORMATE)
+    )
+    return werbung * 2 > gesamt
+
+
+def _rahmenabstand(a: Story, b: Story) -> float:
+    """Luecke zwischen den Rahmen zweier Stories auf der ersten Seite von a."""
+    ax0, ay0, ax1, ay1 = a.rahmen
+    bx0, by0, bx1, by1 = b.rahmen
+    return max(0.0, bx0 - ax1, ax0 - bx1) + max(0.0, by0 - ay1, ay0 - by1)
+
+
 def _kopie_mit_text(block: SourceBlock, text: str) -> SourceBlock:
     from dataclasses import replace
 
     return replace(block, text=text)
 
 
-def _anzeigenzeilen(story: Story) -> str:
-    """Titel einer Anzeige aus ihren kurzen Anfangszeilen, ohne den Verfasser.
+@dataclass
+class Anzeigenkopf:
+    """Verfasser, Titel und Untertitel aus den kurzen Anfangszeilen einer Anzeige."""
 
-    "Harry Lippmann" / "Militärmuseen in Deutschland" / "Informationsgeballt
-    …" ergibt "Militärmuseen in Deutschland". Ohne Format laesst sich der
-    Verfasser nicht vom Titel trennen; dann zaehlen alle kurzen Zeilen.
+    titel: str
+    titelzeilen: list[SourceBlock]
+    unterzeilen: list[SourceBlock]
+    autorzeilen: list[SourceBlock]
+
+    @property
+    def autor(self) -> str | None:
+        """Mehrere Verfasser stehen je in einer Zeile: "Alexander Marguier/" / "Ben Krischke (Hg.)"."""
+        if not self.autorzeilen:
+            return None
+        text = ""
+        for b in self.autorzeilen:
+            zeile = " ".join(b.text.split())
+            text = f"{text}{zeile}" if not text or text.endswith("/") else f"{text} {zeile}"
+        return text
+
+
+def _anzeigenkopf(story: Story) -> Anzeigenkopf | None:
+    """Kopf einer Buchanzeige aus ihren kurzen Anfangszeilen.
+
+    "Harry Lippmann" (Format Autor) / "Militärmuseen in Deutschland" /
+    "Informationsgeballt …" ergibt Titel "Militärmuseen in Deutschland".
+    Steht auch der Titel im Autorformat ("Bücherseite Autor 2018": "Gustav
+    Sichelschmidt" / "Wie im alten Rom"), ist die erste Zeile der Verfasser
+    und die zweite der Titel — frueher hiess die Anzeige nach allem
+    zusammen ("Gustav Sichelschmidt Wie im alten Rom Dekadenzerscheinungen
+    …"). Eine kurze Zeile in anderem Format nach dem Titel ("Norweger
+    1941–1943 in der Waffen-SS" unter "Die Freiwilligen-Legion Norwegen")
+    ist der Untertitel. Eine Zeile, die mit "/" endet, nennt den ersten von
+    mehreren Verfassern; die naechste Zeile gehoert dazu ("Alexander
+    Marguier/" / "Ben Krischke (Hg.)", auch ohne Format: "Alfred de Zayas/"
+    / "Konrad Badenheuer"). Sonst laesst sich ohne Format der Verfasser
+    nicht vom Titel trennen; dann zaehlen alle kurzen Zeilen zum Titel.
     """
-    zeilen: list[str] = []
+    autorzeilen: list[SourceBlock] = []
+    titelzeilen: list[SourceBlock] = []
+    unterzeilen: list[SourceBlock] = []
     for b in story.blocks:
-        if len(b.text) > BEIWERK_HOECHSTLAENGE or len(zeilen) >= 3:
+        if len(b.text) > BEIWERK_HOECHSTLAENGE:
             break
-        if rolle_fuer(b.style_name, len(b.text)) == "autor":
+        ist_autor = rolle_fuer(b.style_name, len(b.text)) == "autor"
+        weiter = bool(autorzeilen) and autorzeilen[-1].text.rstrip().endswith("/")
+        if not titelzeilen and (
+            weiter
+            or (not autorzeilen and (ist_autor or b.text.rstrip().endswith("/")))
+        ):
+            autorzeilen.append(b)
+        elif not titelzeilen:
+            titelzeilen.append(b)
+        elif (
+            not unterzeilen
+            and len(titelzeilen) < 3
+            and (b.style_name == titelzeilen[0].style_name or _ohne_format(b, titelzeilen[0]))
+        ):
+            titelzeilen.append(b)
+        elif len(unterzeilen) < 2:
+            unterzeilen.append(b)
+        else:
+            break
+    if not titelzeilen:
+        return None
+    return Anzeigenkopf(
+        titel=zeilen_verbinden(b.text for b in titelzeilen),
+        titelzeilen=titelzeilen,
+        unterzeilen=unterzeilen,
+        autorzeilen=autorzeilen,
+    )
+
+
+def _ohne_format(*bloecke: SourceBlock) -> bool:
+    return all((b.style_name or "").lower() in OHNE_FORMAT for b in bloecke)
+
+
+# Die Buchangabe am Ende einer Besprechung: "Richard Overy. Warum Krieg?
+# 368 S., geb., € 28,–. Berlin: Rowohlt, 2024." Der Umfang trennt Verfasser
+# und Titel von Ausstattung und Verlag.
+_BUCH_UMFANG = re.compile(r"\s\d{1,4}(?:\.\d{3})?\s*(?:S\.|Seiten)\s*,")
+# Ein Punkt, der ein Kuerzel beendet, trennt nicht Verfasser und Titel
+# ("Claus-M. Wolfschlag", "Dr. Stefan Scheil").
+_KUERZEL = re.compile(r"(?:^|[-(])[A-ZÄÖÜ]$|^(?:Dr|Prof|St|Hrsg|Hg|jr|Jr|v)$")
+
+
+def buchtitel_aus_angabe(text: str) -> str | None:
+    """"Verfasser: Titel" aus einer Buchangabe, ohne Untertitel.
+
+    "Linus Ammer. Indogermanen: Herkunft, Eigenschaften … 192 S., geb." wird
+    "Linus Ammer: Indogermanen", "Cora Stephan (Hrsg.). Deutsche Legenden:
+    Wer …" wird "Cora Stephan (Hrsg.): Deutsche Legenden".
+    """
+    t = " ".join(text.split())
+    if len(t) > 400:
+        return None
+    umfang = _BUCH_UMFANG.search(t)
+    if not umfang:
+        return None
+    kopf = t[: umfang.start()].rstrip().rstrip(".")
+    for punkt in re.finditer(r"\.\s+(?=[„\"»A-ZÄÖÜ0-9])", kopf):
+        davor = kopf[: punkt.start()].strip()
+        letztes = davor.split()[-1] if davor.split() else ""
+        if _KUERZEL.search(letztes):
             continue
-        zeilen.append(b.text.strip())
-    return zeilen_verbinden(zeilen)
+        verfasser, titel = davor, kopf[punkt.end() :].strip()
+        break
+    else:
+        return None
+    if (
+        not 3 <= len(verfasser) <= 80
+        or re.search(r"\d", verfasser)
+        or not verfasser[0].isupper()
+        or not titel
+    ):
+        return None
+    titel = titel.split(": ")[0].strip()
+    return f"{verfasser}: {titel}"
+
+
+def _besprochenes_buch(story: Story) -> str | None:
+    """Titel einer Buchbesprechung aus der Buchangabe an ihrem Ende.
+
+    Die Besprechung hat im Satz keine Ueberschrift; als Titel stand ihr
+    erster Satz ("Endzeit in Schlesien. Im Dorf Rosenthal …"), die erste
+    der Seite hiess nach der Kopfzeile "Buchbesprechungen". Gesucht wird in
+    den letzten beiden Absaetzen, hinter wenigstens einem Absatz Text.
+    """
+    if len(story.blocks) < 2:
+        return None
+    for b in story.blocks[-2:]:
+        titel = buchtitel_aus_angabe(b.text)
+        if titel and b is not story.blocks[0]:
+            return titel
+    return None
+
+
+# Ein Titel in eigenem Rahmen ohne Format mitten im Textrahmen: die Kolumne
+# von ZUERST! ("Unseriöse Medien" unter dem Foto, der Text laeuft darum).
+TITELRAHMEN_IM_TEXT_ZEICHEN = (8, 80)
+
+
+def _titel_im_textrahmen(story: Story, frei: list[Story]) -> Story | None:
+    """Ein kurzer Rahmen ohne Format, der ganz im Textrahmen der Story steht."""
+    x0, y0, x1, y1 = story.rahmen
+    rand = 0.005
+    moeglich = []
+    for s in frei:
+        if s.erste_seite != story.erste_seite or len(s.seiten) != 1 or len(s.blocks) > 3:
+            continue
+        text = _text(s)
+        if not (
+            TITELRAHMEN_IM_TEXT_ZEICHEN[0] <= len(text) <= TITELRAHMEN_IM_TEXT_ZEICHEN[1]
+            and text[:1].isupper()
+            and re.search(r"[^\W\d_]{4}", text)
+        ):
+            continue
+        sx0, sy0, sx1, sy1 = s.rahmen
+        if sx0 >= x0 - rand and sy0 >= y0 - rand and sx1 <= x1 + rand and sy1 <= y1 + rand:
+            moeglich.append(s)
+    return min(moeglich, key=lambda s: (s.oben, s.links)) if moeglich else None
+
+
+# So viele Zeilen hat eine Ueberschrift, die der Setzer mit Absatzmarken
+# umbrochen hat ("Wadephul warnt vor" / "Debatte über NATO-Zerfall").
+ZEILEN_HOECHSTZAHL = 4
+
+
+def _eigene_zeilen(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Die Zeilen am Anfang einer Story, die ihre Ueberschrift bilden.
+
+    Alle aufeinanderfolgenden Absaetze im Ueberschriftformat zaehlen, nicht
+    nur der erste: frueher hiessen Meldungen "Wadephul warnt vor", "Erich
+    Raeder" (mit "vergrößert" und "die Kriegsmarine" als Zwischentiteln im
+    Text). Eine Anrede ("Sehr geehrte Leser,") im Ueberschriftformat ist
+    keine Zeile, sondern der erste Satz des Editorials.
+    """
+    from .rubriken import ANREDE
+
+    zeilen: list[SourceBlock] = []
+    for b in blocks[:ZEILEN_HOECHSTZAHL]:
+        rolle = rolle_fuer(b.style_name, len(b.text))
+        if rolle not in ("ueberschrift", "zwischentitel") or len(b.text) > 120:
+            break
+        if not zeilen and ANREDE.match(b.text):
+            break
+        zeilen.append(b)
+    return zeilen
+
+
+def _meldungen_trennen(stories: list[Story]) -> tuple[list[Story], set[str]]:
+    """Eine Story mit mehreren Meldungen wird je Meldung eine Story.
+
+    ZUERST! 3/2026, S. 25: "Wadephul warnt vor Debatte über NATO-Zerfall"
+    und "Bundeswehr-General verlangt Atombombe" stehen in einem Textrahmen,
+    jede mit eigener Zeile im Ueberschriftformat. Als ein Artikel hiess das
+    Ganze nach der ersten Zeile, die zweite Meldung lief als Zwischentitel
+    mit. Getrennt wird nur, wenn die Story mit einer Zeile beginnt und jede
+    Zeile Text nach sich hat; die Teile sind Artikel, auch wenn sie kurz sind.
+    """
+    out: list[Story] = []
+    geteilt: set[str] = set()
+    for story in stories:
+        rollen = [rolle_fuer(b.style_name, len(b.text)) for b in story.blocks]
+        anfaenge = [
+            i
+            for i, r in enumerate(rollen)
+            if r == "ueberschrift" and (i == 0 or rollen[i - 1] != "ueberschrift")
+        ]
+        if (
+            story.rolle() != "mengentext"
+            or len(anfaenge) < 2
+            or anfaenge[0] != 0
+            or any(
+                all(r == "ueberschrift" for r in rollen[a:e])
+                for a, e in zip(anfaenge, anfaenge[1:] + [len(rollen)])
+            )
+        ):
+            out.append(story)
+            continue
+        for n, (a, e) in enumerate(zip(anfaenge, anfaenge[1:] + [len(rollen)])):
+            teil = Story(story.story_id if n == 0 else f"{story.story_id}#{n}", story.blocks[a:e])
+            out.append(teil)
+            geteilt.add(teil.story_id)
+    return out, geteilt
+
+
+def _anrede_zusammenziehen(story: Story) -> None:
+    """"Verehrter" / "Leser," in zwei Absaetzen (DMZ-Editorial) wird ein Absatz."""
+    from dataclasses import replace
+
+    from .rubriken import ANREDE
+
+    for n in (2, 3):
+        anfang = story.blocks[:n]
+        if len(anfang) < n or any(len(b.text) > 25 for b in anfang):
+            continue
+        text = " ".join(b.text.strip() for b in anfang)
+        if ANREDE.match(text) and text.endswith(","):
+            story.blocks[:n] = [replace(anfang[0], text=text)]
+            return
 
 
 def artikel_aus_satz(
@@ -653,10 +1012,17 @@ def artikel_aus_satz(
     Story und bleibt stehen.
     """
     stories = initialen_einsetzen(stories_bilden(blocks))
+    # Beschriftungen in Karten und Grafiken gehoeren zur Zeichnung.
+    grafik = grafikbeschriftungen(stories, images)
+    stories = [s for s in stories if s.story_id not in grafik]
+    for s in stories:
+        _anrede_zusammenziehen(s)
+    stories, geteilt = _meldungen_trennen(stories)
     lang = [
         s
         for s in stories
-        if s.rolle() == "mengentext" and s.textzeichen >= ARTIKEL_MINDESTZEICHEN
+        if s.rolle() == "mengentext"
+        and (s.textzeichen >= ARTIKEL_MINDESTZEICHEN or s.story_id in geteilt)
     ]
     # Kurze Buchanzeigen tragen Verfasser und Titel selbst; eine Ueberschrift
     # der Seite ("ALT!" als Blickfang) bekommen sie nicht.
@@ -695,6 +1061,7 @@ def artikel_aus_satz(
         if s.rolle() == "mengentext"
         and s.textzeichen < ARTIKEL_MINDESTZEICHEN
         and s.story_id not in als_anzeige
+        and s.story_id not in geteilt
     ]
 
     kopf_zu = _kopf_zuordnen(lang, ueberschriften)
@@ -704,6 +1071,7 @@ def artikel_aus_satz(
     vergeben: set[str] = set()
     artikel: list[AssembledArticle] = []
     paare: list[tuple[Story, AssembledArticle]] = []
+    interviews: set[int] = set()
     belegte_seiten: dict[int, AssembledArticle] = {}
 
     for story in koerper:
@@ -715,25 +1083,35 @@ def artikel_aus_satz(
         if kopf:
             for b in kopf.blocks:
                 eigene.append(_als(b, "heading"))
-        if unter:
-            for b in unter.blocks:
-                eigene.append(_als(b, "lead"))
-        if einleitung:
-            for b in einleitung.blocks:
-                eigene.append(_als(b, "lead"))
+        # Unterzeile und Vorspann sind je ein Absatz; der Setzer bricht ihre
+        # Zeilen mit Absatzmarken ("… wo er Anfang 1944 als" / "ausgebildet").
+        for vorn in (unter, einleitung):
+            if vorn:
+                eigene.append(_als(_kopie_mit_text(vorn.blocks[0], _text(vorn)), "lead"))
         eigene.extend(story.blocks)
         rahmen = [] if kopf else titelrahmen.get(story.story_id, [])
         eigene[0:0] = [_als(b, "heading") for r in rahmen for b in r.blocks]
 
         aus_text = False
+        anzeigen_unterzeile: str | None = None
+        anzeigenkopf = _anzeigenkopf(story) if story.story_id in anzeigen else None
         if kopf:
             titel = _text(kopf)
         elif any(story is g for g, _ in gruppen):
             titel = _text(rahmen[-1])
-        elif story.story_id in anzeigen and _anzeigenzeilen(story):
+        elif anzeigenkopf:
             # Verfasser und Titel in der Anzeige selbst; ein Rahmen darueber
-            # ist dann ein Werbesatz ("Legionäre für Europa").
-            titel = _anzeigenzeilen(story)
+            # ist dann ein Werbesatz ("Legionäre für Europa"). Im Lesetext
+            # stuenden Verfasser, Titel und Untertitel sonst ein zweites Mal.
+            titel = anzeigenkopf.titel
+            for b in anzeigenkopf.titelzeilen:
+                eigene[eigene.index(b)] = _als(b, "heading")
+            if anzeigenkopf.unterzeilen:
+                anzeigen_unterzeile = zeilen_verbinden(b.text for b in anzeigenkopf.unterzeilen)
+                for b in anzeigenkopf.unterzeilen:
+                    eigene[eigene.index(b)] = _als(b, "lead")
+            for b in anzeigenkopf.autorzeilen:
+                eigene.remove(b)
         elif rahmen:
             # Sonst nennt der Rahmen direkt ueber der Beschreibung Verfasser
             # und Titel, darueber steht der Werbesatz.
@@ -742,41 +1120,65 @@ def artikel_aus_satz(
             # Kurze Meldungen tragen ihre Zeile als ersten Absatz der eigenen
             # Story ("Philipp Wild geboren" im Kalenderblatt). Dann ist das
             # Format des ersten Absatzes die Ueberschrift, nicht das der Story.
+            zeilen = _eigene_zeilen(story.blocks)
             erster = story.blocks[0]
-            eigene_zeile = (
-                rolle_fuer(erster.style_name, len(erster.text))
-                in ("ueberschrift", "zwischentitel")
-                and len(erster.text) <= 120
-            )
-            aus_text = not eigene_zeile
-            if eigene_zeile:
-                titel = erster.text
-                eigene[eigene.index(erster)] = _als(erster, "heading")
+            buch = None if zeilen else _besprochenes_buch(story)
+            im_rahmen = None if zeilen or buch else _titel_im_textrahmen(story, frei)
+            if zeilen:
+                titel = zeilen_verbinden(b.text for b in zeilen)
+                for b in zeilen:
+                    eigene[eigene.index(b)] = _als(b, "heading")
+            elif buch:
+                # Buchbesprechung: "Verfasser: Titel" aus der Buchangabe.
+                titel = buch
+            elif im_rahmen is not None:
+                titel = _text(im_rahmen)
+                frei = [s for s in frei if s is not im_rahmen]
+                eigene[0:0] = [_als(b, "heading") for b in im_rahmen.blocks]
             else:
+                aus_text = True
                 titel = _erster_satz(_text(story))
-        autor = None
-        for a in autoren:
-            if a.story_id in vergeben:
-                continue
-            if a.erste_seite in story.seiten:
-                autor = _text(a)
-                vergeben.add(a.story_id)
-                break
-        # Ein Autorenname kann auch als letzter Absatz im Mengentext stehen.
+            if erster.kind == "heading" and erster not in zeilen and erster in eigene:
+                # Die Anrede im Ueberschriftformat bleibt erster Absatz.
+                eigene[eigene.index(erster)] = _als(erster, "paragraph")
+        # Der Autor im eigenen Text zuerst: ZUERST! und DMZ setzen ihn als
+        # Absatz im Format "Autorenname" ans Ende des Mengentexts. Eine
+        # Autorzeile in einem eigenen Rahmen zaehlt erst danach, und nie
+        # die einer Anzeige: in 3/2026 trug die Titelgeschichte sonst die
+        # Schlagzeile der Buchanzeige auf S. 15 ("Was die Deutschen nicht
+        # wissen sollen") als Autor.
+        autor = (anzeigenkopf.autor if anzeigenkopf and not kopf else None) or next(
+            (
+                b.text
+                for b in story.blocks
+                if rolle_fuer(b.style_name, len(b.text)) == "autor"
+            ),
+            None,
+        )
         if autor is None:
-            for b in story.blocks:
-                if rolle_fuer(b.style_name, len(b.text)) == "autor":
-                    autor = b.text
+            for a in autoren:
+                if a.story_id in vergeben or _anzeigenformat(a):
+                    continue
+                if a.erste_seite in story.seiten:
+                    autor = _text(a)
+                    vergeben.add(a.story_id)
                     break
 
+        unterzeile, vorspann = _unterzeile_und_vorspann(unter, einleitung)
+        unterzeile = unterzeile or anzeigen_unterzeile
         stueck = AssembledArticle(
             title=titel,
             blocks=eigene,
-            subtitle=_text(unter) if unter else None,
+            subtitle=unterzeile,
             author=autor,
-            teaser=_text(einleitung) if einleitung else None,
+            teaser=vorspann,
             title_from_body=not kopf and aus_text,
         )
+        if ist_leserbriefseite(story):
+            stueck.blocks = leserbriefe_gliedern(stueck.blocks)
+        elif ist_interview(story):
+            stueck.blocks = fragen_absetzen(stueck.blocks)
+            interviews.add(id(stueck))
         artikel.append(stueck)
         paare.append((story, stueck))
 
@@ -791,10 +1193,44 @@ def artikel_aus_satz(
         for seite in stueck.pages:
             belegte_seiten.setdefault(seite, stueck)
 
+    # Teile einer Anzeige (der Preis "€ 32,80" in eigenem Rahmen, die
+    # Schlagzeile im Format "Autorenname Katalog") gehoeren zur Anzeige
+    # derselben Seite, nie in den redaktionellen Artikel daneben.
+    anzeigen_auf_seite = [
+        (s, st)
+        for s, st in paare
+        if id(st) in noch_da and (_anzeigenformat(s) or s.story_id in anzeigen)
+    ]
+
+    def anzeige_zu(teil: Story) -> AssembledArticle | None:
+        moeglich = [
+            (_rahmenabstand(teil, s), n, st)
+            for n, (s, st) in enumerate(anzeigen_auf_seite)
+            if teil.erste_seite in s.seiten
+        ]
+        return min(moeglich, key=lambda m: m[:2])[2] if moeglich else None
+
+    for kopf in autoren:
+        if kopf.story_id in vergeben or not _anzeigenformat(kopf):
+            continue
+        ziel = anzeige_zu(kopf)
+        if ziel is None:
+            continue
+        zeile = _text(kopf)
+        ziel.blocks.insert(0, _als(_kopie_mit_text(kopf.blocks[0], zeile), "heading"))
+        if ziel.title_from_body:
+            ziel.title = zeile
+            ziel.title_from_body = False
+
     # Kaesten und kurze Reste wandern in den Artikel ihrer Seite — und dort
     # hinter den letzten Absatz derselben Seite, damit sie im Lesefluss an der
     # richtigen Stelle stehen und nicht am Ende des Artikels.
     for rest in kaesten + kurze:
+        if _anzeigenformat(rest) and rest.textzeichen < ANZEIGE_MINDESTZEICHEN:
+            ziel = anzeige_zu(rest)
+            if ziel is not None:
+                ziel.blocks.extend(_als(b, "paragraph") for b in rest.blocks)
+            continue
         ziel = belegte_seiten.get(rest.erste_seite)
         if ziel is None and any(b.kind == "table" for b in rest.blocks):
             # Eine Tabelle steht oft allein auf der Nachbarseite ihres Textes,
@@ -805,9 +1241,16 @@ def artikel_aus_satz(
             )
         if ziel is None:
             continue
-        art = "box" if rest.rolle() == "kasten" else "paragraph"
-        # Eine Tabelle bleibt eine Tabelle, auch in einem Kasten.
-        neue = [b if b.kind == "table" else _als(b, art) for b in rest.blocks]
+        if rest.rolle() == "kasten":
+            neue = _kasten_bloecke(rest.blocks)
+        else:
+            # Eine Tabelle bleibt eine Tabelle.
+            neue = [b if b.kind == "table" else _als(b, "paragraph") for b in rest.blocks]
+        if id(ziel) in interviews and rest.rolle() == "kasten":
+            # Die Kurzbiografie zum Interview ("Interview-Vita") stuende an
+            # ihrer Seite zwischen Frage und Antwort; sie kommt ans Ende.
+            ziel.blocks.extend(neue)
+            continue
         stelle = _letzte_stelle(ziel.blocks, rest.erste_seite)
         ziel.blocks[stelle:stelle] = neue
 
@@ -818,6 +1261,247 @@ def artikel_aus_satz(
 
         _attach_images(artikel, images)
     return artikel
+
+
+# Eine Unterzeile hat zwei, drei Zeilen (ZUERST!: 40 bis 140 Zeichen). Ein
+# Vorspann von fuenf Saetzen (DMZ-Soldatenportraet, 550 bis 600 Zeichen) ist
+# Lesetext und gehoert als Vorspann-Absatz in den Artikel, nicht in den Kopf.
+UNTERZEILE_HOECHSTLAENGE = 250
+
+
+def _unterzeile_und_vorspann(
+    unter: Story | None, einleitung: Story | None
+) -> tuple[str | None, str | None]:
+    """Unterzeile und Vorspann des Kopfes.
+
+    Die Unterzeile ist die kurze Zeile unter dem Titel — bei der DMZ im
+    Format "Unterueberschrift", bei ZUERST! im "Einleitungstext" (eine eigene
+    Unterzeile gibt es dort nicht). Der Leser zeigt nur die Unterzeile im
+    Kopf; was als Vorspann (`teaser`) im Kopf stand, fehlte im Lesetext, weil
+    der gleichlautende Absatz als Wiederholung des Kopfes wegfiel. Deshalb:
+
+    * kurze Unterzeile oder, ohne sie, kurze Einleitung: Unterzeile;
+    * eine Einleitung, die zur Unterzeile wurde, steht auch als Vorspann
+      (fuer die Suche) — im Lesetext faellt sie als Wiederholung weg;
+    * alles Lange und eine zweite Einleitung neben der Unterzeile bleiben
+      Vorspann-Absaetze im Text.
+    """
+    unter_text = _text(unter) if unter else None
+    einleitung_text = _text(einleitung) if einleitung else None
+
+    def kurz(t: str | None) -> bool:
+        return bool(t) and len(t) <= UNTERZEILE_HOECHSTLAENGE
+
+    if kurz(unter_text):
+        return unter_text, None
+    if kurz(einleitung_text):
+        return einleitung_text, einleitung_text
+    return None, None
+
+
+# --- Interviews ---------------------------------------------------------------
+
+_FRAGE = re.compile(r"interview[\s-]*frage")
+_ANTWORT = re.compile(r"interview[\s-]*antwort")
+
+
+def _stil(b: SourceBlock) -> str:
+    return (b.style_name or "").lower()
+
+
+def ist_interview(story: Story) -> bool:
+    """Fragen und Antworten in eigenen Formaten ("Interviewfrage",
+    "Interview-Antwort 2023"). Die Leserbriefseite von ZUERST! setzt die
+    Unterschriften auch im Frageformat, hat aber keine Antworten."""
+    fragen = sum(1 for b in story.blocks if _FRAGE.search(_stil(b)))
+    antworten = sum(1 for b in story.blocks if _ANTWORT.search(_stil(b)))
+    return fragen >= 2 and antworten >= 1
+
+
+def fragen_absetzen(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Die Fragen eines Interviews als eigener Blocktyp ("question").
+
+    Im Druck stehen sie kursiv und abgesetzt; als gewoehnliche Absaetze
+    waren Frage und Antwort im Lesetext nicht zu unterscheiden.
+    """
+    return [_als(b, "question") if _FRAGE.search(_stil(b)) else b for b in blocks]
+
+
+# --- Leserbriefe --------------------------------------------------------------
+
+# "Zu „Siegfried der Rüpel“ in ZUERST! 12/2024", "Antwort auf den Leserbrief
+# von …", "Zu Meldung „…“". Der Bezug beginnt jeden Brief.
+LESERBRIEF_BEZUG = re.compile(r"^(?:Zu|Antwort auf)\s")
+# Der Bezug endet mit der Heftangabe ("in ZUERST! 12/2024", "in DMZ 169").
+_HEFTANGABE = re.compile(r"(?:\d{1,2}(?:[-–]\d{1,2})?/\d{4}|\b(?:DMZ|ZUERST!?)\s+\d{1,4})\s*$")
+LESERBRIEF_KOPFZEILE = 100
+UNTERSCHRIFT_HOECHSTLAENGE = 60
+
+
+def ist_leserbriefseite(story: Story) -> bool:
+    """Mindestens zwei Briefe mit Bezugszeile in einer Story."""
+    return (
+        sum(
+            1
+            for b in story.blocks
+            if len(b.text) <= LESERBRIEF_KOPFZEILE and LESERBRIEF_BEZUG.match(b.text)
+        )
+        >= 2
+    )
+
+
+def _ist_unterschrift(text: str) -> bool:
+    t = text.strip()
+    return (
+        0 < len(t) <= UNTERSCHRIFT_HOECHSTLAENGE
+        and len(t.split()) <= 7
+        and not re.search(r"[.!?…:]$", t)
+        and (t[0].isupper() or t[0] in "„\"»")
+        and not LESERBRIEF_BEZUG.match(t)
+    )
+
+
+def unterschrift_abtrennen(text: str) -> tuple[str, str | None]:
+    """Eine Unterschrift, die am Briefende klebt: "… nachziehen. Holger Dörr".
+
+    Im Satz steht sie mit Leerraum oder Tabulator rechtsbuendig in der
+    letzten Zeile; im Text bleibt davon ein Leerzeichen. Ein Brief endet
+    sonst mit einem Satzzeichen — was danach kommt, ist die Unterschrift.
+    """
+    t = text.rstrip()
+    if not t or re.search(r"[.!?…:;,)“”\"»]$", t):
+        return text, None
+    for m in reversed(list(re.finditer(r"[.!?…][“”\"»)]*\s+", t))):
+        davor = t[: m.start()]
+        if re.search(r"(?:^|\s)[A-ZÄÖÜ]$", davor):
+            # "D. Kaspareit": der Punkt beendet ein Kuerzel.
+            continue
+        rest = t[m.end() :]
+        if _ist_unterschrift(rest):
+            return t[: m.end()].rstrip(), rest
+        break
+    return text, None
+
+
+def leserbriefe_gliedern(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Bezug und Brieftitel als ein Zwischentitel, die Unterschrift als Absatz.
+
+    Der Satz bricht beides mit Absatzmarken: "Zu „Siegfried der Rüpel“" /
+    "in ZUERST! 12/2024" / "Positive" / "Überraschung". Daraus wird ein
+    Zwischentitel "Zu „Siegfried der Rüpel“ in ZUERST! 12/2024 – Positive
+    Überraschung". Die Unterschrift steht danach als eigener Absatz, auch
+    wenn sie im Satz ueber zwei Zeilen geht ("Peter Lüdin," / "kommentiert
+    auf zuerst.de") oder am letzten Satz des Briefes klebt.
+    """
+    out: list[SourceBlock] = []
+    i, n = 0, len(blocks)
+    while i < n:
+        b = blocks[i]
+        if (
+            b.kind != "table"
+            and len(b.text) <= LESERBRIEF_KOPFZEILE
+            and LESERBRIEF_BEZUG.match(b.text)
+        ):
+            kopf: list[SourceBlock] = []
+            j = i
+            while (
+                j < n
+                and len(kopf) < 5
+                and blocks[j].kind != "table"
+                and len(blocks[j].text) <= LESERBRIEF_KOPFZEILE
+                and not (kopf and LESERBRIEF_BEZUG.match(blocks[j].text))
+            ):
+                kopf.append(blocks[j])
+                j += 1
+            if j < n and len(blocks[j].text) > LESERBRIEF_KOPFZEILE:
+                ende = next((k for k, z in enumerate(kopf) if _HEFTANGABE.search(z.text)), 0)
+                bezug = zeilen_verbinden(z.text for z in kopf[: ende + 1])
+                titel = zeilen_verbinden(z.text for z in kopf[ende + 1 :])
+                zeile = f"{bezug} – {titel}" if titel else bezug
+                out.append(_als(_kopie_mit_text(kopf[0], zeile), "subheading"))
+                i = j
+                continue
+        out.append(b)
+        i += 1
+
+    gegliedert: list[SourceBlock] = []
+    k = 0
+    while k < len(out):
+        b = out[k]
+        vorher = gegliedert[-1] if gegliedert else None
+        if (
+            b.kind in ("paragraph", "other")
+            and _ist_unterschrift(b.text)
+            and vorher is not None
+            and vorher.kind == "paragraph"
+            and len(vorher.text) > LESERBRIEF_KOPFZEILE
+        ):
+            zeilen = [b]
+            k += 1
+            while (
+                k < len(out)
+                and out[k].kind in ("paragraph", "other")
+                and len(out[k].text) <= UNTERSCHRIFT_HOECHSTLAENGE
+                and not LESERBRIEF_BEZUG.match(out[k].text)
+                and not re.search(r"[.!?]$", zeilen[-1].text.strip())
+            ):
+                zeilen.append(out[k])
+                k += 1
+            gegliedert.append(_als(_kopie_mit_text(b, zeilen_verbinden(z.text for z in zeilen)), "paragraph"))
+            continue
+        naechster = out[k + 1] if k + 1 < len(out) else None
+        if (
+            b.kind == "paragraph"
+            and len(b.text) > LESERBRIEF_KOPFZEILE
+            and (naechster is None or naechster.kind == "subheading")
+        ):
+            text, unterschrift = unterschrift_abtrennen(b.text)
+            if unterschrift:
+                gegliedert.append(_kopie_mit_text(b, text))
+                gegliedert.append(_kopie_mit_text(b, unterschrift))
+                k += 1
+                continue
+        gegliedert.append(b)
+        k += 1
+    return gegliedert
+
+
+def _kasten_bloecke(blocks: list[SourceBlock]) -> list[SourceBlock]:
+    """Ein Kasten ist ein Block: seine Absaetze als Zeilen, getrennt durch "\\n".
+
+    Ein Datenkasten der DMZ ("Panzerjäger Centauro – Technische Daten:")
+    setzt jede Zeile als eigenen Absatz ("Länge 7,85 m", "Breite 2,94 m");
+    als zwanzig lose Absaetze zerfiel er im Lesetext. Der Leser zeigt einen
+    Kasten abgesetzt und mit seinen Zeilenumbruechen. Eine am Zeilenende
+    getrennte Bezeichnung ("Haupt-" / "bewaffnung 1 × 105-mm-Kanone") wird
+    eine Zeile. Eine Tabelle im Kasten bleibt eine Tabelle.
+    """
+    out: list[SourceBlock] = []
+    zeilen: list[str] = []
+    erster: SourceBlock | None = None
+
+    def abschliessen() -> None:
+        nonlocal zeilen, erster
+        if erster is not None and zeilen:
+            out.append(_als(_kopie_mit_text(erster, "\n".join(zeilen)), "box"))
+        zeilen, erster = [], None
+
+    for b in blocks:
+        if b.kind == "table":
+            abschliessen()
+            out.append(b)
+            continue
+        text = " ".join(b.text.split())
+        if not text:
+            continue
+        if erster is None:
+            erster = b
+        if zeilen and re.search(r"[^\W\d_]-$", zeilen[-1]) and text[:1].islower():
+            zeilen[-1] = zeilen_verbinden([zeilen[-1], text])
+        else:
+            zeilen.append(text)
+    abschliessen()
+    return out
 
 
 def _letzte_stelle(blocks: list[SourceBlock], seite: int) -> int:

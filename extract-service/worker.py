@@ -56,16 +56,20 @@ from extractor.pdf_extract import (
 )
 from extractor.idml_articles import (
     artikel_aus_satz,
+    initialen_zurueck,
     ohne_unterlagen,
     ohne_vorschaubilder,
     rollen_je_story,
 )
 from extractor.publication_profiles import apply_profile
 from extractor.rubriken import (
+    TITEL_SEITENABSTAND,
     kopfzeilen,
     seitenrubriken,
     stehende_rubrik,
     titel_bereinigen,
+    titel_nennt_artikel,
+    verfasser_aus_eintrag,
     verzeichnis_doppelseite,
 )
 from extractor.textutil import normalize_compare
@@ -233,7 +237,11 @@ class Job:
                 verzeichnis=verzeichnis.get(seite),
                 erster_auf_seite=seite not in gesehen,
             )
+            erster_auf_seite = seite not in gesehen
             gesehen.add(seite)
+            if not a.author and erster_auf_seite:
+                # Die Kolumne nennt ihren Verfasser nur im Verzeichnis.
+                a.author = verfasser_aus_eintrag(verzeichnis.get(seite))
             if neu != a.title:
                 kern = (stehende_rubrik(neu) or neu).lower()
                 if (seite, kern) in vergeben:
@@ -804,7 +812,9 @@ class Job:
                 jobId=self.job_id,
                 entfernt=len(bildrahmen) - len(gefiltert),
             )
-        satz_blocks = frames_to_blocks(rohe_blocks, page_map, trims)
+        # Die ausgelagerte Initiale zurueck an ihren Absatz, bevor das
+        # Aussortieren sie als Beiwerk (zwei Zeichen) verwirft.
+        satz_blocks = initialen_zurueck(frames_to_blocks(rohe_blocks, page_map, trims))
         satz_images = frames_to_images(gefiltert, page_map, trims)
         return satz_blocks, satz_images
 
@@ -1078,7 +1088,7 @@ class Job:
                 {
                     "order": i + 1,
                     "type": b.kind if b.kind in
-                    ("heading", "subheading", "lead", "paragraph", "quote", "caption", "box")
+                    ("heading", "subheading", "lead", "paragraph", "question", "quote", "caption", "box")
                     or (b.kind == "table" and b.table is not None)
                     else "other",
                     "text": b.text,
@@ -1150,13 +1160,31 @@ class Job:
                 None,
             )
 
-        for order, hint in enumerate(hints, start=1):
-            article_order = artikel_ab(hint.page_index)
+        def artikel_zum_eintrag(label: str, seite: int) -> int | None:
+            # Zuerst der Titel: nennt der Eintrag einen Artikel, der in der
+            # Naehe der Seite beginnt, ist es dieser — auch wenn sich die
+            # Seitenbereiche verschoben haben ("Leserbriefe/Impressum" zeigt
+            # auf die Seite nach dem Anfang der Briefe).
+            passend = [
+                (abs(article.pages[0] - seite), index + 1)
+                for index, article in enumerate(articles)
+                if article.pages
+                and abs(article.pages[0] - seite) <= TITEL_SEITENABSTAND
+                and titel_nennt_artikel(label, article.title)
+            ]
+            if passend:
+                return min(passend)[1]
+            # Sonst die Seite: der erste Artikel, der dort beginnt.
+            article_order = artikel_ab(seite)
             # Aufmacherseite: das Verzeichnis nennt die Seite mit Bild und
             # Titel, der Text der Story beginnt erst auf der naechsten. Die
             # Folgeseite zaehlt nur, wenn kein eigener Eintrag auf sie zeigt.
-            if article_order is None and hint.page_index + 1 not in ziele:
-                article_order = artikel_ab(hint.page_index + 1)
+            if article_order is None and seite + 1 not in ziele:
+                article_order = artikel_ab(seite + 1)
+            return article_order
+
+        for order, hint in enumerate(hints, start=1):
+            article_order = artikel_zum_eintrag(hint.label, hint.page_index)
             entry = {
                 "order": order,
                 "label": hint.label,
@@ -1199,9 +1227,7 @@ class Job:
         # Verzeichniszeile, auf deren Seite sie zeigen.
         for region in Job._anreisser_regionen(self, hints):
             ziel = region["targetPageIndex"]
-            article_order = artikel_ab(ziel)
-            if article_order is None and ziel + 1 not in ziele:
-                article_order = artikel_ab(ziel + 1)
+            article_order = artikel_zum_eintrag(region.get("label") or "", ziel)
             if article_order is None:
                 continue
             region = {k: v for k, v in region.items() if k != "label"}

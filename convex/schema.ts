@@ -38,6 +38,8 @@ export const blockType = v.union(
   v.literal("subheading"),
   v.literal("lead"),
   v.literal("paragraph"),
+  // Frage eines Interviews (im Druck kursiv und abgesetzt).
+  v.literal("question"),
   v.literal("quote"),
   v.literal("caption"),
   v.literal("box"),
