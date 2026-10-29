@@ -116,6 +116,17 @@ Import von der Kommandozeile testen, wie ein Mensch über die Oberfläche:
 `import-test@lesenundschenken.de`, Anmeldung über `magicLink:requestInternal`;
 danach `account:purgeByEmailInternal`).
 
+Daten lesen ohne eigene Abfrage: `npx convex run --env-file
+_scratch/verlag-direkt.env --identity '{"subject":"<userId>|x","issuer":"x","tokenIdentifier":"x"}'
+articles:listForEditors '{"issueId":"…"}'` läuft als dieses Konto (Testkonto
+import-test@: `devtools:usersByEmailPartInternal {"teil":"import-test"}`).
+So gehen alle Redaktionsabfragen (`issues:listForEditors`,
+`toc:listForEditors`, `imports:listForIssue`, `articles:regionsForReader`).
+`npx convex data` blockt der Hook. Werkzeuge dafür: `_scratch/ag3/cx.py`,
+`dump.py`. Sichtprüfung im Reader: `_scratch/ag3/sicht.mjs <issueId>
+<seite>` (Chrome unter `/usr/bin/google-chrome`, der Playwright-Cache ist
+geleert; jedes Mal frisch anmelden, die gespeicherte Sitzung hält nicht).
+
 ---
 
 ## 1d. Kopf und Fuss wie im Netzladen (26.10.2026)
@@ -745,6 +756,83 @@ eine Zeile im Inhaltsverzeichnis.
   `tests/fixtures/titel/`; `textLayer.test.ts` für den schrägen Lauf.
   Erzeugen einer Vorlage aus einem Umschlag-PDF ohne Browser:
   `_scratch/titel-anreisser/umschlag-text.ts` (mit esbuild bündeln, siehe Kopf).
+  **Falle:** bei einem Umschlag mit Klappe (DMZ-Zeitgeschichte) das
+  Netzformat mitgeben (`node umschlag-text.mjs <pdf> 595.276 841.89 <aus>`),
+  sonst teilt das Skript die Tafeln falsch und alle Flächen liegen
+  verschoben. Ergebnis vor dem Einspielen auf das Titelbild zeichnen.
+
+## 4l. Verzeichniszeilen gingen verloren, Anreißer der DMZ (29.10.2026)
+
+drm-viewer-ag3, drm-viewer-4yb.
+
+* **Ursache (ag3):** Eine Klickfläche des Inhaltsverzeichnisses (und jeder
+  Anreißer auf U1) hängt in `articleRegions` an dem Artikel ihrer Zielseite,
+  liegt aber auf einer anderen Seite. Jedes Löschen eines Artikels löschte
+  sie mit: `deleteArticle` im Nachtrag (`mergeResultInternal`),
+  `articles.removeArticle`/`removeInternal`. Am 02.10. ersetzte ein Nachtrag
+  der DMZ 170 die Einzelmeldungen auf S. 35 und 51 durch je einen Artikel
+  „Nachrichten aus …“ (Commit 6a18642); die beiden Verzeichniszeilen
+  verschwanden. Ebenso „Nachruf“ in DMZ-Zeitgeschichte 80 und zwei Zeilen
+  (S. 48) in ZUERST! 4/2025. Dazu: „Leserbriefe/Impressum“ (ZUERST!, neun
+  Hefte) bekam nie eine Fläche, weil die Briefe eine Seite früher beginnen
+  und kein Artikel auf der genannten Seite anfängt.
+* **Fix:** `convex/tocZiel.ts`. Sprungflächen eines gelöschten Artikels
+  gehen an den Artikel ihrer Zielseite (`sprungflaechenRetten`), im
+  Nachtrag nach dem Einfügen der Nachfolger. Die Wahl des Artikels
+  (`zielArtikelWaehlen`) kennt jetzt auch den Artikel, der über die Seite
+  läuft (bei mehreren der, dessen Titel im Eintrag steht). Druckfehler im
+  Verzeichnis (DMZ 170 nennt für „Nachrichten aus aus aller Welt“ die 35,
+  die Meldungen stehen auf 51): `zielSeite` nimmt die Seite des Eintrags mit
+  gleichem Titel, den die Redaktion berichtigt hat, sonst die des einzigen
+  Artikels mit dem Titel; Vergleich in `titelForm` (ohne Satzzeichen, ohne
+  doppeltes Wort). Nachgetragene Einträge vergleichen ebenso; vorher legte
+  ein `toc`-Auftrag „Made in Germany jetzt erst recht!“ neben „Made in
+  Germany – jetzt erst recht!“ an. Im Worker dasselbe beim vollen Import
+  (`_seite_nach_titel`, `artikel_ueber` in `_build_toc_entries`).
+* **Anreißer (4yb):** `titel_anreisser.py`. Drei Anreißer gleicher Schrift
+  dicht untereinander (DMZ: Centauro, Senger, Poseidon) waren ein Block und
+  führten alle zu Senger. `_aufteilen` zerlegt einen Block in Zeilengruppen
+  mit den meisten sicheren Treffern (Gleichstand: mehr abgedeckte Zeilen,
+  weniger Gruppen, größere Lücken an den Schnitten). Weiter: gleicher
+  langer Wortstamm („Fernspäher“ ↔ „Fernspähtruppe“, mindestens 8 Zeichen
+  und drei Viertel des kürzeren Wortes, also nicht „Unterschrift“ ↔
+  „Unterscharführer“); ein einzelnes Wort ab 5 Zeichen genügt, wenn es genau
+  so im Titel eines einzigen Eintrags steht („Mscha 1943“ → „Vorstoß über
+  den Mscha“); Preise mit fremdem Eurozeichen („t 9,80“) und „Nr. 170“
+  gelten als Kopf. Gestapelte Flächen teilen sich die Lücke. Tests mit den
+  echten Titelseiten DMZ 170 und DMZ-Zeitgeschichte 80
+  (`tests/fixtures/titel/`), ZUERST! 3/2026 unverändert.
+* **Bestand (live, 29.10.):** DMZ 170: 25 Verzeichnisflächen (vorher 23),
+  5 Anreißer (Hess → 52, Fernspäher → 26, Centauro → 44, Senger → 10,
+  Poseidon → 36, im Reader angeklickt). DMZ-Zeitgeschichte 80: 15 (vorher
+  14), 6 Anreißer. ZUERST! 3/2026: 46 (vorher 45), 6 Anreißer. Eingespielt
+  mit `imports:activateTocRegionsInternal` (Flächen aus den Testvorlagen mit
+  dem neuen Code gerechnet, `_scratch/ag3/plan.py`, `anwenden.py`). ZUERST!
+  2025 (acht Hefte): Eintrag „Leserbriefe/Impressum“ per
+  `toc:setTargetInternal` an den Artikel „Leserbriefe“, dann ein
+  `toc`-Auftrag mit dem laufenden Worker (`leserbriefe.py`); 4/2025 bekam
+  dabei auch die zwei verlorenen Zeilen zurück. Sicherung vorher:
+  `_scratch/ag3/sicherung-vorher/` (Artikel mit Flächen, Verzeichnis, Seiten
+  je Heft); Rückweg `zurueck.py <issueId> --echt` (Flächen und
+  Eintragsziele auf die Sicherung). Prüfen: `dump.py <ordner>`, dann
+  `pruefen.py <ordner> -v`; `vergleich.py <issueId>` zeigt den Unterschied
+  zur Sicherung.
+* **Zahlen:** vorher 22 von 464 Einträgen ohne Fläche, davon 14 gedruckte
+  Zeilen (DMZ 170: 2, Zeitgeschichte 80: 1, ZUERST! 3/2026 und acht Hefte
+  2025: je „Leserbriefe/Impressum“, ZUERST! 4/2025 zusätzlich 2 Zeilen, die
+  die Prüfung nach Zielseite nicht zählte). Jetzt 10 ohne Fläche, alle ohne
+  gedruckte Zeile: Greim 7 (kein Verzeichnis), Editorial und Historischer
+  Kalender der DMZ 170, Editorial der Zeitgeschichte 80. Anreißer auf U1:
+  vorher 38 (nur ZUERST! 2025), jetzt 55.
+* **Offen:** Server-Worker und Convex sind **nicht** ausgerollt. Bis dahin:
+  ein Nachtrag oder Löschen frisst wieder Verzeichnisflächen, und ein
+  `toc`-Auftrag mit dem alten Worker legt die DMZ-Anreißer falsch (alle drei
+  zu Senger). Die Umschlag-Textebene von DMZ 170, Zeitgeschichte 80 und
+  ZUERST! 3/2026 liegt nicht am Heft (Quelle `text`/`cover` fehlt); ein
+  `toc`-Auftrag nimmt ihre Anreißer deshalb wieder weg. Nach dem Ausrollen
+  über „Textebene aus Umschlag (PDF)“ nachtragen (PDFs auf dem Stick,
+  Ordner „ziemlich alle PDFs DMZ-Hefte“ / „…DMZ-Zeitgeschichte“). Greim hat
+  keine Anreißer: keine Umschlag-Textebene.
 
 ## 4k. Leseansicht: Kopf und festes Inhaltsverzeichnis (seit 05.10.2026)
 

@@ -14,7 +14,8 @@ import type { Infer } from "convex/values";
 import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
 import { pageLinkInput, replaceImportedLinks } from "./pageLinks";
 import { internal } from "./_generated/api";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
+import { sprungflaechenRetten, titelForm, zielArtikelWaehlen, zielSeite } from "./tocZiel";
 
 /** Wie lange ein Worker einen Auftrag fuer sich behalten darf. */
 const LEASE_MS = Number(process.env.IMPORT_LEASE_MS ?? String(10 * 60 * 1000));
@@ -360,35 +361,24 @@ export const activateTocRegionsInternal = internalMutation({
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
     articles.sort((a, b) => a.order - b.order);
-    const vorhanden = new Set(articles.map((a) => a._id as string));
     const toc = await ctx.db
       .query("tocEntries")
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
-    const ziele = new Set(regions.map((r) => r.targetPageIndex));
-    const artikelAb = (pageIndex: number): Id<"articles"> | undefined => {
-      const eintrag = toc.find(
-        (t) =>
-          t.pageIndex === pageIndex &&
-          t.articleId !== undefined &&
-          vorhanden.has(t.articleId as string),
-      );
-      if (eintrag?.articleId) return eintrag.articleId;
-      return articles.find((a) => a.pageStart === pageIndex)?._id;
-    };
-    const zielArtikel = (pageIndex: number): Id<"articles"> | undefined => {
-      const genau = artikelAb(pageIndex);
-      // Aufmacherseite: das Verzeichnis nennt die Seite mit Bild und Titel,
-      // der Text der Story beginnt erst auf der naechsten. Die Folgeseite
-      // zaehlt nur, wenn kein eigener Eintrag auf sie zeigt.
-      if (genau || ziele.has(pageIndex + 1)) return genau;
-      return artikelAb(pageIndex + 1);
-    };
+    // Druckfehler im Verzeichnis: hat die Redaktion den Eintrag auf eine
+    // andere Seite gelegt, fuehrt auch die Zeile dorthin (`zielSeite`).
+    const gelegt = regions.map((r) => ({
+      ...r,
+      targetPageIndex: zielSeite(r.label, r.targetPageIndex, toc, articles),
+    }));
+    const ziele = new Set(gelegt.map((r) => r.targetPageIndex));
+    const zielArtikel = (pageIndex: number, label?: string) =>
+      zielArtikelWaehlen({ articles, toc, ziele, pageIndex, label });
 
     let eingetragen = 0;
     let uebergangen = 0;
-    for (const [i, r] of regions.entries()) {
-      const articleId = zielArtikel(r.targetPageIndex);
+    for (const [i, r] of gelegt.entries()) {
+      const articleId = zielArtikel(r.targetPageIndex, r.label);
       if (!articleId) {
         uebergangen++;
         continue;
@@ -409,26 +399,31 @@ export const activateTocRegionsInternal = internalMutation({
     }
     let neueEintraege = 0;
     if (entries?.length) {
+      // Verglichen wird in der Vergleichsform (`titelForm`): "Made in Germany –
+      // jetzt erst recht!" und "Made in Germany jetzt erst recht!" sind ein
+      // Eintrag, nicht zwei.
       const vorhandene = toc.map((t) => ({
         id: t._id,
         pageIndex: t.pageIndex,
-        label: t.label.trim().toLowerCase(),
+        label: titelForm(t.label),
       }));
       for (const e of entries) {
         const label = e.label.trim();
-        const klein = label.toLowerCase();
+        const form = titelForm(label);
+        // Ein von der Redaktion berichtigter Druckfehler gilt auch hier.
+        const pageIndex = zielSeite(label, e.pageIndex, toc, articles);
         // Derselbe Eintrag, wenn ein Text den anderen enthaelt: ein frueherer
         // Import kannte nur die zweite Zeile ("statt Strafpsychiatrie"), der
         // Satz nennt jetzt beide. Dann waechst der Eintrag, statt sich zu verdoppeln.
         const gleich = vorhandene.find(
           (v) =>
-            v.pageIndex === e.pageIndex &&
-            (v.label === klein || klein.includes(v.label) || v.label.includes(klein)),
+            v.pageIndex === pageIndex &&
+            (v.label === form || form.includes(v.label) || v.label.includes(form)),
         );
         if (gleich) {
-          if (klein.length > gleich.label.length) {
+          if (form.length > gleich.label.length && gleich.id) {
             await ctx.db.patch(gleich.id, { label: label.slice(0, 300) });
-            gleich.label = klein;
+            gleich.label = form;
           }
           continue;
         }
@@ -437,11 +432,11 @@ export const activateTocRegionsInternal = internalMutation({
           order: 0,
           label: label.slice(0, 300),
           section: e.section,
-          pageIndex: e.pageIndex,
-          articleId: zielArtikel(e.pageIndex),
+          pageIndex,
+          articleId: zielArtikel(pageIndex, label),
           level: 1,
         });
-        vorhandene.push({ id: undefined as any, pageIndex: e.pageIndex, label: klein });
+        vorhandene.push({ id: undefined as any, pageIndex, label: form });
         neueEintraege++;
       }
       if (neueEintraege) {
@@ -705,7 +700,16 @@ export const liveArticlesInternal = internalQuery({
   },
 });
 
-async function deleteArticle(ctx: MutationCtx, articleId: Id<"articles">) {
+/**
+ * Einen Artikel samt Bloecken, Flaechen und Bildern loeschen. Die Sprung-
+ * flaechen (Verzeichniszeilen, Anreisser der Titelseite) liegen auf einer
+ * anderen Seite und bleiben stehen; der Aufrufer haengt sie mit
+ * `sprungflaechenRetten` um, sobald die Nachfolger eingefuegt sind.
+ */
+async function deleteArticle(
+  ctx: MutationCtx,
+  articleId: Id<"articles">,
+): Promise<Doc<"articleRegions">[]> {
   const blocks = await ctx.db
     .query("articleBlocks")
     .withIndex("by_article", (q) => q.eq("articleId", articleId))
@@ -714,16 +718,24 @@ async function deleteArticle(ctx: MutationCtx, articleId: Id<"articles">) {
     await deleteLinksForBlock(ctx, b._id);
     await ctx.db.delete(b._id);
   }
-  for (const table of ["articleRegions", "articleAssets"] as const) {
-    const rows = await ctx.db
-      .query(table)
-      .withIndex("by_article", (q: any) => q.eq("articleId", articleId))
-      .collect();
-    for (const r of rows) await ctx.db.delete(r._id);
+  const sprung: Doc<"articleRegions">[] = [];
+  const regionen = await ctx.db
+    .query("articleRegions")
+    .withIndex("by_article", (q) => q.eq("articleId", articleId))
+    .collect();
+  for (const r of regionen) {
+    if (r.targetPageIndex !== undefined) sprung.push(r);
+    else await ctx.db.delete(r._id);
   }
+  const bilder = await ctx.db
+    .query("articleAssets")
+    .withIndex("by_article", (q) => q.eq("articleId", articleId))
+    .collect();
+  for (const r of bilder) await ctx.db.delete(r._id);
   const article = await ctx.db.get(articleId);
   await ctx.db.delete(articleId);
   if (article) await sucheVormerken(ctx, article.issueId, articleId);
+  return sprung;
 }
 
 /**
@@ -764,7 +776,8 @@ export const mergeResultInternal = internalMutation({
 
     const allApproved = articles.length > 0 && articles.every((a) => a.reviewStatus === "approved");
     const now = Date.now();
-    for (const a of removed) await deleteArticle(ctx, a._id);
+    const sprung: Doc<"articleRegions">[] = [];
+    for (const a of removed) sprung.push(...(await deleteArticle(ctx, a._id)));
     const neu: { id: Id<"articles">; pageStart: number; rank: number }[] = [];
     for (const a of insert) {
       const id = await insertArticle(ctx, issueId, a, allApproved ? "approved" : "pending", now);
@@ -783,6 +796,9 @@ export const mergeResultInternal = internalMutation({
       const alt = removed.find((a) => a._id === t.articleId)!;
       await ctx.db.patch(t._id, { articleId: nachfolger(alt.pageStart) });
     }
+    // Verzeichniszeilen und Anreisser, die am ersetzten Artikel hingen,
+    // gehen an den Artikel ihrer Zielseite, statt mit ihm zu verschwinden.
+    await sprungflaechenRetten(ctx, issueId, sprung, weg);
     const progress = await ctx.db.query("readingProgress").collect();
     for (const p of progress) {
       if (p.issueId !== issueId || !p.articleId || !weg.has(p.articleId)) continue;

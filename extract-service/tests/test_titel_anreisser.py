@@ -110,3 +110,68 @@ def test_gedrehter_satz_nur_auf_wunsch():
     mit = text_layer_for_cover(daten, seiten, mit_gedrehtem=True)[0]
     assert all(i.winkel == 0 for i in ohne)
     assert any(i.winkel == 43 for i in mit)
+
+
+# --- DMZ und DMZ-Zeitgeschichte (seit 29.10.2026) ---------------------------
+
+TITEL = Path(__file__).parent / "fixtures" / "titel"
+
+
+def _heft(name: str):
+    daten, blocks, _ = _laden(name)
+    hints = toc_from_idml(blocks, daten["printed_offset"])
+    items = text_layer_for_cover(
+        (TITEL / f"{name}-u1.json").read_bytes(),
+        [{"index": 0, "role": "front_cover"}],
+        mit_gedrehtem=True,
+    )[0]
+    return titel_anreisser(items, hints)
+
+
+def _ohne_ueberlappung(flaechen):
+    for i, a in enumerate(flaechen):
+        for b in flaechen[i + 1 :]:
+            assert min(a.x1, b.x1) <= max(a.x0, b.x0) or min(a.y1, b.y1) <= max(a.y0, b.y0)
+
+
+def test_dmz_gestapelte_anreisser_werden_getrennt():
+    # Drei Anreisser gleicher Schrift dicht untereinander waren ein Block und
+    # fuehrten alle zu Senger (S. 10). Jetzt jeder zu seinem Artikel.
+    flaechen = _heft("dmz-170")
+    gefunden = {a.label.split()[0]: a.page_index for a in flaechen}
+    assert gefunden == {
+        "Im": 50,  # Interview Joachim Hess -> Der Gefangenschaft entflohen
+        "Fernspäher": 24,  # Titelthema -> Auge des Heeres (Fernspaehtruppe)
+        "Italiens": 42,  # Centauro -> Rasanter Panzerjaeger
+        "Aristokrat": 8,  # Senger -> Weltgewandter Offizier von Adel
+        "Putins": 34,  # Poseidon -> Putins Weltuntergangswaffe
+    }
+    centauro = next(a for a in flaechen if a.page_index == 42)
+    assert "Altgedient" in centauro.label  # die Unterzeile gehoert zu ihrem Anreisser
+    _ohne_ueberlappung(flaechen)
+
+
+def test_dmz_zeitgeschichte_ohne_kopf_und_abo_formular():
+    flaechen = _heft("dmz-zeitgeschichte-80")
+    assert sorted(a.page_index for a in flaechen) == [4, 16, 16, 28, 34, 48]
+    # Das Titelthema nennt nur ein Wort aus dem Titel: "Vorstoss ueber den Mscha".
+    assert any(a.label == "Mscha 1943" and a.page_index == 16 for a in flaechen)
+    labels = " ".join(a.label for a in flaechen)
+    # Der Kopf mit Heftnummer und Preis steht dicht unter dem Anreisser.
+    for fremd in ("Nr. 80", "10,80", "Unterschrift", "IBAN"):
+        assert fremd not in labels
+    _ohne_ueberlappung(flaechen)
+
+
+def test_wortstamm_nur_wenn_er_das_wort_traegt():
+    from extractor.titel_anreisser import _passt
+
+    assert _passt("fernspäher", "fernspähtruppe")
+    assert not _passt("unterschrift", "unterscharführer")
+
+
+def test_preis_mit_fremdem_eurozeichen():
+    from extractor.titel_anreisser import PREIS
+
+    assert PREIS.search("Nr. 170 • März – April 2026 • t 9,80")
+    assert not PREIS.search("2025 kamen über 370.000 Asylbewerber")

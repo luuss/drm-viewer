@@ -1129,6 +1129,7 @@ class Job:
     def _build_toc_entries(self, hints, articles, payload_articles) -> list[dict]:
         """Gedruckten Inhalt mit Artikeln und Seitensprung-Regionen verbinden."""
         out = []
+        hints = [_seite_nach_titel(h, articles) for h in hints]
         ziele = {h.page_index for h in hints}
 
         def artikel_ab(seite: int) -> int | None:
@@ -1141,6 +1142,27 @@ class Job:
                 None,
             )
 
+        def artikel_ueber(seite: int, label: str) -> int | None:
+            """Ein Artikel, der ueber die Seite laeuft ("Leserbriefe/Impressum 81",
+            die Briefe beginnen auf 80); bei mehreren der, dessen Titel im Eintrag steht."""
+            darueber = [
+                index + 1
+                for index, article in enumerate(articles)
+                if article.pages and article.pages[0] <= seite <= article.pages[-1]
+            ]
+            if not darueber:
+                return None
+            form = _titelform(label)
+            return next(
+                (
+                    o
+                    for o in darueber
+                    if len(_titelform(articles[o - 1].title)) >= 4
+                    and _titelform(articles[o - 1].title) in form
+                ),
+                darueber[0],
+            )
+
         for order, hint in enumerate(hints, start=1):
             article_order = artikel_ab(hint.page_index)
             # Aufmacherseite: das Verzeichnis nennt die Seite mit Bild und
@@ -1148,6 +1170,8 @@ class Job:
             # Folgeseite zaehlt nur, wenn kein eigener Eintrag auf sie zeigt.
             if article_order is None and hint.page_index + 1 not in ziele:
                 article_order = artikel_ab(hint.page_index + 1)
+            if article_order is None:
+                article_order = artikel_ueber(hint.page_index, hint.label)
             entry = {
                 "order": order,
                 "label": hint.label,
@@ -1181,6 +1205,8 @@ class Job:
             article_order = artikel_ab(ziel)
             if article_order is None and ziel + 1 not in ziele:
                 article_order = artikel_ab(ziel + 1)
+            if article_order is None:
+                article_order = artikel_ueber(ziel, region.get("label") or "")
             if article_order is None:
                 continue
             region = {k: v for k, v in region.items() if k != "label"}
@@ -1529,6 +1555,47 @@ def _printed_offset(pages: list[dict]) -> int:
         if label.isdigit():
             return int(label) - page["index"]
     return 0
+
+
+def _titelform(text: str) -> str:
+    """Vergleichsform eines Titels: klein, nur Woerter, ohne doppeltes Wort.
+
+    Wie `convex/tocZiel.ts` (`titelForm`). Ein Druckfehler wie "Nachrichten
+    aus aus aller Welt" im Verzeichnis zaehlt nicht.
+    """
+    import re
+    import unicodedata
+
+    woerter = re.findall(r"[^\W_]+", unicodedata.normalize("NFKC", text).casefold())
+    return " ".join(w for i, w in enumerate(woerter) if i == 0 or w != woerter[i - 1])
+
+
+def _seite_nach_titel(hint, articles):
+    """Eine falsch gedruckte Seitenzahl im Verzeichnis ueber den Titel berichtigen.
+
+    DMZ 170 nennt fuer "Nachrichten aus aller Welt" die 35, wo die Nachrichten
+    aus Deutschland stehen; die Meldungen aus aller Welt beginnen auf 51.
+    Traegt genau ein Artikel den Titel des Eintrags und beginnt er woanders,
+    waehrend auf der gedruckten Seite keiner mit diesem Titel steht, gilt
+    seine Seite. Sonst bleibt die gedruckte Zahl.
+    """
+    from dataclasses import replace
+
+    form = _titelform(hint.label)
+    if not form:
+        return hint
+    gleich = [a for a in articles if a.pages and _titelform(a.title) == form]
+    # Beginnt der Artikel auf der Folgeseite, ist die gedruckte Seite seine
+    # Aufmacherseite mit Bild, kein Druckfehler.
+    if len(gleich) != 1 or gleich[0].pages[0] in (hint.page_index, hint.page_index + 1):
+        return hint
+    if any(
+        a.pages[0] <= hint.page_index <= a.pages[-1] and _titelform(a.title) == form
+        for a in articles
+        if a.pages
+    ):
+        return hint
+    return replace(hint, page_index=gleich[0].pages[0])
 
 
 if __name__ == "__main__":
