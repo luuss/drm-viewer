@@ -458,6 +458,20 @@ Abschnitt „Buchanzeigen im Heft".
 * Geprüft im Betrieb am 30.09. (Wegwerfkonto, danach gelöscht), Rechner und
   Telefonbreite mit Berührung: Knopf im Artikel öffnet den Shop im neuen Tab,
   Auswahl im Seitenmodus, „Text lesen", Esc; Redaktionskasten und Suche.
+* **Seit 29.10.2026 (Bead drm-viewer-18n):** Tipp auf den Umschlag öffnet
+  das Produkt, Tipp auf den Text den Text, ohne Auswahl
+  (`web/src/reader/tippZiel.ts`); die Auswahl kommt nur noch bei mehreren
+  Büchern unter einer gemeinsamen Fläche. Knopf heißt „Buch im Shop kaufen".
+  Zuordnung verbessert („Autor: Titel", doppelte Treffer, fremder Verfasser,
+  Rückfall auf `articleProducts`, kein Ziel statt leerer Suchseite).
+  Durchsicht aller Hefte, Zahlen, zwei Fehlzuordnungen und die 19 live
+  eingetragenen Ziele: `docs/shop-integration.md`, „Tipp auf Umschlag oder
+  Text". Werkzeuge: `tools/buchzuordnung_dump.sh` (Stand lesen, als
+  Redakteur per `--identity`), `tools/buchzuordnung_sim.ts` (neuer Code gegen
+  den Laden, schreibt nichts), `tools/buchzuordnung_anwenden.py`.
+  Falle: `npx convex run … --identity '{"subject":"<userId>|x","issuer":"x"}'`
+  ruft auch öffentliche Abfragen mit Redakteursrechten auf; so kommt man ohne
+  eigene Dump-Funktion an `listForEditors`.
 * Offen: In den DMZ-Texten steht „t" statt „€" („Art. 102474 t 29,80"); die
   Preiserkennung kommt damit zurecht, der Lesetext zeigt es aber so.
 

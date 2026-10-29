@@ -143,6 +143,9 @@ async function zielAdresse(
   }
   if (row.kind === "series" && row.publicationSlug) return seriesUrl(row.publicationSlug);
   if (row.kind === "shop") {
+    // Eine Buchflaeche, zu der der Laden nichts fuehrt, fuehrt nirgendwohin:
+    // der Tipp oeffnet dann die Anzeige (mit "Zum Shop"), keine leere Suche.
+    if (row.resolvedAt && row.label?.includes(BOOK_LABEL_SEPARATOR)) return null;
     // Noch nicht aufgeloest: die Suchseite mit dem genauesten Begriff.
     const q = row.queries?.[0] ?? row.reference;
     return q ? searchUrl(q) : SHOP_URL;
@@ -347,15 +350,151 @@ export const listUnresolvedInternal = internalQuery({
       .query("pageLinks")
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
-    return rows
-      .filter((r) => r.kind === "shop" && !r.url)
-      .map((r) => ({
-        id: r._id,
-        queries: r.queries ?? [],
-        reference: r.reference ?? null,
-        single: r.single ?? false,
-        label: r.label ?? null,
-      }));
+    // Eine Buchflaeche, die auf die Suchseite fuehrt, ist nicht fertig: der
+    // Laden kann das Buch inzwischen eindeutig fuehren.
+    const offen = rows.filter(
+      (r) =>
+        r.kind === "shop" &&
+        (!r.url ||
+          (r.source === "import" &&
+            r.label?.includes(BOOK_LABEL_SEPARATOR) &&
+            r.url.includes("/suche?"))),
+    );
+    const fallback = await adProductsForLinks(ctx, issueId, offen);
+    return offen.map((r) => ({
+      id: r._id,
+      queries: r.queries ?? [],
+      reference: r.reference ?? null,
+      single: r.single ?? false,
+      label: r.label ?? null,
+      fallback: fallback.get(r._id) ?? [],
+    }));
+  },
+});
+
+/** Ab diesem Anteil seiner Flaeche liegt eine Artikelflaeche unter einer Buchflaeche. */
+const UNDER_LINK_SHARE = 0.5;
+
+type Box = { x0: number; y0: number; x1: number; y1: number };
+const boxArea = (b: Box) => Math.max(0, b.x1 - b.x0) * Math.max(0, b.y1 - b.y0);
+const overlapArea = (a: Box, b: Box) =>
+  Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) *
+  Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+
+/** Liegt die Textflaeche eines Artikels unter der Buchflaeche? */
+export function textUnderLink(region: Box, link: Box): boolean {
+  const a = boxArea(region);
+  return a > 0 && overlapArea(region, link) >= UNDER_LINK_SHARE * a;
+}
+
+/**
+ * Die Produkte, die der Abgleich der Anzeigen (articleProducts) den Artikeln
+ * unter jeder Buchflaeche gegeben hat — als Rueckfall fuer `resolveInternal`.
+ */
+async function adProductsForLinks(
+  ctx: { db: any },
+  issueId: Id<"issues">,
+  links: Doc<"pageLinks">[],
+): Promise<Map<Id<"pageLinks">, ShopProduct[]>> {
+  const out = new Map<Id<"pageLinks">, ShopProduct[]>();
+  const buecher = links.filter((l) => l.label?.includes(BOOK_LABEL_SEPARATOR));
+  if (!buecher.length) return out;
+  const rows: Doc<"articleProducts">[] = await ctx.db
+    .query("articleProducts")
+    .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+    .collect();
+  const jeArtikel = new Map<string, number[]>();
+  for (const row of rows) {
+    if (row.productId === undefined) continue;
+    const block = await ctx.db.get(row.blockId);
+    if (!block) continue;
+    const ids = jeArtikel.get(block.articleId) ?? [];
+    if (!ids.includes(row.productId)) ids.push(row.productId);
+    jeArtikel.set(block.articleId, ids);
+  }
+  if (!jeArtikel.size) return out;
+  const regions: Doc<"articleRegions">[] = await ctx.db
+    .query("articleRegions")
+    .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+    .collect();
+  const produkte = new Map<number, ShopProduct | null>();
+  for (const link of buecher) {
+    const ids = new Set<number>();
+    for (const r of regions) {
+      // Text oder Umschlag des Artikels unter der Flaeche (bei Besprechungen
+      // ist die Flaeche das Umschlagbild, der Text steht daneben).
+      if (r.pageIndex !== link.pageIndex || r.targetPageIndex !== undefined) continue;
+      if (!textUnderLink(r, link)) continue;
+      for (const id of jeArtikel.get(r.articleId) ?? []) ids.add(id);
+    }
+    const liste: ShopProduct[] = [];
+    for (const id of ids) {
+      if (!produkte.has(id)) {
+        const p: Doc<"shopProducts"> | null = await ctx.db
+          .query("shopProducts")
+          .withIndex("by_product", (q: any) => q.eq("productId", id))
+          .first();
+        produkte.set(
+          id,
+          p
+            ? {
+                id: p.productId,
+                name: p.name,
+                reference: p.reference,
+                priceCents: p.priceCents ?? null,
+                url: p.url,
+                coverUrl: null,
+                manufacturer: "",
+                active: p.active,
+                digital: null,
+              }
+            : null,
+        );
+      }
+      const p = produkte.get(id);
+      if (p) liste.push(p);
+    }
+    if (liste.length) out.set(link._id, liste);
+  }
+  return out;
+}
+
+/**
+ * Rueckfall aus der Anzeige unter der Buchflaeche. Ihr Abgleich verlangt den
+ * Namen woertlich in der Anzeige und prueft den Preis; uebernommen wird ein
+ * Produkt, dessen Name zum Titel der Flaeche passt oder ganz in ihm steht
+ * ("Propaganda" in "Propaganda oder der Mythos der Demokratie").
+ */
+export function chooseFromAd(
+  products: ShopProduct[],
+  label: string,
+  reference?: string | null,
+): ShopProduct | null {
+  const brauchbar = [...new Map(products.map((p) => [p.url, p])).values()].filter(
+    (p) => p.active && isShopUrl(p.url),
+  );
+  if (reference) {
+    const genau = brauchbar.filter((p) => p.reference === reference);
+    if (genau.length === 1) return genau[0];
+  }
+  // Auch hier muss der Name zum Titel passen: die Bilder eines Bucherseiten-
+  // Artikels liegen nicht immer unter dem eigenen Buch.
+  const { title } = splitBookLabel(label);
+  const titel = new Set(titleWords(title));
+  const passend = brauchbar.filter((p) => {
+    if (titleRank(p.name, title) > 0) return true;
+    const name = titleWords(p.name);
+    return name.length > 0 && name.every((w) => titel.has(w));
+  });
+  if (passend.length === 1) return passend[0];
+  return chooseBook(passend, label, reference);
+}
+
+/** Buchflaeche ohne eindeutiges Produkt: Suchseite oder (Buch nicht im Laden) nichts. */
+export const markOpenInternal = internalMutation({
+  args: { id: v.id("pageLinks"), url: v.optional(v.string()) },
+  handler: async (ctx, { id, url }) => {
+    await ctx.db.patch(id, { url, resolvedAt: Date.now() });
   },
 });
 
@@ -499,6 +638,53 @@ export function titleRank(productName: string, title: string): number {
   return 0;
 }
 
+/** "Manfred Kleine-Hartlage", "Jake Tapper/Alex Thompson", "Pierre Drieu la Rochelle". */
+export function looksLikeName(text: string): boolean {
+  const t = text.replace(/\((?:Hrsg?|Hg)\.\)/g, "").trim();
+  if (!t || t.length > 90 || /\d/.test(t)) return false;
+  const words = t.split(/[\s/]+/).filter(Boolean);
+  if (words.length < 2 || words.length > 8) return false;
+  const particle = /^(?:von|van|de|du|da|del|la|le|zu|v\.)$/;
+  const upper = words.filter((w) => /^\p{Lu}/u.test(w)).length;
+  return upper >= 2 && words.every((w) => /^\p{Lu}/u.test(w) || particle.test(w));
+}
+
+/**
+ * Titel und Verfasser einer Buchflaeche. Der Import schreibt "Titel ·
+ * Verfasser". Bei Anzeigen unter einem Artikel steht beides in einer Zeile
+ * ("Manfred Kleine-Hartlage: BRD-Sprech"), der Verfasser fehlt im Label und
+ * der Titel beginnt mit dem Namen. Dann ist der Teil vor dem Doppelpunkt der
+ * Verfasser — aber nur, wenn er wie ein Name aussieht ("Kalender: ..." ist
+ * eine Gattung, "2025: Verheimlicht ..." ein Jahrbuch).
+ */
+export function splitBookLabel(label: string): { title: string; author: string } {
+  const [rawTitle, rawAuthor = ""] = label.split(BOOK_LABEL_SEPARATOR);
+  const title = rawTitle.trim();
+  const author = rawAuthor.trim();
+  if (!author) {
+    const at = title.indexOf(": ");
+    if (at > 0 && looksLikeName(title.slice(0, at)) && titleWords(title.slice(at + 2)).length) {
+      return { title: title.slice(at + 2).trim(), author: title.slice(0, at).trim() };
+    }
+  }
+  return { title, author };
+}
+
+/**
+ * Was nach "Wort. " im Titel steht ("Endspiel. Der Multikulticrash" →
+ * "Der Multikulticrash"). Nur nach einem Punkt und nur, wenn davor keine
+ * Zahl steht: "2025: Verheimlicht …" ist ein Jahrgang, den der Laden
+ * vielleicht nicht fuehrt; ohne die Zahl traefe es einen anderen.
+ */
+function subtitles(title: string): string[] {
+  const teile = title.split(/(?<=[.!?])\s+/);
+  if (teile.length < 2 || /\d/.test(teile[0])) return [];
+  // Zwei Woerter, davon eins tragend: "Der Multikulticrash" ja, "Teil 2" nein.
+  return teile
+    .slice(1)
+    .filter((t) => plainTitle(t).split(" ").length >= 2 && titleWords(t).length >= 1);
+}
+
 function surname(author: string): string | null {
   const first = author.split(/[/,;&]| und /)[0].replace(/\((?:Hrsg?|Hg)\.\)/g, "").trim();
   const parts = first.split(/\s+/).filter((p) => /^[A-ZÄÖÜ]/.test(p) && p.length > 1);
@@ -525,7 +711,7 @@ export function bookQueries(
   reference: string | null,
   queries: string[],
 ): string[] {
-  const [title] = label.split(BOOK_LABEL_SEPARATOR);
+  const { title, author } = splitBookLabel(label);
   const out = new Set<string>();
   const add = (q: string | null | undefined) => {
     const w = q ? searchWords(q) : "";
@@ -533,6 +719,18 @@ export function bookQueries(
   };
   add(reference);
   for (const q of queries) add(q);
+  // "Autor: Titel" im Label: der Titel allein und mit dem Nachnamen (der
+  // Laden fuehrt den Verfasser im Herstellerfeld, das die Suche mitliest).
+  const nachname = author ? surname(author) : null;
+  if (author && !label.split(BOOK_LABEL_SEPARATOR)[1]?.trim()) {
+    add(title);
+    if (nachname) add(`${mainTitle(title)} ${nachname}`);
+  }
+  // Der Teil nach dem Punkt mit dem Verfasser ("Der Multikulticrash Reichel"):
+  // so heisst das Buch manchmal im Laden (siehe `chooseBook`).
+  if (nachname) {
+    for (const teil of subtitles(title)) add(`${teil} ${nachname}`);
+  }
   // Ein einzelnes Wort vor dem Doppelpunkt ("Kalender: Maenner der ...") ist
   // eine Gattung, kein Titel: allein gesucht passt es auf Dutzende Produkte,
   // und der richtige Treffer ginge im Gleichstand unter.
@@ -559,35 +757,94 @@ export function chooseBook(
   label: string,
   reference?: string | null,
 ): ShopProduct | null {
-  const brauchbar = products.filter((p) => p.active && isShopUrl(p.url));
+  // Jede Anfrage liefert ihre Treffer; dasselbe Produkt kommt so mehrfach.
+  // Doppelt gezaehlt war die Artikelnummer nie "genau eins" (DMZ-Zeitgeschichte
+  // 80: "Soldatenköpfe 2026" verlor gegen das Produkt "Wolfgang Willrich").
+  const einmal = new Map<string, ShopProduct>();
+  for (const p of products) if (p.active && isShopUrl(p.url) && !einmal.has(p.url)) einmal.set(p.url, p);
+  const brauchbar = [...einmal.values()];
   if (reference) {
+    // Mit Artikelnummer nur genau dieses Produkt. Ein Titeltreffer mit
+    // anderer Nummer ist ein anderer Jahrgang oder ein anderes Buch.
     const genau = brauchbar.filter((p) => p.reference === reference);
-    if (genau.length === 1) return genau[0];
+    return genau.length === 1 ? genau[0] : null;
   }
-  const [title, author = ""] = label.split(BOOK_LABEL_SEPARATOR);
+  const { title, author } = splitBookLabel(label);
   // "Kalender: Maenner der Waffen-SS 2026": vor dem Doppelpunkt steht die
   // Gattung, der Laden fuehrt den Teil danach als Namen.
   const titel = [title];
   const doppelpunkt = title.indexOf(": ");
-  if (doppelpunkt > 0 && titleWords(title.slice(0, doppelpunkt)).length < 2) {
+  // Ein Jahrgang ("2025: Verheimlicht …") ist keine Gattung: ohne ihn traefe
+  // der Titel jeden anderen Jahrgang.
+  if (
+    doppelpunkt > 0 &&
+    titleWords(title.slice(0, doppelpunkt)).length < 2 &&
+    !/\d/.test(title.slice(0, doppelpunkt))
+  ) {
     titel.push(title.slice(doppelpunkt + 2));
   }
+  // Nennt der Laden einen anderen Verfasser, ist es ein anderes Buch
+  // ("Hybris" von Tapper/Thompson ist nicht "Hybris am Hindukusch" von
+  // Michael Lueders). Ohne Herstellerfeld zaehlt nur der Titel.
+  const verfasser = author ? surnames(author) : [];
+  const vomVerfasser = (p: ShopProduct) => {
+    const m = plainTitle(p.manufacturer);
+    return verfasser.some((n) => m.split(" ").includes(n));
+  };
   const ranked = new Map<string, { rank: number; product: ShopProduct }>();
   for (const p of brauchbar) {
-    const rank = Math.max(...titel.map((t) => titleRank(p.name, t)));
-    if (rank > 0 && !ranked.has(p.url)) ranked.set(p.url, { rank, product: p });
+    if (verfasser.length && plainTitle(p.manufacturer) && !vomVerfasser(p)) continue;
+    // Der Laden fuehrt manchmal nur den Teil nach dem Punkt ("Endspiel. Der
+    // Multikulticrash" heisst dort "Der Multikulticrash"). Das zaehlt nur,
+    // wenn der Verfasser im Herstellerfeld steht.
+    const teile = verfasser.length && vomVerfasser(p) ? subtitles(title) : [];
+    const rank = Math.max(...[...titel, ...teile].map((t) => titleRank(p.name, t)));
+    if (rank > 0) ranked.set(p.url, { rank, product: p });
   }
   if (!ranked.size) return null;
   const top = Math.max(...[...ranked.values()].map((r) => r.rank));
   let kandidaten = [...ranked.values()].filter((r) => r.rank === top).map((r) => r.product);
-  const nachname = author ? surname(author) : null;
-  if (kandidaten.length > 1 && nachname) {
-    const mit = kandidaten.filter((p) =>
-      p.manufacturer.toLowerCase().includes(nachname.toLowerCase()),
-    );
+  if (kandidaten.length > 1 && verfasser.length) {
+    const mit = kandidaten.filter(vomVerfasser);
     if (mit.length) kandidaten = mit;
   }
+  // Dasselbe Buch zweimal im Laden (neue Auflage, gleicher Name, gleicher
+  // Verfasser): die neuere Ausgabe, also die hoehere Produktnummer. Ohne
+  // bestaetigten Verfasser bleibt es offen — gleichnamige Baende einer Reihe
+  // haben einen Herausgeber, der in der Anzeige nicht steht.
+  if (
+    kandidaten.length > 1 &&
+    verfasser.length &&
+    kandidaten.every((p) => vomVerfasser(p) && plainTitle(p.name) === plainTitle(kandidaten[0].name))
+  ) {
+    return [...kandidaten].sort((a, b) => b.id - a.id)[0];
+  }
   return kandidaten.length === 1 ? kandidaten[0] : null;
+}
+
+/** Nachnamen aller Verfasser, vereinfacht: "Gunter Frank/Martina Binnig" -> frank, binnig. */
+function surnames(author: string): string[] {
+  return author
+    .replace(/\((?:Hrsg?|Hg)\.\)/g, " ")
+    .split(/[/,;&]| und /)
+    .map((n) => plainTitle(n).split(" ").filter((w) => w.length >= 3).pop() ?? "")
+    .filter(Boolean);
+}
+
+/**
+ * Ziel einer Buchflaeche ohne eindeutiges Produkt: die Suchseite des Titels,
+ * wenn der Laden Buecher dieses Namens vom selben Verfasser fuehrt (Baende,
+ * Ausgaben), sonst keins — eine leere Suchseite hilft niemandem.
+ */
+export function openBookTarget(products: ShopProduct[], label: string): string | undefined {
+  const { title, author } = splitBookLabel(label);
+  const verfasser = author ? surnames(author) : [];
+  const aehnlich = products.some((p) => {
+    if (!p.active || !isShopUrl(p.url) || titleRank(p.name, title) === 0) return false;
+    const m = plainTitle(p.manufacturer);
+    return !verfasser.length || !m || verfasser.some((n) => m.split(" ").includes(n));
+  });
+  return aehnlich ? searchUrl(searchWords(mainTitle(title))) : undefined;
 }
 
 export const setUrlInternal = internalMutation({
@@ -620,8 +877,11 @@ export const resolveInternal = internalAction({
       reference: string | null;
       single: boolean;
       label: string | null;
+      fallback: ShopProduct[];
     }[] = await ctx.runQuery(internal.pageLinks.listUnresolvedInternal, { issueId });
     let resolved = 0;
+    // Fuer das Protokoll: welche Buecher offen bleiben und warum.
+    const offen: { label: string; ziel: "suche" | "keins" }[] = [];
     const cache = new Map<string, ShopProduct[]>();
     const search = async (q: string): Promise<ShopProduct[]> => {
       if (!cache.has(q)) cache.set(q, parseProducts(await callShopApi("search", { q })));
@@ -631,19 +891,29 @@ export const resolveInternal = internalAction({
       for (const row of rows) {
         let url: string | null = null;
         if (row.label?.includes(BOOK_LABEL_SEPARATOR)) {
-          // Ein einzelnes Buch: nur ein Produkt mit passendem Titel, sonst
-          // die Suchseite des Titels — nie ein beliebiger einziger Treffer.
+          // Ein einzelnes Buch: nur ein Produkt mit passendem Titel — nie ein
+          // beliebiger einziger Treffer der Suche.
           const products: ShopProduct[] = [];
           for (const q of bookQueries(row.label, row.reference, row.queries)) {
             products.push(...(await search(q)));
           }
-          // Ohne Treffer bleibt die Flaeche offen: sie fuehrt bis dahin auf die
-          // Suchseite des Titels (`zielAdresse`), und ein spaeterer Lauf findet
-          // das Buch, sobald der Laden es fuehrt.
-          const buch = chooseBook(products, row.label, row.reference);
+          const buch =
+            chooseBook(products, row.label, row.reference) ??
+            // Sonst das Produkt, das der Abgleich der Anzeige darunter
+            // gefunden hat (articleProducts: Titel woertlich in der Anzeige,
+            // Preis bestaetigt).
+            chooseFromAd(row.fallback, row.label, row.reference);
           if (buch) {
             await ctx.runMutation(internal.pageLinks.setUrlInternal, { id: row.id, url: buch.url });
             resolved++;
+          } else {
+            // Mehrere Baende oder Ausgaben gleichen Namens: die Suchseite des
+            // Titels zeigt sie. Fuehrt der Laden das Buch gar nicht, fuehrt
+            // die Flaeche nirgendwohin (der Tipp oeffnet die Anzeige), statt
+            // auf eine leere Suchseite. Der naechste Lauf versucht es wieder.
+            const ziel = openBookTarget(products, row.label);
+            offen.push({ label: row.label.slice(0, 80), ziel: ziel ? "suche" : "keins" });
+            await ctx.runMutation(internal.pageLinks.markOpenInternal, { id: row.id, url: ziel });
           }
           continue;
         }
@@ -679,7 +949,13 @@ export const resolveInternal = internalAction({
       return null;
     }
     console.log(
-      JSON.stringify({ event: "pageLinks.resolved", issueId, resolved, open: rows.length - resolved }),
+      JSON.stringify({
+        event: "pageLinks.resolved",
+        issueId,
+        resolved,
+        open: rows.length - resolved,
+        openBooks: offen.slice(0, 40),
+      }),
     );
     return { resolved, open: rows.length - resolved };
   },

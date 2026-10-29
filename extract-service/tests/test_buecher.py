@@ -84,9 +84,10 @@ def test_zuerst_bucherseite_jedes_buch_eine_flaeche_mit_umschlag():
     for i, a in enumerate(seite):
         for b in seite[i + 1 :]:
             assert not _ueberlappen(a, b), (a.titel, b.titel)
-    # Die Flaeche reicht vom Umschlagbild bis unter den Text der Kachel.
+    # Die Flaeche ist das Umschlagbild; der Text darunter bleibt dem Artikel
+    # (Tipp auf den Text oeffnet den Text, Tipp auf den Umschlag den Laden).
     kaputt = _je_titel(seite)["Warum macht ihr uns kaputt?"]
-    assert kaputt.y0 < 0.08 and kaputt.y1 > 0.33
+    assert kaputt.y0 < 0.08 and 0.2 < kaputt.y1 < 0.23
     assert 0.04 < kaputt.x0 < 0.07 and kaputt.x1 < 0.22
 
 
@@ -146,6 +147,65 @@ def test_dmz_zeitgeschichte_katalog_und_kalender():
     assert {b.titel: b.autor for b in alle}["Soldatenköpfe"] == "Wolfgang Willrich"
     # Impressum und Kleinanzeigen tragen Preise, sind aber keine Buecher.
     assert not any(t.startswith(("Impressum", "Kleinanzeigen")) for t in nummern)
+
+
+def _absatz(text: str, style: str = "Text", frame: str = "u1") -> SourceBlock:
+    return SourceBlock(
+        page_index=20, text=text, x0=0.37, y0=0.65, x1=0.94, y1=0.94, origin="idml",
+        frame_id=frame, style_name=style, frame_box=(0.37, 0.65, 0.94, 0.94),
+    )
+
+
+def test_zwei_buecher_in_einem_rahmen_je_eigener_umschlag():
+    # ZUERST! 6/2025, S. 21 unten: Anzeige unter dem Interview, zwei Buecher
+    # desselben Verfassers in einem Textrahmen, die Umschlaege darin.
+    blocks = [
+        _absatz("Manfred Kleine-Hartlage: BRD-Sprech"),
+        _absatz("Worte als Waffe der Umerziehung. – Die Fortsetzung seines Erfolgsbuches. "
+                "220 S., Pb., € 20,–"),
+        _absatz("Manfred Kleine-Hartlage"),
+        _absatz("Die Sprache der BRD"),
+        _absatz("131 Unwörter und ihre politische Bedeutung. 272 S., Pb., € 18,–"),
+    ]
+    images = [
+        SourceImage(page_index=20, x0=0.78, y0=0.65, x1=0.94, y1=0.82, link="Sprache der BRD.tif"),
+        SourceImage(page_index=20, x0=0.37, y0=0.76, x1=0.51, y1=0.93, link="BRD-Sprech.jpg"),
+    ]
+    buecher = _je_titel(buecher_der_seiten(blocks, images))
+    assert set(buecher) == {"BRD-Sprech", "Die Sprache der BRD"}
+    assert buecher["BRD-Sprech"].autor == "Manfred Kleine-Hartlage"
+    assert (buecher["BRD-Sprech"].x0, buecher["BRD-Sprech"].y0) == (0.37, 0.76)
+    assert (buecher["Die Sprache der BRD"].x0, buecher["Die Sprache der BRD"].y0) == (0.78, 0.65)
+
+
+def test_zwei_buecher_ohne_passendes_bild_keine_flaeche():
+    blocks = [
+        _absatz("Manfred Kleine-Hartlage: BRD-Sprech"),
+        _absatz("Worte als Waffe. 220 S., Pb., € 20,–"),
+        _absatz("Die Sprache der BRD"),
+        _absatz("131 Unwörter. 272 S., Pb., € 18,–"),
+    ]
+    images = [SourceImage(page_index=20, x0=0.78, y0=0.65, x1=0.94, y1=0.82, link="foto 3.tif")]
+    # Welches Bild welches Buch zeigt, verraet nur der Dateiname. Ohne ihn
+    # keine Flaeche: der Tipp oeffnet die Anzeige mit beiden Knoepfen.
+    assert buecher_der_seiten(blocks, images) == []
+
+
+def test_ein_buch_mit_zwei_preisen_bleibt_eins():
+    blocks = [
+        _absatz("Peter Hahne"),
+        _absatz("Warum macht ihr uns kaputt?"),
+        _absatz("Text über das Buch. 160 S., geb., € 20,– (D)"),
+        _absatz("€ 20,60 (A)"),
+    ]
+    buecher = buecher_der_seiten(blocks, [])
+    assert [(b.titel, b.autor) for b in buecher] == [("Warum macht ihr uns kaputt?", "Peter Hahne")]
+
+
+def test_doppelpunkt_ohne_namen_bleibt_titel():
+    for zeile in ("Kalender: Männer der Waffen-SS 2026", "2025: Verheimlicht – vertuscht"):
+        blocks = [_absatz(zeile), _absatz("Beschreibung. 120 S., geb., € 18,–")]
+        assert [(b.titel, b.autor) for b in buecher_der_seiten(blocks, [])] == [(zeile, None)]
 
 
 def test_link_fuer_das_backend():

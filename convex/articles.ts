@@ -266,6 +266,7 @@ export const regionsForReader = query({
       targetPageIndex: number | null;
     };
     const navigation: ReaderRegion[] = [];
+    const bilder: ReaderRegion[] = [];
     const articleAreas = new Map<string, ReaderRegion[]>();
     for (const r of regions) {
       const key = r.articleId as string;
@@ -305,6 +306,10 @@ export const regionsForReader = query({
       // wachsen zusammen, entfernte bleiben getrennt. Ein einziger Kasten je
       // Artikel und Seite wuerde sonst bei zwei Artikeln auf einer Seite die
       // ganze Seite belegen und den Nachbarn verdecken.
+      // Bilder zusaetzlich einzeln: der Reader unterscheidet damit den Tipp
+      // auf ein Umschlagbild (Buch im Laden) vom Tipp auf den Text (Artikel).
+      // Sie sind keine eigene Klickflaeche, nur Teil des Treffertests.
+      if (r.kind === "image") bilder.push(normalized);
       const areaKey = `${r.articleId}:${r.pageIndex}`;
       const bisher = articleAreas.get(areaKey);
       if (bisher) bisher.push({ ...normalized, kind: "body" });
@@ -314,7 +319,7 @@ export const regionsForReader = query({
     for (const rohe of articleAreas.values()) {
       for (const teil of verschmelzen(rohe)) flaechen.push(teil);
     }
-    return [...navigation, ...flaechen];
+    return [...navigation, ...flaechen, ...bilder];
   },
 });
 

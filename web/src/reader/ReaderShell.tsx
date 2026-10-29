@@ -394,15 +394,12 @@ export default function ReaderShell() {
   );
 
   /**
-   * Tipp auf eine Artikelflaeche im Seitenmodus. Eine Anzeige mit Produkt im
-   * Laden oeffnet nicht gleich ihren Text, sondern fragt erst.
+   * Tipp auf den Umschlag einer Anzeige mit mehreren Buechern im Seitenmodus:
+   * die Auswahl, welches Buch. Text und eindeutige Umschlaege oeffnen ohne
+   * Frage (PageMode, `tippZiel`).
    */
   const openFromPage = useCallback(
     (id: Id<"articles">, fromPageIndex?: number, punkt?: Klickpunkt) => {
-      if (!productsByArticle.get(id)?.isAd) {
-        openArticle(id, fromPageIndex, punkt);
-        return;
-      }
       // Ein Tipp erreicht die Seite auf zwei Wegen (Flaeche und Zeichenflaeche);
       // die angetippte Seite des ersten bleibt stehen.
       setAdChoice((current) =>
@@ -415,7 +412,7 @@ export default function ReaderShell() {
           : { articleId: id, fromPageIndex, punkt },
       );
     },
-    [productsByArticle, openArticle],
+    [],
   );
 
   const goArticle = useCallback(
@@ -792,7 +789,9 @@ export default function ReaderShell() {
                 regions={regions ?? []}
                 links={links ?? []}
                 watermark={watermark}
-                onOpenArticle={openFromPage}
+                anzeigen={productsByArticle}
+                onChooseProduct={openFromPage}
+                onOpenArticle={openArticle}
                 onNavigatePage={goPage}
                 onPrev={prev}
                 onNext={next}
