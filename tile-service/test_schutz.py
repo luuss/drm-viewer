@@ -81,7 +81,13 @@ def test_zu_kleine_bilder_bleiben():
 
 
 def test_schnell_genug_fuer_bildreiche_artikel():
+    # Im Vergleich zur alten Fassung gemessen, nicht gegen die Uhr: auf einem
+    # ausgelasteten Rechner werden beide langsamer (lokal ~50 statt ~330 ms).
     bild = _bild(1600, 1200)
-    start = time.perf_counter()
-    schutz.verwuerfeln(bild, 99)
-    assert time.perf_counter() - start < 0.15
+
+    def dauer(verfahren):
+        start = time.perf_counter()
+        verfahren(bild, 99)
+        return time.perf_counter() - start
+
+    assert dauer(schutz.verwuerfeln) * 2 < dauer(verwuerfeln_alt)

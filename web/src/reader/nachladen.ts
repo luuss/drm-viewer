@@ -65,24 +65,30 @@ function warten(ms: number, signal: AbortSignal): Promise<void> {
  * neu gerufen (ein Einmal-Ticket gilt nur einmal). Zurueck kommt die letzte
  * Antwort, auch eine misslungene; kam gar keine, der letzte Netzfehler.
  * `beimWarten` meldet jede Pause, etwa fuer "Seite wird gleich geladen".
+ * `bisMs` begrenzt die ganze Kette: eine Pause, die darueber hinausginge,
+ * wird nicht mehr gemacht (Kacheln: OpenSeadragon gibt einen Auftrag nach
+ * 30 s ohnehin auf). Ein Abbruch (AbortError) beendet die Kette sofort.
  */
 export async function mitWiederholung(
   hole: () => Promise<Response>,
   signal: AbortSignal,
   beimWarten?: (ausgang: Ausgang) => void,
+  { bisMs = Infinity }: { bisMs?: number } = {},
 ): Promise<Response> {
+  const beginn = Date.now();
   for (let versuch = 0; ; versuch++) {
     let antwort: Response | null = null;
     let fehler: unknown = null;
     try {
       antwort = await hole();
     } catch (e) {
-      if (signal.aborted) throw e;
+      if (signal.aborted || (e instanceof DOMException && e.name === "AbortError")) throw e;
       fehler = e;
     }
     if (antwort?.ok) return antwort;
     const ausgang: Ausgang = antwort ? antwort.status : "netz";
-    const ms = nochmalNach(ausgang, versuch, antwort?.headers.get("Retry-After"));
+    let ms = nochmalNach(ausgang, versuch, antwort?.headers.get("Retry-After"));
+    if (ms !== null && Date.now() - beginn + ms > bisMs) ms = null;
     if (ms === null) {
       if (antwort) return antwort;
       throw fehler;
