@@ -20,7 +20,7 @@ const DOPPELSTRICH = /(?<=\p{L})--(?=\p{L})/gu;
 // "t 12,80", "t 28,–": das Eurozeichen aus der Symbolschrift.
 const EURO_ALS_T = /(^|[\s(,;:])t (?=\d{1,4}(?:[.,]\d{2}|,[–-])(?!\d))/gu;
 // Zeichen aus Symbolschriften (Schlusszeichen der DMZ) — leeres Kaestchen.
-const SYMBOLZEICHEN = /[-]/gu;
+const SYMBOLZEICHEN = /[\uE000-\uF8FF]/gu;
 
 // Wie textutil._AKZENTE: ohne Akut und Gravis ("geht´s" ist ein Apostroph).
 const AKZENTE: Record<string, string> = {
