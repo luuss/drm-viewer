@@ -554,6 +554,7 @@ async function insertArticle(
       assetId: img.assetId,
       order: i,
       caption: img.caption,
+      credit: img.credit,
       sourcePageIndex: img.sourcePageIndex,
       sourceY: img.sourceY,
       afterBlockOrder: img.afterBlockOrder,

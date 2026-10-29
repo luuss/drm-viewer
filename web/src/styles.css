@@ -3002,6 +3002,14 @@ body:has(.reihe-seite) { overflow-x: clip; }
   margin-top: var(--s2);
   line-height: 1.5;
 }
+/* Bildnachweis ("Foto: Wikimedia/..."): eigene Zeile, kleiner als die
+   Unterschrift. Kurzer Klassenname wie die anderen Leserklassen. */
+.article-body figcaption .bq {
+  display: block;
+  font-size: 0.85em;
+  opacity: 0.85;
+  margin-top: 0.15rem;
+}
 
 /* Tabellen aus dem Heft. Der Rahmen rollt seitlich, wenn die Spalten nicht
    in die Breite passen (Telefon); die Tabelle selbst wird dafuer nie

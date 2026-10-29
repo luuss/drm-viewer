@@ -43,6 +43,7 @@ def test_bilder_nachtrag_nur_fuer_artikel_mit_gegenstueck():
     foto = SourceImage(
         page_index=33, x0=0.05, y0=0.75, x1=0.64, y1=1.0, link="IMG_2460.tif",
         caption="Bürgermeister Laurens Nothdurft mit Schülern.",
+        credit="Foto: Stadt Roßlau",
     )
     foto.after_block_order = 1
     anders = SourceImage(page_index=33, x0=0.6, y0=0.1, x1=0.9, y1=0.3, link="karte.tif")
@@ -61,6 +62,7 @@ def test_bilder_nachtrag_nur_fuer_artikel_mit_gegenstueck():
     assert [e["articleId"] for e in eingabe] == ["A"]
     bild = eingabe[0]["images"][0]
     assert bild["caption"] == "Bürgermeister Laurens Nothdurft mit Schülern."
+    assert bild["credit"] == "Foto: Stadt Roßlau"
     assert bild["anchorText"].startswith("Absatz s1")
     assert eingabe[0]["imageRegions"][0]["pageIndex"] == 33
     # Eigener Dateiname: die alten Bildzeilen bleiben bis zum Ruecksetzen gueltig.
@@ -69,10 +71,13 @@ def test_bilder_nachtrag_nur_fuer_artikel_mit_gegenstueck():
 
 
 def test_bilder_nachtrag_probelauf_legt_nichts_ab():
-    foto = SourceImage(page_index=33, x0=0.05, y0=0.75, x1=0.64, y1=1.0, caption="Unterschrift.")
+    foto = SourceImage(
+        page_index=33, x0=0.05, y0=0.75, x1=0.64, y1=1.0, caption="Unterschrift.", credit="Foto: X/Y"
+    )
     job = _NachtragJob({})
     _status, meldung = job._bilder_nachtrag(
         [_satzartikel(["s1"], [foto])], {33: _jpeg(100, 140)}, probe=True
     )
     assert job.gesendet == [] and job.abgelegt == []
     assert "unterschriftenNachher 1" in meldung
+    assert "nachweiseNachher 1" in meldung

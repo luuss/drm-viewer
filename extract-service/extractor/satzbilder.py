@@ -47,7 +47,7 @@ from .idml_articles import (
     ist_buchanzeige,
     stories_bilden,
 )
-from . import bildunterschriften
+from . import bildnachweise, bildunterschriften
 from .model import SourceBlock, SourceImage
 
 Kasten = tuple[float, float, float, float]
@@ -104,7 +104,10 @@ def unterschriften_zuordnen(images: list[SourceImage], blocks: list[SourceBlock]
     """
     for img in images:
         img.caption = None
+        img.credit = None
     bildunterschriften.zuordnen(images, blocks)
+    # Der Bildnachweis am Rand des Fotos (HANDOVER 4n).
+    bildnachweise.zuordnen(images, blocks)
     for img in images:
         img.satz_geprueft = True
     return sum(1 for img in images if img.caption)

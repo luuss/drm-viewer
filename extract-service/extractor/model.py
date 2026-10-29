@@ -203,6 +203,10 @@ class SourceImage:
     story_id: str | None = None
     anzeige: bool = False
     beleg: str = ""
+    # Bildnachweis aus dem Satz ("Foto: Wikimedia/..."), der am Rand des
+    # Bildes steht (extractor/bildnachweise.py). Der Leser zeigt ihn klein
+    # unter der Unterschrift.
+    credit: str | None = None
 
 
 @dataclass
