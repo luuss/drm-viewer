@@ -373,6 +373,10 @@ export default defineSchema(
     assetId: v.id("assets"),
     order: v.number(),
     caption: v.optional(v.string()),
+    // Bildnachweis vom Bildrand ("Foto: Wikimedia/..."), aus dem Satz
+    // (extract-service/extractor/bildnachweise.py). Der Leser zeigt ihn klein
+    // unter der Unterschrift.
+    credit: v.optional(v.string()),
     sourcePageIndex: v.optional(v.number()),
     sourceY: v.optional(v.number()),
     afterBlockOrder: v.optional(v.number()),

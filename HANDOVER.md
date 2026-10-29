@@ -1124,6 +1124,82 @@ npx convex run --env-file _scratch/verlag-direkt.env issues:slugErneuernInternal
 # Probelauf zeigt alt/neu, dann mit "apply":true; ebenso md74g0vmshwnqyaepjb35k5xa18h6m4d
 ```
 
+## 4o. Bildnachweis unter dem Bild (seit 29.10.2026, drm-viewer-egz)
+
+Anlass: ZUERST! 8-9/2025 S. 5 („Wanderwitz läßt nicht locker“) und S. 6
+(„Wagenknecht gegen …“): die Bildquelle („Foto: Wikimedia/…“) steht im Heft
+hochkant rechts am Foto, in der Artikelansicht fehlte sie ganz. Auftrag: „Die
+Bildquelle muss als Bildunterschrift da auch stehen.“
+
+* **Im Satz:** eigener kleiner Textrahmen, fast immer um 90 Grad gedreht an
+  der rechten Bildkante, Absatzformat „Bildquelle“ (ZUERST!), „Bildquelle DMZ
+  2023“, „Bildquelle DMZ-Zeit 2018“, „bildquelle schwerter“ (Greim). Rolle
+  `other` in `idml_extract.STYLE_RULES`, deshalb nie im Lesetext und nie
+  Unterschrift (`bildunterschriften.NACHWEIS` filtert „Foto: …“ dort aus).
+  `_path_bounds` rechnet die Drehung mit: der Rahmen kommt als hohes, schmales
+  Rechteck an.
+* **Erkennung** (`extractor/bildnachweise.py`, aufgerufen in
+  `satzbilder.unterschriften_zuordnen` auf allen Bildern vor den Filtern):
+  Rahmen im Nachweisformat, dessen Text wie eine Quelle aussieht (`Wort:` am
+  Anfang, „/“, „©“, „CC“), oder ein Rahmen ganz aus „Foto:/Fotos:/Bild:/
+  Quelle:/©…“ in beliebigem Format (Greim: „Foto: Harald Jaudas“ im Format
+  „zwischen Titel“). Nicht: „Anzeige“ (steht im selben Format), „Foto: xxx“,
+  „Alle Fotos auf dieser Seite …“, über 240 Zeichen, Kalenderanzeige im Format
+  Bildquelle (ZUERST! 1/2025 S. 63).
+* **Zuordnung über die Geometrie, nicht die Reihenfolge:** hoher Rahmen nur
+  an senkrechter, flacher nur an waagerechter Kante; mindestens 40 % seiner
+  Länge entlang der Kante (der Rahmen läuft oft neben Foto *und* grauem
+  Unterschriftbalken weiter); außen höchstens 0,02 weg, über der Kante =
+  bündig, innen höchstens 0,04 (0,065 bei angeschnittenem Foto: DMZ und Greim
+  setzen den Nachweis in den Seitenrand auf das randlose Foto). Gruppe aus
+  Bild und Nachweis schlägt die Lage; ohne Kante zählt noch „auf dem Foto“
+  (≥ 80 %). Nächste Kante gewinnt; **links am Foto kostet 0,005 Aufschlag**:
+  der Satz stellt den Nachweis rechts an sein Foto (1.281 von 1.419), im
+  Spaltenzwischenraum gehört er zum linken Foto, auch wenn er dem rechten ein
+  Stück näher steht (ZUERST! 7/2025 S. 7 Kabinettsporträts, S. 18; 11 Fälle
+  gekippt, alle an Dateinamen geprüft: „Olaf Kosinsky“ ↔ `…by_OlafKosinsky…`,
+  „Tobias Koch“ ↔ `…5tk1725…`). Gleich nah: das kleinere Bild. Zwei Nachweise
+  an einem Bild (Montage) werden mit „ · “ verbunden.
+* **Datenweg:** `SourceImage.credit` → Worker (`_store_images`, Probelauf,
+  Doppelbild-Zusammenlegung) → `articleInput.images[].credit` (Routen
+  `/service/jobs/articles`, `/service/jobs/merge`) → `articleAssets.credit`
+  (optional, alte Zeilen ohne). Bilder-Nachtrag: `bildEingabe.credit`,
+  `gesicherteZeile.credit`, Zähler `nachweiseVorher`/`nachweiseNachher`,
+  „geändert“ vergleicht auch den Nachweis. `articles.getForReader` liefert
+  `credit` verschlüsselt wie die Unterschrift (`encOpt`), `listForEditors` im
+  Klartext. Leser: `ArticleMode.tsx`, `<span class="bq">` in der
+  `figcaption` nach der Unterschrift, eigene Zeile, 0,85 em.
+* **Reihenfolge beim Ausrollen:** erst Convex (sonst lehnen die Validatoren
+  das neue Feld ab und jeder Import und Nachtrag scheitert), dann
+  `import-worker`, dann `web`.
+
+**Zahlen** (13 Hefte mit Satz, Worker-Weg nachgerechnet mit
+`_scratch/bildnachweis/zaehlen.py`, Fälle in `faelle.json`): 1.431 Nachweise
+im Satz erkannt, 1.425 an einem Artikelbild (1.424 Bilder, eine Montage mit
+zwei). Ohne Bild 6: drei „Daten: …“ an InDesign-Diagrammen ohne Bildrahmen,
+die Bestelladresse einer Anzeige im Format Bildquelle, ein frei stehender
+Nachweis im Verzeichnis (ZUERST! 3/2026 S. 4), ein Nachweis am ganzseitigen
+Bild DMZ 170 S. 8, das in keinem Artikel steht. Von 1.926 Artikelbildern
+tragen 1.424 einen Nachweis (live vorher: 0). Am Druckbild geprüft: 49
+Zuordnungen (`ov1.jpg` … `ov4.jpg`, alle vier Reihen, alle Sonderfälle:
+Zwischenraum, gleich nah, angeschnitten, Gruppe, waagerecht, auf dem Foto),
+keine falsch.
+
+Werkzeuge in `_scratch/bildnachweis/` (aus dem Repo-Ordner aufrufen): IDMLs
+aller 13 Hefte unter `idml/<issueId>.idml` (`alle_holen.py` /
+`idml_holen.sh <id>` holen sie aus MinIO), `zaehlen.py [--liste] [--json
+datei] [id …]`, `seite.py <id> <satzseite>` (alle Rahmen, nach Filtern, mit
+Unterschrift und Nachweis), `ov.py <aus.jpg> <id>:<satzseite> …`
+(Kontaktbogen am Druckbild: zugeordnet grün, Nachweis rot), `stile.py`
+(Absatzformate je Heft), Seitenbilder `seiten/` über `seite_holen.sh`.
+Satzseite = Druckseite − 1.
+
+**Nachtrag für den Bestand:** `_scratch/bildnachtrag/alle.sh` (Lauf 2, alle
+13 Hefte inkl. ZUERST! 6/2025; Lauf 1 als `alle-lauf1.sh`), Sicherungen nach
+`_scratch/bildnachtrag2/vorher-<id>.json`, Protokoll `lauf.log` dort. Einzelne
+Hefte: `bash _scratch/bildnachtrag/alle.sh <id> …`. Rückweg steht im Kopf des
+Skripts.
+
 ---
 
 ## 5. Was in dieser Sitzung gebaut wurde

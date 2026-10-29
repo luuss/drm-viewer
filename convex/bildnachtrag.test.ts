@@ -88,6 +88,7 @@ describe("Bilder-Nachtrag ohne Neuimport", () => {
               sourcePageIndex: 33,
               sourceY: 0.75,
               caption: "Bürgermeister Laurens Nothdurft (rechts) mit Roßlauer Schülern am 8. Mai.",
+              credit: "Foto: Stadt Roßlau",
               // Der Absatz steht heute an Stelle 2, im neuen Satz an Stelle 5.
               afterBlockOrder: 5,
               anchorText: "Nothdurft: Als gewählter Ortsbürgermeister meiner Heimatstadt",
@@ -101,7 +102,7 @@ describe("Bilder-Nachtrag ohne Neuimport", () => {
       ],
     };
     const probe = await t.mutation(internal.bildnachtrag.ersetzenInternal, { ...eingabe, probe: true });
-    expect(probe).toMatchObject({ artikel: 1, geaendert: 1, unterschriftenVorher: 0, unterschriftenNachher: 1 });
+    expect(probe).toMatchObject({ artikel: 1, geaendert: 1, unterschriftenVorher: 0, unterschriftenNachher: 1, nachweiseVorher: 0, nachweiseNachher: 1 });
     const nachProbe = await t.query(internal.bildnachtrag.bestandInternal, { issueId });
     expect(nachProbe.bilder.map((b) => b.assetId)).toEqual(gesichert.bilder.map((b) => b.assetId));
 
@@ -116,6 +117,7 @@ describe("Bilder-Nachtrag ohne Neuimport", () => {
       [neuA, null, null],
       [neuB, "Bürgermeister Laurens Nothdurft (rechts) mit Roßlauer Schülern am 8. Mai.", 2],
     ]);
+    expect(stand.bilder.map((b) => b.credit ?? null)).toEqual([null, "Foto: Stadt Roßlau"]);
     expect(stand.flaechen.filter((f) => f.kind === "image")).toHaveLength(2);
     expect(stand.flaechen.filter((f) => f.kind === "body")).toHaveLength(1);
     expect(stand.artikel?.reviewStatus).toBe("approved");

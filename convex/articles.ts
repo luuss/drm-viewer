@@ -80,6 +80,7 @@ export const articleInput = v.object({
       v.object({
         assetId: v.id("assets"),
         caption: v.optional(v.string()),
+        credit: v.optional(v.string()),
         sourcePageIndex: v.optional(v.number()),
         sourceY: v.optional(v.number()),
         afterBlockOrder: v.optional(v.number()),
@@ -416,6 +417,8 @@ export const getForReader = query({
         withUrls.push({
           url,
           caption: encOpt(img.caption),
+          // Der Nachweis ist Text des Hefts wie die Unterschrift: verschluesselt.
+          credit: encOpt(img.credit),
           page: img.sourcePageIndex ?? null,
           sourceY: img.sourceY ?? null,
           afterBlockOrder: img.afterBlockOrder ?? null,
@@ -649,6 +652,7 @@ export const listForEditors = query({
             .map((image) => ({
               order: image.order,
               caption: image.caption ?? null,
+              credit: image.credit ?? null,
               sourcePageIndex: image.sourcePageIndex ?? null,
               afterBlockOrder: image.afterBlockOrder ?? null,
             })),
@@ -1179,6 +1183,7 @@ export const replaceForIssueInternal = internalMutation({
           assetId: img.assetId,
           order: i,
           caption: img.caption,
+          credit: img.credit,
           sourcePageIndex: img.sourcePageIndex,
           sourceY: img.sourceY,
           afterBlockOrder: img.afterBlockOrder,

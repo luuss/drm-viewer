@@ -1185,6 +1185,7 @@ class Job:
                         "assetId": "probe",
                         "sourcePageIndex": img.page_index,
                         **({"caption": img.caption} if img.caption else {}),
+                        **({"credit": img.credit} if img.credit else {}),
                     }
                     for img in article.images
                 ]
@@ -1218,6 +1219,9 @@ class Job:
                 "bilderNachher": sum(len(e["images"]) for e in eingaben),
                 "unterschriftenNachher": sum(
                     1 for e in eingaben for i in e["images"] if i.get("caption")
+                ),
+                "nachweiseNachher": sum(
+                    1 for e in eingaben for i in e["images"] if i.get("credit")
                 ),
             }
         else:
@@ -1578,6 +1582,8 @@ class Job:
                     # zweiten Vorkommen hing.
                     if img.caption and "caption" not in erstes:
                         erstes["caption"] = img.caption
+                    if img.credit and "credit" not in erstes:
+                        erstes["credit"] = img.credit
                     self._doppelt = getattr(self, "_doppelt", 0) + 1
                     continue
             if aus_vorlage:
@@ -1617,6 +1623,9 @@ class Job:
             }
             if img.caption:
                 entry["caption"] = img.caption
+            # Bildnachweis vom Bildrand (extractor/bildnachweise.py).
+            if img.credit:
+                entry["credit"] = img.credit
             if img.after_block_order is not None:
                 entry["afterBlockOrder"] = img.after_block_order
             elif img.after_block is not None:

@@ -395,7 +395,13 @@ export default function ArticleMode({
                     ? { width: img.width, height: img.height }
                     : {})}
                 />
-                {img.caption && <figcaption>{img.caption}</figcaption>}
+                {(img.caption || img.credit) && (
+                  <figcaption>
+                    {img.caption}
+                    {/* Bildnachweis vom Bildrand, klein unter der Unterschrift. */}
+                    {img.credit && <span className="bq">{img.credit}</span>}
+                  </figcaption>
+                )}
               </figure>
             );
           }

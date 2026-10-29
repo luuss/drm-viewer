@@ -4,7 +4,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { regionBox } from "./schema";
 
 /**
- * Bilder-Nachtrag: je Artikel nur Bilder und Bildunterschriften neu, ohne
+ * Bilder-Nachtrag: je Artikel nur Bilder, Bildunterschriften und Bildnachweise neu, ohne
  * Neuimport (HANDOVER 4m, drm-viewer-jmm).
  *
  * Ein Neuimport verwirft die Freigaben der Redaktion, der Auftrag "nachtrag"
@@ -21,6 +21,7 @@ import { regionBox } from "./schema";
 const bildEingabe = v.object({
   assetId: v.id("assets"),
   caption: v.optional(v.string()),
+  credit: v.optional(v.string()),
   sourcePageIndex: v.optional(v.number()),
   sourceY: v.optional(v.number()),
   afterBlockOrder: v.optional(v.number()),
@@ -93,6 +94,8 @@ export const ersetzenInternal = internalMutation({
     bilderNachher: v.number(),
     unterschriftenVorher: v.number(),
     unterschriftenNachher: v.number(),
+    nachweiseVorher: v.number(),
+    nachweiseNachher: v.number(),
     ohneAnker: v.number(),
   }),
   handler: async (ctx, { jobId, workerId, issueId, probe, articles }) => {
@@ -108,6 +111,8 @@ export const ersetzenInternal = internalMutation({
       bilderNachher: 0,
       unterschriftenVorher: 0,
       unterschriftenNachher: 0,
+      nachweiseVorher: 0,
+      nachweiseNachher: 0,
       ohneAnker: 0,
     };
     for (const eingabe of articles) {
@@ -129,6 +134,7 @@ export const ersetzenInternal = internalMutation({
           assetId: img.assetId,
           order: i,
           caption: img.caption,
+          credit: img.credit,
           sourcePageIndex: img.sourcePageIndex,
           sourceY: img.sourceY,
           afterBlockOrder: anker,
@@ -139,11 +145,18 @@ export const ersetzenInternal = internalMutation({
       summe.bilderNachher += neu.length;
       summe.unterschriftenVorher += bilder.filter((b) => b.caption).length;
       summe.unterschriftenNachher += neu.filter((b) => b.caption).length;
+      summe.nachweiseVorher += bilder.filter((b) => b.credit).length;
+      summe.nachweiseNachher += neu.filter((b) => b.credit).length;
       const gleich =
         bilder.length === neu.length &&
         [...bilder]
           .sort((a, b) => a.order - b.order)
-          .every((b, i) => (b.caption ?? "") === (neu[i].caption ?? "") && b.sourcePageIndex === neu[i].sourcePageIndex);
+          .every(
+            (b, i) =>
+              (b.caption ?? "") === (neu[i].caption ?? "") &&
+              (b.credit ?? "") === (neu[i].credit ?? "") &&
+              b.sourcePageIndex === neu[i].sourcePageIndex,
+          );
       if (!gleich) summe.geaendert++;
       if (probe) continue;
       for (const b of bilder) await ctx.db.delete(b._id);
@@ -191,6 +204,7 @@ const gesicherteZeile = v.object({
   assetId: v.id("assets"),
   order: v.number(),
   caption: v.optional(v.string()),
+  credit: v.optional(v.string()),
   sourcePageIndex: v.optional(v.number()),
   sourceY: v.optional(v.number()),
   afterBlockOrder: v.optional(v.number()),
