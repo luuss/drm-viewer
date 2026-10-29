@@ -386,6 +386,9 @@ export const matchInternal = internalAction({
       { issueId, links: resolved.links, products: resolved.products },
     );
     console.log(JSON.stringify({ event: "articleProducts.matched", issueId, ...stored }));
+    // Die Buchflaechen der Seiten nehmen offene Buecher aus diesem Abgleich
+    // (pageLinks.chooseFromAd); er ist erst jetzt fertig.
+    await ctx.scheduler.runAfter(0, internal.pageLinks.resolveInternal, { issueId });
     return stored;
   },
 });

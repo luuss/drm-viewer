@@ -4,6 +4,7 @@ import OpenSeadragon from "openseadragon";
 import { TILE_SERVICE_URL, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
 import { kachelSeed, mitTicket, zusammensetzen } from "./schutz";
+import { tippZiel, type TippAnzeige } from "./tippZiel";
 
 /** Wo auf der Seite getippt wurde, normiert auf 0..1. */
 export type Klickpunkt = { pageIndex: number; x: number; y: number };
@@ -15,6 +16,8 @@ type Region = {
   y0: number;
   x1: number;
   y1: number;
+  /** "image": Bild des Artikels, nur fuer den Treffertest (Umschlag oder Text). */
+  kind?: string;
   targetPageIndex: number | null;
 };
 
@@ -38,6 +41,14 @@ type Props = {
   schutzKey: number;
   regions: Region[];
   links: PageLink[];
+  /** Buchanzeigen mit Produkten im Laden (articleProducts.forReader), je Artikel. */
+  anzeigen?: ReadonlyMap<Id<"articles">, TippAnzeige>;
+  /** Umschlag einer Anzeige mit mehreren Buechern: welches Buch? */
+  onChooseProduct?: (
+    articleId: Id<"articles">,
+    fromPageIndex?: number,
+    punkt?: Klickpunkt,
+  ) => void;
   watermark: string;
   onOpenArticle: (
     articleId: Id<"articles">,
@@ -77,6 +88,8 @@ export default function PageMode({
   schutzKey,
   regions,
   links,
+  anzeigen,
+  onChooseProduct,
   watermark,
   onOpenArticle,
   onNavigatePage,
@@ -98,6 +111,10 @@ export default function PageMode({
   const regionsRef = useRef(regions);
   const linksRef = useRef(links);
   const openArticleRef = useRef(onOpenArticle);
+  const anzeigenRef = useRef(anzeigen);
+  const chooseProductRef = useRef(onChooseProduct);
+  anzeigenRef.current = anzeigen;
+  chooseProductRef.current = onChooseProduct;
   const navigatePageRef = useRef(onNavigatePage);
   regionsRef.current = regions;
   linksRef.current = links;
@@ -174,9 +191,6 @@ export default function PageMode({
     viewer.addHandler("canvas-click", (event: any) => {
       if (!event.quick || !readyRef.current) return;
       const viewportPoint = viewer.viewport.pointFromPixel(event.position, true);
-      let best: Region | null = null;
-      let bestArea = Infinity;
-      let bestPunkt: Klickpunkt | undefined;
 
       for (let slot = 0; slot < viewer.world.getItemCount(); slot += 1) {
         const item = viewer.world.getItemAt(slot);
@@ -186,39 +200,26 @@ export default function PageMode({
         const ny = point.y / size.y;
         if (nx < 0 || nx > 1 || ny < 0 || ny > 1) continue;
         const pageIndex = openedPagesRef.current[slot];
-        // Flaechen nach draussen gehen vor. Der Knopf darunter bekommt den
-        // Klick nie: OpenSeadragon bricht ihn an der Zeichenflaeche ab,
-        // bevor er bei React ankommt.
-        const link = linksRef.current.find(
-          (l) =>
-            l.pageIndex === pageIndex &&
-            nx >= l.x0 &&
-            nx <= l.x1 &&
-            ny >= l.y0 &&
-            ny <= l.y1,
+        const punkt: Klickpunkt = { pageIndex, x: nx, y: ny };
+        // Der Knopf darunter bekommt den Klick nie: OpenSeadragon bricht ihn
+        // an der Zeichenflaeche ab, bevor er bei React ankommt. Was der Tipp
+        // oeffnet (Laden, Text, Auswahl), entscheidet `tippZiel`.
+        const ziel = tippZiel(
+          punkt,
+          linksRef.current,
+          regionsRef.current,
+          anzeigenRef.current ?? new Map(),
         );
-        if (link) {
-          nachDraussen(link.url);
-          return;
+        if (!ziel) return;
+        if (ziel.art === "laden") nachDraussen(ziel.url);
+        else if (ziel.art === "seite") navigatePageRef.current(ziel.pageIndex);
+        else if (ziel.art === "auswahl" && chooseProductRef.current) {
+          chooseProductRef.current(ziel.articleId, pageIndex, punkt);
+        } else {
+          // Mit Seite und Punkt: der Artikel oeffnet beim angetippten Absatz.
+          openArticleRef.current(ziel.articleId, pageIndex, punkt);
         }
-        for (const region of regionsRef.current) {
-          if (region.pageIndex !== pageIndex) continue;
-          if (nx < region.x0 || nx > region.x1 || ny < region.y0 || ny > region.y1) {
-            continue;
-          }
-          const area = (region.x1 - region.x0) * (region.y1 - region.y0);
-          if (area < bestArea) {
-            best = region;
-            bestArea = area;
-            bestPunkt = { pageIndex, x: nx, y: ny };
-          }
-        }
-      }
-
-      if (best) {
-        if (best.targetPageIndex !== null) navigatePageRef.current(best.targetPageIndex);
-        // Mit Seite und Punkt: der Artikel oeffnet beim angetippten Absatz.
-        else openArticleRef.current(best.articleId, best.pageIndex, bestPunkt);
+        return;
       }
     });
     viewer.addHandler("tile-load-failed", (event: any) => {
@@ -377,7 +378,9 @@ export default function PageMode({
           createPortal(
             <>
               {shown.map((pageIndex, slot) => {
-                const pageRegions = regions.filter((region) => region.pageIndex === pageIndex);
+                const pageRegions = regions.filter(
+                  (region) => region.pageIndex === pageIndex && region.kind !== "image",
+                );
                 const pageLinks = links.filter((link) => link.pageIndex === pageIndex);
                 return (
                   <div

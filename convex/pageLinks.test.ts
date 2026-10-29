@@ -1,10 +1,14 @@
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   bookQueries,
   chooseBook,
+  chooseFromAd,
+  openBookTarget,
+  splitBookLabel,
+  textUnderLink,
   searchWords,
   chooseProduct,
   chooseTarget,
@@ -307,3 +311,213 @@ describe("bookQueries", () => {
   });
 });
 
+
+// Fehler aus der Durchsicht aller Hefte am 29.10.2026
+// (tools/buchzuordnung_sim.ts gegen den Stand live).
+describe("Buchzuordnung, Durchsicht 29.10.2026", () => {
+  let id = 9000;
+  const p = (name: string, manufacturer = "", reference = "", nr?: number) => {
+    const n = nr ?? ++id;
+    return {
+      id: n,
+      name,
+      reference,
+      priceCents: 2000,
+      url: `https://lesenundschenken.de/${n}-buch.html`,
+      coverUrl: null,
+      manufacturer,
+      active: true,
+      digital: null,
+    };
+  };
+
+  test("'Autor: Titel' im Label: Verfasser vor dem Doppelpunkt", () => {
+    expect(splitBookLabel("Manfred Kleine-Hartlage: BRD-Sprech · ")).toEqual({
+      title: "BRD-Sprech",
+      author: "Manfred Kleine-Hartlage",
+    });
+    expect(splitBookLabel("Pierre Drieu la Rochelle: Heimat Europa · ").author).toBe(
+      "Pierre Drieu la Rochelle",
+    );
+    // Gattung oder Jahrgang vor dem Doppelpunkt bleiben Teil des Titels.
+    expect(splitBookLabel("Kalender: Männer der Waffen‑SS 2026 · ").author).toBe("");
+    expect(splitBookLabel("2025: Verheimlicht – vertuscht – vergessen · Gerhard Wisnewski"))
+      .toEqual({ title: "2025: Verheimlicht – vertuscht – vergessen", author: "Gerhard Wisnewski" });
+    // ZUERST! 6/2025, S. 21: fuehrte auf die Suchseite.
+    const brd = p("BRD-Sprech", "Manfred Kleine-Hartlage");
+    const sprache = p("Die Sprache der BRD", "Manfred Kleine-Hartlage");
+    expect(chooseBook([sprache, brd], "Manfred Kleine-Hartlage: BRD-Sprech · ")?.id).toBe(brd.id);
+    expect(bookQueries("Manfred Kleine-Hartlage: BRD-Sprech · ", null, [])).toContain(
+      "BRD Sprech Kleine Hartlage",
+    );
+  });
+
+  test("Artikelnummer zaehlt einmal, auch wenn mehrere Anfragen sie liefern", () => {
+    const kalender = p("Wolfgang Willrich: Soldatenköpfe 2026", "", "460721");
+    const anderes = p('"Wolfgang Willrich"', "", "460949");
+    // Live fuehrte die Flaeche auf "Wolfgang Willrich" (anderes Produkt).
+    expect(
+      chooseBook([kalender, kalender, anderes], "Wolfgang Willrich: Soldatenköpfe · ", "460721")?.id,
+    ).toBe(kalender.id);
+    // Mit Nummer nie ein Titeltreffer mit anderer Nummer.
+    expect(chooseBook([anderes], "Wolfgang Willrich: Soldatenköpfe · ", "460721")).toBeNull();
+  });
+
+  test("Anderer Verfasser im Laden ist ein anderes Buch", () => {
+    // 9/2025: "Endspiel" von Werner Reichel fuehrte auf "Endspiel Europa".
+    expect(chooseBook([p("Endspiel Europa", "Ulrike Guérot / Hauke Ritz")], "Endspiel · Werner Reichel"))
+      .toBeNull();
+    expect(
+      chooseBook([p("Hybris am Hindukusch", "Michael Lüders")], "Jake Tapper/Alex Thompson: Hybris · "),
+    ).toBeNull();
+    expect(
+      openBookTarget([p("Endspiel Europa", "Ulrike Guérot / Hauke Ritz")], "Endspiel · Werner Reichel"),
+    ).toBeUndefined();
+  });
+
+  test("Untertitel nach dem Punkt, wenn der Verfasser passt", () => {
+    const crash = p("Der Multikulticrash", "Werner Reichel");
+    expect(chooseBook([crash], "Endspiel. Der Multikulticrash · Werner Reichel")?.id).toBe(crash.id);
+    expect(bookQueries("Endspiel. Der Multikulticrash · Werner Reichel", null, [])).toContain(
+      "Der Multikulticrash Reichel",
+    );
+    // Ein Jahrgang vor dem Titel ist kein Wort, das man weglassen darf.
+    const alt = p("Verheimlicht, vertuscht, vergessen", "Gerhard Wisnewski");
+    expect(chooseBook([alt], "2025: Verheimlicht – vertuscht – vergessen · Gerhard Wisnewski"))
+      .toBeNull();
+  });
+
+  test("Dasselbe Buch zweimal im Laden: die neuere Ausgabe", () => {
+    const alt = p("Feindliche Übernahme", "Thilo Sarrazin", "", 2043);
+    const neu = p("Feindliche Übernahme", "Thilo Sarrazin", "", 9210);
+    expect(chooseBook([alt, neu], "Feindliche Übernahme · Thilo Sarrazin")?.id).toBe(9210);
+    // Baende einer Reihe mit Herausgeber, Verfasser der Anzeige nicht im Laden: offen.
+    const b1 = p("Veteranen der Waffen-SS berichten", "Rolf Michaelis (Hrsg.)");
+    const b2 = p("Veteranen der Waffen SS berichten", "Rolf Michaelis (Hrsg.)");
+    expect(chooseBook([b1, b2], "Veteranen der Waffen-SS berichten · Erich Thöle/Martin Glade"))
+      .toBeNull();
+    // Ohne Verfasser in der Anzeige: offen, die Suchseite zeigt beide.
+    expect(chooseBook([alt, neu], "Feindliche Übernahme · ")).toBeNull();
+    expect(openBookTarget([alt, neu], "Feindliche Übernahme · ")).toBe(
+      searchUrl("Feindliche Übernahme"),
+    );
+  });
+
+  test("Rueckfall auf das Produkt der Anzeige darunter", () => {
+    const propaganda = p("Propaganda");
+    expect(chooseFromAd([propaganda], "Propaganda oder der Mythos der Demokratie · Gabriele Kuby")?.id)
+      .toBe(propaganda.id);
+    // Zwei Buecher in der Anzeige: nur das mit passendem Titel.
+    const brd = p("BRD-Sprech");
+    const sprache = p("Die Sprache der BRD");
+    expect(chooseFromAd([brd, sprache], "Die Sprache der BRD · ")?.id).toBe(sprache.id);
+    expect(chooseFromAd([], "X · Y")).toBeNull();
+  });
+
+  test("Buch nicht im Laden: kein Ziel statt leerer Suchseite", () => {
+    expect(openBookTarget([], "Tapetenbewohner · Michael Esders")).toBeUndefined();
+    expect(openBookTarget([p("Alliierte Tieffliegerangriffe auf Deutschland")], "Tiefflieger · André Lecloux"))
+      .toBeUndefined();
+  });
+
+  test("Textflaeche unter einer Buchflaeche", () => {
+    const flaeche = { x0: 0.05, y0: 0.08, x1: 0.21, y1: 0.34 };
+    expect(textUnderLink({ x0: 0.05, y0: 0.23, x1: 0.21, y1: 0.34 }, flaeche)).toBe(true);
+    // Eine Interviewspalte, die nur ein Stueck in die Anzeige ragt.
+    expect(
+      textUnderLink({ x0: 0.36, y0: 0.06, x1: 0.64, y1: 0.94 }, { x0: 0.37, y0: 0.65, x1: 0.94, y1: 0.94 }),
+    ).toBe(false);
+  });
+});
+
+describe("Offene Buchflaechen", () => {
+  test("Rueckfall aus der Anzeige, Suchseite wird erneut versucht, ohne Ziel kein Link", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId } = await heft(t);
+    const ids = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const articleId = await ctx.db.insert("articles", {
+        issueId,
+        order: 1,
+        title: "Propaganda oder der Mythos der Demokratie",
+        source: "idml",
+        reviewStatus: "approved",
+        primaryPageIndex: 78,
+        pageStart: 78,
+        pageEnd: 78,
+        searchText: "kurz",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const blockId = await ctx.db.insert("articleBlocks", {
+        articleId,
+        issueId,
+        order: 1,
+        type: "paragraph",
+        text: "Gabriele Kuby. Propaganda. 200 S., € 20,–",
+      });
+      await ctx.db.insert("articleRegions", {
+        articleId,
+        issueId,
+        pageIndex: 78,
+        x0: 0.6,
+        y0: 0.23,
+        x1: 0.77,
+        y1: 0.34,
+        kind: "body",
+      });
+      await ctx.db.insert("articleProducts", {
+        issueId,
+        blockId,
+        order: 0,
+        source: "title",
+        productId: 9192,
+      });
+      await ctx.db.insert("shopProducts", {
+        productId: 9192,
+        reference: "282000",
+        name: "Propaganda",
+        url: "https://lesenundschenken.de/9192-propaganda.html",
+        active: true,
+        checkedAt: now,
+      });
+      const box = { pageIndex: 78, x0: 0.6, y0: 0.07, x1: 0.77, y1: 0.34 };
+      const suche = await ctx.db.insert("pageLinks", {
+        issueId,
+        ...box,
+        kind: "shop",
+        queries: ["Propaganda oder der Mythos der Demokratie"],
+        single: true,
+        label: "Propaganda oder der Mythos der Demokratie · Gabriele Kuby",
+        url: "https://lesenundschenken.de/suche?s=Propaganda",
+        source: "import",
+      });
+      const keins = await ctx.db.insert("pageLinks", {
+        issueId,
+        ...box,
+        pageIndex: 79,
+        kind: "shop",
+        queries: ["Tapetenbewohner"],
+        single: true,
+        label: "Tapetenbewohner · Michael Esders",
+        resolvedAt: now,
+        source: "import",
+      });
+      const userId = await ctx.db.insert("users", {
+        email: "redaktion@example.org",
+        roles: ["editor"],
+      });
+      return { suche, keins, userId };
+    });
+    const offen = await t.query(internal.pageLinks.listUnresolvedInternal, { issueId });
+    const propaganda = offen.find((r: any) => r.id === ids.suche);
+    // Die Suchseite gilt als offen; der Rueckfall kennt das Produkt der Anzeige.
+    expect(propaganda?.fallback.map((p: any) => p.id)).toEqual([9192]);
+    expect(chooseFromAd(propaganda!.fallback, propaganda!.label!)?.id).toBe(9192);
+    // Buch nicht im Laden (aufgeloest, ohne Ziel): die Flaeche fuehrt nirgendwohin.
+    const redaktion = t.withIdentity({ subject: `${ids.userId}|s` });
+    const links = await redaktion.query(api.pageLinks.listForEditors, { issueId });
+    expect(links.find((l: any) => l._id === ids.keins)?.target).toBeNull();
+    expect(links.find((l: any) => l._id === ids.suche)?.target).toContain("/suche?");
+  });
+});

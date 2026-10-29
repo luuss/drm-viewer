@@ -270,8 +270,9 @@ Stand und Betrieb des Moduls: `../../docs/digital-verkauf-shop.md`.
 Die Hefte tragen Anzeigen fuer Buecher aus dem eigenen Laden und
 Buchbesprechungen. Der Import macht daraus kurze Artikel. Der Leser verbindet
 sie mit dem Produkt im Laden: im Artikel steht unter dem Anzeigentext der
-Knopf "Im Shop bestellen", im Seitenmodus oeffnet ein Tipp auf die Anzeige die
-Auswahl "bestellen oder Text lesen". Der Knopf fuehrt auf die Produktseite,
+Knopf "Buch im Shop kaufen", im Seitenmodus oeffnet ein Tipp auf den Umschlag
+das Produkt, ein Tipp auf den Text den Text (Regeln unten, "Tipp auf Umschlag
+oder Text"). Der Knopf fuehrt auf die Produktseite,
 immer in einem neuen Tab. Fremdanzeigen haben kein Produkt im Laden und
 bleiben ohne Knopf.
 
@@ -397,6 +398,64 @@ Buecher, die der Laden nicht fuehrt, und Titel mit mehreren Baenden oder
 Ausgaben gleichen Namens ("Unbekannt – April 1945", "Veteranen der Waffen-SS
 berichten", "Militaerflugzeuge des Kalten Krieges"): dort zeigt die
 Suchseite alle. Greim hat keine Buecherseite.
+
+### Tipp auf Umschlag oder Text, Durchsicht aller Hefte (seit 29.10.2026)
+
+Regel im Seitenmodus (`web/src/reader/tippZiel.ts`, Tests daneben):
+
+* **Umschlagbild** → Produkt im Laden, neuer Tab, ohne Frage. Umschlag ist
+  eine Buchflaeche oder ein Bild eines Artikels (`regionsForReader` liefert
+  Bilder jetzt zusaetzlich einzeln mit `kind: "image"`, nur fuer den
+  Treffertest). Liegt der Umschlag in einer Anzeige mit mehreren Buechern und
+  nur unter einer gemeinsamen Flaeche, fragt die Auswahl, welches Buch.
+* **Text** → der Artikel beim angetippten Absatz, ohne Frage. Liegt eine
+  Buchflaeche ganz im Text (Umschlag in der Besprechungsspalte), gewinnt die
+  kleinere Flaeche. Im Artikel steht unter der Anzeige "Buch im Shop kaufen".
+* Abo-Aufruf, Sammelanzeige, Umschlag-Anzeige: immer nach draussen.
+
+Der Import legt die Buchflaeche jetzt nur auf das Umschlagbild (ohne
+Umschlag weiter auf den Rahmen) und teilt einen Rahmen mit zwei Buechern
+(`_buecher_im_rahmen`, Kopfzeile nach einer Beschreibung mit Preis); dann
+gilt nur ein Bild, dessen Dateiname den Titel nennt. "Autor: Titel" in einer
+Zeile wird Verfasser und Titel (`_autor_vor_doppelpunkt`, Backend
+`splitBookLabel`), aber nicht "Kalender: …" oder "2025: …".
+
+Aufloesung (`chooseBook`, `chooseFromAd`, `openBookTarget`):
+
+* Treffer mehrerer Anfragen zaehlen je Produkt einmal (vorher war die
+  Artikelnummer doppelt und damit "nicht eindeutig").
+* Mit Artikelnummer nur dieses Produkt.
+* Nennt der Laden einen anderen Verfasser (Herstellerfeld), ist es ein
+  anderes Buch. Gleicher Name und gleicher Verfasser zweimal (neue Auflage):
+  die hoehere Produktnummer. Teil nach "Wort. " zaehlt mit Verfasser
+  ("Endspiel. Der Multikulticrash").
+* Rueckfall: das Produkt, das `articleProducts` der Anzeige unter der Flaeche
+  gegeben hat, wenn sein Name zum Titel passt oder ganz darin steht.
+* Kein Produkt: Suchseite nur, wenn der Laden Buecher dieses Namens vom selben
+  Verfasser fuehrt; sonst kein Ziel (`resolvedAt` ohne `url`), der Tipp
+  oeffnet dann die Anzeige. Buchflaechen mit Suchseite gelten als offen und
+  laufen bei jedem `resolveInternal` mit. `matchInternal` stoesst am Ende
+  `pageLinks.resolveInternal` an (auch nachts fuer Hefte mit offenen
+  Anzeigen). Das Protokoll `pageLinks.resolved` nennt die offenen Buecher
+  (`openBooks`), `articleProducts.note` den Grund je Anzeige.
+
+Durchsicht 29.10.2026 (`tools/buchzuordnung_dump.sh`,
+`tools/buchzuordnung_sim.ts`, 13 Hefte, 248 Buchflaechen, 267
+Anzeigenzeilen): live 196 Buchflaechen auf der Produktseite, 52 auf der
+Suchseite. Mit dem neuen Code 212 Produkt, 1 Suche (DMZ 170 "Unbekannt –
+April 1945": zwei Baende),
+35 ohne Ziel (Buch nicht im Laden). Falsch zugeordnet waren 2 Buchflaechen:
+DMZ-Zeitgeschichte 80 S. 64 "Soldatenköpfe" (Art. 460721) auf "Wolfgang
+Willrich" statt "Soldatenköpfe 2026", 9/2025 S. 93 "Endspiel" (Werner
+Reichel) auf "Endspiel Europa" (Guérot). `articleProducts`: 209 zugeordnet,
+keine Fehlzuordnung gefunden, 58 offen (meist nicht im Laden). Die 19
+Ziele sind live mit `pageLinks:setFieldsInternal` eingetragen
+(`tools/buchzuordnung_anwenden.py <plan> --echt`, zurueck mit `--zurueck`);
+Plan und Stand vorher: `_scratch/buchzuordnung/`.
+
+Bestand: die Flaechen der Hefte 2025 bleiben Umschlag plus Rahmen, bis sie
+neu importiert oder nachgeruestet werden (die IDML liegen nicht auf diesem
+Rechner). Der Treffertest im Leser trennt Text und Umschlag trotzdem.
 
 Schon importierte Hefte nachruesten, ohne neuen Import (Artikel und Freigaben
 bleiben): `extract-service/tools/buecher_nachruesten.py <issueId> <idml>`

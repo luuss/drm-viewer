@@ -11,7 +11,12 @@ Zwei Formen werden erkannt, beide aus dem Satz (IDML):
 
 * **Kachel** — ein kurzer Textrahmen mit Preis, in dem Verfasser und Titel
   stehen (Absatzformate "... autor" und "... titel", sonst die ersten kurzen
-  Absaetze). Die Flaeche ist der Rahmen samt dem Umschlagbild darueber.
+  Absaetze). Die Flaeche ist das Umschlagbild darueber oder daneben: ein
+  Tipp auf den Umschlag oeffnet das Buch im Laden, ein Tipp auf den Text den
+  Text. Ohne erkennbaren Umschlag ist es der Rahmen. Stehen in einem Rahmen
+  zwei Buecher untereinander (Anzeige unter einem Interview: "Manfred
+  Kleine-Hartlage: BRD-Sprech" und "Die Sprache der BRD"), wird jedes ein
+  eigenes Buch mit eigenem Umschlag.
 * **Literaturangabe** einer Buchbesprechung ("Verfasser. Titel. 288 S., geb.,
   € 18,–."). Die Flaeche ist das abgebildete Umschlagbild; welches Bild zu
   welcher Angabe gehoert, verraet der Dateiname ("verheimlicht 2026.tif").
@@ -177,7 +182,19 @@ def _kopf_der_kachel(absaetze: list[SourceBlock]) -> tuple[str | None, str | Non
         return None, None
     if len(kopf) >= 2 and _sieht_aus_wie_name(kopf[0]):
         return kopf[0], kopf[1]
-    return None, kopf[0]
+    return _autor_vor_doppelpunkt(kopf[0])
+
+
+def _autor_vor_doppelpunkt(zeile: str) -> tuple[str | None, str]:
+    """"Manfred Kleine-Hartlage: BRD-Sprech" → Verfasser und Titel.
+
+    Nur wenn der Teil vor dem Doppelpunkt wie ein Name aussieht:
+    "Kalender: Maenner der Waffen-SS" und "2025: Verheimlicht …" bleiben Titel.
+    """
+    kopf, sep, rest = zeile.partition(": ")
+    if sep and rest.strip() and _sieht_aus_wie_name(kopf) and _woerter(rest):
+        return kopf.strip(), rest.strip()
+    return None, zeile
 
 
 def _ueberlappung(a0: float, a1: float, b0: float, b1: float) -> float:
@@ -212,6 +229,7 @@ def _umschlag_der_kachel(
     titel: str,
     bilder: list[SourceImage],
     vergeben: set[int],
+    nur_name: bool = False,
 ) -> int | None:
     """Das Umschlagbild zu einer Kachel.
 
@@ -231,12 +249,47 @@ def _umschlag_der_kachel(
         ueber = kasten[1] - b.y1
         neben = max(kasten[0] - b.x1, b.x0 - kasten[2])
         nah = (spalte and -0.02 <= ueber <= 0.06) or (zeile and neben <= 0.05)
-        if not nah and name < 0.6:
+        if (not nah or nur_name) and name < (0.5 if nur_name else 0.6):
             continue
         punkte = name * 2 + (1.0 if nah else 0.0) - 0.1 * max(0.0, ueber if spalte else neben)
         if beste is None or punkte > beste[0]:
             beste = (punkte, i)
     return beste[1] if beste else None
+
+
+def _beschreibt(text: str) -> bool:
+    return bool(_PREIS.search(text) or _UMFANG.search(text))
+
+
+def _buecher_im_rahmen(absaetze: list[SourceBlock]) -> list[list[SourceBlock]]:
+    """Die Buecher eines Rahmens, je Buch seine Absaetze.
+
+    Ein neues Buch beginnt mit einer kurzen Kopfzeile nach einer
+    Beschreibung mit Umfang oder Preis. Nur wenn so mindestens zwei Buecher
+    mit Preis entstehen, wird geteilt; Zeilen ohne Preis am Ende ("Jetzt
+    bestellen!") bleiben beim letzten Buch.
+    """
+    gruppen: list[list[SourceBlock]] = [[]]
+    beschrieben = False
+    for b in absaetze:
+        t = b.text.strip()
+        kopfzeile = bool(t) and len(t) <= MAX_KOPF_ZEICHEN and not _beschreibt(t)
+        if beschrieben and kopfzeile and not re.match(r"^(?:Art(?:ikel)?\.?\s*(?:-?\s*Nr\.?)?)\s*\d", t, re.I):
+            gruppen.append([])
+            beschrieben = False
+        gruppen[-1].append(b)
+        if _beschreibt(t):
+            beschrieben = True
+    mit_preis = [g for g in gruppen if _PREIS.search(" ".join(b.text for b in g))]
+    if len(mit_preis) < 2:
+        return [absaetze]
+    out: list[list[SourceBlock]] = []
+    for g in gruppen:
+        if out and not _PREIS.search(" ".join(b.text for b in g)):
+            out[-1].extend(g)
+        else:
+            out.append(g)
+    return out
 
 
 def kacheln(blocks: list[SourceBlock], bilder: list[SourceImage]) -> list[Buch]:
@@ -259,31 +312,42 @@ def kacheln(blocks: list[SourceBlock], bilder: list[SourceImage]) -> list[Buch]:
             continue
         if not (_UMFANG.search(text) or nummern):
             continue
-        autor, titel = _kopf_der_kachel(absaetze)
-        if not titel or _KEIN_TITEL.match(titel) or not _woerter(titel):
-            continue
+        gruppen = _buecher_im_rahmen(absaetze)
+        mehrere = len(gruppen) > 1
         kasten = absaetze[0].frame_box
         auf_seite = [i for i in bilder if i.page_index == seite]
         frei = vergeben.setdefault(seite, set())
-        bild_nr = _umschlag_der_kachel(kasten, titel, auf_seite, frei)
-        x0, y0, x1, y1 = kasten
-        if bild_nr is not None:
-            frei.add(bild_nr)
-            bild = auf_seite[bild_nr]
-            x0, y0 = min(x0, bild.x0), min(y0, bild.y0)
-            x1, y1 = max(x1, bild.x1), max(y1, bild.y1)
-        buecher.append(
-            Buch(
-                page_index=seite,
-                x0=x0,
-                y0=y0,
-                x1=x1,
-                y1=y1,
-                titel=" ".join(titel.split()),
-                autor=" ".join(autor.split()) if autor else None,
-                referenz=nummern[0] if nummern else None,
+        for gruppe in gruppen:
+            gtext = " ".join(b.text for b in gruppe) if mehrere else text
+            gnummern = artikelnummern(gtext) if mehrere else nummern
+            if mehrere and not (_UMFANG.search(gtext) or gnummern):
+                continue
+            autor, titel = _kopf_der_kachel(gruppe)
+            if not titel or _KEIN_TITEL.match(titel) or not _woerter(titel):
+                continue
+            # Teilen sich mehrere Buecher einen Rahmen, sagt die Lage nichts
+            # ueber das Buch: nur ein Bild, dessen Dateiname den Titel nennt.
+            bild_nr = _umschlag_der_kachel(kasten, titel, auf_seite, frei, nur_name=mehrere)
+            if bild_nr is not None:
+                frei.add(bild_nr)
+                bild = auf_seite[bild_nr]
+                x0, y0, x1, y1 = bild.x0, bild.y0, bild.x1, bild.y1
+            elif mehrere:
+                continue
+            else:
+                x0, y0, x1, y1 = kasten
+            buecher.append(
+                Buch(
+                    page_index=seite,
+                    x0=x0,
+                    y0=y0,
+                    x1=x1,
+                    y1=y1,
+                    titel=" ".join(titel.split()),
+                    autor=" ".join(autor.split()) if autor else None,
+                    referenz=gnummern[0] if gnummern else None,
+                )
             )
-        )
     return buecher
 
 
