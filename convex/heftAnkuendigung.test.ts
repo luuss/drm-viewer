@@ -413,20 +413,34 @@ describe("Ablauf", () => {
     let stand = await redaktion.query(api.heftAnkuendigung.fuerRedaktion, { issueId });
     expect(stand.ankuendigung).toMatchObject({ status: "abgebrochen", grund: "gestoppt" });
 
-    // Der Laden ist zweimal ganz weg, dann wieder da; gast@ hat schon zu
-    // viele Mails bekommen.
+    // Der Laden ist zweimal ganz weg, dann wieder da; gast@ ist eine
+    // ungueltige Adresse, konto@ ist einmal gesperrt und kommt dann durch.
     let ausfaelle = 6;
+    let gesperrt = 1;
     antwort = (body) => {
       if (ausfaelle-- > 0) return new Response("Bad Gateway", { status: 502 });
-      return body.to === "gast@example.de"
-        ? new Response(JSON.stringify({ ok: false, error: "rate_limited" }), { status: 429 })
-        : new Response(JSON.stringify({ ok: true }), { status: 200 });
+      if (body.to === "gast@example.de") {
+        return new Response(JSON.stringify({ ok: false, error: "bad_email" }), { status: 400 });
+      }
+      if (body.to === "konto@example.de" && gesperrt-- > 0) {
+        return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), { status: 429 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
     await redaktion.mutation(api.heftAnkuendigung.jetztSenden, { issueId });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(gesendet.filter((g) => g.to === "gast@example.de")).toHaveLength(3);
     stand = await redaktion.query(api.heftAnkuendigung.fuerRedaktion, { issueId });
     expect(stand.ankuendigung).toMatchObject({ status: "fertig", gesendet: 2, fehler: 1 });
+
+    // Fehler nachholen: nur gast@ bekommt einen neuen Versuch.
+    const vorher = gesendet.length;
+    antwort = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+    await t.mutation(internal.heftAnkuendigung.fehlerNachholenInternal, { issueId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(gesendet.slice(vorher).map((g) => g.to)).toEqual(["gast@example.de"]);
+    stand = await redaktion.query(api.heftAnkuendigung.fuerRedaktion, { issueId });
+    expect(stand.ankuendigung).toMatchObject({ status: "fertig", gesendet: 3, fehler: 0 });
   });
 
   test("Kontoloeschung bestellt alles ab", async () => {

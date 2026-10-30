@@ -27,6 +27,7 @@ import type * as entitlements from "../entitlements.js";
 import type * as erscheinung from "../erscheinung.js";
 import type * as heftAnkuendigung from "../heftAnkuendigung.js";
 import type * as heftMail from "../heftMail.js";
+import type * as heftnummer from "../heftnummer.js";
 import type * as http from "../http.js";
 import type * as imports from "../imports.js";
 import type * as issuePages from "../issuePages.js";
@@ -98,6 +99,7 @@ declare const fullApi: ApiFromModules<{
   erscheinung: typeof erscheinung;
   heftAnkuendigung: typeof heftAnkuendigung;
   heftMail: typeof heftMail;
+  heftnummer: typeof heftnummer;
   http: typeof http;
   imports: typeof imports;
   issuePages: typeof issuePages;

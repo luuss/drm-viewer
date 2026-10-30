@@ -483,13 +483,13 @@ export const senden = internalAction({
       try {
         await verschicken(stapel.daten, stapel.reiheSlug, an);
       } catch (err: any) {
-        // Endgueltig, wenn es an der Adresse liegt: ungueltig oder schon zu
-        // viele Mails bekommen. Alles andere (Laden nicht erreichbar, 502,
-        // Modul ohne `heft_mail`) ist eine Stoerung: spaeter noch einmal.
+        // Endgueltig nur, wenn die Adresse ungueltig ist. Alles andere (Laden
+        // nicht erreichbar, 502, Sperre im Laden, Modul ohne `heft_mail`) ist
+        // eine Stoerung: spaeter noch einmal.
         fehlschlaege.push({
           id: an.id,
           fehler: String(err?.message ?? err).slice(0, 300),
-          endgueltig: err?.code === "bad_email" || err?.code === "rate_limited",
+          endgueltig: err?.code === "bad_email",
         });
         continue;
       }
@@ -507,6 +507,35 @@ export const senden = internalAction({
     if (stoerung) console.error(JSON.stringify({ event: "heft.ankuendigung.stoerung", fehler: fehlschlaege[0]?.fehler }));
     const pause = stoerung && erfolge === 0 ? PAUSE_STOERUNG_MS : PAUSE_MS;
     await ctx.scheduler.runAfter(pause, internal.heftAnkuendigung.senden, { ankuendigungId, lauf });
+  },
+});
+
+/**
+ * Fehlgeschlagene Adressen einer fertigen Ankuendigung noch einmal senden:
+ * `npx convex run heftAnkuendigung:fehlerNachholenInternal '{"issueId":"…"}'`.
+ * Wer die Mail schon hat, bekommt sie nicht noch einmal.
+ */
+export const fehlerNachholenInternal = internalMutation({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    const a = await ankuendigungZu(ctx, issueId);
+    if (!a || a.status !== "fertig") return { nachgeholt: 0 };
+    const zeilen = await ctx.db
+      .query("heftAnkuendigungEmpfaenger")
+      .withIndex("by_ankuendigung_and_status", (q) => q.eq("ankuendigungId", a._id).eq("status", "fehler"))
+      .take(500);
+    if (zeilen.length === 0) return { nachgeholt: 0 };
+    for (const r of zeilen) await ctx.db.patch(r._id, { status: "offen", versuche: 0, fehler: undefined });
+    const lauf = a.lauf + 1;
+    await ctx.db.patch(a._id, {
+      status: "sendet",
+      lauf,
+      fehler: Math.max(0, a.fehler - zeilen.length),
+      fertigAm: undefined,
+      aktivAm: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.heftAnkuendigung.senden, { ankuendigungId: a._id, lauf });
+    return { nachgeholt: zeilen.length };
   },
 });
 

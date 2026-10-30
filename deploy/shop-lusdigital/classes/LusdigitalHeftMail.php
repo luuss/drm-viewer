@@ -9,8 +9,10 @@
  *  - jede Adresse in href/src muss auf den Leser zeigen, keine Skripte,
  *    Formulare oder eingebetteten Objekte,
  *  - die Abmeldeadresse (Kopf List-Unsubscribe, RFC 8058) zeigt auf den Leser,
- *  - höchstens 6 solcher Mails je Empfänger und Tag, dazu die 5 je Stunde aller
- *    Lesermails (Tabelle ps_lusdigital_mail, Empfänger nur als SHA-256).
+ *  - die Schnittstelle ist signiert; kein Mengenlimit, denn der Leser schickt
+ *    je Heft und Adresse höchstens eine Mail. Protokoll in ps_lusdigital_mail
+ *    (Empfänger nur als SHA-256). Ein Limit würde Ankündigungen verschlucken,
+ *    wenn mehrere Hefte am selben Tag erscheinen.
  *
  * Der Shop stellt allen Betreffs "[Lesen und Schenken]" voran
  * (PS_MAIL_SUBJECT_PREFIX); für diese Mails setzt der Hook
@@ -19,7 +21,7 @@
  *
  * Rumpf: {"action":"heft_mail","to":"…","subject":"…","html":"…","text":"…",
  *         "from_name":"…","unsubscribe":"https://digital.lesenundschenken.de/hooks/mail/abbestellen?t=…&r=…","ts":…}
- * Antwort: {"ok":true} oder {"ok":false,"error":"bad_email|bad_subject|bad_content|bad_link|rate_limited|mail_failed","message":"…"}
+ * Antwort: {"ok":true} oder {"ok":false,"error":"bad_email|bad_subject|bad_content|bad_link|mail_failed","message":"…"}
  */
 if (!defined('_PS_VERSION_')) {
     exit;
@@ -32,8 +34,6 @@ class LusdigitalHeftMail
     const VORLAGE = 'lusdigital_heft';
     const LINK_PRAEFIXE = ['https://digital.lesenundschenken.de/', 'https://lesen.lesenundschenken.de/'];
     const ABMELDE_PFAD = 'hooks/mail/abbestellen?';
-    const MAX_PRO_TAG = 6;
-    const MAX_PRO_STUNDE = 5;
     const MAX_HTML = 300000;
     const MAX_TEXT = 100000;
 
@@ -89,21 +89,9 @@ class LusdigitalHeftMail
 
         LusdigitalLoginMail::tabelleAnlegen();
         $db = Db::getInstance();
-        $tabelle = _DB_PREFIX_ . 'lusdigital_mail';
         $hash = hash('sha256', $an);
-        $proStunde = (int) $db->getValue(
-            'SELECT COUNT(*) FROM `' . $tabelle . '` WHERE empfaenger_hash = "' . pSQL($hash) . '"'
-            . ' AND gesendet_am > DATE_SUB(NOW(), INTERVAL 1 HOUR)'
-        );
-        $proTag = (int) $db->getValue(
-            'SELECT COUNT(*) FROM `' . $tabelle . '` WHERE empfaenger_hash = "' . pSQL($hash) . '"'
-            . ' AND vorlage = "' . pSQL(self::VORLAGE) . '" AND gesendet_am > DATE_SUB(NOW(), INTERVAL 1 DAY)'
-        );
-        if ($proStunde >= self::MAX_PRO_STUNDE || $proTag >= self::MAX_PRO_TAG) {
-            return self::fehler(429, 'rate_limited', 'Zu viele Mails an diese Adresse.');
-        }
 
-        // Vor dem Senden zählen: auch ein fehlgeschlagener Versuch zählt.
+        // Protokoll: ok bleibt 0, wenn der Versand scheitert.
         $db->insert('lusdigital_mail', [
             'empfaenger_hash' => pSQL($hash),
             'vorlage' => pSQL(self::VORLAGE),

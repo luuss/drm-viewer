@@ -7,6 +7,8 @@ steht, was am 28.10.2026 fuer die Heft-Mails dazukam
 
 * `classes/LusdigitalHeftMail.php` und `mails/de/lusdigital_heft.{html,txt}`:
   neu, 1:1 so auf dem Server.
+* `classes/LusdigitalLoginMail.php`: Kopie vom Server, seit 30.10.2026 ohne
+  Heft-Mails im Stundenlimit. Sicherungen: `*.bak-20261030`.
 * `api.php.diff` (`controllers/front/api.php`, Aktion `heft_mail`) und
   `lusdigital.php.diff` (Hook `actionMailAlterMessageBeforeSend`): nur die
   Aenderung; die Dateien selbst pflegen auch Kollegen direkt auf dem Server.

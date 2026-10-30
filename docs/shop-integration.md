@@ -791,10 +791,13 @@ Leser erscheint. Je Zeitschrift abbestellbar. Code: `convex/heftAnkuendigung.ts`
   vom Laden. Der Hook `actionMailAlterMessageBeforeSend` nimmt das Praefix
   „[Lesen und Schenken]“ aus dem Betreff und setzt `List-Unsubscribe` und
   `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. Der Laden prueft:
-  jedes `href`/`src` auf den Leser, keine Skripte/Formulare, hoechstens
-  6 Heft-Mails je Adresse und Tag. Zehn Mails je Stapel, 2 s Pause; bei
-  einer Stoerung 5 min Pause, bis zu 12 Versuche je Adresse; ungueltige
-  Adresse oder `rate_limited` gilt sofort als Fehler.
+  jedes `href`/`src` auf den Leser, keine Skripte/Formulare. Kein
+  Mengenlimit (seit 30.10.2026, vorher 6 je Tag und 5 je Stunde: das
+  verschluckte 6 von 18 Ankuendigungen). Heft-Mails zaehlen auch nicht mehr
+  gegen das Limit der Anmeldelinks. Zehn Mails je Stapel, 2 s Pause; bei
+  einer Stoerung 5 min Pause, bis zu 12 Versuche je Adresse; nur eine
+  ungueltige Adresse gilt sofort als Fehler. Nachholen:
+  `heftAnkuendigung:fehlerNachholenInternal '{"issueId":"…"}'`.
 * **Abbestellen.** Link in jeder Mail auf `/abbestellen?t=<schluessel>&r=<reihe>`
   (Knopf fuer die Reihe, darunter alle Reihen als Haken), Ein-Klick aus dem
   Mailprogramm `POST /hooks/mail/abbestellen` (ein GET fuehrt nur auf die

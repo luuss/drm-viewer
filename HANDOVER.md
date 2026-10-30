@@ -241,6 +241,11 @@ geleert; jedes Mal frisch anmelden, die gespeicherte Sitzung hält nicht).
 * Redaktion: Heft → Uebersicht → „Mail an die Kaeufer“ (Stand, Probe an
   mich, sofort senden, anhalten). Die vor dem 28.10. veroeffentlichten Hefte
   sind nicht angekuendigt; dort steht „Jetzt ankuendigen“.
+* Kein Mengenlimit mehr im Laden (30.10.2026): `heft_mail` sperrte bei 6 je
+  Tag bzw. 5 je Stunde und Convex wertete das als endgueltig, dadurch 6 von 18
+  Ankuendigungen verloren. Heft-Mails zaehlen auch nicht mehr gegen das Limit
+  der Anmeldelinks (`LusdigitalLoginMail.php`). Nachholen je Heft:
+  `heftAnkuendigung:fehlerNachholenInternal '{"issueId":"…"}'`.
 
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 
