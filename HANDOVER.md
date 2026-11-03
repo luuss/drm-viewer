@@ -1,5 +1,9 @@
 # Übergabe — Stand 30.09.2026
 
+**Neu am 03.11.2026: zweiter Leser https://digital.weltkrieg-online.de** (gleicher Code,
+eigene Anlage `/opt/weltkrieg-digital`, Marke `VITE_MARKE=weltkrieg`, Anmeldemails über
+WordPress-mu-plugin). Alles dazu: `docs/weltkrieg-digital.md`.
+
 **Neu am 30.09.:** Heftimport auf dem Verlagsserver repariert (lief dort nie),
 alle vier Hefte vom Stick importiert, Import schneller. Einzelheiten in
 Abschnitt 1a und 4. Buchanzeigen im Heft führen jetzt zum Produkt im Shop
