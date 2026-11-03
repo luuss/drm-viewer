@@ -116,4 +116,16 @@ describe("tafelnNachInhalt", () => {
   it("erkennt fremde Hefte in Anzeigen nicht als Titelseite", () => {
     expect(titelseitenWert(anzeige, "112")).toBeLessThan(titelseitenWert(titel, "112"));
   });
+  it("nimmt ohne eigene Nummer die klar beste Tafel, wenn U1 gar nicht passt", () => {
+    // "b1 Tanks forward": Ordner b1, Umschlag "No. 35"; U1 war eine Fahrzeugtafel.
+    const blitz = [
+      ["BLITZKRIEG", 0.05, 0.03, 0.9, 0.15, 90],
+      ["NO. 35", 0.05, 0.16, 0.15, 0.18, 14],
+      ["€ 4,95", 0.85, 0.16, 0.94, 0.18, 14],
+    ] as const;
+    const texte = new Map<any, any>([[geraten.vorn[1], blitz]]);
+    const neu = tafelnNachInhalt(geraten, texte, "1");
+    expect(neu.vorn[0].quellSeite).toBe(2);
+  });
 });
+

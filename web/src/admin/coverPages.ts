@@ -164,10 +164,24 @@ export function tafelnNachInhalt(
   // Nur eine Tafel mit der eigenen Nummer kann die Titelseite sein. Ohne
   // sie ist eine Anzeige fuer ein anderes Heft (Schriftzug, "Nr.", Preis)
   // nicht sicher zu unterscheiden; dann bleibt es bei der Lage.
-  const kandidaten = alle
+  let kandidaten = alle
     .map((t, i) => ({ t, w: werte[i], i }))
     .filter(({ i }) => werte[i] > ohneNummer[i]);
-  if (!kandidaten.length) return tafeln;
+  if (!kandidaten.length) {
+    // Rueckfall ohne Nummer ("b1 Tanks forward" traegt "No. 35"): nur wenn
+    // die bisherige U1 gar nicht nach Titelseite aussieht und eine andere
+    // Tafel klar die meisten Merkmale hat.
+    const bisher = alle.findIndex((t) => t.role === "front_cover");
+    if (bisher < 0 || ohneNummer[bisher] > 2) return tafeln;
+    // Auf der Titelseite steht "Nr./No." oben unter dem Schriftzug; in einer
+    // Anzeige fuer ein anderes Heft weiter unten im Text.
+    const nummerOben = (t: Tafel) =>
+      (texte.get(t) ?? []).some((i) => i[2] < 0.3 && /\b(nr|no)\.?\s*\d+/i.test(i[0]));
+    kandidaten = alle
+      .map((t, i) => ({ t, w: ohneNummer[i], i }))
+      .filter((k) => k.w >= 5 && nummerOben(k.t));
+    if (!kandidaten.length) return tafeln;
+  }
   const best = Math.max(...kandidaten.map((k) => k.w));
   const beste = kandidaten.filter((k) => k.w === best);
   if (beste.length !== 1) return tafeln;
