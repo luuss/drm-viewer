@@ -55,6 +55,14 @@ const SEITEN_BREITE = 2400;
 // Spuren warteten summiert 283 s auf Upload-Plaetze). 0,82 statt 0,86 spart
 // rund ein Fuenftel der Bytes; beim Zoomen sieht man keinen Unterschied.
 const SEITEN_GUETE = 0.82;
+/**
+ * Weltkrieg-Hefte: Innenseiten sind Romantext, gelesen wird in der
+ * Leseansicht. 1400 px bei 0,72 ist beim Zoom noch scharf und braucht ein
+ * Drittel der Bytes (1d: 1,19 MB -> 0,43 MB je Seite; 452 Hefte ~25 GB statt
+ * ~70 GB). Der Umschlag bleibt in voller Groesse.
+ */
+const INNEN_BREITE = IST_WELTKRIEG ? 1400 : SEITEN_BREITE;
+const INNEN_GUETE = IST_WELTKRIEG ? 0.72 : SEITEN_GUETE;
 
 /** `fehler`: der Lauf ist hier stehen geblieben — der Balken zeigt das an. */
 type Fortschritt = { text: string; prozent: number; fehler?: boolean };
@@ -427,8 +435,8 @@ export default function FolderImport({
         await renderPdfPages(
           innenPdf,
           {
-            targetWidth: SEITEN_BREITE,
-            quality: SEITEN_GUETE,
+            targetWidth: INNEN_BREITE,
+            quality: INNEN_GUETE,
             trimWidthPt: satzMass?.pageWidthPt,
             trimHeightPt: satzMass?.pageHeightPt,
             spuren: RENDER_SPUREN,
