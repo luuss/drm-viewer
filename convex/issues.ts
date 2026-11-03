@@ -231,10 +231,8 @@ export const listForEditors = query({
           .query("issuePages")
           .withIndex("by_issue", (q) => q.eq("issueId", i._id))
           .collect();
-        const articles = await ctx.db
-          .query("articles")
-          .withIndex("by_issue", (q) => q.eq("issueId", i._id))
-          .collect();
+        // Zaehler am Heft statt aller Artikel samt Suchtext (artikelStand.ts).
+        const stand = i.artikelStand ?? { gesamt: i.articleCount ?? 0, offen: 0, frei: 0 };
         const job = await ctx.db
           .query("importJobs")
           .withIndex("by_issue", (q) => q.eq("issueId", i._id))
@@ -261,9 +259,9 @@ export const listForEditors = query({
           priceSource: i.priceSource ?? null,
           publicationName: (await ctx.db.get(i.publicationId))?.name ?? null,
           pageCount: pages.length || i.pageCount,
-          articleCount: articles.length,
-          approvedArticles: articles.filter((a) => a.reviewStatus === "approved").length,
-          pendingArticles: articles.filter((a) => a.reviewStatus === "pending").length,
+          articleCount: stand.gesamt,
+          approvedArticles: stand.frei,
+          pendingArticles: stand.offen,
           coverUrl: await assetUrl(ctx, i.coverAssetId),
           sources: sources.map((s) => ({
             _id: s._id,
@@ -302,10 +300,22 @@ export const overviewForEditors = query({
     const names = new Map<string, string | null>();
     return Promise.all(
       rows.map(async (i) => {
-        const articles = await ctx.db
-          .query("articles")
-          .withIndex("by_issue", (q) => q.eq("issueId", i._id))
-          .take(2000);
+        // Zaehler am Heft (artikelStand.ts); nur alte Hefte ohne Stand lesen
+        // noch die Artikel. Mit Suchtext waren das bei 160 Weltkrieg-Heften
+        // mehr als 16 MB, und die Liste fiel aus.
+        const stand =
+          i.artikelStand ??
+          (await (async () => {
+            const articles = await ctx.db
+              .query("articles")
+              .withIndex("by_issue", (q) => q.eq("issueId", i._id))
+              .take(2000);
+            return {
+              gesamt: articles.length,
+              offen: articles.filter((a) => a.reviewStatus === "pending").length,
+              frei: articles.filter((a) => a.reviewStatus === "approved").length,
+            };
+          })());
         const job = await ctx.db
           .query("importJobs")
           .withIndex("by_issue", (q) => q.eq("issueId", i._id))
@@ -331,9 +341,9 @@ export const overviewForEditors = query({
           isPublished: i.isPublished,
           includedInSubscription: i.includedInSubscription,
           shopOffered: i.shopDigital?.offered ?? false,
-          articleCount: articles.length,
-          pendingArticles: articles.filter((a) => a.reviewStatus === "pending").length,
-          approvedArticles: articles.filter((a) => a.reviewStatus === "approved").length,
+          articleCount: stand.gesamt,
+          pendingArticles: stand.offen,
+          approvedArticles: stand.frei,
           hasToc: verzeichnis !== null,
           coverUrl: await assetUrl(ctx, i.coverAssetId),
           lastJob: job

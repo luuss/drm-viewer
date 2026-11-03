@@ -126,6 +126,10 @@ export default defineSchema(
     .index("by_shop_subscription_sku", ["shopSubscriptionSku"]),
 
   issues: defineTable({
+    // Artikelzaehler (convex/artikelStand.ts); fehlt bei alten Heften bis zum Nachtrag.
+    artikelStand: v.optional(
+      v.object({ gesamt: v.number(), offen: v.number(), frei: v.number() }),
+    ),
     publicationId: v.id("publications"),
     title: v.string(),
     slug: v.string(),

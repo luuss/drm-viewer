@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { artikelStandAktualisieren } from "./artikelStand";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { slugify } from "./publications";
@@ -226,6 +227,7 @@ export const releaseIssueInternal = internalMutation({
     }
     await audit(ctx, "article.approveAll", issueId, `${approved} Artikel (Kommandozeile)`);
     await publishIssue(ctx, issueId);
+    await artikelStandAktualisieren(ctx, issueId);
     const issue = await ctx.db.get(issueId);
     return { approved, articles: rows.length, slug: issue?.slug ?? null };
   },
@@ -285,6 +287,7 @@ export const setArticleStatusInternal = internalMutation({
     await ctx.db.patch(article._id, { reviewStatus, updatedAt: Date.now() });
     await sucheVormerken(ctx, issueId, article._id);
     await audit(ctx, "article.setReviewStatus", article._id, `${reviewStatus} (Kommandozeile)`);
+    await artikelStandAktualisieren(ctx, issueId);
     return { title: article.title, reviewStatus };
   },
 });

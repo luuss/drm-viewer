@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { artikelStandAktualisieren } from "./artikelStand";
 import { sucheVormerken } from "./suche";
 import {
   internalMutation,
@@ -691,6 +692,7 @@ export const activateResultInternal = internalMutation({
         links,
       }),
     );
+    await artikelStandAktualisieren(ctx, issueId);
     return { articles: articles.length, toc: toc.length };
   },
 });
@@ -859,6 +861,7 @@ export const mergeResultInternal = internalMutation({
         inserted: insert.length,
       }),
     );
+    await artikelStandAktualisieren(ctx, issueId);
     return summary;
   },
 });

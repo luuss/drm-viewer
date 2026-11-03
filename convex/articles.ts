@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { artikelStandAktualisieren } from "./artikelStand";
 import { verschluesseler } from "./schutz";
 import { schutzSeedVon } from "./readerSessions";
 import { absatzBeiPunkt } from "./einstieg";
@@ -107,11 +108,8 @@ export async function rebuildSearchText(ctx: MutationCtx, articleId: Id<"article
 }
 
 async function recountIssue(ctx: MutationCtx, issueId: Id<"issues">) {
-  const rows = await ctx.db
-    .query("articles")
-    .withIndex("by_issue", (q) => q.eq("issueId", issueId))
-    .collect();
-  await ctx.db.patch(issueId, { articleCount: rows.length, updatedAt: Date.now() });
+  // Zaehlt mit und setzt `articleCount` und `artikelStand` (artikelStand.ts).
+  await artikelStandAktualisieren(ctx, issueId);
 }
 
 async function renumber(ctx: MutationCtx, issueId: Id<"issues">) {
@@ -964,6 +962,7 @@ export const setReviewStatusInternal = internalMutation({
     await ctx.db.patch(articleId, { reviewStatus, updatedAt: Date.now() });
     const geaendert = await ctx.db.get(articleId);
     if (geaendert) await sucheVormerken(ctx, geaendert.issueId, articleId);
+    if (geaendert) await artikelStandAktualisieren(ctx, geaendert.issueId);
   },
 });
 
@@ -981,6 +980,7 @@ export const setReviewStatus = mutation({
     await ctx.db.patch(articleId, { reviewStatus, updatedAt: Date.now() });
     const geaendert = await ctx.db.get(articleId);
     if (geaendert) await sucheVormerken(ctx, geaendert.issueId, articleId);
+    if (geaendert) await artikelStandAktualisieren(ctx, geaendert.issueId);
     await audit(ctx, `article.review.${reviewStatus}`, articleId);
   },
 });
@@ -1023,6 +1023,7 @@ export const approveAllPending = mutation({
       issueId,
       `${rows.length} Artikel${remaining ? ", weitere offen" : ""}`,
     );
+    await artikelStandAktualisieren(ctx, issueId);
     return { approved: rows.length, remaining };
   },
 });
@@ -1199,6 +1200,7 @@ export const replaceForIssueInternal = internalMutation({
       .withIndex("by_issue", (q) => q.eq("issueId", issueId))
       .collect();
     await ctx.db.patch(issueId, { articleCount: all.length, updatedAt: now });
+    await artikelStandAktualisieren(ctx, issueId);
     await ctx.scheduler.runAfter(0, internal.articleProducts.matchInternal, { issueId });
     return { ids };
   },

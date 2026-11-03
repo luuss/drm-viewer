@@ -573,6 +573,7 @@ describe("Artikeloperationen", () => {
       return {
         status: rows.map((r: any) => [r.title, r.reviewStatus]),
         articleCount: issue.articleCount,
+        stand: issue.artikelStand,
         actions: log.map((entry: any) => entry.action),
       };
     });
@@ -584,8 +585,10 @@ describe("Artikeloperationen", () => {
       ["Raus", "excluded"],
       ["Schon frei", "approved"],
     ]);
-    // Der Zaehler am Heft haengt an der Anzahl, nicht am Status.
-    expect(state.articleCount).toBeUndefined();
+    // Der Zaehler am Heft zaehlt mit (artikelStand.ts): die Heftliste liest
+    // ihn statt aller Artikel samt Suchtext.
+    expect(state.articleCount).toBe(4);
+    expect(state.stand).toEqual({ gesamt: 4, offen: 0, frei: 3 });
     expect(state.actions).toContain("article.review.approveAll");
 
     // Zweiter Aufruf findet nichts mehr und meldet das auch so.
