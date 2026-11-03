@@ -714,6 +714,10 @@ def _graphic_crop(
         ia, ib, ic, id_, _, _ = innen
         if rahmen_element is None or abs(ib) > 1e-6 or abs(ic) > 1e-6 or ia <= 0 or id_ <= 0:
             return None
+        # Nur eine echte, kleine Drehung: gespiegelt (Determinante < 0) oder
+        # auf dem Kopf (a, d < 0) zeigt die gerade Datei nicht, was gedruckt ist.
+        if a * d - b * c <= 0 or a <= 0 or d <= 0:
+            return None
         lokal = _path_bounds(rahmen_element, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
         if lokal is None:
             return None

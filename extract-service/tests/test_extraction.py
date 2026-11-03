@@ -1800,6 +1800,18 @@ def test_schraeger_voller_rahmen_nimmt_die_ganze_datei():
     assert bilder[0].crop == (0.0, 0.0, 1.0, 1.0)
 
 
+def test_gespiegelter_rahmen_bleibt_beim_seitenausschnitt():
+    # Gespiegelter Rahmen, Bild darin gerade: die gerade Datei waere falsch
+    # herum, also kein Ausschnitt.
+    idml = _idml_mit_ausschnitt(
+        graphic_transform="1 0 0 1 0 0",
+        bounds='Left="-100" Top="-50" Right="100" Bottom="50"',
+        rahmen_transform="-0.9998 0.0175 0.0175 0.9998 250 -150",
+    )
+    bilder, _ = extract_idml_frames(idml)
+    assert bilder[0].crop is None
+
+
 def test_gedrehtes_bild_gibt_keinen_ausschnitt():
     # Eine Drehung wuerde die Rechnung verfaelschen; dann traegt der
     # Seitenausschnitt.
