@@ -55,6 +55,13 @@ USAGE_FLUSH_SECONDS = int(os.environ.get("USAGE_FLUSH_SECONDS", "30"))
 # weiter gebremst; der Leser wartet bei 429 und fragt selbst nach.
 MAX_PAGES_PER_MIN = int(os.environ.get("MAX_PAGES_PER_MIN", "300"))
 MAX_TILES_PER_MIN = int(os.environ.get("MAX_TILES_PER_MIN", "6000"))
+# Der Offline-Puffer des Readers (`web/src/reader/pufferFuellen.ts`) holt die
+# offene Ausgabe nebenher ganz, gut 1500 Kacheln und Bilder je Heft. Solche
+# Anfragen tragen `X-Q: 1` und laufen auf einer eigenen Spur: hoechstens so
+# viele zugleich, und gerechnet wird in einem eigenen Faden. Die Kacheln, die
+# Leser gerade ansehen, warten so nicht hinter dem Puffern anderer Leser.
+# Pruefung von Sitzung, Ticket und Bremse ist fuer beide Spuren gleich.
+PUFFER_GLEICHZEITIG = int(os.environ.get("PUFFER_GLEICHZEITIG", "1"))
 
 # Medienspeicher. Liegen die Bilder in einem Eimer statt in der Convex-Ablage,
 # hat Convex keine Adresse fuer den Browser — dieser Dienst hat den Zugang und
@@ -81,7 +88,21 @@ _session_cache: dict[str, tuple[float, dict]] = {}
 _rate: dict[str, deque[float]] = defaultdict(deque)
 _usage: dict[str, int] = defaultdict(int)
 _lock = asyncio.Lock()
+_puffer_spur: asyncio.Semaphore | None = None
 _s3 = None
+
+
+def puffer_spur() -> asyncio.Semaphore:
+    """Erst in der laufenden Ereignisschleife anlegen."""
+    global _puffer_spur
+    if _puffer_spur is None:
+        _puffer_spur = asyncio.Semaphore(max(1, PUFFER_GLEICHZEITIG))
+    return _puffer_spur
+
+
+def nebenher(request: Request) -> bool:
+    """Anfrage des Offline-Puffers statt der Anzeige."""
+    return request.headers.get("x-q") == "1"
 
 
 def s3():
@@ -387,7 +408,9 @@ async def load_page(issue_id: str, index: int) -> tuple[Image.Image, dict]:
             return hit[1], hit[2]
 
     daten = await fetch_object(info.get("url"), info.get("bucket"), info.get("key"))
-    image = Image.open(io.BytesIO(daten)).convert("RGB")
+    # Ein Seitenbild zu entpacken dauert gut 100 ms; im eigenen Faden halten
+    # derweil die anderen Anfragen nicht an.
+    image = await asyncio.to_thread(lambda: Image.open(io.BytesIO(daten)).convert("RGB"))
     meta = {"width": image.width, "height": image.height}
     async with _lock:
         _page_cache[key] = (time.monotonic() + DATEI_TTL, image, meta)
@@ -517,19 +540,28 @@ async def asset(
         "Bilder",
     )
     require_ticket(x_tile_session or "", x_ticket)
-    daten = await load_bild(info)
     seed = schutz.fnv1a32(f'{session.get("kachelSchluessel", 0)}:asset:{asset_id}')
 
     feld = wasserzeichen_feld(session)
 
-    def verwuerfelt() -> bytes:
-        bild = Image.open(io.BytesIO(daten)).convert("RGB")
-        if feld is not None:
-            bild = wasserzeichen.einbetten(bild, feld, (0.0, 0.0, 1.0, 1.0))
-        return schutz.als_jpeg(schutz.verwuerfeln(bild, seed), quality=88)
+    async def bauen() -> bytes:
+        daten = await load_bild(info)
 
+        def verwuerfelt() -> bytes:
+            bild = Image.open(io.BytesIO(daten)).convert("RGB")
+            if feld is not None:
+                bild = wasserzeichen.einbetten(bild, feld, (0.0, 0.0, 1.0, 1.0))
+            return schutz.als_jpeg(schutz.verwuerfeln(bild, seed), quality=88)
+
+        return await asyncio.to_thread(verwuerfelt)
+
+    if nebenher(request):
+        async with puffer_spur():
+            inhalt = await bauen()
+    else:
+        inhalt = await bauen()
     return Response(
-        content=await asyncio.to_thread(verwuerfelt),
+        content=inhalt,
         media_type="image/jpeg",
         headers={"Cache-Control": "private, no-store", "X-V": "1"},
     )
@@ -570,7 +602,11 @@ async def page_info(
         MAX_PAGES_PER_MIN,
         "Seiten",
     )
-    _, meta = await load_page(issue_id, index)
+    if nebenher(request):
+        async with puffer_spur():
+            _, meta = await load_page(issue_id, index)
+    else:
+        _, meta = await load_page(issue_id, index)
     levels = 1
     while max(meta["width"], meta["height"]) >> levels > TILE_SIZE:
         levels += 1
@@ -605,7 +641,41 @@ async def tile(
     require_ticket(x_tile_session or "", x_ticket)
     _usage[x_tile_session or ""] += 1
 
-    image, meta = await load_page(issue_id, index)
+    if level < 0 or level > 12:
+        raise HTTPException(404, "Kachel ausserhalb der Seite")
+    feld = wasserzeichen_feld(session)
+    # Verwuerfelt ausliefern; zusammengesetzt wird erst im Reader
+    # (`web/src/reader/schutz.ts`). Wer die Kachel speichert, hat Bloecke.
+    seed = schutz.fnv1a32(
+        f'{session.get("kachelSchluessel", 0)}:{issue_id}:{index}:{level}:{col}:{row}'
+    )
+    if nebenher(request):
+        async with puffer_spur():
+            image, meta = await load_page(issue_id, index)
+            inhalt = await asyncio.to_thread(
+                kachel_bauen, image, meta, level, col, row, feld, seed
+            )
+    else:
+        image, meta = await load_page(issue_id, index)
+        inhalt = kachel_bauen(image, meta, level, col, row, feld, seed)
+    return Response(
+        content=inhalt,
+        media_type="image/jpeg",
+        # Haengt an der Sitzung: eine neue Sitzung verwuerfelt anders.
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+def kachel_bauen(
+    image: Image.Image,
+    meta: dict,
+    level: int,
+    col: int,
+    row: int,
+    feld: Image.Image | None,
+    seed: int,
+) -> bytes:
+    """Ausschnitt, Wasserzeichen, Verwuerfeln: eine fertige Kachel."""
     scale = 2 ** max(0, level)
     # Aufrunden, nicht abschneiden: OpenSeadragon rechnet die Stufengroesse
     # ebenfalls aufgerundet. Sonst sitzen die Randkacheln um ein Pixel daneben
@@ -614,7 +684,7 @@ async def tile(
     height = max(1, -(-meta["height"] // scale))
     left = col * TILE_SIZE
     top = row * TILE_SIZE
-    if left >= width or top >= height or level < 0 or level > 12:
+    if left >= width or top >= height:
         raise HTTPException(404, "Kachel ausserhalb der Seite")
 
     box = (
@@ -633,7 +703,6 @@ async def tile(
 
     # Unsichtbares Wasserzeichen der Sitzung, in Seitenkoordinaten: alle
     # Kacheln aller Stufen ergeben zusammen dasselbe Feld ueber der Seite.
-    feld = wasserzeichen_feld(session)
     if feld is not None:
         cropped = wasserzeichen.einbetten(
             cropped,
@@ -645,17 +714,7 @@ async def tile(
                 box[3] / meta["height"],
             ),
         )
-    # Verwuerfelt ausliefern; zusammengesetzt wird erst im Reader
-    # (`web/src/reader/schutz.ts`). Wer die Kachel speichert, hat Bloecke.
-    seed = schutz.fnv1a32(
-        f'{session.get("kachelSchluessel", 0)}:{issue_id}:{index}:{level}:{col}:{row}'
-    )
-    return Response(
-        content=schutz.als_jpeg(schutz.verwuerfeln(cropped, seed), quality=82),
-        media_type="image/jpeg",
-        # Haengt an der Sitzung: eine neue Sitzung verwuerfelt anders.
-        headers={"Cache-Control": "private, no-store"},
-    )
+    return schutz.als_jpeg(schutz.verwuerfeln(cropped, seed), quality=82)
 
 
 @app.middleware("http")

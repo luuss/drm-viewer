@@ -18,13 +18,27 @@ export const listForReader = query({
       .query("issuePages")
       .withIndex("by_issue_index", (q) => q.eq("issueId", issueId))
       .collect();
-    return pages.map((p) => ({
-      index: p.index,
-      printedLabel: p.printedLabel ?? null,
-      role: p.role,
-      width: p.width,
-      height: p.height,
-    }));
+    const out = [];
+    for (const p of pages) {
+      // Stand des gerenderten Seitenbilds: ein Neuimport ueberschreibt es
+      // unter demselben Schluessel. Der Offline-Puffer des Readers erkennt
+      // daran, dass seine Kacheln veraltet sind (`web/src/reader/puffer.ts`).
+      const bild = p.previewKey
+        ? await ctx.db
+            .query("assets")
+            .withIndex("by_key", (q) => q.eq("key", p.previewKey!))
+            .first()
+        : null;
+      out.push({
+        index: p.index,
+        printedLabel: p.printedLabel ?? null,
+        role: p.role,
+        width: p.width,
+        height: p.height,
+        stand: bild ? assetStand(bild) : null,
+      });
+    }
+    return out;
   },
 });
 

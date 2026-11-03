@@ -1,6 +1,13 @@
 import { useEffect } from "react";
-import { Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
-import { AuthLoading, Authenticated, Unauthenticated, useMutation, useQuery } from "convex/react";
+import { Routes, Route, Navigate, useMatch, useParams, useSearchParams } from "react-router-dom";
+import {
+  AuthLoading,
+  Authenticated,
+  Unauthenticated,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import LoginPage from "./pages/LoginPage";
 import LibraryPage from "./library/LibraryPage";
@@ -26,15 +33,41 @@ import AbbestellenPage from "./pages/AbbestellenPage";
 import NichtGefunden from "./components/NichtGefunden";
 import Fangnetz from "./components/Fangnetz";
 import { istKennung } from "./lib/kennung";
+import { useOfflineLeser } from "./reader/offline";
+import { pufferLeeren } from "./reader/puffer";
+import OfflineHinweis from "./components/OfflineHinweis";
 
 export default function App() {
+  // Der Reader haengt nicht an den drei Anmeldezustaenden unten: ohne
+  // Verbindung bleibt die Anmeldung beim Laden stehen, und das gespeicherte
+  // Heft (`reader/puffer.ts`) oeffnet trotzdem. Kommt die Verbindung, bleibt
+  // derselbe Reader stehen, statt neu aufzubauen.
+  const leser = useMatch("/reader/:issueId");
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const offlineLeser = useOfflineLeser(isLoading ? (leser?.params.issueId ?? null) : null);
+  const leserOffen = !!leser && (isAuthenticated || (isLoading && offlineLeser));
+
+  return (
+    <>
+      {isAuthenticated && <Anmeldewaechter />}
+      {leserOffen ? <LeserEingang /> : <Seiten />}
+    </>
+  );
+}
+
+/** Alles ausser dem Reader, je nach Anmeldung. */
+function Seiten() {
   return (
     <>
       <AuthLoading>
-        <div className="centered">Laden...</div>
+        <div className="centered">
+          Laden...
+          <OfflineHinweis />
+        </div>
       </AuthLoading>
 
       <Unauthenticated>
+        <PufferWeg />
         <Routes>
           {/* Der Kiosk ist die Startseite: die Hefte sollen ohne Konto sichtbar sein. */}
           <Route path="/" element={<Shell><KioskPage /></Shell>} />
@@ -63,10 +96,9 @@ export default function App() {
       </Unauthenticated>
 
       <Authenticated>
-        <Anmeldewaechter />
         <Routes>
-          {/* Der Reader laeuft ohne Rahmen, damit die Seite den Schirm fuellt. */}
-          <Route path="/reader/:issueId" element={<LeserEingang />} />
+          {/* Der Reader (`/reader/:issueId`) laeuft ohne Rahmen, damit die
+              Seite den Schirm fuellt; er steht oben in `App`. */}
           <Route path="/" element={<Shell><KioskPage /></Shell>} />
           <Route path="/kiosk" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<NachAnmeldung />} />
@@ -102,6 +134,14 @@ export default function App() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AppShell>{children}</AppShell>;
+}
+
+/** Abgemeldet: das offline gespeicherte Heft gehoert niemandem mehr. */
+function PufferWeg() {
+  useEffect(() => {
+    void pufferLeeren();
+  }, []);
+  return null;
 }
 
 /**

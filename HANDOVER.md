@@ -251,6 +251,59 @@ geleert; jedes Mal frisch anmelden, die gespeicherte Sitzung hält nicht).
   der Anmeldelinks (`LusdigitalLoginMail.php`). Nachholen je Heft:
   `heftAnkuendigung:fehlerNachholenInternal '{"issueId":"…"}'`.
 
+## 1g. Offline-Puffer: Heft ohne Netz zu Ende lesen (03.11.2026)
+
+Faellt das Netz weg (Zug, Funkloch), liest der Leser die offene oder zuletzt
+gelesene Ausgabe weiter, auch nach dem Neuladen ohne Netz. Der Kopierschutz
+aus Abschnitt 1e bleibt dabei ganz.
+
+* **Was im Browser liegt** (`web/src/reader/puffer.ts`): genau ein Paket,
+  fuer eine Ausgabe und ein Konto, in IndexedDB `lv`. Kacheln (Stufen 1 bis
+  grob, ~17 je Seite; Stufe 0 nur, was der Leser vergroessert angesehen hat),
+  Artikelbilder, Artikeltexte, die drei Sitzungsschriften, Seitenmasse und
+  die Listen (Seiten, Artikel, Klickflaechen, Verzeichnis, Lesestelle). Ein
+  Heft sind grob 50-100 MB.
+* **Schutz:** Kacheln und Bilder liegen verwuerfelt mit dem Wasserzeichen
+  ihrer Sitzung, so wie das Gateway sie schickte, samt dem Schluessel `k`
+  dieser Sitzung. Texte liegen verschluesselt wie aus `getForReader`, mit
+  der Kennung ihres Satzes (Sitzung); jede Sitzung hat eigene
+  Schriftfamilien (`F0<satz>`, CSS `--f0/--f1`). Darueber ist jeder Eintrag
+  AES-GCM-verschluesselt, Schluessel ist ein nicht exportierbarer CryptoKey
+  aus dem Browser, Eintragsnamen sind SHA-256-Werte. Kein Cache Storage,
+  keine Datei, kein `blob:`.
+* **Gueltigkeit:** 72 h nach der letzten Bestaetigung durch den Server
+  (`OFFLINE_FRIST_MS`), Uhr zurueckstellen zaehlt nicht. Weg beim Abmelden
+  (jede `<Unauthenticated>`-Ansicht leert), bei `hasAccess = false`, bei
+  einem anderen Konto und bei offenen DevTools. Eine neue Ausgabe ersetzt
+  das Paket.
+* **Fuellen** (`pufferFuellen.ts`): nach dem Oeffnen der Lesesitzung,
+  nebenher, ab der aufgeschlagenen Seite, Texte zuerst. Eine neue Sitzung
+  baut auf dem Paket auf (Kacheln behalten ihr `k`), nur Texte und Schriften
+  kommen neu. Neuimport (Seitenstand aendert sich): Paket von vorn. Mehrere
+  Tabs: Web Lock `lv` mit `steal`.
+* **Gateway:** Puffer-Anfragen tragen `X-Q: 1` und laufen auf einer eigenen
+  Spur (`PUFFER_GLEICHZEITIG`, Standard 1, gerechnet im Faden), damit die
+  Kacheln, die Leser gerade ansehen, nicht hinter dem Puffern anderer
+  warten. Sitzung, Einmal-Ticket und Bremse wie bisher. Seitenbilder werden
+  jetzt im Faden entpackt.
+* **Convex:** `issuePages.listForReader` und die Bilder in
+  `articles.getForReader` haben ein Feld `stand` (`assetStand`); daran
+  erkennt der Puffer neu importierte Seiten und nachgetragene Bilder.
+* **Start ohne Netz:** Service Worker `web/public/sw.js` haelt nur die Huelle
+  (index.html, `/assets/`, `/fonts/`, `/img/`), nie `/api`, `/convex`,
+  `/hooks`, `/medien`. Seitenaufruf aus dem Netz, nach 4 s oder ohne Netz die
+  gemerkte Huelle. `App.tsx` oeffnet den Reader dann aus dem Paket, solange
+  die Anmeldung haengt (gespeichertes Token desselben Kontos noetig).
+  **Notbremse:** `web/public/sw.js` durch
+  `self.addEventListener("install",()=>self.skipWaiting());self.addEventListener("activate",()=>self.registration.unregister());`
+  ersetzen und ausrollen; nginx liefert sw.js mit `no-cache`.
+* **Sichtbar:** im Kopf des Readers "Offline", wenn ohne Verbindung aus dem
+  Paket gelesen wird; Seite oder Artikel nicht im Paket: "Ohne Verbindung
+  ist diese Seite/dieser Artikel nicht verfuegbar"; auf anderen Seiten ohne
+  Verbindung ein Link "<Heft> weiterlesen".
+* Ausrollen: Convex (neue Felder, abwaertskompatibel), dann `web` und
+  `tile-service` zusammen.
+
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 
 Der Leser heisst seit 19.10.2026 **https://digital.lesenundschenken.de**

@@ -7,6 +7,7 @@ import Icon from "./Icon";
 import HandyQr from "./HandyQr";
 import { useWarenkorb } from "../lib/warenkorb";
 import { MARKE } from "../lib/marke";
+import OfflineHinweis from "./OfflineHinweis";
 
 const NETZLADEN = MARKE.laden;
 
@@ -94,7 +95,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      <main>{children}</main>
+      <main>
+        <OfflineHinweis />
+        {children}
+      </main>
 
       <footer className="app-footer">
         <div className="shell-inner footer-main">

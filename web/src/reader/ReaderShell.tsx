@@ -6,7 +6,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { api, TILE_SERVICE_URL, type Id } from "../lib/api";
 import PageMode, { type Klickpunkt } from "./PageMode";
 import { useDevtoolsWache, useKopierschutz } from "./kopierschutz";
@@ -21,6 +21,9 @@ import { reiheVon } from "../lib/reihen";
 import { ProductChoice } from "./ShopProduct";
 import { wischachse, wischbar, wischziel, type Wischachse } from "./wischen";
 import { artikelAufSeite } from "./artikelAufSeite";
+import { pufferLeeren, pufferLeerenFuer, satzVon, seitenPuffer } from "./puffer";
+import { pufferFuellen } from "./pufferFuellen";
+import { useKonto, useLesepuffer, useOhneVerbindung, useVerbunden } from "./offline";
 
 type Mode = "page" | "article";
 type PageLayout = "single" | "spread";
@@ -69,17 +72,57 @@ export default function ReaderShell() {
   const navigationType = useNavigationType();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const access = useQuery(api.issues.hasAccess, { issueId });
-  const issue = useQuery(api.issues.getPublic, { issueId });
-  const pages = useQuery(api.issuePages.listForReader, { issueId });
-  const articles = useQuery(api.articles.listForReader, { issueId });
-  const regions = useQuery(api.articles.regionsForReader, { issueId });
-  const links = useQuery(api.pageLinks.forReader, { issueId });
-  const productLinks = useQuery(api.articleProducts.forReader, { issueId });
-  const progress = useQuery(api.progress.get, { issueId });
+  const liveAccess = useQuery(api.issues.hasAccess, { issueId });
+  const liveIssue = useQuery(api.issues.getPublic, { issueId });
+  const livePages = useQuery(api.issuePages.listForReader, { issueId });
+  const liveArticles = useQuery(api.articles.listForReader, { issueId });
+  const liveRegions = useQuery(api.articles.regionsForReader, { issueId });
+  const liveLinks = useQuery(api.pageLinks.forReader, { issueId });
+  const liveProductLinks = useQuery(api.articleProducts.forReader, { issueId });
+  const liveProgress = useQuery(api.progress.get, { issueId });
   const openSession = useMutation(api.readerSessions.issue);
   const saveProgress = useMutation(api.progress.save);
   const sperrenWegenDevtools = useMutation(api.readerSessions.abschluss);
+  const convex = useConvex();
+
+  // Offline-Puffer (`puffer.ts`): die Ausgabe liegt verschluesselt im
+  // Browser. Was der Server (noch) nicht liefert, kommt von dort; ohne
+  // Verbindung ist das alles.
+  const userId = useKonto();
+  const puffer = useLesepuffer(issueId, userId);
+  const gepuffert = puffer?.daten ?? null;
+  const verbunden = useVerbunden();
+  const ohneVerbindung = useOhneVerbindung();
+  const access = liveAccess ?? (puffer ? true : undefined);
+  const issue = liveIssue !== undefined ? liveIssue : gepuffert?.issue;
+  const pages = livePages ?? gepuffert?.pages;
+  const articles = liveArticles ?? gepuffert?.articles;
+  const regions = liveRegions ?? gepuffert?.regions;
+  const links = liveLinks ?? gepuffert?.links;
+  const productLinks = liveProductLinks ?? gepuffert?.products;
+  // Die Lesestelle: die juengere aus Server und Puffer. Wer ohne Verbindung
+  // weitergelesen hat, steht nach dem Neuladen dort, nicht am alten Stand.
+  const [geduldVorbei, setGeduldVorbei] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setGeduldVorbei(true), 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const progress = useMemo(() => {
+    const gemerkt = puffer?.kopf.fortschritt ?? null;
+    const ausPuffer = gemerkt
+      ? { ...gemerkt, articleId: gemerkt.articleId as Id<"articles"> | null }
+      : null;
+    if (liveProgress !== undefined) {
+      if (ausPuffer && (!liveProgress || ausPuffer.updatedAt > liveProgress.updatedAt)) {
+        return ausPuffer;
+      }
+      return liveProgress;
+    }
+    if (puffer && (!verbunden || geduldVorbei)) return ausPuffer;
+    return undefined;
+  }, [liveProgress, puffer, verbunden, geduldVorbei]);
+  const pufferRef = useRef(puffer);
+  pufferRef.current = puffer;
 
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   // Schluessel zum Zusammensetzen der verwuerfelten Kacheln und Bilder.
@@ -98,6 +141,8 @@ export default function ReaderShell() {
     }
     if (sessionToken) void sperrenWegenDevtools({ sessionToken }).catch(() => undefined);
     setSessionToken(null);
+    // Auch der Offline-Puffer ist damit weg.
+    void pufferLeeren();
   }, [devtools, sessionToken, sperrenWegenDevtools]);
   const [watermark, setWatermark] = useState("");
   const [mode, setMode] = useState<Mode>("page");
@@ -153,11 +198,46 @@ export default function ReaderShell() {
     navigate(`/issue/${issue.slug}`, { replace: true });
   }, [access, issue, navigate]);
 
+  // Zugriff entzogen (Widerruf, Abo zu Ende): der Puffer geht mit.
+  useEffect(() => {
+    if (liveAccess === false) void pufferLeerenFuer(issueId);
+  }, [liveAccess, issueId]);
+
+  // Steht die Leitung und bestaetigt der Server den Zugriff, beginnt die
+  // Offline-Frist neu; bei langem Lesen alle zehn Minuten.
+  useEffect(() => {
+    if (liveAccess !== true || !verbunden || !puffer) return;
+    void puffer.bestaetigen();
+    const timer = window.setInterval(() => void puffer.bestaetigen(), 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [liveAccess, verbunden, puffer]);
+
+  // Ohne Verbindung liess sich keine Sitzung oeffnen: sobald sie wieder
+  // steht, noch einmal. Nur beim Wechsel, sonst liefe ein Fehler mit
+  // Verbindung (kein Zugriff) im Kreis.
+  const [sitzungsAnlauf, setSitzungsAnlauf] = useState(0);
+  const warVerbunden = useRef(verbunden);
+  useEffect(() => {
+    const vorher = warVerbunden.current;
+    warVerbunden.current = verbunden;
+    if (!verbunden || vorher || sessionToken || !sitzungFehler) return;
+    setSitzungFehler(false);
+    setSitzungsAnlauf((n) => n + 1);
+  }, [verbunden, sessionToken, sitzungFehler]);
+
   useEffect(() => {
     if (!access) return;
     let cancelled = false;
     (async () => {
-      const s = await openSession({ issueId });
+      // Ohne Verbindung wartet Convex mit der Mutation, bis die Leitung
+      // wieder steht; bis dahin liest der Leser aus dem Puffer.
+      let s: { token: string };
+      try {
+        s = await openSession({ issueId });
+      } catch {
+        if (!cancelled) setSitzungFehler(true);
+        return;
+      }
       if (cancelled) return;
       // Ohne den Schluessel aus der Sitzung bleiben Kacheln und Bilder
       // verwuerfelt; der Reader wartet also auf ihn.
@@ -182,7 +262,23 @@ export default function ReaderShell() {
     return () => {
       cancelled = true;
     };
-  }, [access, issueId, openSession]);
+  }, [access, issueId, openSession, sitzungsAnlauf]);
+
+  // Mit der Sitzung fuellt sich der Offline-Puffer, ab der aufgeschlagenen Seite.
+  const positionRef = useRef(0);
+  positionRef.current = pageIndex;
+  useEffect(() => {
+    if (!sessionToken || schutzKey === null || !userId) return;
+    pufferFuellen({
+      issueId,
+      userId,
+      sessionToken,
+      k: schutzKey,
+      watermark,
+      convex,
+      position: () => positionRef.current,
+    });
+  }, [issueId, userId, sessionToken, schutzKey, watermark, convex]);
 
   // Letzte Position wiederherstellen, sonst Seite 1 im Seitenmodus.
   useEffect(() => {
@@ -283,14 +379,26 @@ export default function ReaderShell() {
   const persist = useCallback(
     (next: { mode: Mode; pageIndex: number; articleId: Id<"articles"> | null }) => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      // Gedrosselt schreiben, nicht bei jedem Blaettern sofort.
+      // Gedrosselt schreiben, nicht bei jedem Blaettern sofort. Auch in den
+      // Puffer: ohne Verbindung wartet die Mutation, und ein Neuladen ohne
+      // Netz verloere sie.
       saveTimer.current = window.setTimeout(() => {
+        const jetzt = Date.now();
+        void pufferRef.current?.kopfAendern((k) => {
+          k.fortschritt = {
+            mode: next.mode,
+            pageIndex: next.pageIndex,
+            articleId: next.articleId,
+            updatedAt: jetzt,
+          };
+          k.zuletzt = Math.max(k.zuletzt, jetzt);
+        });
         void saveProgress({
           issueId,
           mode: next.mode,
           pageIndex: next.pageIndex,
           articleId: next.articleId ?? undefined,
-        });
+        }).catch(() => undefined);
       }, 1200);
     },
     [issueId, saveProgress],
@@ -397,6 +505,13 @@ export default function ReaderShell() {
     },
     [articleList, pageIndex, persist, adresse, mode],
   );
+
+  // Was PageMode aus dem Puffer liest; der Stand jeder Seite steht in der Liste.
+  const seitenAusPuffer = useMemo(
+    () => (puffer && pages ? seitenPuffer(puffer, pages) : null),
+    [puffer, pages],
+  );
+  const wasserzeichen = watermark || puffer?.kopf.watermark || "";
 
   const productsByArticle = useMemo(
     () => new Map((productLinks ?? []).map((entry) => [entry.articleId, entry])),
@@ -723,6 +838,11 @@ export default function ReaderShell() {
         <span className={logo ? `issue-title reihe-${logo.slug}` : "issue-title"}>
           {issue?.title}
         </span>
+        {ohneVerbindung && puffer && (
+          <span className="offline-marke" role="status" title="Keine Verbindung: gespeicherte Ausgabe">
+            Offline
+          </span>
+        )}
         <div className="mode-switch" role="group" aria-label="Ansicht">
           <button className={mode === "page" ? "active" : ""} onClick={switchToPages}>
             <Icon name="pages" />
@@ -789,16 +909,17 @@ export default function ReaderShell() {
             </div>
           )}
           {mode === "page" ? (
-            sessionToken && schutzKey !== null ? (
+            (sessionToken && schutzKey !== null) || puffer ? (
               <PageMode
                 issueId={issueId}
                 pageIndexes={visiblePageIndexes}
                 spread={pageLayout === "spread"}
                 sessionToken={sessionToken}
                 schutzKey={schutzKey}
+                puffer={seitenAusPuffer}
                 regions={regions ?? []}
                 links={links ?? []}
-                watermark={watermark}
+                watermark={wasserzeichen}
                 anzeigen={productsByArticle}
                 onChooseProduct={openFromPage}
                 onOpenArticle={openArticle}
@@ -841,11 +962,15 @@ export default function ReaderShell() {
               canPrev={canPrev}
               canNext={canNext}
               sessionToken={sessionToken}
+              puffer={puffer ?? null}
+              satz={sessionToken ? satzVon(sessionToken) : null}
             />
           )}
           {/* Im Artikelmodus an derselben Stelle wie auf der Seite: unten
               rechts in der Leseflaeche, nicht im Regler darunter. */}
-          {mode === "article" && watermark && <div className="watermark">{watermark}</div>}
+          {mode === "article" && wasserzeichen && (
+            <div className="watermark">{wasserzeichen}</div>
+          )}
         </main>
 
         <TocDrawer
@@ -857,6 +982,7 @@ export default function ReaderShell() {
           currentArticleId={currentArticleId}
           currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
           pageLabel={pageLabel}
+          ersatz={gepuffert?.toc}
           onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
           onPage={zuVerzeichnisSeite}
           onArticle={(id) => openArticle(id, undefined, undefined, true)}

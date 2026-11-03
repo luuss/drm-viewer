@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
@@ -6,9 +6,17 @@ import ArtikelTabelle from "../components/ArtikelTabelle";
 import { ShopProductLink, productKey, type ReaderProduct } from "./ShopProduct";
 import { meldungsfolge } from "./meldungsfolge";
 import { bildfolge } from "./bildfolge";
-import { bildAlsCanvas, schriftenLaden, ticketVorrat } from "./schutz";
+import {
+  bildAlsCanvas,
+  satzSchriften,
+  schriftenAnmelden,
+  schriftFamilien,
+  ticketVorrat,
+} from "./schutz";
 import { bildschlange } from "./bildschlange";
 import type { Klickpunkt } from "./PageMode";
+import type { GepufferterArtikel, Paket } from "./puffer";
+import { useVerbunden } from "./offline";
 
 /**
  * Artikelbild ohne Adresse: ueber Sitzung und Einmal-Ticket geholt, im
@@ -18,12 +26,15 @@ import type { Klickpunkt } from "./PageMode";
  * Geholt wird erst, wenn das Bild in die Naehe des sichtbaren Bereichs
  * kommt, und dann ueber die gemeinsame Warteschlange (`bildschlange.ts`):
  * wenige zugleich, oben im Artikel zuerst. `rang` ist die Stelle im Artikel.
+ * Liegt es im Offline-Puffer, kommt es von dort (`stand`: Stand der Datei).
  */
 function SchutzBild({
   url,
   sessionToken,
   issueId,
   schutzKey,
+  puffer,
+  stand,
   width,
   height,
   rang,
@@ -32,6 +43,8 @@ function SchutzBild({
   sessionToken: string | null | undefined;
   issueId: string | null;
   schutzKey: number | null;
+  puffer: Paket | null;
+  stand: string | null;
   width?: number;
   height?: number;
   rang: number;
@@ -63,14 +76,18 @@ function SchutzBild({
     return () => beobachter.disconnect();
   }, [url, nah]);
   useEffect(() => {
-    if (!nah || !url || !sessionToken || !issueId || schutzKey === null) return;
+    const mitSitzung = !!sessionToken && schutzKey !== null;
+    if (!nah || !url || !issueId || (!mitSitzung && !puffer)) return;
     const abbruch = new AbortController();
     let frei: (() => void) | null = null;
     bildschlange
       .platz(rangRef.current, abbruch.signal)
       .then((freigabe) => {
         frei = freigabe;
-        return bildAlsCanvas(url, sessionToken, issueId, schutzKey, abbruch.signal);
+        return bildAlsCanvas(url, sessionToken ?? null, issueId, schutzKey, abbruch.signal, {
+          paket: puffer,
+          stand,
+        });
       })
       .then((canvas) => {
         if (abbruch.signal.aborted || !halter.current) return;
@@ -86,7 +103,7 @@ function SchutzBild({
       halter.current?.replaceChildren();
       setFertig(false);
     };
-  }, [nah, url, sessionToken, issueId, schutzKey]);
+  }, [nah, url, sessionToken, issueId, schutzKey, puffer, stand]);
   // Bis das Bild steht, haelt ein leerer Rahmen in Bildgroesse den Platz.
   return (
     <span
@@ -102,35 +119,61 @@ function SchutzBild({
 }
 
 /**
- * Leseschriften der Sitzung. Der Artikeltext kommt verschluesselt
- * (`convex/schutz.ts`); erst mit diesen Schriften wird er lesbar.
+ * Leseschriften eines Satzes (einer Lesesitzung). Der Artikeltext kommt
+ * verschluesselt (`convex/schutz.ts`); erst mit der Schrift seiner Sitzung
+ * wird er lesbar. Ein Text aus dem Offline-Puffer kann von einer frueheren
+ * Sitzung stammen, darum hat jeder Satz eigene Familiennamen.
  */
-function useSchutzSchrift(sessionToken: string | null | undefined, issueId: string | null) {
-  const [stand, setStand] = useState<"laedt" | "bereit" | "fehler">("laedt");
+function useSchutzSchrift(
+  satz: string | null,
+  quelle: {
+    paket: Paket | null;
+    issueId: string | null;
+    sessionToken: string | null;
+    liveSatz: string | null;
+  },
+) {
+  const [bereitFuer, setBereitFuer] = useState<string | null>(null);
+  const [fehlerFuer, setFehlerFuer] = useState<string | null>(null);
   const [versuch, setVersuch] = useState(0);
+  const quelleRef = useRef(quelle);
+  quelleRef.current = quelle;
   useEffect(() => {
-    if (!sessionToken || !issueId) return;
-    const abbruch = new AbortController();
+    const { issueId } = quelleRef.current;
+    if (!satz || !issueId) return;
+    let aus = false;
     let faces: FontFace[] = [];
-    setStand("laedt");
-    schriftenLaden(sessionToken, issueId, abbruch.signal)
+    setFehlerFuer(null);
+    satzSchriften(satz, { ...quelleRef.current, issueId })
+      .then((daten) => schriftenAnmelden(satz, daten))
       .then((geladen) => {
-        if (abbruch.signal.aborted) return;
+        if (aus) return;
         faces = geladen;
         for (const f of faces) document.fonts.add(f);
-        setStand("bereit");
+        setBereitFuer(satz);
       })
       .catch(() => {
         // Ohne Schrift ist der Text unlesbar; nicht ewig "Laden..." zeigen.
-        if (!abbruch.signal.aborted) setStand("fehler");
+        if (!aus) setFehlerFuer(satz);
       });
     return () => {
-      abbruch.abort();
+      aus = true;
       for (const f of faces) document.fonts.delete(f);
+      setBereitFuer(null);
     };
-  }, [sessionToken, issueId, versuch]);
-  return { stand, nochmal: () => setVersuch((v) => v + 1) };
+  }, [satz, versuch, quelle.issueId]);
+  const stand = !satz
+    ? "laedt"
+    : bereitFuer === satz
+      ? "bereit"
+      : fehlerFuer === satz
+        ? "fehler"
+        : "laedt";
+  return { stand, nochmal: () => setVersuch((v) => v + 1) } as const;
 }
+
+/** So lange wartet ein Artikel auf den Server, bevor er aus dem Puffer kommt. */
+const GEDULD_MS = 1500;
 
 type Props = {
   articleId: Id<"articles"> | null;
@@ -156,6 +199,10 @@ type Props = {
   stelle?: number | null;
   /** Schluessel zum Zusammensetzen der Artikelbilder. */
   schutzKey: number | null;
+  /** Offline-Puffer der Ausgabe: Texte, Bilder und Schriften auch ohne Netz. */
+  puffer?: Paket | null;
+  /** Satz der laufenden Sitzung (`satzVon`); zu ihm passen die Texte vom Server. */
+  satz?: string | null;
 };
 
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
@@ -172,13 +219,81 @@ export default function ArticleMode({
   einstiegPunkt,
   stelle = null,
   schutzKey,
+  puffer = null,
+  satz = null,
 }: Props) {
   // Text gibt es nur zu einer Lesesitzung, und nur verschluesselt.
-  const article = useQuery(
+  const live = useQuery(
     api.articles.getForReader,
     articleId && sessionToken ? { articleId, sessionToken } : "skip",
   );
-  const schrift = useSchutzSchrift(sessionToken, article?.issueId ?? null);
+  const verbunden = useVerbunden();
+
+  // Derselbe Artikel aus dem Offline-Puffer, mit dem Satz seiner Schrift.
+  const [gepuffert, setGepuffert] = useState<{
+    id: string;
+    artikel: GepufferterArtikel | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!articleId || !puffer) return;
+    let aus = false;
+    puffer
+      .artikel(articleId)
+      .catch(() => null)
+      .then((artikel) => !aus && setGepuffert({ id: articleId, artikel }));
+    return () => {
+      aus = true;
+    };
+  }, [articleId, puffer]);
+  const ausPuffer = puffer && gepuffert?.id === articleId ? gepuffert.artikel : null;
+  const [geduldFuer, setGeduldFuer] = useState<string | null>(null);
+  useEffect(() => {
+    if (!articleId) return;
+    const timer = window.setTimeout(() => setGeduldFuer(articleId), GEDULD_MS);
+    return () => window.clearTimeout(timer);
+  }, [articleId]);
+
+  // Woher der Text kommt, steht je Artikel einmal fest: vom Server, oder aus
+  // dem Puffer, wenn der Puffer schon den Text dieser Sitzung hat oder der
+  // Server nicht antwortet. Ein spaeterer Wechsel taeuschte die Schrift aus
+  // und warf den Leser an den Anfang zurueck.
+  // Der Text aus dem Puffer bleibt fest, auch wenn das Paket inzwischen
+  // ersetzt wurde.
+  const wahl = useRef<
+    { id: string; art: "live" } | { id: string; art: "puffer"; artikel: GepufferterArtikel } | null
+  >(null);
+  if (wahl.current && wahl.current.id !== articleId) wahl.current = null;
+  if (!wahl.current && articleId) {
+    if (live) wahl.current = { id: articleId, art: "live" };
+    else if (
+      ausPuffer &&
+      (live === null ||
+        ausPuffer.satz === satz ||
+        !verbunden ||
+        !sessionToken ||
+        geduldFuer === articleId)
+    ) {
+      wahl.current = { id: articleId, art: "puffer", artikel: ausPuffer };
+    } else if (live === null) wahl.current = { id: articleId, art: "live" };
+  }
+  const gewaehlt = wahl.current;
+  const article =
+    gewaehlt?.art === "puffer" ? gewaehlt.artikel.body : gewaehlt?.art === "live" ? live : undefined;
+  const textSatz =
+    gewaehlt?.art === "puffer" ? gewaehlt.artikel.satz : gewaehlt?.art === "live" ? satz : null;
+  // Ohne Verbindung und nicht im Puffer: nicht ewig "Laden..." zeigen.
+  const nichtGespeichert =
+    article === undefined &&
+    !verbunden &&
+    geduldFuer === articleId &&
+    (!puffer || (gepuffert?.id === articleId && !gepuffert.artikel));
+
+  const schrift = useSchutzSchrift(textSatz, {
+    paket: puffer,
+    issueId: article?.issueId ?? null,
+    sessionToken: sessionToken ?? null,
+    liveSatz: satz,
+  });
   // Tickets fuer die Bilder schon holen, waehrend die Schrift laedt.
   const artikelHeft = article?.issueId ?? null;
   useEffect(() => {
@@ -186,17 +301,18 @@ export default function ArticleMode({
   }, [sessionToken, artikelHeft]);
   const schriftBereit = schrift.stand === "bereit";
   const koerper = useRef<HTMLElement>(null);
-  const zielAbsatz = useQuery(
-    api.articles.absatzBeiKlick,
-    articleId && einstiegPunkt
+  // Der Absatz unter dem Finger kommt vom Server; ohne Verbindung geht es
+  // zur angetippten Seite im Artikel.
+  const punktFrage =
+    articleId && einstiegPunkt && verbunden
       ? {
           articleId,
           pageIndex: einstiegPunkt.pageIndex,
           x: einstiegPunkt.x,
           y: einstiegPunkt.y,
         }
-      : "skip",
-  );
+      : ("skip" as const);
+  const zielAbsatz = useQuery(api.articles.absatzBeiKlick, punktFrage);
 
   // An die Stelle springen, die zur angetippten Seite gehoert. Jeder Absatz
   // und jedes Bild traegt seine Druckseite; die erste Marke der Seite ist der
@@ -204,7 +320,8 @@ export default function ArticleMode({
   // Tipppunkt geht es genauer: zum Absatz unter dem Finger.
   // Eine Fundstelle aus der Suche geht vor, ebenso genau.
   const geladen = article ?? null;
-  const punktOffen = stelle === null && einstiegPunkt != null && zielAbsatz === undefined;
+  const punktOffen =
+    stelle === null && einstiegPunkt != null && punktFrage !== "skip" && zielAbsatz === undefined;
   const zielOrder = stelle ?? (zielAbsatz && einstiegPunkt ? zielAbsatz.order : null);
   // Jeder Einstieg springt einmal. Laedt der Artikel spaeter neu (die Abfrage
   // ist reaktiv), bleibt der Leser, wo er inzwischen gelesen hat.
@@ -252,6 +369,13 @@ export default function ArticleMode({
             Erneut versuchen
           </button>
         </p>
+      </div>
+    );
+  }
+  if (nichtGespeichert) {
+    return (
+      <div className="article-mode">
+        <p className="page-hint err">Ohne Verbindung ist dieser Artikel nicht verfügbar.</p>
       </div>
     );
   }
@@ -353,8 +477,14 @@ export default function ArticleMode({
       .map((product) => <ShopProductLink key={productKey(product)} product={product} />);
   const productsAtEnd = products.filter((product) => !shownOrders.has(product.blockOrder));
 
+  // Die Schrift der Sitzung dieses Textes (`schriftFamilien`).
+  const familien = textSatz ? schriftFamilien(textSatz) : null;
+  const schriftStil = familien
+    ? ({ "--f0": `'${familien.f0}'`, "--f1": `'${familien.f1}'` } as CSSProperties)
+    : undefined;
+
   return (
-    <div className="article-mode gx">
+    <div className="article-mode gx" style={schriftStil}>
       <ReaderTurnButton
         direction="previous"
         label="Vorheriger Artikel"
@@ -387,6 +517,8 @@ export default function ArticleMode({
                   sessionToken={sessionToken}
                   issueId={article.issueId}
                   schutzKey={schutzKey}
+                  puffer={puffer}
+                  stand={img.stand ?? null}
                   rang={stelleImFluss}
                   // Die eigene Groesse haelt das Bild davon ab, auf
                   // Spaltenbreite hochgezogen zu werden, und haelt waehrend

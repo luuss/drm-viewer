@@ -3,10 +3,14 @@ import { createPortal } from "react-dom";
 import OpenSeadragon from "openseadragon";
 import { TILE_SERVICE_URL, type Id } from "../lib/api";
 import ReaderTurnButton from "./ReaderTurnButton";
-import { kachelSeed, mitTicket, zusammensetzen } from "./schutz";
+import { kachelSeed, mitTicket, OHNE_NETZ, zusammensetzen } from "./schutz";
 import { mitWiederholung } from "./nachladen";
 import { kachelLader } from "./kachelLaden";
 import { tippZiel, type TippAnzeige } from "./tippZiel";
+import type { SeitenInfo, SeitenPuffer } from "./puffer";
+import { FEINSTE_STUFE } from "./pufferFuellen";
+import { liveAnfrage } from "./vorrang";
+import { useVerbunden } from "./offline";
 
 /** Wo auf der Seite getippt wurde, normiert auf 0..1. */
 export type Klickpunkt = { pageIndex: number; x: number; y: number };
@@ -38,9 +42,16 @@ type Props = {
   issueId: Id<"issues">;
   pageIndexes: number[];
   spread: boolean;
-  sessionToken: string;
+  /** Lesesitzung; ohne Verbindung (Start aus dem Puffer) noch leer. */
+  sessionToken: string | null;
   /** Schluessel zum Zusammensetzen der verwuerfelten Kacheln. */
-  schutzKey: number;
+  schutzKey: number | null;
+  /**
+   * Offline-Puffer der Ausgabe (`puffer.ts`). Seitenmasse und Kacheln kommen
+   * zuerst von dort, mit dem Schluessel ihrer eigenen Sitzung; was vom
+   * Gateway kommt, wandert hinein.
+   */
+  puffer?: SeitenPuffer | null;
   regions: Region[];
   links: PageLink[];
   /** Buchanzeigen mit Produkten im Laden (articleProducts.forReader), je Artikel. */
@@ -66,12 +77,14 @@ type Props = {
 
 /** `nochmal`: der Hinweis traegt den Knopf "Erneut versuchen". */
 type PageNotice = { text: string; tone: "retry" | "error"; nochmal?: boolean };
-type PageInfo = {
-  width: number;
-  height: number;
-  tileSize: number;
-  maxLevel: number;
-};
+type PageInfo = SeitenInfo;
+
+/** Antwort des Gateways auf die Seitenmasse, die kein Erfolg war. */
+class SeitenStatus extends Error {
+  constructor(public status: number) {
+    super(`Seite ${status}`);
+  }
+}
 
 /** Schnell ueberblaetterte Seiten sollen keine unnoetigen Anfragen ausloesen. */
 const SETTLE_MS = 180;
@@ -83,6 +96,12 @@ const SETTLE_MS = 180;
 const KACHEL_FRIST_MS = 20_000;
 const NICHT_GELADEN: PageNotice = {
   text: "Seite konnte nicht geladen werden.",
+  tone: "error",
+  nochmal: true,
+};
+/** Ohne Verbindung, und die Seite liegt (noch) nicht im Puffer. */
+const NICHT_GESPEICHERT: PageNotice = {
+  text: "Ohne Verbindung ist diese Seite nicht verfügbar.",
   tone: "error",
   nochmal: true,
 };
@@ -98,6 +117,7 @@ export default function PageMode({
   spread,
   sessionToken,
   schutzKey,
+  puffer,
   regions,
   links,
   anzeigen,
@@ -144,6 +164,17 @@ export default function PageMode({
   }, []);
   openArticleRef.current = onOpenArticle;
   navigatePageRef.current = onNavigatePage;
+  // Sitzung und Puffer lesen die Ladeketten zur Laufzeit: kommt die Sitzung
+  // erst nach dem Start aus dem Puffer, bleibt die aufgeschlagene Seite stehen.
+  const sitzungRef = useRef(sessionToken);
+  sitzungRef.current = sessionToken;
+  const pufferRef = useRef(puffer);
+  pufferRef.current = puffer;
+  const verbunden = useVerbunden();
+  const verbundenRef = useRef(verbunden);
+  verbundenRef.current = verbunden;
+  // Eine Seite fehlte, weil noch keine Sitzung da war: mit ihr neu laden.
+  const fehlteSitzung = useRef(false);
 
   /** Jede Hotspot-Ebene folgt ihrem Seitenbild in der gemeinsamen Welt. */
   const syncLayers = useCallback(() => {
@@ -267,12 +298,24 @@ export default function PageMode({
       // die eigentlichen Kacheln kommen danach. Erst wenn alle eingebauten
       // Wiederholungen verbraucht sind, zeigen wir den ruhigen Fehlerhinweis.
       if (
-        event.maxReached &&
-        event.tiledImage &&
-        viewer.world.getIndexOfItem(event.tiledImage) !== -1
+        !event.maxReached ||
+        !event.tiledImage ||
+        viewer.world.getIndexOfItem(event.tiledImage) === -1
       ) {
-        setNotice(NICHT_GELADEN);
+        return;
       }
+      const ohneNetz =
+        !verbundenRef.current || String(event.message ?? "").includes(OHNE_NETZ);
+      if (!ohneNetz) {
+        setNotice(NICHT_GELADEN);
+        return;
+      }
+      // Ohne Verbindung fehlt im Puffer nur die volle Aufloesung (Stufe 0):
+      // die Seite steht dann in der naechstgroeberen da, ohne Hinweis. Fehlt
+      // eine groebere Stufe, ist die Seite nicht gespeichert. Mit Verbindung
+      // fehlte nur die Sitzung; mit ihr laedt die Seite neu.
+      const stufe = (event.tiledImage.source?.maxLevel ?? 0) - (event.tile?.level ?? 0);
+      if (!verbundenRef.current && stufe >= FEINSTE_STUFE) setNotice(NICHT_GESPEICHERT);
     });
 
     return () => {
@@ -281,7 +324,7 @@ export default function PageMode({
       viewer.destroy();
       viewerRef.current = null;
     };
-  }, [sessionToken, syncLayers, nachDraussen]);
+  }, [syncLayers, nachDraussen]);
 
   const schutzKeyRef = useRef(schutzKey);
   schutzKeyRef.current = schutzKey;
@@ -293,25 +336,41 @@ export default function PageMode({
     // Alle Ladeketten dieser Seiten; beim Blaettern bricht der Aufraeumer sie
     // ab (kachelLaden.ts).
     const kacheln = kachelLader(async (src, signal, aktuell) => {
-      const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(src);
+      const teile = /\/page\/(\d+)\/tile\/(\d+)\/(\d+)\/(\d+)\.jpg$/.exec(src)!;
+      const [seite, stufe, spalte, zeile] = teile.slice(1).map(Number);
+      const seed = (k: number) =>
+        kachelSeed(k, issueId, teile[1], teile[2], teile[3], teile[4]);
+      // Zuerst der Offline-Puffer: die Kachel liegt dort verwuerfelt, mit dem
+      // Schluessel der Sitzung, mit der sie geholt wurde.
+      const gepuffert = await pufferRef.current?.kachel(seite, stufe, spalte, zeile);
+      if (gepuffert) {
+        const bild = await createImageBitmap(new Blob([gepuffert.daten]));
+        return zusammensetzen(bild, seed(gepuffert.k)).getContext("2d");
+      }
+      const token = sitzungRef.current;
+      const key = schutzKeyRef.current;
+      if (!token || key === null) {
+        fehlteSitzung.current = true;
+        throw new Error(OHNE_NETZ);
+      }
       // Je Versuch ein frisches Ticket; gebremste Kacheln kommen nach einer
       // kurzen Pause von selbst, solange die Kachel noch gefragt ist.
-      const res = await mitWiederholung(
-        () => {
-          if (!aktuell()) throw new DOMException("Kachel nicht mehr gefragt", "AbortError");
-          return mitTicket(src, sessionToken, issueId, signal);
-        },
-        signal,
-        undefined,
-        { bisMs: KACHEL_FRIST_MS },
+      const res = await liveAnfrage(
+        mitWiederholung(
+          () => {
+            if (!aktuell()) throw new DOMException("Kachel nicht mehr gefragt", "AbortError");
+            return mitTicket(src, token, issueId, signal);
+          },
+          signal,
+          undefined,
+          { bisMs: KACHEL_FRIST_MS },
+        ),
       );
       if (!res.ok) throw new Error(`Kachel ${res.status}`);
-      const bild = await createImageBitmap(await res.blob());
-      const canvas = zusammensetzen(
-        bild,
-        kachelSeed(schutzKeyRef.current, issueId, teile![1], teile![2], teile![3], teile![4]),
-      );
-      return canvas.getContext("2d");
+      const daten = await res.arrayBuffer();
+      pufferRef.current?.kachelAblegen(seite, stufe, spalte, zeile, key, daten);
+      const bild = await createImageBitmap(new Blob([daten]));
+      return zusammensetzen(bild, seed(key)).getContext("2d");
     });
     readyRef.current = false;
     openedPagesRef.current = [];
@@ -322,40 +381,44 @@ export default function PageMode({
       if (layer) layer.style.visibility = "hidden";
     }
 
+    /** Seitenmasse: aus dem Puffer, sonst vom Gateway; null ohne Sitzung. */
+    async function seitenInfo(pageIndex: number): Promise<PageInfo | null> {
+      const gepuffert = await pufferRef.current?.info(pageIndex);
+      if (gepuffert) return gepuffert;
+      const token = sitzungRef.current;
+      if (!token) return null;
+      // Gebremst (429) wartet der Leser und fragt selbst nach; bei einem
+      // Netz- oder Serverfehler einmal (nachladen.ts).
+      const response = await mitWiederholung(
+        () =>
+          fetch(`${TILE_SERVICE_URL}/api/issue/${issueId}/page/${pageIndex}/info`, {
+            headers: { "X-Tile-Session": token },
+            signal: abortController.signal,
+          }),
+        abortController.signal,
+        () => {
+          if (!cancelled) setNotice({ text: "Seite wird gleich geladen …", tone: "retry" });
+        },
+      );
+      if (!response.ok) throw new SeitenStatus(response.status);
+      const info = (await response.json()) as PageInfo;
+      pufferRef.current?.infoAblegen(pageIndex, info);
+      return info;
+    }
+
     async function load() {
       try {
-        // Gebremst (429) wartet der Leser und fragt selbst nach; bei einem
-        // Netz- oder Serverfehler einmal (nachladen.ts).
-        const responses = await Promise.all(
-          shown.map((pageIndex) =>
-            mitWiederholung(
-              () =>
-                fetch(`${TILE_SERVICE_URL}/api/issue/${issueId}/page/${pageIndex}/info`, {
-                  headers: { "X-Tile-Session": sessionToken },
-                  signal: abortController.signal,
-                }),
-              abortController.signal,
-              () => {
-                if (!cancelled) setNotice({ text: "Seite wird gleich geladen …", tone: "retry" });
-              },
-            ),
-          ),
-        );
+        const geladen = await Promise.all(shown.map(seitenInfo));
         if (cancelled) return;
 
-        const failed = responses.find((response) => !response.ok);
-        if (failed) {
-          setNotice(
-            failed.status === 409
-              ? { text: "Diese Seite ist noch nicht aufbereitet.", tone: "error" }
-              : NICHT_GELADEN,
-          );
+        if (geladen.some((info) => info === null)) {
+          // Noch keine Sitzung (Start aus dem Puffer) und die Seite nicht im
+          // Puffer: mit Verbindung kommt sie gleich, ohne nicht.
+          fehlteSitzung.current = true;
+          if (!verbundenRef.current) setNotice(NICHT_GESPEICHERT);
           return;
         }
-
-        const infos = (await Promise.all(
-          responses.map((response) => response.json()),
-        )) as PageInfo[];
+        const infos = geladen as PageInfo[];
         if (cancelled || !viewerRef.current) return;
 
         let worldX = 0;
@@ -388,7 +451,12 @@ export default function PageMode({
         openedPagesRef.current = [...shown];
         viewerRef.current.open(tileSources);
       } catch (error) {
-        if (!cancelled && !abortController.signal.aborted) setNotice(NICHT_GELADEN);
+        if (cancelled || abortController.signal.aborted) return;
+        if (error instanceof SeitenStatus && error.status === 409) {
+          setNotice({ text: "Diese Seite ist noch nicht aufbereitet.", tone: "error" });
+        } else {
+          setNotice(verbundenRef.current ? NICHT_GELADEN : NICHT_GESPEICHERT);
+        }
       }
     }
 
@@ -399,8 +467,20 @@ export default function PageMode({
       kacheln.alleAbbrechen();
       window.clearTimeout(timer);
     };
-    // Die konkrete Folge ist absichtlich Teil der Abhaengigkeit.
-  }, [issueId, sessionToken, pageIndexes.join(","), nochmal]);
+    // Die konkrete Folge ist absichtlich Teil der Abhaengigkeit. Die Sitzung
+    // nicht: die Ladeketten lesen sie zur Laufzeit (sitzungRef).
+  }, [issueId, pageIndexes.join(","), nochmal]);
+
+  // Kommt die Sitzung oder die Verbindung zurueck, laedt eine Seite neu, die
+  // ohne sie nicht zu haben war.
+  useEffect(() => {
+    if (!sessionToken || !fehlteSitzung.current) return;
+    fehlteSitzung.current = false;
+    setNochmal((n) => n + 1);
+  }, [sessionToken]);
+  useEffect(() => {
+    if (verbunden && notice === NICHT_GESPEICHERT) setNochmal((n) => n + 1);
+  }, [verbunden, notice]);
 
   return (
     <div className={`page-mode ${spread ? "spread" : "single"} ${hasTwoPages ? "two-pages" : "one-page"}`}>

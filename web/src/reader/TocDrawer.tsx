@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api, type Id } from "../lib/api";
 import Icon from "../components/Icon";
 
@@ -24,6 +25,8 @@ type Props = {
   currentPages: number[];
   /** Gedruckte Seitenzahl zu einer Leseseite (U1 statt 1 auf dem Umschlag). */
   pageLabel: (index: number) => string;
+  /** Das Verzeichnis aus dem Offline-Puffer, solange der Server nicht antwortet. */
+  ersatz?: FunctionReturnType<typeof api.toc.listForReader>;
 };
 
 type Entry = {
@@ -75,9 +78,10 @@ export default function TocDrawer({
   currentArticleId,
   currentPages,
   pageLabel,
+  ersatz,
 }: Props) {
   const visible = open || docked;
-  const entries = useQuery(api.toc.listForReader, visible ? { issueId } : "skip");
+  const entries = useQuery(api.toc.listForReader, visible ? { issueId } : "skip") ?? ersatz;
   const list = useRef<HTMLUListElement>(null);
   const currentId = entries
     ? currentEntryId(entries, currentArticleId, currentPages)

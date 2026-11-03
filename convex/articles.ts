@@ -13,7 +13,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireEditor, requirePublisher, audit } from "./roles";
 import { hasIssueAccess, accessibleIssueIds, istRedaktion } from "./access";
 import { blockType, tableData } from "./schema";
-import { assetUrl } from "./assets";
+import { assetStand, assetUrl } from "./assets";
 import { deleteLinksForBlock, deleteLinksForIssue } from "./articleProducts";
 import { internal } from "./_generated/api";
 import {
@@ -424,6 +424,9 @@ export const getForReader = query({
           afterBlockOrder: img.afterBlockOrder ?? null,
           width: asset?.width ?? null,
           height: asset?.height ?? null,
+          // Stand der Bilddatei: der Offline-Puffer legt das Bild darunter ab
+          // und holt es nach einem Bildnachtrag neu.
+          stand: asset ? assetStand(asset) : null,
         });
       }
     }

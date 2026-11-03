@@ -203,3 +203,42 @@ def test_seitenbild_mit_neuem_stand_wird_neu_geladen(monkeypatch):
     stand[0] = "2:120"
     assert asyncio.run(laden())[1]["width"] == 42
     assert len(geholt) == 2
+
+
+def test_puffer_spur_liefert_dieselbe_kachel_und_prueft_gleich(monkeypatch):
+    """Anfragen des Offline-Puffers (`X-Q: 1`) laufen hinten an, aber mit
+    derselben Pruefung (Sitzung, Ticket) und demselben verwuerfelten Bild."""
+    from fastapi.testclient import TestClient
+    from PIL import Image
+
+    seite = Image.new("RGB", (1000, 1400), (200, 30, 30))
+    for x in range(0, 1000, 50):
+        seite.paste((20, 20, 200), (x, 0, x + 10, 1400))
+
+    async def sitzung(token, issue_id=None):
+        return {"userId": "leser", "issueId": "heft", "kachelSchluessel": 7}
+
+    async def laden(issue_id, index):
+        return seite, {"width": seite.width, "height": seite.height}
+
+    monkeypatch.setattr(main, "require_session", sitzung)
+    monkeypatch.setattr(main, "load_page", laden)
+    monkeypatch.setattr(main, "_puffer_spur", None)
+    client = TestClient(main.app)
+    adresse = "/api/issue/heft/page/0/tile/1/0/1.jpg"
+    tickets = main.neue_tickets("sitzung")
+
+    vorn = client.get(adresse, headers={"X-Tile-Session": "sitzung", "X-Req": tickets[0]})
+    hinten = client.get(
+        adresse, headers={"X-Tile-Session": "sitzung", "X-Req": tickets[1], "X-Q": "1"}
+    )
+    assert vorn.status_code == 200 and hinten.status_code == 200
+    assert vorn.content == hinten.content
+    assert hinten.headers["Cache-Control"] == "private, no-store"
+    # Auch hinten gilt jedes Ticket nur einmal, und ohne Ticket gibt es nichts.
+    nochmal = client.get(
+        adresse, headers={"X-Tile-Session": "sitzung", "X-Req": tickets[1], "X-Q": "1"}
+    )
+    assert nochmal.status_code == 403
+    ohne = client.get(adresse, headers={"X-Tile-Session": "sitzung", "X-Q": "1"})
+    assert ohne.status_code == 403
