@@ -214,12 +214,11 @@ export const resolveForServiceInternal = internalQuery({
     }
     if (!asset) return null;
     return {
-      // Titelbild oeffentlich nur bei veroeffentlichtem Heft (oder ohne Heft:
-      // Reihenbild). Sonst sah, wer die Asset-ID kennt, unveroeffentlichte Titel.
-      public:
-        (asset.kind === "cover" &&
-          (!asset.issueId || (await ctx.db.get(asset.issueId))?.isPublished === true)) ||
-        (await isPublicTocPage(ctx, asset)),
+      // Titelbilder bleiben oeffentlich, auch bei unveroeffentlichten Heften:
+      // die Heftliste der Redaktion laedt sie ohne Lesesitzung. Die Pruefung
+      // 03.11. ("nur veroeffentlicht") nahm der Liste alle Cover; wer ein
+      // Titelbild sehen will, braucht ohnehin seine Asset-ID.
+      public: asset.kind === "cover" || (await isPublicTocPage(ctx, asset)),
       issueId: asset.issueId ?? null,
       key: asset.key,
       bucket: asset.bucket ?? null,
