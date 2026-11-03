@@ -122,6 +122,34 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
   Convex-Funktionen noch nicht ausgerollt waren. Nach dem Deploy weg; nach
   einem Neuaufbau zuerst `npx convex deploy`, dann den Worker starten.
 
+## Buch-Modus: ein Heft ist ein Text (03.11.2026)
+
+* **Import:** `IMPORT_MODUS=buch` am Import-Worker (nur `docker-compose.weltkrieg.yml`),
+  Code `extract-service/extractor/buch.py`. Die Absatzformate taugen bei
+  Weltkrieg nicht: der ganze Fließtext steht im Format
+  „weltkrieg kapitelüberschrift“, die Zeitschriften-Regeln hielten ihn für eine
+  Überschrift und warfen ihn weg (Heft 159: 2 Artikel, 4.000 Zeichen statt
+  212.000). Jetzt: alle Absätze in Seitenfolge, kleine Stories am Bild
+  (Unterschrift, „Bildquelle: …“) raus, Fußnoten („* AOK = …“) an ihrer Seite,
+  Kapitelzeile = kleine eigene Story in Kapitelform (doppelte Zeile = Kartentitel,
+  raus), kleine Stories auf Seiten mit Anzeigenbild raus. Geprüft an 159 und 160.
+  Prüfskript: `_scratch/wk160/probe.py <idml>` (aus `extract-service/`).
+* **Leser:** „Leseansicht“ statt „Artikelansicht“. Der Regler zeigt in beiden
+  Ansichten die Seiten; in der Leseansicht springt er im Text zur ersten Stelle
+  der Seite. Die Seite oben im Text ist der Lesestand (`progress.save` mit
+  `mode: article`, `pageIndex`) und wird beim Öffnen angesprungen
+  (`IST_WELTKRIEG` in `ReaderShell.tsx`, `onSeite`/`sprungNr` in `ArticleMode.tsx`).
+* **Titel und Reihe** kommen von der Titelseite (U1): Titel = größte Schrift
+  unter dem Kopf (Schriftzug „WELTKRIEG“ steht oben), Reihe = Reihenname auf U1
+  („erlebnisberichte – Doppelband“), Schreibung aus dem Satz
+  (`web/src/admin/umschlagTitel.ts`). Das Kürzel hinter der Nummer („159d“,
+  d = Doppelband, mag, F, FK, FL …) ist **kein** Beleg für die Reihe (Anweisung
+  03.11.), es fällt nur aus dem Titel.
+* **Ordnerstruktur einlesen:** zweites Feld im Admin; lädt nur die Liste
+  (Pfad, Größe, Datum) nach `emag-media/struktur/<zeit>-<name>.json`. Holen:
+  im Container `wkdigital-import-worker-1` mit boto3 (wie die IDML in
+  `_scratch/wk160`). Zweck: Musterhefte je Reihe aussuchen, dann Massenimport.
+
 ## Offen
 
 * **Rechtstexte** (`drm-viewer-evz`): Impressum, Datenschutz, AGB, Widerruf
