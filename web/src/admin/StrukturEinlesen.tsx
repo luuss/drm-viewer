@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "../lib/api";
-import { strukturLesen } from "./folderDrop";
+import { alleDateien, strukturLesen } from "./folderDrop";
+import { HEFTARCHIV_EREIGNIS, MUSTERHEFTE, hefteImArchiv, type ArchivHeft } from "./heftarchiv";
 import { formatBytes } from "./folderScan";
 
 type Stand =
@@ -53,6 +54,8 @@ export default function StrukturEinlesen() {
   }
 
   return (
+    <>
+      <ArchivImport />
     <details className="aufklapp struktur-einlesen">
       <summary>Ordnerstruktur einlesen (nur Liste, für den Massenimport)</summary>
       <div
@@ -92,6 +95,114 @@ export default function StrukturEinlesen() {
         </p>
       )}
       {stand.art === "fehler" && <p className="err">Fehler: {stand.text}</p>}
+    </details>
+    </>
+  );
+}
+
+/**
+ * Hefte aus dem ganzen Heftarchiv importieren. Der Browser findet die Hefte
+ * selbst (`hefteImArchiv`) und gibt nur sie an die Importschlange; von jedem
+ * Heft liest der Import nur, was er braucht (Innenteil, Umschlag, IDML,
+ * Bilder aus Links/), nicht das ganze Archiv.
+ */
+function ArchivImport() {
+  const [ueber, setUeber] = useState(false);
+  const [liest, setLiest] = useState<number | null>(null);
+  const [nurMuster, setNurMuster] = useState(true);
+  const [gefunden, setGefunden] = useState<ArchivHeft[] | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [gestartet, setGestartet] = useState(0);
+
+  async function lesen(items: DataTransferItemList) {
+    setFehler(null);
+    setGefunden(null);
+    setGestartet(0);
+    try {
+      setLiest(0);
+      const dateien = await alleDateien(items, (n) => setLiest(n));
+      setGefunden(hefteImArchiv(dateien));
+    } catch (e: any) {
+      setFehler(e?.message ?? String(e));
+    } finally {
+      setLiest(null);
+    }
+  }
+
+  const auswahl = (gefunden ?? []).filter((h) => !nurMuster || MUSTERHEFTE.includes(h.kennung));
+  const fehlen = nurMuster && gefunden
+    ? MUSTERHEFTE.filter((k) => !gefunden.some((h) => h.kennung === k))
+    : [];
+
+  function starten() {
+    window.dispatchEvent(
+      new CustomEvent(HEFTARCHIV_EREIGNIS, {
+        detail: auswahl.map((h) => ({ folderName: h.folderName, files: h.files })),
+      }),
+    );
+    setGestartet(auswahl.length);
+  }
+
+  return (
+    <details className="aufklapp struktur-einlesen">
+      <summary>Hefte aus dem Heftarchiv importieren</summary>
+      <div
+        className={`dropzone${ueber ? " over" : ""}${liest !== null ? " busy" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (liest === null) setUeber(true);
+        }}
+        onDragLeave={() => setUeber(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setUeber(false);
+          if (liest === null) void lesen(e.dataTransfer.items);
+        }}
+      >
+        <strong>Ganzes Heftarchiv hierher ziehen</strong>
+        <span className="hint">
+          Der Browser sucht die Hefte selbst heraus. Hochgeladen wird je Heft nur Innenteil,
+          Umschlag, IDML und die Bilder in Netzgröße.
+        </span>
+      </div>
+      <label className="muted">
+        <input
+          type="checkbox"
+          checked={nurMuster}
+          onChange={(e) => setNurMuster(e.target.checked)}
+        />{" "}
+        Nur die {MUSTERHEFTE.length} Musterhefte
+      </label>
+      {liest !== null && (
+        <p className="muted" role="status">
+          Lese Archiv … {liest.toLocaleString("de-DE")} Dateien
+        </p>
+      )}
+      {fehler && <p className="err">Fehler: {fehler}</p>}
+      {gefunden && (
+        <div>
+          <p>
+            {gefunden.length} Hefte im Archiv gefunden ({gefunden.filter((h) => h.mitIdml).length}{" "}
+            mit IDML). Ausgewählt: {auswahl.length}.
+            {fehlen.length > 0 && <> Nicht gefunden: {fehlen.join(", ")}.</>}
+          </p>
+          <ul className="muted heftarchiv-liste">
+            {auswahl.slice(0, 60).map((h) => (
+              <li key={h.pfad}>
+                {h.kennung} · {h.mitIdml ? "IDML + PDF" : "nur PDF"} · {h.pfad}
+              </li>
+            ))}
+            {auswahl.length > 60 && <li>… und {auswahl.length - 60} weitere</li>}
+          </ul>
+          {gestartet > 0 ? (
+            <p role="status">{gestartet} Hefte sind in der Importschlange. Der Balken oben zeigt den Lauf.</p>
+          ) : (
+            <button type="button" onClick={starten} disabled={!auswahl.length}>
+              {auswahl.length} Hefte importieren
+            </button>
+          )}
+        </div>
+      )}
     </details>
   );
 }

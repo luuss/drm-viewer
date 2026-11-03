@@ -135,3 +135,37 @@ export async function satzTexte(file: Blob): Promise<string[]> {
   }
   return out;
 }
+
+/** Dateistamm, vergleichbar: ohne Endung, NFC, klein. */
+export function dateiStamm(name: string): string {
+  return name.normalize("NFC").replace(/\.[^.]+$/, "").trim().toLowerCase();
+}
+
+/**
+ * Welche Bilddateien der Satz verlinkt (`LinkResourceURI`), als Dateistamm.
+ * Im Heftarchiv liegen neben den platzierten Bildern Umschlagvorlagen und
+ * alte Fassungen; hoch muss nur, was im Heft steht.
+ */
+export async function verlinkteBilder(file: Blob): Promise<Set<string>> {
+  const out = new Set<string>();
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch {
+    return out;
+  }
+  for (const name of Object.keys(zip.files).filter((n) => n.startsWith("Spreads/"))) {
+    const text = await zip.files[name].async("text").catch(() => "");
+    for (const m of text.matchAll(/LinkResourceURI="([^"]+)"/g)) {
+      const uri = m[1];
+      let datei = uri.split("/").pop() ?? uri;
+      try {
+        datei = decodeURIComponent(datei);
+      } catch {
+        // Kaputte Kodierung: so nehmen, wie es steht.
+      }
+      out.add(dateiStamm(datei));
+    }
+  }
+  return out;
+}

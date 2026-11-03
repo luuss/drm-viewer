@@ -20,10 +20,11 @@ import { jpegName } from "./imageConvert";
 import { Ladeschlange } from "./ladeschlange";
 import { buildPageOrder, type CoverPage } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
-import { readIdmlMeta, satzTexte } from "./idmlMeta";
+import { dateiStamm, readIdmlMeta, satzTexte, verlinkteBilder } from "./idmlMeta";
 import { ausVersalien, nameVomUmschlag, schreibungAusSatz } from "./umschlagTitel";
 import { REIHEN } from "../lib/reihen";
 import { IST_WELTKRIEG } from "../lib/marke";
+import { HEFTARCHIV_EREIGNIS } from "./heftarchiv";
 import { textebeneAlsBlob, type TextPage } from "./textLayer";
 import {
   oeffnePdf,
@@ -217,6 +218,17 @@ export default function FolderImport({
     setOrdner({ id: ++naechsteId.current, ...weiter });
   }
 
+  // Hefte aus dem Heftarchiv (StrukturEinlesen) kommen in dieselbe Schlange.
+  const uebernehmenRef = useRef<(liste: DroppedFolder[]) => void>(() => undefined);
+  useEffect(() => {
+    const annehmen = (e: Event) => {
+      const liste = (e as CustomEvent<DroppedFolder[]>).detail;
+      if (Array.isArray(liste) && liste.length) uebernehmenRef.current(liste);
+    };
+    window.addEventListener(HEFTARCHIV_EREIGNIS, annehmen);
+    return () => window.removeEventListener(HEFTARCHIV_EREIGNIS, annehmen);
+  }, []);
+
   function uebernehmen(liste: DroppedFolder[]) {
     if (!liste.length) {
       setErr("Das war kein Ordner. Bitte den ganzen Heftordner fallen lassen.");
@@ -230,8 +242,18 @@ export default function FolderImport({
     setErledigtListe([]);
     naechster();
   }
+  uebernehmenRef.current = uebernehmen;
 
   async function starten(plan: FolderPlan, name: Heftname) {
+    if (!plan.inner) return;
+    // Weltkrieg (Heftarchiv): nur die Bilder hoch, die der Satz verlinkt;
+    // ohne Satzdatei gar keine, denn dann weiss niemand, wohin sie gehoeren.
+    // Im Archiv liegen daneben Umschlagvorlagen von 100 MB und alte Fassungen.
+    if (IST_WELTKRIEG && plan.artwork.length) {
+      const verlinkt = plan.idml ? await verlinkteBilder(plan.idml.file).catch(() => null) : null;
+      const artwork = verlinkt ? plan.artwork.filter((f) => verlinkt.has(dateiStamm(f.name))) : [];
+      plan = { ...plan, artwork };
+    }
     if (!plan.inner) return;
     const innenteil = plan.inner;
     setErr(null);

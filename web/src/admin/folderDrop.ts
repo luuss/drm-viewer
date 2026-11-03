@@ -244,3 +244,41 @@ export async function strukturLesen(
   melden();
   return { wurzeln: eintraege.map((e) => e.name), dateien, bytes };
 }
+
+/**
+ * Alle Dateien eines Drops mit ihren Datei-Objekten, ohne etwas zu lesen.
+ * Ein `File` aus `entry.file()` ist nur ein Verweis; gelesen wird erst, wenn
+ * der Import die Datei wirklich braucht.
+ */
+export async function alleDateien(
+  items: DataTransferItemList,
+  onFortschritt?: (dateien: number) => void,
+): Promise<ScannedFile[]> {
+  const eintraege: FileSystemEntry[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry?.();
+    if (entry) eintraege.push(entry);
+  }
+  const out: ScannedFile[] = [];
+  async function gehen(dir: FileSystemDirectoryEntry, prefix: string): Promise<void> {
+    const reader = dir.createReader();
+    for (;;) {
+      const batch = await readBatch(reader);
+      if (!batch.length) break;
+      for (const entry of batch) {
+        if (entry.isFile) {
+          const file = await fileOf(entry as FileSystemFileEntry).catch(() => null);
+          if (file) out.push({ path: prefix + entry.name, name: entry.name, size: file.size, file });
+          if (out.length % 500 === 0) onFortschritt?.(out.length);
+        } else if (entry.isDirectory) {
+          await gehen(entry as FileSystemDirectoryEntry, prefix + entry.name + "/");
+        }
+      }
+    }
+  }
+  for (const e of eintraege) {
+    if (e.isDirectory) await gehen(e as FileSystemDirectoryEntry, e.name + "/");
+  }
+  onFortschritt?.(out.length);
+  return out;
+}
