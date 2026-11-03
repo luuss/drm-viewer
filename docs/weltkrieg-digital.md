@@ -150,6 +150,52 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
   im Container `wkdigital-import-worker-1` mit boto3 (wie die IDML in
   `_scratch/wk160`). Zweck: Musterhefte je Reihe aussuchen, dann Massenimport.
 
+## Heftarchiv und Massenimport (03.11.2026)
+
+* **Archiv** (Ordner `weltkrieg`, 309 GB, 67.288 Dateien; Liste in
+  `_scratch/wk-struktur/liste.json`, nicht im Repo): je Reihe ein Ordner
+  (Doppelbände, Fliegerhefte, Freikorps, Fremdenlegion, Großbände,
+  Magazinhefte, Marinehefte, Normalhefte, Soldaten-Reihe), darin Nummernbereiche
+  und je Heft `Ausgabe/` mit Innenteil- und Umschlag-PDF. Dazu
+  `FÜR E-BOOKS/E-Books zum Veröffentlichen` (89 Hefte mit IDML+PDF, für epuboo).
+  235 der 309 GB sind TIF.
+* **Bestand:** 448 Hefte mit Innenteil: 316 nur PDF (+INDD), 97 PDF+IDML,
+  15 nur INDD, 15 ohne alles, 5 nur PDF. **Der Import muss aus dem PDF
+  allein laufen** (Anweisung 03.11.: keine IDML-Exporte von Hand).
+* **Admin → „Hefte aus dem Heftarchiv importieren“**: ganzes Archiv
+  hineinziehen; `web/src/admin/heftarchiv.ts` findet die Hefte (452 im Archiv,
+  0,3 s): Innenteil-Datei („innenteil“ im Datei- oder Ordnernamen), Heftordner
+  = oberster Ordner mit derselben Nummer (nicht „121-130d“), Fassung mit IDML
+  vor nur PDF, „ALT-ALT“/„alte versionen“ raus. Erst nur `MUSTERHEFTE` (27).
+  Hochgeladen werden nur die Bilder, die die IDML verlinkt; ohne IDML keine.
+* **Text ohne IDML:** `extract-service/extractor/buch_pdf.py` aus der
+  Textebene (`textebene.json`): Kolumnentitel/Seitenzahl am Kopf/Fuss raus,
+  zweispaltig (Normalhefte, Doppelbände) und einspaltig, Initiale an die Zeile
+  daneben, Absatz bei Einzug nach voller Zeile/Satzende, bei Abstand oder kurzer
+  Zeile mit Satzende; Trennung auch ohne Strich in der Textebene (Zeile endet
+  eine Strichbreite vor dem Rand); Fussnoten (klein, „*“) hinter den Absatz mit
+  dem letzten Text ihrer Seite; Werbeseiten (≥5 grosse Zeilen) raus. Geprüft:
+  284n (2-spaltig), 121d, 81mag. Prüfskript `_scratch/wk-pdf/probe2.py <textebene>`.
+  Ohne Lesetext endet der Auftrag als Fehler.
+* **Umschlag:** Die Umschlag-PDFs kommen in wechselnder Seitenfolge. Die
+  Titelseite ist die Tafel mit der **eigenen Heftnummer** („Nr. 112“) plus
+  Schriftzug/Preis (`titelseitenWert`, `tafelnNachInhalt` in `coverPages.ts`);
+  Bogenpartnerin = U4, anderer Bogen = U2/U3. Anzeigen auf U3/U4 haben
+  Schriftzug, „Nr.“ und Preis auch, aber nicht die eigene Nummer. Ohne
+  Umschlag-PDF wird die Titelseite vorn im Innenteil gesucht.
+* **Reihe Pflicht:** Erkennt die Titelseite keine Reihe, wird das Heft nicht
+  importiert. Grund: am 03.11. schrieben sich 1d, 1n, 1g, 1m, 1fk und 1legion
+  als „Weltkrieg 1“ ins selbe Heft. Freikorps und Blitzkrieg haben den
+  Schriftzug als Bild; erkannt an „Erlebte Geschichte / Freiwillige
+  Wehrverbände“ bzw. „Second World War in Fight“ (`umschlag` in `reihen.ts`).
+* **Titel:** grösste Schrift unter dem Kopf, doppelte Konturzeilen einmal,
+  Trennstrich am Zeilenende zusammen; Schreibung von der Titelseite des
+  Innenteils (`anfangsText`), sonst Satz, sonst `ausVersalien`.
+* Die 24 Testhefte vom 03.11. sind gelöscht (Liste `_scratch/wk-struktur/issues-vor-loeschen.json`),
+  falsche Reihen „159d …“, „160d …“, „Weltkrieg“, „B“ abgeschaltet.
+* Convex der Anlage von der Kommandozeile: `/root/wkrun [--identity JSON] fn JSON`
+  auf dem Server, lokal `_scratch/wk-struktur/wkrun.sh`.
+
 ## Offen
 
 * **Rechtstexte** (`drm-viewer-evz`): Impressum, Datenschutz, AGB, Widerruf
