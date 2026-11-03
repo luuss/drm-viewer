@@ -35,7 +35,7 @@ export function AnmeldeRahmen({ titel, children }: { titel: string; children: Re
     <div className="auth-page">
       <div className="auth-box">
         <div className="auth-brand">
-          <img src={MARKE.logoHell} alt={MARKE.logoAlt} className={MARKE.logoSchriftzug ? "brand-logo schriftzug" : "brand-logo"} />
+          <img src={MARKE.logo} alt={MARKE.logoAlt} className={MARKE.logoSchriftzug ? "brand-logo schriftzug" : "brand-logo"} />
           <span className="brand-sub">Digital</span>
         </div>
         <div className="titles">
