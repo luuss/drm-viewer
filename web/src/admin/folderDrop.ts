@@ -195,3 +195,52 @@ export function readDirectoryInput(list: FileList): DroppedFolder | null {
   if (!files.length) return null;
   return { folderName, files };
 }
+
+/** Eine Datei der Ordnerliste: Pfad, Groesse in Byte, Aenderungszeit (ms). */
+export type ListenEintrag = [string, number, number];
+
+/**
+ * Nur die Struktur eines Drops lesen: Pfade, Groessen, Zeiten. Kein Byte
+ * Inhalt wird gelesen; `entry.file()` liefert nur die Angaben der Datei.
+ * Gedacht fuer das ganze Heftarchiv (300 GB) vor dem Massenimport.
+ */
+export async function strukturLesen(
+  items: DataTransferItemList,
+  onFortschritt?: (dateien: number, bytes: number) => void,
+): Promise<{ wurzeln: string[]; dateien: ListenEintrag[]; bytes: number }> {
+  const eintraege: FileSystemEntry[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry?.();
+    if (entry) eintraege.push(entry);
+  }
+  const dateien: ListenEintrag[] = [];
+  let bytes = 0;
+  const melden = () => onFortschritt?.(dateien.length, bytes);
+  async function gehen(dir: FileSystemDirectoryEntry, prefix: string): Promise<void> {
+    const reader = dir.createReader();
+    for (;;) {
+      const batch = await readBatch(reader);
+      if (!batch.length) break;
+      for (const entry of batch) {
+        if (entry.isFile) {
+          const file = await fileOf(entry as FileSystemFileEntry).catch(() => null);
+          const groesse = file?.size ?? -1;
+          dateien.push([prefix + entry.name, groesse, file?.lastModified ?? 0]);
+          if (groesse > 0) bytes += groesse;
+          if (dateien.length % 500 === 0) melden();
+        } else if (entry.isDirectory) {
+          await gehen(entry as FileSystemDirectoryEntry, prefix + entry.name + "/");
+        }
+      }
+    }
+  }
+  for (const e of eintraege) {
+    if (e.isDirectory) await gehen(e as FileSystemDirectoryEntry, e.name + "/");
+    else if (e.isFile) {
+      const file = await fileOf(e as FileSystemFileEntry).catch(() => null);
+      dateien.push([e.name, file?.size ?? -1, file?.lastModified ?? 0]);
+    }
+  }
+  melden();
+  return { wurzeln: eintraege.map((e) => e.name), dateien, bytes };
+}

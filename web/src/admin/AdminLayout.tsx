@@ -2,6 +2,8 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "../lib/api";
 import FolderImport from "./FolderImport";
+import StrukturEinlesen from "./StrukturEinlesen";
+import { IST_WELTKRIEG } from "../lib/marke";
 
 /**
  * Rahmen der Redaktion: Hefte, ein Heft, Einstellungen, Personen. Die
@@ -37,6 +39,7 @@ export default function AdminLayout() {
       </nav>
       <div className="admin-inhalt">
         <FolderImport kompakt={!aufListe} />
+        {IST_WELTKRIEG && aufListe && <StrukturEinlesen />}
         <Outlet />
       </div>
     </div>

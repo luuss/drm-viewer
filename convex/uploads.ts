@@ -47,3 +47,31 @@ export const presignUpload = action({
     return { url, key };
   },
 });
+
+/**
+ * Adresse fuer eine Ordnerliste (Weltkrieg, 03.11.2026): vor dem
+ * Massenimport laedt die Redaktion nur Pfade und Groessen ihres
+ * Heftarchivs hoch, ohne eine einzige Heftdatei. Gehoert zu keinem Heft.
+ */
+export const presignStruktur = action({
+  args: { name: v.string(), bytes: v.number() },
+  handler: async (ctx, args): Promise<{ url: string; key: string } | null> => {
+    await ctx.runQuery(api.users.requireRoleQuery, { role: "editor" });
+    assertUploadAllowed("application/json", args.bytes, "liste.json");
+    const endpoint = process.env.S3_ENDPOINT_URL;
+    const bucket = process.env.MEDIA_BUCKET ?? "emag-media";
+    if (!endpoint) return null;
+    const safeName = args.name.replace(/[^\w.\-]+/g, "_").slice(-80) || "ordner";
+    const key = `struktur/${Date.now()}-${safeName}.json`;
+    const url = await presignPut({
+      endpoint,
+      region: process.env.AWS_REGION ?? "us-east-1",
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
+      bucket,
+      key,
+      expiresIn: 900,
+    });
+    return { url, key };
+  },
+});
