@@ -91,4 +91,16 @@ describe("lose PDFs ohne Ordner", () => {
     expect(hefte).toHaveLength(1);
     expect(hefte[0].files.map((f) => f.name)).toEqual(["Marine 7.pdf", "Marine 7.idml"]);
   });
+  it("ordnet Begleitdateien bei mehreren PDFs nach Name zu", () => {
+    const hefte = zusammenfuehren([], [
+      datei("Marine 7.pdf"),
+      datei("Flieger 3.pdf"),
+      datei("Flieger 3.idml"),
+      datei("marine 7.jpg"),
+    ]);
+    expect(hefte.map((h) => h.files.map((f) => f.name))).toEqual([
+      ["Marine 7.pdf", "marine 7.jpg"],
+      ["Flieger 3.pdf", "Flieger 3.idml"],
+    ]);
+  });
 });

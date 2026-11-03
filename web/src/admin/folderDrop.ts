@@ -118,7 +118,21 @@ export function zusammenfuehren(ordner: DroppedFolder[], lose: ScannedFile[] = [
     const pdfs = lose.filter((f) => /\.pdf$/i.test(f.name));
     if (!ordner.length && pdfs.length) {
       if (pdfs.length === 1) return [{ folderName: pdfs[0].name, files: [...lose] }];
-      return pdfs.map((f) => ({ folderName: f.name, files: [f] }));
+      // Mehrere PDFs: eine Begleitdatei geht zu dem PDF mit gleichem
+      // Dateistamm, sonst mit gleicher Heftnummer. Passt keins eindeutig,
+      // bleibt sie draussen.
+      const stamm = (n: string) => n.replace(/\.[^.]+$/, "").trim().toLowerCase();
+      const hefteLos = pdfs.map((f) => ({ folderName: f.name, files: [f] }));
+      for (const f of lose) {
+        if (pdfs.includes(f)) continue;
+        let ziel = hefteLos.filter((h) => stamm(h.folderName) === stamm(f.name));
+        if (ziel.length !== 1) {
+          const nr = parseFolderName(f.name).issueNumber;
+          ziel = nr ? hefteLos.filter((h) => parseFolderName(h.folderName).issueNumber === nr) : [];
+        }
+        if (ziel.length === 1) ziel[0].files.push(f);
+      }
+      return hefteLos;
     }
     // Nur lose Dateien und Ordner ohne PDF: der erste Ordner gibt den Namen.
     return ordner.length
