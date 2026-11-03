@@ -223,6 +223,13 @@ class Job:
                 self._text_pages, self._cover_pages, self.data.get("issueTitle")
             )
             quelle = "buch-pdf"
+            if not articles and self.data.get("kind") != "nachtrag":
+                # Kein Text, kein Heft: lieber ein sichtbarer Fehler als ein
+                # leeres Heft "zur Pruefung".
+                raise RuntimeError(
+                    "Kein Lesetext: weder Satzdatei noch lesbare Textebene im PDF "
+                    "(gescanntes PDF oder Textebene fehlt)"
+                )
         elif satz:
             # Der Satz kennt seine Artikel selbst: eine Mengentext-Story ist
             # ein Artikel, die Reihenfolge der Absaetze steht in der Datei.
