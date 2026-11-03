@@ -4709,9 +4709,13 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 /* Fuss mit der blauen Linie wie im Laden */
 [data-marke="weltkrieg"] .app-footer { border-top: 3px solid #0077c0; }
 
-/* Knoepfe dunkel und in Versalien wie "SUCHEN" im Laden */
-[data-marke="weltkrieg"] button,
-[data-marke="weltkrieg"] .btn {
+/* Knoepfe dunkel und in Versalien wie "SUCHEN" im Laden. Das Markenattribut
+   steht in :where(), damit die Regeln nicht staerker sind als die Grundregel
+   fuer button/.btn: Bauteile mit eigener Klasse (Filterreiter, Heftzeilen im
+   Admin) behalten so ihre Farben. Vorher stand dort dunkle Schrift auf
+   dunklem Grund (03.11.2026). */
+:where([data-marke="weltkrieg"]) button,
+:where([data-marke="weltkrieg"]) .btn {
   font-family: var(--knopf);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -4720,25 +4724,25 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   border-color: #333333;
   border-radius: var(--radius-xs);
 }
-[data-marke="weltkrieg"] button:hover:not(:disabled),
-[data-marke="weltkrieg"] .btn:hover {
+:where([data-marke="weltkrieg"]) button:hover:not(:disabled),
+:where([data-marke="weltkrieg"]) .btn:hover {
   background: #111111;
   border-color: #111111;
 }
-[data-marke="weltkrieg"] button.secondary,
-[data-marke="weltkrieg"] .btn.secondary {
+:where([data-marke="weltkrieg"]) button.secondary,
+:where([data-marke="weltkrieg"]) .btn.secondary {
   background: var(--surface);
   color: #222222;
   border-color: #333333;
 }
-[data-marke="weltkrieg"] button.secondary:hover:not(:disabled),
-[data-marke="weltkrieg"] .btn.secondary:hover {
+:where([data-marke="weltkrieg"]) button.secondary:hover:not(:disabled),
+:where([data-marke="weltkrieg"]) .btn.secondary:hover {
   background: #f0f0f0;
   color: #000000;
   border-color: #000000;
 }
-[data-marke="weltkrieg"] button:disabled,
-[data-marke="weltkrieg"] .btn:disabled {
+:where([data-marke="weltkrieg"]) button:disabled,
+:where([data-marke="weltkrieg"]) .btn:disabled {
   background: var(--paper-sunk);
   border-color: var(--rule);
   color: var(--muted);
