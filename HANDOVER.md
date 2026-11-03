@@ -1279,6 +1279,29 @@ Skripts.
 
 ---
 
+## 4p. Schräg gesetzte Fotos (03.11.2026)
+
+* Die DMZ dreht Fotos im Satz um 1 bis 9 Grad (DMZ 174: 92 Rahmen). Bisher gab
+  `_graphic_crop` dafür None, `_artwork_image` verglich dann das
+  Seitenverhältnis der achsparallelen Hülle mit der Datei und fiel oft auf den
+  Seitenausschnitt zurück: im Artikel stand ein schiefes Foto mit Ecken vom
+  Seitenhintergrund, Bildnachweis und Balkenresten (DMZ 174 S. 40 u. a.).
+* Jetzt (`extract-service/extractor/idml_extract.py`, Commits 0e22ba9, 7608602):
+  Ist nur der Rahmen gedreht und das Bild darin gerade, rechnet der Ausschnitt
+  im System des Rahmens (Ankerpunkte ohne Rahmen-Transform, `GraphicBounds` mit
+  der Bild-Transform). Ohne Beschnitt kommt `(0,0,1,1)`, damit die Datei aus
+  `Links/` genommen wird. Gespiegelt oder auf dem Kopf: weiter None.
+* Bestand: DMZ 174 (`md726n7…`) und ZUERST! 11/2026 (`md7cgzx…`) per
+  Bilder-Nachtrag (4m) neu, Sicherungen `_scratch/bildnachtrag/vorher-<id>-2026-11-03.json`.
+  Hefte, die vor dem 03.11. importiert wurden, haben den Fehler noch.
+* Falle beim Nachsehen: Der Schlüssel `images/<n>-…` zählt die Seiten mit
+  Umschlag, die Seitenbilder `seite-<nnn>.jpg` und die IDML-Seiten nicht.
+  DMZ 174 S. 40 = `seite-038.jpg` = IDML-Seite 37 = `images/39-…`.
+* **Den Import-Worker nie neu bauen, während ein Auftrag läuft.** Der Neustart
+  bricht ihn ab, der Auftrag bleibt auf `running` stehen. Vorher
+  `devtools:recentJobsInternal` ansehen; abgebrochenen Auftrag mit
+  `devtools:requeueJob '{"jobId":"…"}'` neu starten.
+
 ## 5. Was in dieser Sitzung gebaut wurde
 
 * **Eine Story ist ein Artikel.** Der Satz wird direkt gelesen statt über
