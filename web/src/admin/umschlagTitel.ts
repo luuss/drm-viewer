@@ -27,30 +27,61 @@ export type UmschlagName = {
   reihe: string | null;
 };
 
-type Reihe = { name: string; match: RegExp };
+type Reihe = { name: string; match: RegExp; umschlag?: RegExp };
+
+/** Der Kopf der Titelseite: Reihenzeile und Schriftzug. */
+const REIHE_IM_KOPF = 0.3;
 
 function gerade(i: TextItem): boolean {
   return i.length < 7 || !i[6] || i[6] % 360 === 0;
 }
 
+/**
+ * Derselbe Text an derselben Stelle zaehlt einmal: Titel liegen oft doppelt
+ * im PDF, einmal als Kontur ("Blutiger Januar Blutiger Januar").
+ */
+function ohneDoppel(items: TextItem[]): TextItem[] {
+  const gesehen = new Set<string>();
+  return items.filter((i) => {
+    const k = `${i[0].trim()}|${Math.round(i[1] * 100)}|${Math.round(i[2] * 100)}`;
+    if (gesehen.has(k)) return false;
+    gesehen.add(k);
+    return true;
+  });
+}
+
+/** Zeilen verbinden; ein Trennstrich am Zeilenende verbindet ohne Luecke. */
+function zeilenVerbinden(zeilen: string[]): string {
+  let out = "";
+  for (const z of zeilen) {
+    if (!out) out = z;
+    else if (/[A-Za-zÄÖÜäöüß]-$/.test(out)) out += z;
+    else out += " " + z;
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
+
 export function nameVomUmschlag(items: TextItem[], reihen: Reihe[]): UmschlagName | null {
-  const flach = items.filter((i) => gerade(i) && i[0].trim());
+  const flach = ohneDoppel(items.filter((i) => gerade(i) && i[0].trim()));
   const unten = flach.filter((i) => i[2] >= KOPF_BIS);
   const groesste = Math.max(0, ...unten.map((i) => i[5]));
   let titelGedruckt = "";
   if (groesste >= TITEL_MINDESTGROESSE) {
-    titelGedruckt = unten
-      .filter((i) => i[5] >= groesste * (1 - GROESSEN_SPANNE))
-      .sort((a, b) => a[2] - b[2] || a[1] - b[1])
-      .map((i) => i[0].trim())
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
+    titelGedruckt = zeilenVerbinden(
+      unten
+        .filter((i) => i[5] >= groesste * (1 - GROESSEN_SPANNE))
+        .sort((a, b) => a[2] - b[2] || a[1] - b[1])
+        .map((i) => i[0].trim()),
+    );
   }
-  const text = flach.map((i) => i[0]).join(" ");
-  // Die Reihe als eigenes Wort auf der Titelseite. Der Schriftzug der Anlage
+  // Die Reihe steht im Kopf ("erlebnisberichte – Doppelband"); erst dort
+  // suchen, dann auf der ganzen Seite. Der Schriftzug der Anlage
   // ("WELTKRIEG") passt auf keine Reihe; steht keine da, bleibt es offen.
-  const reihe = reihen.find((r) => r.match.test(text))?.name ?? null;
+  const kopf = flach.filter((i) => i[2] < REIHE_IM_KOPF).map((i) => i[0]).join(" ");
+  const text = flach.map((i) => i[0]).join(" ");
+  const passt = (r: Reihe, t: string) => (r.umschlag ?? r.match).test(t);
+  const reihe =
+    (reihen.find((r) => passt(r, kopf)) ?? reihen.find((r) => passt(r, text)))?.name ?? null;
   if (!titelGedruckt && !reihe) return null;
   return { titelGedruckt, reihe };
 }
@@ -97,8 +128,11 @@ export function ausVersalien(titel: string): string {
   return titel
     .toLocaleLowerCase("de-DE")
     .split(/(\s+|-)/)
-    .map((wort, i) =>
-      i > 0 && KLEIN.has(wort) ? wort : wort.charAt(0).toLocaleUpperCase("de-DE") + wort.slice(1),
-    )
+    .map((wort, i) => {
+      if (i > 0 && KLEIN.has(wort)) return wort;
+      // Anfuehrungszeichen vorn: der erste Buchstabe danach ("„Windhunde“").
+      const m = /^([„"‚'»«(]*)(.*)$/.exec(wort)!;
+      return m[1] + m[2].charAt(0).toLocaleUpperCase("de-DE") + m[2].slice(1);
+    })
     .join("");
 }

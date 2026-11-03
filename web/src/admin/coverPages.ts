@@ -113,3 +113,81 @@ export function umschlagTafeln(
         : [tafel("inside_back", "U3", n - 2, ganz(n - 2)), tafel("back_cover", "U4", n - 1, ganz(n - 1))],
   };
 }
+
+/**
+ * Wie sehr eine Tafel nach Titelseite aussieht, aus ihrer Textebene.
+ *
+ * Die Titelseite traegt oben den Schriftzug der Reihe in sehr grosser Schrift
+ * ("WELTKRIEG" 100 pt, "Freikorps", "LEGION"), die Heftnummer ("Nr. 159")
+ * und den Preis ("€ 4,95"). Rueckseite und Innenseiten haben das nicht.
+ */
+export function titelseitenWert(
+  items: ReadonlyArray<readonly [string, number, number, number, number, number, number?]>,
+  heftNummer?: string | null,
+): number {
+  let wert = 0;
+  const oben = items.filter((i) => i[2] < 0.35);
+  const groesste = Math.max(0, ...oben.map((i) => i[5]));
+  if (groesste >= 50) wert += 3;
+  else if (groesste >= 36) wert += 1;
+  const text = items.map((i) => i[0]).join(" ");
+  if (/\bnr\.?\s*\d+/i.test(text) || /\bno\.?\s*\d+/i.test(text)) wert += 2;
+  if (/€\s?\d+,\d{2}/.test(text)) wert += 1;
+  if (/www\.[a-z-]+\.(info|online|de)/i.test(text)) wert += 1;
+  // Die eigene Nummer: Anzeigen fuer andere Hefte auf U3/U4 tragen alles
+  // andere auch (Schriftzug, "Nr.", Preis), aber nicht diese Nummer.
+  const nr = /^\d+/.exec(heftNummer ?? "")?.[0];
+  if (nr && new RegExp(`\\b(nr|no)\\.?\\s*0*${nr}(?!\\d)`, "i").test(text)) wert += 5;
+  return wert;
+}
+
+/**
+ * Die Rollen der Tafeln nach dem Inhalt richten (Weltkrieg, 03.11.2026).
+ *
+ * Die Umschlag-PDFs der Druckvorstufe kommen in wechselnder Folge: mal
+ * U4, U1, U2, U3, mal zuerst der innere Bogen. Nach der Position allein
+ * stand bei "Zwei Treffer" der Kapitaen von U2 auf der Titelseite. Hier
+ * gewinnt die Tafel, die nach Titelseite aussieht; ihre Partnerin auf
+ * demselben Bogen (dieselbe Quellseite, sonst die Nachbarseite 0/1, 2/3)
+ * ist U4, vom anderen Bogen kommt links U2, rechts U3. Sieht keine Tafel
+ * eindeutig nach Titelseite aus, bleibt die Zuordnung nach Position.
+ */
+export function tafelnNachInhalt(
+  tafeln: { vorn: Tafel[]; hinten: Tafel[] },
+  texte: Map<Tafel, ReadonlyArray<readonly [string, number, number, number, number, number, number?]>>,
+  heftNummer?: string | null,
+): { vorn: Tafel[]; hinten: Tafel[] } {
+  const alle = [...tafeln.vorn, ...tafeln.hinten];
+  if (alle.length < 2) return tafeln;
+  const werte = alle.map((t) => titelseitenWert(texte.get(t) ?? [], heftNummer));
+  const ohneNummer = alle.map((t) => titelseitenWert(texte.get(t) ?? []));
+  // Nur eine Tafel mit der eigenen Nummer kann die Titelseite sein. Ohne
+  // sie ist eine Anzeige fuer ein anderes Heft (Schriftzug, "Nr.", Preis)
+  // nicht sicher zu unterscheiden; dann bleibt es bei der Lage.
+  const kandidaten = alle
+    .map((t, i) => ({ t, w: werte[i], i }))
+    .filter(({ i }) => werte[i] > ohneNummer[i]);
+  if (!kandidaten.length) return tafeln;
+  const best = Math.max(...kandidaten.map((k) => k.w));
+  const beste = kandidaten.filter((k) => k.w === best);
+  if (beste.length !== 1) return tafeln;
+  const titel = beste[0].t;
+  if (titel.role === "front_cover") return tafeln;
+  const nachLage = (a: Tafel, b: Tafel) => a.quellSeite - b.quellSeite || a.schnitt.links - b.schnitt.links;
+  const rest = alle.filter((t) => t !== titel);
+  const gleicherBogen = rest.find((t) => t.quellSeite === titel.quellSeite);
+  const partner =
+    gleicherBogen ?? rest.find((t) => t.quellSeite === (titel.quellSeite ^ 1)) ?? null;
+  const innen = rest.filter((t) => t !== partner).sort(nachLage);
+  const neu = (t: Tafel, role: TafelRolle, printedLabel: Tafel["printedLabel"]): Tafel => ({
+    ...t,
+    role,
+    printedLabel,
+  });
+  const vorn = [neu(titel, "front_cover", "U1")];
+  if (innen[0]) vorn.push(neu(innen[0], "inside_front", "U2"));
+  const hinten: Tafel[] = [];
+  if (innen[1]) hinten.push(neu(innen[1], "inside_back", "U3"));
+  if (partner) hinten.push(neu(partner, "back_cover", "U4"));
+  return { vorn, hinten };
+}

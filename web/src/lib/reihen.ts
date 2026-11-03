@@ -32,6 +32,12 @@ export type Reihe = {
   kasten: boolean;
   /** Hausfarbe der Reihe fuer ihre eigene Seite. */
   farbe: string;
+  /**
+   * Woran die Reihe auf der Titelseite zu erkennen ist, wenn nicht am Namen
+   * (der Schriftzug "Freikorps" ist ein Bild, im Text steht "Erlebte
+   * Geschichte · Freiwillige Wehrverbände"). Weltkrieg-Import.
+   */
+  umschlag?: RegExp;
   /** Kategorie der Reihe im Netzladen (Druckhefte, Sonderhefte). */
   laden: string;
   /** Werbegrafik fuer die Netzladen-Kachel; ohne sie zeigt die Kachel die neuesten Umschlaege. */
@@ -165,8 +171,8 @@ const WK_REIHEN: Reihe[] = [
   wk("marine", "Weltkrieg Marine", "#018ec3", /marine/i, "weltkrieg-marine"),
   wk("soldaten", "Weltkrieg Soldaten", "#8a3b2c", /soldaten/i, "weltkrieg-soldaten"),
   wk("magazin", "Weltkrieg Magazin", "#edcd00", /magazin/i, "weltkrieg-magazin"),
-  wk("blitzkrieg", "Blitzkrieg", "#ec6708", /blitzkrieg/i, "blitzkrieg"),
-  wk("freikorps", "Freikorps", "#35532d", /freikorps/i, "freikorps"),
+  { ...wk("blitzkrieg", "Blitzkrieg", "#ec6708", /blitzkrieg/i, "blitzkrieg"), umschlag: /blitzkrieg|second world war in fight/i },
+  { ...wk("freikorps", "Freikorps", "#35532d", /freikorps/i, "freikorps"), umschlag: /freikorps|erlebte geschichte|freiwillige wehrverb/i },
   wk("legion", "Legion", "#9f862a", /legion/i, "legion"),
 ];
 

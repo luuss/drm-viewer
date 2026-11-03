@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { umschlagTafeln } from "./coverPages";
+import { umschlagTafeln, tafelnNachInhalt, titelseitenWert } from "./coverPages";
 
 const A4 = { pageWidthPt: 595.276, pageHeightPt: 841.89 };
 
@@ -76,5 +76,44 @@ describe("umschlagTafeln", () => {
     expect(zwei.vorn.map((t) => t.printedLabel)).toEqual(["U1"]);
     expect(zwei.hinten.map((t) => [t.printedLabel, t.quellSeite])).toEqual([["U4", 1]]);
     expect(umschlagTafeln([]).vorn).toEqual([]);
+  });
+});
+
+describe("tafelnNachInhalt", () => {
+  const schnitt = { links: 0, oben: 0, breite: 400, hoehe: 560 };
+  const t = (role: any, printedLabel: any, quellSeite: number) => ({ role, printedLabel, quellSeite, schnitt });
+  const titel = [
+    ["WELTKRIEG", 0.05, 0.01, 0.9, 0.17, 100],
+    ["NR. 112", 0.05, 0.18, 0.15, 0.2, 16],
+    ["€ 3,95", 0.85, 0.18, 0.94, 0.2, 16],
+    ["WWW.WELTKRIEG.INFO", 0.35, 0.18, 0.65, 0.2, 16],
+  ] as const;
+  const anzeige = [
+    ["FREIKORPS", 0.05, 0.02, 0.9, 0.15, 70],
+    ["Aktuell ist Heft Nr. 35", 0.1, 0.9, 0.5, 0.92, 9],
+    ["€ 2,95", 0.1, 0.93, 0.2, 0.95, 9],
+    ["www.freikorps.info", 0.1, 0.96, 0.4, 0.98, 9],
+  ] as const;
+  // "Zwei Treffer": die PDF-Folge war U2, U3, U4, U1; geometrisch geraten
+  // wurde U4, U1, U2, U3.
+  const geraten = {
+    vorn: [t("front_cover", "U1", 1), t("inside_front", "U2", 2)],
+    hinten: [t("inside_back", "U3", 3), t("back_cover", "U4", 0)],
+  };
+  it("nimmt die Tafel mit der eigenen Nummer als Titelseite, ihre Bogenpartnerin als U4", () => {
+    const texte = new Map<any, any>([
+      [geraten.hinten[0], titel],
+      [geraten.vorn[1], anzeige],
+    ]);
+    const neu = tafelnNachInhalt(geraten, texte, "112");
+    const lage = [...neu.vorn, ...neu.hinten].map((x) => `${x.printedLabel}:${x.quellSeite}`);
+    expect(lage).toEqual(["U1:3", "U2:0", "U3:1", "U4:2"]);
+  });
+  it("laesst die Lage, wenn keine Tafel eindeutig Titelseite ist", () => {
+    const texte = new Map<any, any>([[geraten.vorn[1], anzeige]]);
+    expect(tafelnNachInhalt(geraten, texte, "112")).toBe(geraten);
+  });
+  it("erkennt fremde Hefte in Anzeigen nicht als Titelseite", () => {
+    expect(titelseitenWert(anzeige, "112")).toBeLessThan(titelseitenWert(titel, "112"));
   });
 });

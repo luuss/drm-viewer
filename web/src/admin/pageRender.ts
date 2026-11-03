@@ -21,7 +21,7 @@ import {
   type TextItem,
   type TextPage,
 } from "./textLayer";
-import { umschlagTafeln, type Netz, type Tafel } from "./coverPages";
+import { tafelnNachInhalt, umschlagTafeln, type Netz, type Tafel } from "./coverPages";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -227,10 +227,34 @@ export type UmschlagTafel = Tafel & RenderedPage;
  * aus Bogenform und Netzformat; das Netzformat kommt aus der TrimBox der
  * Datei. Jede Tafel geht durch `onTafel`, in Lesereihenfolge.
  */
+/**
+ * Tafeln nach ihrem Inhalt richten (`tafelnNachInhalt`): dazu die Textebene
+ * jeder Tafel lesen. Kostet je Quellseite ein `getTextContent`.
+ */
+async function nachInhaltRichten(
+  doc: any,
+  tafeln: { vorn: Tafel[]; hinten: Tafel[] },
+  heftNummer?: string | null,
+): Promise<{ vorn: Tafel[]; hinten: Tafel[] }> {
+  const texte = new Map<Tafel, TextItem[]>();
+  for (const t of [...tafeln.vorn, ...tafeln.hinten]) {
+    try {
+      const page = await doc.getPage(t.quellSeite + 1);
+      const roh = page.getViewport({ scale: 1 });
+      const inhalt = await page.getTextContent();
+      texte.set(t, normiereTextelemente(inhalt.items as any[], roh, t.schnitt, true));
+      page.cleanup();
+    } catch {
+      texte.set(t, []);
+    }
+  }
+  return tafelnNachInhalt(tafeln, texte, heftNummer);
+}
+
 export async function renderUmschlag(
   file: Blob,
   netz: Netz | undefined,
-  options: { targetWidth: number; quality: number },
+  options: { targetWidth: number; quality: number; nachInhalt?: boolean; heftNummer?: string | null },
   onTafel: (tafel: UmschlagTafel, position: number, total: number) => Promise<void>,
   abgebrochen?: () => boolean,
 ): Promise<{ vorn: number; hinten: number }> {
@@ -247,7 +271,10 @@ export async function renderUmschlag(
       });
       page.cleanup();
     }
-    const { vorn, hinten } = umschlagTafeln(quellseiten, netz);
+    const geometrisch = umschlagTafeln(quellseiten, netz);
+    const { vorn, hinten } = options.nachInhalt
+      ? await nachInhaltRichten(doc, geometrisch, options.heftNummer)
+      : geometrisch;
     const alle = [...vorn, ...hinten];
     for (const [position, tafel] of alle.entries()) {
       if (abgebrochen?.()) break;
@@ -273,6 +300,8 @@ export async function renderUmschlag(
 export async function umschlagTextAusPdf(
   file: Blob,
   netz?: Netz,
+  nachInhalt = false,
+  heftNummer?: string | null,
 ): Promise<{ sourcePageIndex: number; role: Tafel["role"]; items: TextItem[] }[]> {
   const trim = await trimBoxAusPdf(file);
   return await mitPdf(file, async (doc) => {
@@ -287,7 +316,8 @@ export async function umschlagTextAusPdf(
       });
       page.cleanup();
     }
-    const { vorn, hinten } = umschlagTafeln(quellseiten, netz);
+    const geometrisch = umschlagTafeln(quellseiten, netz);
+    const { vorn, hinten } = nachInhalt ? await nachInhaltRichten(doc, geometrisch, heftNummer) : geometrisch;
     const out = [];
     for (const [position, tafel] of [...vorn, ...hinten].entries()) {
       const page = await doc.getPage(tafel.quellSeite + 1);
@@ -432,4 +462,24 @@ export async function readPriceFromImprint(
     }
     return undefined;
   });
+}
+
+/**
+ * Der Text der ersten Seiten eines geoeffneten PDF, je Seite ein String.
+ * Fuer die Schreibung des Heft-Titels: der Umschlag setzt Versalien, die
+ * Titelseite des Innenteils schreibt ihn richtig.
+ */
+export async function anfangsText(pdf: OffenesPdf, seiten = 4): Promise<string[]> {
+  const out: string[] = [];
+  for (let i = 1; i <= Math.min(seiten, pdf.doc.numPages); i++) {
+    try {
+      const page = await pdf.doc.getPage(i);
+      const inhalt = await page.getTextContent();
+      out.push((inhalt.items as any[]).map((t) => (t.str ?? "") + (t.hasEOL ? "\n" : " ")).join(""));
+      page.cleanup();
+    } catch {
+      continue;
+    }
+  }
+  return out;
 }

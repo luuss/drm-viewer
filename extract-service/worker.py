@@ -37,6 +37,7 @@ from extractor.article_assembler import assemble, assemble_cover_pages, flow_tex
 from extractor.buecher import buecher_der_seiten
 from extractor import bildunterschriften
 from extractor.buch import buch_aus_satz
+from extractor.buch_pdf import buch_aus_textebene
 from extractor.idml_extract import (
     BILD_MINDESTFLAECHE,
     extract_idml_blocks,
@@ -215,6 +216,13 @@ class Job:
         if satz and IMPORT_MODUS == "buch":
             articles = buch_aus_satz(satz, images, self.data.get("issueTitle"))
             quelle = "buch"
+        elif IMPORT_MODUS == "buch":
+            # Ohne Satzdatei: der Text aus der Textebene des Druck-PDF, die
+            # der Browser gelesen hat (extractor/buch_pdf.py).
+            articles = buch_aus_textebene(
+                self._text_pages, self._cover_pages, self.data.get("issueTitle")
+            )
+            quelle = "buch-pdf"
         elif satz:
             # Der Satz kennt seine Artikel selbst: eine Mengentext-Story ist
             # ein Artikel, die Reihenfolge der Absaetze steht in der Datei.

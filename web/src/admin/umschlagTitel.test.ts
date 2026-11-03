@@ -47,3 +47,33 @@ describe("schreibungAusSatz", () => {
     expect(ausVersalien("ALLES AUF EINE KARTE")).toBe("Alles auf eine Karte");
   });
 });
+
+describe("Titelseiten aus dem Archiv", () => {
+  const R = [
+    { name: "Weltkrieg Doppelband", match: /doppel/i },
+    { name: "Freikorps", match: /freikorps/i, umschlag: /freikorps|erlebte geschichte|freiwillige wehrverb/i },
+  ];
+  it("zaehlt doppelt gesetzte Titelzeilen einmal und erkennt Freikorps am Untertitel", () => {
+    const items: TextItem[] = [
+      ["Freiwillige Wehrverbände 1918–23", 0.18, 0.21, 0.62, 0.23, 13.2],
+      ["Nr. 34", 0.75, 0.21, 0.83, 0.23, 13.2],
+      ["Blutiger Januar", 0.05, 0.23, 0.93, 0.35, 70],
+      ["Blutiger Januar", 0.05, 0.23, 0.93, 0.35, 70],
+      ["ERLEBTE GESCHICHTE", 0.29, 0.03, 0.78, 0.07, 24],
+    ];
+    expect(nameVomUmschlag(items, R)).toEqual({ titelGedruckt: "Blutiger Januar", reihe: "Freikorps" });
+  });
+  it("verbindet getrennte Titelzeilen ohne Luecke", () => {
+    const items: TextItem[] = [
+      ["PAROLE „GROSSER ZAPFEN-", 0.1, 0.3, 0.9, 0.36, 40],
+      ["STREICH“", 0.1, 0.37, 0.5, 0.43, 40],
+    ];
+    expect(nameVomUmschlag(items, R)?.titelGedruckt).toBe("PAROLE „GROSSER ZAPFEN-STREICH“");
+  });
+  it("holt die Schreibung von der Titelseite des Innenteils", () => {
+    expect(
+      schreibungAusSatz("DAS LETZTE BATAILLON ENTSCHEIDET", ["Das letzte Bataillon entscheidet!\nVorstoß an die Wolga"]),
+    ).toBe("Das letzte Bataillon entscheidet");
+    expect(ausVersalien("„WINDHUNDE“ IN SCHWERER SEE")).toBe("„Windhunde“ in Schwerer See");
+  });
+});

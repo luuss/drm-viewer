@@ -33,6 +33,7 @@ import {
   renderPdfPages,
   renderUmschlag,
   umschlagTextAusPdf,
+  anfangsText,
   type OffenesPdf,
   type RenderedPage,
 } from "./pageRender";
@@ -319,20 +320,39 @@ export default function FolderImport({
       // Weltkrieg: Titel und Reihe stehen auf der Titelseite, nicht sicher im
       // Ordnernamen. Lesbar ist die Titelseite in einem Augenblick; der
       // Umschlag wird spaeter ohnehin ganz gerendert.
-      if (IST_WELTKRIEG && plan.cover) {
-        melde("heft", `Titelseite ${plan.cover.name} wird gelesen`);
-        const tafeln = await umschlagTextAusPdf(plan.cover.file).catch(() => null);
+      if (IST_WELTKRIEG) {
+        // Ohne eigenes Umschlag-PDF steht die Titelseite vorn im Innenteil.
+        const mitTitel = plan.cover ?? innenteil;
+        melde("heft", `Titelseite ${mitTitel.name} wird gelesen`);
+        const tafeln = await umschlagTextAusPdf(mitTitel.file, undefined, true, name.issueNumber).catch(() => null);
         const u1 = tafeln?.find((t) => t.role === "front_cover") ?? tafeln?.[0];
         const vomUmschlag = u1 ? nameVomUmschlag(u1.items, REIHEN) : null;
-        if (vomUmschlag) {
+        if (!vomUmschlag) {
+          throw new Error(
+            `Die Titelseite in ${mitTitel.name} ist nicht lesbar: kein Titel, keine Reihe. ` +
+              "Das Heft wird nicht importiert.",
+          );
+        }
+        {
           let titel = name.issueTitle;
           if (vomUmschlag.titelGedruckt) {
+            // Schreibung: erst die Titelseite des Innenteils, dann der Satz.
+            const innen = innenPdf ? await anfangsText(innenPdf).catch(() => []) : [];
             const satz = plan.idml ? await satzTexte(plan.idml.file).catch(() => []) : [];
             titel =
-              schreibungAusSatz(vomUmschlag.titelGedruckt, satz) ??
+              schreibungAusSatz(vomUmschlag.titelGedruckt, [...innen, ...satz]) ??
               ausVersalien(vomUmschlag.titelGedruckt);
           }
-          const reihe = vomUmschlag.reihe ?? name.publicationName;
+          if (!vomUmschlag.reihe) {
+            // Ohne Reihe fielen Hefte verschiedener Reihen mit derselben
+            // Nummer in ein Heft "Weltkrieg 1" (03.11.2026: sechs Hefte in
+            // "Endstation Kaukasus"). Lieber anhalten.
+            throw new Error(
+              "Auf der Titelseite ist keine Reihe zu erkennen (Originalband, Doppelband, " +
+                "Flieger …). Das Heft wird nicht importiert.",
+            );
+          }
+          const reihe = vomUmschlag.reihe;
           name = {
             ...name,
             publicationName: reihe,
@@ -530,7 +550,12 @@ export default function FolderImport({
           const anzahl = await renderUmschlag(
             umschlag.file,
             satzMass ?? undefined,
-            { targetWidth: SEITEN_BREITE, quality: SEITEN_GUETE },
+            {
+              targetWidth: SEITEN_BREITE,
+              quality: SEITEN_GUETE,
+              nachInhalt: IST_WELTKRIEG,
+              heftNummer: name.issueNumber,
+            },
             async (tafel, position, total) => {
               pruefen();
               melde("umschlag", `Umschlag ${tafel.printedLabel} (${position + 1} von ${total})`, (position + 1) / total);
