@@ -96,8 +96,8 @@ const WELTKRIEG: Marke = {
     widerruf: `${WK_LADEN}widerrufsbelehrung/`,
   },
   kopfbild: {
-    src: "/img/wk/kopf-1440.jpg",
-    srcSet: "/img/wk/kopf-1440.jpg 1440w, /img/wk/kopf.jpg 2246w",
+    src: "/img/wk/kopf-1440.webp",
+    srcSet: "/img/wk/kopf-1440.webp 1440w, /img/wk/kopf.webp 2246w",
     breite: 2246,
     hoehe: 703,
   },

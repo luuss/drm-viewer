@@ -4735,12 +4735,10 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 }
 
 /* Kopfbild des Ladens oben im Kiosk */
+/* Das Bild hat unten einen durchsichtigen Rand, in den das Flugzeug ragt
+   (wie im Laden). Darum kein Kasten, kein Schatten, kein Abschneiden. */
 .marke-kopfbild {
-  margin: 0 0 var(--s5);
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-  background: #8fc3e8;
+  margin: 0 0 var(--s4);
 }
 .marke-kopfbild img {
   display: block;
@@ -4748,7 +4746,6 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   height: auto;
   aspect-ratio: 2246 / 703;
 }
-.kiosk-leer { margin-top: var(--s5); max-width: 40rem; }
 
 /* Reihen-Schriftzuege (SVG) brauchen keinen Kasten, nur Luft */
 [data-marke="weltkrieg"] .reihen-kachel .reihen-logo img { object-fit: contain; }

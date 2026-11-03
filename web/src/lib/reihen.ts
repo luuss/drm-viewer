@@ -137,7 +137,7 @@ const WK = "https://weltkrieg-online.de/produkt-kategorie/";
 const WK_KONTAKT: Kontakt = {
   web: "https://weltkrieg-online.de/",
   webLabel: "Netzladen",
-  webBild: "/img/wk/kopf-1440.jpg",
+  webBild: "/img/wk/kopf-1440.webp",
   mails: [],
   tel: "",
   social: [],

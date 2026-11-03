@@ -54,13 +54,6 @@ export default function KioskPage() {
         <ReihenKacheln hefte={issues} />
       </div>
 
-      {issues.length === 0 && (
-        <p className="hint kiosk-leer">
-          Die ersten Ausgaben werden gerade eingestellt. Gekauft wird im{" "}
-          <a href={MARKE.laden}>Netzladen auf {MARKE.ladenDomain}</a>; mit derselben E-Mail-Adresse
-          lesen Sie Ihre Käufe danach hier.
-        </p>
-      )}
 
       {abos.length > 0 && (
         <section>
