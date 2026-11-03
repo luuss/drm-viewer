@@ -258,5 +258,11 @@ export const setActive = mutation({
 
 export const get = query({
   args: { planId: v.id("subscriptionPlans") },
-  handler: async (ctx, { planId }) => await ctx.db.get(planId),
+  handler: async (ctx, { planId }) => {
+    // Oeffentlich: nur aktive Plaene, ohne Stripe-Kennungen.
+    const plan = await ctx.db.get(planId);
+    if (!plan || !plan.isActive) return null;
+    const { stripePriceId: _p, stripeProductId: _q, ...rest } = plan as any;
+    return rest;
+  },
 });

@@ -14,6 +14,7 @@ import {
   missingVariants,
 } from "./subscriptionCatalog";
 import { stripeCheckoutEnabled } from "./shopLinks";
+import { appUrl } from "./mail";
 
 const stripeClient = new StripeSubscriptions(components.stripe);
 
@@ -342,9 +343,18 @@ export const createPortalSession = action({
       userId: userId as string,
       email,
     });
+    // Nur zurueck auf die eigene Seite, sonst ist das Portal ein offener
+    // Umleiter (Pruefung 03.11.2026).
+    const eigene = new URL(appUrl()).origin;
+    let ziel = `${eigene}/konto`;
+    try {
+      if (new URL(returnUrl).origin === eigene) ziel = returnUrl;
+    } catch {
+      // ungueltige Adresse: Konto-Seite
+    }
     const session = await stripeClient.createCustomerPortalSession(ctx, {
       customerId: customer.customerId,
-      returnUrl,
+      returnUrl: ziel,
     });
     return { url: session.url };
   },

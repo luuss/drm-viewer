@@ -18,8 +18,19 @@
   (`devtools:issueInReiheInternal`), Greim-Dublette (unveröffentlicht) gelöscht,
   leere Reihen abgeschaltet. Umsatz-Seite + Rolle `umsatz` (chuk, Peggy) live bei L&S.
   Admins von L&S in Weltkrieg angelegt (gleiche Rollen).
-* **Nach dem Weltkrieg-Import ausrollen** (Convex + web dort): Umsatz-Seite, Rolle
-  `umsatz`, Löschschutz, `issueInReiheInternal`. Vorher nicht, Import läuft.
+* **Nach dem Weltkrieg-Import ausrollen** (Convex + web + tile-service dort): Umsatz-Seite,
+  Rolle `umsatz`, Löschschutz, `issueInReiheInternal`, Sicherheits-Fixes. Vorher nicht,
+  Import läuft. **Apache beider Leser** (`deploy/apache/digital*.vhost_ssl.conf`, neu:
+  `RequestHeader set X-Echte-IP`) erst danach einspielen und `plesk sbin httpdmng
+  --reconfigure-domain …`: ein Apache-Neuladen trifft beide Seiten.
+* **Sicherheitsprüfung 03.11.** (Ergebnis keine kritische/hohe Lücke): mittel = IP-Sperre
+  der Anmeldelinks per gefälschtem Kopf umgehbar → `x-echte-ip` (Apache) behoben, wirkt
+  erst mit der Apache-Vorlage. Niedrig behoben: Gateway ohne `issueId` → 403, Titelbild
+  unveröffentlichter Hefte nicht mehr öffentlich, `registerUpload` nur eigener Eimer +
+  `uploads/`, `plans.get` nur aktiv ohne Stripe-IDs, Portal-`returnUrl` nur eigene Seite,
+  Prototyp `backend/` (admin123) gelöscht. Offen (niedrig): Presign bindet Content-Type
+  nicht, Shop-HMAC ohne Zeitstempel, Convex-Admin-API öffentlich erreichbar (nur Admin-Key
+  schützt), Turnstile vor `/auth/link`.
 * **Später (nur notiert, nicht bauen):** Weltkrieg soll einen Modus bekommen, in dem
   man online liest und Hefte kauft (wie der Laden bei L&S, dort ohne PrestaShop).
 * **Weltkrieg-Massenimport** lief am 03.11. ab ~22 Uhr (452 Hefte, ~4 h).

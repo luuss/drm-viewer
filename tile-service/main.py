@@ -531,6 +531,10 @@ async def asset(
             headers={"Cache-Control": "private, no-store"},
         )
     require_fetch(request)
+    if not info.get("issueId"):
+        # Ohne Heft gibt es keine Zugriffspruefung; nur Oeffentliches (oben)
+        # darf dann heraus (Pruefung 03.11.2026).
+        raise HTTPException(status_code=403, detail="Kein Zugriff")
     session = await require_session(x_tile_session, info.get("issueId"))
     # Erst bremsen, dann das Ticket verbrauchen: ein 429 kostete sonst ein
     # Ticket, und jeder Neuversuch des Lesers leerte seinen Vorrat weiter.

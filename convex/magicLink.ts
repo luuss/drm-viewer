@@ -242,8 +242,20 @@ export const cleanupInternal = internalMutation({
   },
 });
 
-/** Client-IP hinter Cloudflare und Apache. */
+/**
+ * Client-IP hinter Cloudflare und Apache.
+ *
+ * Zuerst `x-echte-ip`: Apache setzt ihn aus `REMOTE_ADDR`, das dank
+ * mod_remoteip die echte Besucher-IP ist, und ueberschreibt, was der Besucher
+ * schickt (`deploy/apache/*.vhost_ssl.conf`). `cf-connecting-ip` und
+ * `x-forwarded-for` kann ein Besucher selbst setzen, wenn er den Server
+ * direkt anspricht; damit liess sich die Sperre je IP umgehen und die
+ * Gesamtgrenze fuer alle ausschoepfen (Pruefung 03.11.2026). Sie zaehlen
+ * nur noch, solange Apache den Kopf nicht setzt.
+ */
 export function clientIp(headers: Headers): string {
+  const echt = headers.get("x-echte-ip");
+  if (echt?.trim()) return echt.trim().slice(0, 64);
   const cf = headers.get("cf-connecting-ip");
   const xff = headers.get("x-forwarded-for")?.split(",")[0];
   const ip = (cf ?? xff ?? "").trim().slice(0, 64);

@@ -46,6 +46,15 @@ export const registerUpload = mutation({
     if (!args.storageId && !args.bucket) {
       throw new Error("Weder Convex-Ablage noch Eimer angegeben");
     }
+    // Nur der eigene Medienspeicher und nur Upload-Schluessel: sonst liesse
+    // sich jedes Objekt, das das Gateway lesen darf, als Titelbild eintragen.
+    if (args.bucket) {
+      const eigener = process.env.MEDIA_BUCKET ?? "emag-media";
+      if (args.bucket !== eigener) throw new Error("Fremder Speicher");
+      if (!args.key.startsWith("uploads/") || args.key.includes("..")) {
+        throw new Error("Schluessel ausserhalb der Uploads");
+      }
+    }
     assertUploadAllowed(
       args.contentType,
       args.bytes ?? 0,
@@ -205,7 +214,12 @@ export const resolveForServiceInternal = internalQuery({
     }
     if (!asset) return null;
     return {
-      public: asset.kind === "cover" || (await isPublicTocPage(ctx, asset)),
+      // Titelbild oeffentlich nur bei veroeffentlichtem Heft (oder ohne Heft:
+      // Reihenbild). Sonst sah, wer die Asset-ID kennt, unveroeffentlichte Titel.
+      public:
+        (asset.kind === "cover" &&
+          (!asset.issueId || (await ctx.db.get(asset.issueId))?.isPublished === true)) ||
+        (await isPublicTocPage(ctx, asset)),
       issueId: asset.issueId ?? null,
       key: asset.key,
       bucket: asset.bucket ?? null,
