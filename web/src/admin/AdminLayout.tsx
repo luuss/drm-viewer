@@ -36,6 +36,7 @@ export default function AdminLayout() {
         </NavLink>
         {me.isAdmin && <NavLink to="/admin/personen">Personen</NavLink>}
         {me.isAdmin && <NavLink to="/admin/einstellungen">Einstellungen</NavLink>}
+        {me.siehtUmsatz && <NavLink to="/admin/umsatz">Umsatz</NavLink>}
       </nav>
       <div className="admin-inhalt">
         <FolderImport kompakt={!aufListe} />

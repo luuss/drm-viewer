@@ -21,6 +21,7 @@ export const me = query({
       isEditor: roles.includes("editor"),
       isPublisher: roles.includes("publisher"),
       isAdmin: roles.includes("admin"),
+      siehtUmsatz: roles.includes("umsatz"),
       darfRollenVergeben: darfRollenVergeben(user),
     };
   },
@@ -61,7 +62,7 @@ export const setRoles = mutation({
     if (!darfRollenVergeben(await ctx.db.get(adminId))) {
       throw new Error("Rollen vergeben duerfen nur ausgewaehlte Konten");
     }
-    const allowed = ["customer", "reader", "editor", "publisher", "admin"];
+    const allowed = ["customer", "reader", "editor", "publisher", "admin", "umsatz"];
     const clean = roles.filter((r) => allowed.includes(r));
     await ctx.db.patch(userId, { roles: clean } as any);
     await audit(ctx, "user.setRoles", userId, clean.join(","));

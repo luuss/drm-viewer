@@ -69,6 +69,7 @@ import type * as textBereinigung from "../textBereinigung.js";
 import type * as toc from "../toc.js";
 import type * as tocPreview from "../tocPreview.js";
 import type * as tocZiel from "../tocZiel.js";
+import type * as umsatz from "../umsatz.js";
 import type * as uploadRules from "../uploadRules.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
@@ -141,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   toc: typeof toc;
   tocPreview: typeof tocPreview;
   tocZiel: typeof tocZiel;
+  umsatz: typeof umsatz;
   uploadRules: typeof uploadRules;
   uploads: typeof uploads;
   users: typeof users;

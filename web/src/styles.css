@@ -4773,3 +4773,29 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 
 /* Reihen-Schriftzuege (SVG) brauchen keinen Kasten, nur Luft */
 [data-marke="weltkrieg"] .reihen-kachel .reihen-logo img { object-fit: contain; }
+
+/* Umsatz (admin/Umsatz.tsx) */
+.umsatz-kacheln {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.umsatz-kacheln > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+}
+.umsatz-kacheln strong { font-size: 1.4rem; }
+.umsatz .tabelle { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+.umsatz .tabelle th, .umsatz .tabelle td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.umsatz .tabelle td:nth-child(n + 2) { white-space: nowrap; }

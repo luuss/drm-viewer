@@ -24,6 +24,7 @@ import AdminLayout from "./admin/AdminLayout";
 import IssueWorkspace from "./admin/IssueWorkspace";
 import Settings from "./admin/Settings";
 import { Personen } from "./admin/Settings";
+import Umsatz from "./admin/Umsatz";
 import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
 import LegalPage from "./pages/LegalPage";
@@ -125,6 +126,7 @@ function Seiten() {
             <Route path="heft/:issueId/:reiter" element={<IssueWorkspace />} />
             <Route path="einstellungen" element={<Settings />} />
             <Route path="personen" element={<Personen />} />
+            <Route path="umsatz" element={<Umsatz />} />
           </Route>
           <Route path="/impressum" element={<Shell><LegalPage doc="impressum" /></Shell>} />
           <Route path="/agb" element={<Shell><LegalPage doc="agb" /></Shell>} />

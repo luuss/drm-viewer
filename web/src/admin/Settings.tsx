@@ -383,6 +383,7 @@ export function Personen() {
               <th>E-Mail</th>
               <th>Name</th>
               <th>Rolle</th>
+              <th>Umsatz</th>
             </tr>
           </thead>
           <tbody>
@@ -403,7 +404,11 @@ export function Personen() {
                       }
                       onChange={(e) =>
                         tue(
-                          () => setRoles({ userId: u._id, roles: [e.target.value] }),
+                          () =>
+                            setRoles({
+                              userId: u._id,
+                              roles: [e.target.value, ...(u.roles.includes("umsatz") ? ["umsatz"] : [])],
+                            }),
                           `${u.email}: ${ROLLEN.find(([k]) => k === e.target.value)?.[1]}`,
                         )
                       }
@@ -414,6 +419,24 @@ export function Personen() {
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={u.roles.includes("umsatz")}
+                      aria-label={`Umsatz sehen: ${u.email ?? "Konto"}`}
+                      disabled={!me.darfRollenVergeben || busy !== null}
+                      onChange={(e) =>
+                        tue(
+                          () =>
+                            setRoles({
+                              userId: u._id,
+                              roles: [rolle, ...(e.target.checked ? ["umsatz"] : [])],
+                            }),
+                          `${u.email}: Umsatz ${e.target.checked ? "sichtbar" : "aus"}`,
+                        )
+                      }
+                    />
                   </td>
                 </tr>
               );
@@ -428,6 +451,10 @@ export function Personen() {
             <dd>{ROLLE_HINWEIS[k]}</dd>
           </div>
         ))}
+        <div>
+          <dt>Umsatz</dt>
+          <dd>sieht Umsatz und Käufer; nicht in Verwaltung enthalten</dd>
+        </div>
       </dl>
     </section>
   );

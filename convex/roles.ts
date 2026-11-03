@@ -2,8 +2,12 @@ import { QueryCtx, MutationCtx, ActionCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { Id } from "./_generated/dataModel";
 
-/** `reader`: liest jedes veroeffentlichte Heft ohne Kauf, verwaltet nichts. */
-export type Role = "customer" | "reader" | "editor" | "publisher" | "admin";
+/**
+ * `reader`: liest jedes veroeffentlichte Heft ohne Kauf, verwaltet nichts.
+ * `umsatz`: sieht Umsatz und Kaeufer (Seite "Umsatz"). Bewusst nicht in
+ * `admin` enthalten: Zahlen sieht nur, wer die Rolle ausdruecklich hat.
+ */
+export type Role = "customer" | "reader" | "editor" | "publisher" | "admin" | "umsatz";
 
 /** Wer mehr darf, darf auch das Geringere. */
 const IMPLIED: Record<Role, Role[]> = {
@@ -12,6 +16,7 @@ const IMPLIED: Record<Role, Role[]> = {
   editor: ["editor", "reader", "customer"],
   reader: ["reader", "customer"],
   customer: ["customer"],
+  umsatz: ["umsatz", "customer"],
 };
 
 function bootstrapAdminEmails(): string[] {

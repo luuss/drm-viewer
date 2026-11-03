@@ -14,6 +14,7 @@ import { slugify } from "./publications";
 import { reihenDesAbos, syncSubscription } from "./subscriptions";
 import { subscriptionIsActive } from "./access";
 import { Id } from "./_generated/dataModel";
+import { kaeuferDesHefts } from "./umsatz";
 import { assertSkuFree } from "./shopIntegration";
 import { cleanShopUrl, cleanSku, issueShopLink, issueShopSku } from "./shopLinks";
 import { seriesFor } from "./shopCovers";
@@ -63,6 +64,7 @@ export function shopLabels(
 }
 
 /** Kiosk: alle veroeffentlichten Ausgaben. */
+
 export const listPublished = query({
   args: { publicationId: v.optional(v.id("publications")) },
   handler: async (ctx, { publicationId }) => {
@@ -790,9 +792,20 @@ export const setPublished = mutation({
 });
 
 export const remove = mutation({
-  args: { issueId: v.id("issues") },
-  handler: async (ctx, { issueId }) => {
+  args: { issueId: v.id("issues"), trotzKaeufern: v.optional(v.boolean()) },
+  handler: async (ctx, { issueId, trotzKaeufern }) => {
     await requirePublisher(ctx);
+    // Ein Heft mit Kaeufern loescht man nicht nebenbei: mit ihm verschwinden
+    // ihre Freischaltungen (03.11.2026, Greim 36 doppelt, das alte hatte
+    // Freigaben). Nur ausdruecklich mit `trotzKaeufern`.
+    const kaeufer = await kaeuferDesHefts(ctx, issueId);
+    const anzahl = kaeufer.konten + kaeufer.ladenPositionen + kaeufer.leserKaeufe;
+    if (anzahl > 0 && !trotzKaeufern) {
+      throw new Error(
+        `Das Heft hat Kaeufer (${kaeufer.konten} Konten, ${kaeufer.ladenPositionen} ` +
+          `Laden-Positionen, ${kaeufer.leserKaeufe} Leser-Kaeufe) und wird nicht geloescht.`,
+      );
+    }
     const tables = [
       "issuePages",
       "issueSources",

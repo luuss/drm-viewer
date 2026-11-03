@@ -760,7 +760,8 @@ export default defineSchema(
     .index("by_order_line", ["externalOrderId", "lineId"])
     .index("by_email", ["email"])
     .index("by_email_issue", ["email", "issueId"])
-    .index("by_email_publication", ["email", "publicationId"]),
+    .index("by_email_publication", ["email", "publicationId"])
+    .index("by_issue", ["issueId"]),
 
   // --- Kartenkauf im Leser (leserKasse.ts, leserZahlung.ts) -----------------
   // Bezahlt wird mit Stripe im Leser, gebucht im Shop (create_order), frei
