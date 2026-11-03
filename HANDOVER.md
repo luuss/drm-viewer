@@ -31,6 +31,11 @@
   Prototyp `backend/` (admin123) gelöscht. Offen (niedrig): Presign bindet Content-Type
   nicht, Shop-HMAC ohne Zeitstempel, Convex-Admin-API öffentlich erreichbar (nur Admin-Key
   schützt), Turnstile vor `/auth/link`.
+* **Später (nur notiert, nicht bauen): Trennung + Verschlüsselung**, Konzept in
+  `../docs/sicherheit-trennung-konzept.md`. Sofort erledigt: `chmod 700
+  /opt/hefte-digital/files` (lus_shop konnte alle L&S-Hefte lesen). Vorschlag zuerst:
+  PHP-Nutzer per Firewall von 127.0.0.1-Ports der Leser fernhalten, Shop-Secret mit
+  Zeitstempel, dann MinIO-Verschlüsselung.
 * **Später (nur notiert, nicht bauen):** Weltkrieg soll einen Modus bekommen, in dem
   man online liest und Hefte kauft (wie der Laden bei L&S, dort ohne PrestaShop).
 * **Weltkrieg-Massenimport** lief am 03.11. ab ~22 Uhr (452 Hefte, ~4 h).
