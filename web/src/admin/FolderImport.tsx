@@ -8,6 +8,7 @@ import {
   fortschrittProzent,
   heftnameFuerPlan,
   issueTitleFor,
+  slugify,
   type FolderPlan,
   type ImportPhase,
   type ParsedName,
@@ -19,7 +20,9 @@ import { jpegName } from "./imageConvert";
 import { Ladeschlange } from "./ladeschlange";
 import { buildPageOrder, type CoverPage } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
-import { readIdmlMeta } from "./idmlMeta";
+import { readIdmlMeta, satzTexte } from "./idmlMeta";
+import { ausVersalien, nameVomUmschlag, schreibungAusSatz } from "./umschlagTitel";
+import { REIHEN } from "../lib/reihen";
 import { IST_WELTKRIEG } from "../lib/marke";
 import { textebeneAlsBlob, type TextPage } from "./textLayer";
 import {
@@ -28,6 +31,7 @@ import {
   readPriceFromImprint,
   renderPdfPages,
   renderUmschlag,
+  umschlagTextAusPdf,
   type OffenesPdf,
   type RenderedPage,
 } from "./pageRender";
@@ -289,6 +293,33 @@ export default function FolderImport({
           `Satzdatei ${plan.idml?.name ?? ""} laesst sich nicht lesen. ` +
             "Bitte die IDML neu aus InDesign exportieren. Der Lauf ist abgebrochen.",
         );
+      }
+      // Weltkrieg: Titel und Reihe stehen auf der Titelseite, nicht sicher im
+      // Ordnernamen. Lesbar ist die Titelseite in einem Augenblick; der
+      // Umschlag wird spaeter ohnehin ganz gerendert.
+      if (IST_WELTKRIEG && plan.cover) {
+        melde("heft", `Titelseite ${plan.cover.name} wird gelesen`);
+        const tafeln = await umschlagTextAusPdf(plan.cover.file).catch(() => null);
+        const u1 = tafeln?.find((t) => t.role === "front_cover") ?? tafeln?.[0];
+        const vomUmschlag = u1 ? nameVomUmschlag(u1.items, REIHEN) : null;
+        if (vomUmschlag) {
+          let titel = name.issueTitle;
+          if (vomUmschlag.titelGedruckt) {
+            const satz = plan.idml ? await satzTexte(plan.idml.file).catch(() => []) : [];
+            titel =
+              schreibungAusSatz(vomUmschlag.titelGedruckt, satz) ??
+              ausVersalien(vomUmschlag.titelGedruckt);
+          }
+          const reihe = vomUmschlag.reihe ?? name.publicationName;
+          name = {
+            ...name,
+            publicationName: reihe,
+            publicationSlug: slugify(reihe),
+            issueTitle: titel,
+            issueSubtitle: titel,
+          };
+          notiere(`Von der Titelseite: „${titel}“, Reihe ${reihe}`);
+        }
       }
       melde("heft", "Heft anlegen");
       const preis = await readPriceFromImprint(innenPdf).catch(() => undefined);

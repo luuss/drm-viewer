@@ -106,3 +106,32 @@ async function bogenInReihenfolge(zip: JSZip, parser: DOMParser): Promise<string
     return alle.sort();
   }
 }
+
+/**
+ * Der Text jeder Story der Satzdatei, ohne Formatierung. Gebraucht fuer die
+ * Schreibung des Titels (Umschlag in Versalien, Satz richtig geschrieben).
+ */
+export async function satzTexte(file: Blob): Promise<string[]> {
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch {
+    return [];
+  }
+  const parser = new DOMParser();
+  const out: string[] = [];
+  for (const name of Object.keys(zip.files).filter((n) => n.startsWith("Stories/"))) {
+    try {
+      const xml = parser.parseFromString(await zip.files[name].async("text"), "text/xml");
+      const teile: string[] = [];
+      for (const el of Array.from(xml.getElementsByTagName("*"))) {
+        if (el.localName === "Content") teile.push(el.textContent ?? "");
+        else if (el.localName === "Br") teile.push("\n");
+      }
+      out.push(teile.join(""));
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
