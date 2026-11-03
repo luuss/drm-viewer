@@ -1,5 +1,22 @@
 # Übergabe — Stand 30.09.2026
 
+**ERINNERN in der nächsten Sitzung (Stand 03.11.2026 abends):**
+* **Weltkrieg-Preise** sind nur vorläufig: vom Umschlag gelesen, bei E-Book-Fassungen
+  ohne Preis der Preis des neuesten Hefts der Reihe (`tools/weltkrieg/preise_setzen.sh`).
+  Der User: „ist egal, vielleicht will der Chef was anderes“. Den User daran
+  erinnern und fragen, welche Preise der Chef will. Bis dahin nichts weiter tun.
+  Preis-Übernahme beim Import selbst ist noch nicht gebaut (nach dem Massenimport).
+* **Lesen und Schenken, Schwerterträger:** 35, 36, 37, 38 liegen je in einer eigenen
+  Reihe ("35 Hyacinth Von Strachwitz" …), weil der Ordnername mit der Nummer beginnt.
+  Greim 36 doppelt (alt "Schwerterträger 36" und neu "36 Robert Ritter Von Greim").
+  38 Werner Baumbach hatte am 03.11. 0 Seiten (Import lief noch). Zusammenlegen in
+  "Schwerterträger" erst nach Rückfrage.
+* **DMZ 169** (Jan/Feb 2026) fehlt im Leser, sofern 2026 mit 169 beginnt.
+* **Weltkrieg-Massenimport** lief am 03.11. ab ~22 Uhr (452 Hefte, ~4 h).
+  Danach prüfen: Fehlerliste, Magazin 1/2 heißen "Weltkrieg 1"/"Weltkrieg 2"
+  (Titel auf dem Umschlag nicht erkannt), Code-Reviews zu `preise_*`
+  (bd drm-viewer-…), Uploads gelöschter Hefte aufräumen.
+
 **Neu am 03.11.2026: zweiter Leser https://digital.weltkrieg-online.de** (gleicher Code,
 eigene Anlage `/opt/weltkrieg-digital`, Marke `VITE_MARKE=weltkrieg`, Anmeldemails über
 WordPress-mu-plugin). Alles dazu: `docs/weltkrieg-digital.md`.
