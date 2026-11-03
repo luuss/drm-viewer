@@ -168,6 +168,8 @@ async function versuchen<T>(tun: () => Promise<T>, signal: AbortSignal): Promise
     } catch (e) {
       if (signal.aborted || e instanceof SitzungWeg) throw e;
       if (e instanceof DOMException && e.name === "AbortError") throw e;
+      // Speicher des Geraets voll: weiterholen hiesse nur, Daten wegzuwerfen.
+      if (e instanceof DOMException && e.name === "QuotaExceededError") throw e;
       const status =
         e instanceof Antwort
           ? e.status

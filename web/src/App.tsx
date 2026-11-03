@@ -50,7 +50,14 @@ export default function App() {
   return (
     <>
       {isAuthenticated && <Anmeldewaechter />}
-      {leserOffen ? <LeserEingang /> : <Seiten />}
+      {leserOffen ? (
+        // In einer eigenen Route, sonst fehlt dem Reader `useParams`.
+        <Routes>
+          <Route path="/reader/:issueId" element={<LeserEingang />} />
+        </Routes>
+      ) : (
+        <Seiten />
+      )}
     </>
   );
 }

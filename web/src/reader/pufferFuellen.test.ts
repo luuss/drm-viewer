@@ -199,6 +199,24 @@ describe("fuellen", () => {
     expect((await neuesPaket.kachel(0, "neu", 2, 0, 0))?.k).toBe(2);
   });
 
+  it("hoert auf, wenn der Speicher des Geraets voll ist", async () => {
+    const { geholt, convex } = anlage();
+    const voll = new SpeicherAblage();
+    // Kopf, Listen, Schriften und der Text passen noch, die Seiten nicht mehr.
+    let erlaubt = 8;
+    const schreiben = voll.schreiben.bind(voll);
+    voll.schreiben = async (slot, wert) => {
+      if (--erlaubt < 0) throw new DOMException("voll", "QuotaExceededError");
+      return schreiben(slot, wert);
+    };
+    pufferAblageSetzen(voll);
+    await expect(
+      fuellen(auftrag(convex, "q".repeat(64), 1), new AbortController().signal),
+    ).rejects.toThrow("voll");
+    // Nicht jede Kachel noch geholt und weggeworfen.
+    expect(geholt.filter((u) => u.includes("/tile/")).length).toBeLessThan(6);
+  });
+
   it("puffert nichts ohne Zugriff", async () => {
     const { convex } = anlage();
     const listen = convex.query.getMockImplementation()!;

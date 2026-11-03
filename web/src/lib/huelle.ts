@@ -6,8 +6,10 @@
 export function huelleAnmelden() {
   if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
   window.addEventListener("load", () => {
+    // Cloudflare setzt auf sw.js eine Browser-Cachezeit von vier Stunden; die
+    // Pruefung auf eine neue Fassung soll trotzdem immer ins Netz gehen.
     navigator.serviceWorker
-      .register("/sw.js")
+      .register("/sw.js", { updateViaCache: "none" })
       .then(async () => {
         const reg = await navigator.serviceWorker.ready;
         // Was vor dem Worker geladen wurde (Skript, Stile, Schriften,
