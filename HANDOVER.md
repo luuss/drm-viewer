@@ -303,6 +303,21 @@ aus Abschnitt 1e bleibt dabei ganz.
   Verbindung ein Link "<Heft> weiterlesen".
 * Ausrollen: Convex (neue Felder, abwaertskompatibel), dann `web` und
   `tile-service` zusammen.
+* **Geprueft live am 03.11.2026** (`_scratch/offline-puffer/pruefen.mjs`,
+  Wegwerfkonto, Telefon 390x844): Greim (52 Seiten) in ~2,5 min gepuffert,
+  985 Abrufe, 1014 Eintraege, 65 MB, kein Eintrag lesbar, Schluessel nicht
+  exportierbar, im Service-Worker-Cache nur die Huelle. Netz weg mitten im
+  Lesen: Seiten und Artikel (Schrift, Bilder) weiter da, Marke "Offline".
+  Neustart ganz ohne Server (DNS gesperrt): Reader nach 4 s, Artikel- und
+  Seitenansicht aus dem Paket, Lesestelle stimmt. Abmelden: Paket leer.
+  Ladezeit sichtbarer Kacheln mit/ohne Puffern daneben gemessen
+  (`zeiten.mjs`); seit dem Nachlauf von 1,5 s (`vorrang.ts`) kein
+  spuerbarer Unterschied.
+* Cloudflare setzt fuer Browser auf `sw.js` `max-age=14400` (Zone-Einstellung
+  Browser Cache TTL), nginx sendet `no-cache`. Unkritisch: die Registrierung
+  laeuft mit `updateViaCache: "none"`, die Kante prueft jedes Mal nach.
+* Nur auf digital.lesenundschenken.de ausgerollt; digital.weltkrieg-online.de
+  (gleicher Code, `docs/weltkrieg-digital.md`) hat es noch nicht.
 
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 
