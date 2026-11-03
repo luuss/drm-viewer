@@ -7,11 +7,11 @@
  * liest nie aus dieser Datei.
  *
  * Alle Preise sind Jahrespreise in Cent, inklusive Mehrwertsteuer.
- * Quellen, Stand September 2026: zuerst.de/abo und die Bestellformulare fuer
- * DMZ, DMZ Zeitgeschichte und Schwertertraeger auf lesenundschenken.de.
- * Digital gilt nur der Inlandspreis: ohne Versand gibt es keine
- * Auslandspreise (27.10.2026). Die Stufen tragen deshalb nur die Abo-Art
- * als Namen.
+ * Quelle: Preisblaetter "Abo 2027" des Verlags vom 26.10.2026
+ * (docs/abo-preise-2027.md im Dachordner). Digital gibt es dort nur das
+ * Online-Abo und die Gebuehr fuer die Zubuchung zur Druckausgabe; Schueler-,
+ * Foerder- und Kombi-Abos gibt es nur gedruckt. Der Schlesier hat kein
+ * Online-Abo. Digital gilt nur der Inlandspreis (27.10.2026).
  */
 
 export type DeliveryRegion = "inland" | "ausland" | "luftpost";
@@ -53,23 +53,13 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 10440 },
-      },
-      {
-        name: "Schüler- und Studentenabonnement",
-        note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 9000 },
-      },
-      {
-        name: "Kombi-Abonnement",
-        note: "Zusammen mit einem Abonnement der Deutschen Militärzeitschrift",
+        note: "12 Ausgaben im Jahr, nur digital",
         prices: { inland: 9600 },
-        kombi: { mit: "dmz", mitStufe: "Normalabonnement", sonst: "Normalabonnement" },
       },
       {
-        name: "Förderabonnement",
-        note: "Der Förderbetrag fließt in die Werbung von ZUERST!",
-        prices: { inland: 12600 },
+        name: "Zubuchung zur Druckausgabe",
+        note: "Nur für Abonnenten der gedruckten Ausgabe",
+        prices: { inland: 1980 },
       },
     ],
   },
@@ -78,17 +68,13 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 5880 },
+        note: "6 Ausgaben im Jahr, nur digital",
+        prices: { inland: 4980 },
       },
       {
-        name: "Schüler- und Studentenabonnement",
-        note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 5280 },
-      },
-      {
-        name: "Förderabonnement",
-        note: "Der Förderbetrag fließt in die Werbung der DMZ",
-        prices: { inland: 6900 },
+        name: "Zubuchung zur Druckausgabe",
+        note: "Nur für Abonnenten der gedruckten Ausgabe",
+        prices: { inland: 1290 },
       },
     ],
   },
@@ -97,17 +83,13 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 6480 },
+        note: "6 Ausgaben im Jahr, nur digital",
+        prices: { inland: 6540 },
       },
       {
-        name: "Schüler- und Studentenabonnement",
-        note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 5880 },
-      },
-      {
-        name: "Förderabonnement",
-        note: "Der Förderbetrag fließt in die Werbung der DMZ Zeitgeschichte",
-        prices: { inland: 7500 },
+        name: "Zubuchung zur Druckausgabe",
+        note: "Nur für Abonnenten der gedruckten Ausgabe",
+        prices: { inland: 1470 },
       },
     ],
   },
@@ -116,17 +98,13 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
     tiers: [
       {
         name: "Normalabonnement",
-        prices: { inland: 5520 },
+        note: "4 Ausgaben im Jahr, nur digital",
+        prices: { inland: 4700 },
       },
       {
-        name: "Schüler- und Studentenabonnement",
-        note: "Kopie des Schüler- oder Studentenausweises erforderlich",
-        prices: { inland: 4920 },
-      },
-      {
-        name: "Förderabonnement",
-        note: "Der Förderbetrag fließt in die Werbung des Schwerterträgers",
-        prices: { inland: 6380 },
+        name: "Zubuchung zur Druckausgabe",
+        note: "Nur für Abonnenten der gedruckten Ausgabe",
+        prices: { inland: 1280 },
       },
     ],
   },

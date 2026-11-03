@@ -64,13 +64,13 @@ describe("Abos im Kiosk", () => {
     expect(offers[0].headline).toMatchObject({
       tier: "Normalabonnement",
       region: "inland",
-      priceAmountCents: 10440,
+      priceAmountCents: 9600,
       interval: "year",
     });
     expect(offers[1].headline).toMatchObject({
       tier: "Normalabonnement",
       region: "inland",
-      priceAmountCents: 5880,
+      priceAmountCents: 4980,
     });
   });
 
@@ -81,20 +81,14 @@ describe("Abos im Kiosk", () => {
     expect(offer).not.toBeNull();
     expect(offer!.tiers.map((tier) => tier.tier)).toEqual([
       "Normalabonnement",
-      "Schüler- und Studentenabonnement",
-      "Kombi-Abonnement",
-      "Förderabonnement",
+      "Zubuchung zur Druckausgabe",
     ]);
-    expect(offer!.tiers[0].note).toBeNull();
-    expect(offer!.tiers[1].note).toBe(
-      "Kopie des Schüler- oder Studentenausweises erforderlich",
-    );
+    expect(offer!.tiers[0].note).toBe("12 Ausgaben im Jahr, nur digital");
+    expect(offer!.tiers[1].note).toBe("Nur für Abonnenten der gedruckten Ausgabe");
     // Digital gibt es je Abo-Art nur einen Preis, ohne Auslandspreise.
     expect(offer!.tiers.map((tier) => tier.plans.map((p) => [p.name, p.priceAmountCents]))).toEqual([
-      [["Normalabonnement", 10440]],
-      [["Schüler- und Studentenabonnement", 9000]],
-      [["Kombi-Abonnement", 9600]],
-      [["Förderabonnement", 12600]],
+      [["Normalabonnement", 9600]],
+      [["Zubuchung zur Druckausgabe", 1980]],
     ]);
     expect(offer!.headline!._id).toBe(offer!.tiers[0].plans[0]._id);
   });
@@ -104,12 +98,12 @@ describe("Abos im Kiosk", () => {
     const { zuerst } = await seed(t);
     await t.run(async (ctx) => {
       const foerder = (await ctx.db.query("subscriptionPlans").collect()).find(
-        (p) => p.tier === "Förderabonnement" && p.publicationId === zuerst,
+        (p) => p.tier === "Zubuchung zur Druckausgabe" && p.publicationId === zuerst,
       );
       await ctx.db.patch(foerder!._id, { isActive: false });
     });
     const offer = await t.query(api.plans.offerBySlug, { slug: "zuerst" });
-    expect(offer!.tiers.map((tier) => tier.tier)).not.toContain("Förderabonnement");
+    expect(offer!.tiers.map((tier) => tier.tier)).not.toContain("Zubuchung zur Druckausgabe");
     expect(await t.query(api.plans.offerBySlug, { slug: "archiv" })).toBeNull();
     expect(await t.query(api.plans.offerBySlug, { slug: "gibt-es-nicht" })).toBeNull();
     const offers = await t.query(api.plans.offers, {});
@@ -202,8 +196,7 @@ describe("Abo-Katalog", () => {
     const dmz = catalogVariants(SUBSCRIPTION_CATALOG.dmz);
     expect(dmz.map((v) => [v.name, v.region, v.sortOrder])).toEqual([
       ["Normalabonnement", "inland", 0],
-      ["Schüler- und Studentenabonnement", "inland", 10],
-      ["Förderabonnement", "inland", 20],
+      ["Zubuchung zur Druckausgabe", "inland", 10],
     ]);
   });
 
@@ -213,10 +206,6 @@ describe("Abo-Katalog", () => {
       // Ein Plan ohne Abo-Art (etwa aus der Verwaltung) blockiert nichts.
       { tier: undefined, region: undefined },
     ]);
-    expect(missing.map((v) => v.name)).toEqual([
-      "Schüler- und Studentenabonnement",
-      "Kombi-Abonnement",
-      "Förderabonnement",
-    ]);
+    expect(missing.map((v) => v.name)).toEqual(["Zubuchung zur Druckausgabe"]);
   });
 });

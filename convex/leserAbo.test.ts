@@ -5,6 +5,24 @@ import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { signaturBilden } from "./leserStripe";
 import { ABO_HERKUNFT, aboAusStripe } from "./leserAbo";
+import { SUBSCRIPTION_CATALOG } from "./subscriptionCatalog";
+
+/**
+ * Der Katalog 2027 hat digital kein Kombi-Abo mehr. Die Kombi-Logik bleibt
+ * im Code; diese Tests haengen dafuer eine Kombi-Stufe an ZUERST! an.
+ */
+const KATALOG_ZUERST = [...SUBSCRIPTION_CATALOG.zuerst.tiers];
+function kombiImKatalog() {
+  SUBSCRIPTION_CATALOG.zuerst.tiers = [
+    ...KATALOG_ZUERST,
+    {
+      name: "Kombi-Abonnement",
+      note: "Zusammen mit einem Abonnement der Deutschen Militärzeitschrift",
+      prices: { inland: 9600 },
+      kombi: { mit: "dmz", mitStufe: "Normalabonnement", sonst: "Normalabonnement" },
+    },
+  ];
+}
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -78,6 +96,7 @@ describe("leserAbo", () => {
     kasseLive();
   });
   afterEach(() => {
+    SUBSCRIPTION_CATALOG.zuerst.tiers = [...KATALOG_ZUERST];
     vi.useRealTimers();
     for (const k of [
       "LESER_STRIPE_MODE",
@@ -274,6 +293,7 @@ describe("leserAbo", () => {
   });
 
   test("Kombi-Angebot: Preis zusammen, eigenes DMZ-Abo erkannt, Hinweis auf der DMZ-Seite", async () => {
+    kombiImKatalog();
     const t = convexTest(schema, modules);
     const s = await kombiAufbau(t);
     const als = t.withIdentity({ subject: `${s.userId}|sitzung` });
@@ -319,6 +339,7 @@ describe("leserAbo", () => {
   });
 
   test("Kombi ohne DMZ-Abo wird vor der Verlaengerung auf den Normalpreis gestellt", async () => {
+    kombiImKatalog();
     const t = convexTest(schema, modules);
     const s = await kombiAufbau(t);
     const anlegen = (periodenEnde: number) =>
