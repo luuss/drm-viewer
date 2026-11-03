@@ -1293,7 +1293,12 @@ Skripts.
   `Links/` genommen wird. Gespiegelt oder auf dem Kopf: weiter None.
 * Bestand: DMZ 174 (`md726n7…`) und ZUERST! 11/2026 (`md7cgzx…`) per
   Bilder-Nachtrag (4m) neu, Sicherungen `_scratch/bildnachtrag/vorher-<id>-2026-11-03.json`.
-  Hefte, die vor dem 03.11. importiert wurden, haben den Fehler noch.
+  Danach alle übrigen 22 Hefte mit `_scratch/bildnachtrag/alle.py` (Sicherung,
+  Probelauf, Nachtrag; Protokoll `alle-2026-11-03.log`), alle ohne Fehler.
+  Artikel ohne Gegenstück im Bestand (je 0 bis 5, DMZ 170: 5) bleiben unverändert.
+* Seit 03.11. hält der Ordner-Import ohne lesbare IDML an, bevor das Heft
+  angelegt wird (`web/src/admin/FolderImport.tsx`). DMZ-Zeitgeschichte 79 war
+  ohne IDML hochgeladen, leer, und wurde gelöscht.
 * Falle beim Nachsehen: Der Schlüssel `images/<n>-…` zählt die Seiten mit
   Umschlag, die Seitenbilder `seite-<nnn>.jpg` und die IDML-Seiten nicht.
   DMZ 174 S. 40 = `seite-038.jpg` = IDML-Seite 37 = `images/39-…`.
