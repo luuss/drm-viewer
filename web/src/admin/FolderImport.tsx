@@ -164,6 +164,19 @@ export default function FolderImport({
       naechster();
       return;
     }
+    // Ohne Satzdatei wird nicht importiert (Anweisung 03.11.2026): Artikel,
+    // Bilder, Beschnitt und Verzeichnis kaemen dann nur geschaetzt aus dem PDF.
+    // Lieber anhalten, als ein ungenaues Heft anzulegen.
+    if (!plan.idml) {
+      const fehler =
+        "Keine IDML-Datei im Ordner. Ohne Satzdatei wird nicht importiert. " +
+        "Bitte die IDML aus InDesign exportieren (Datei → Exportieren → InDesign Markup), " +
+        "in den Heftordner legen und den Ordner neu fallen lassen.";
+      setErr(fehler);
+      setErledigtListe((alt) => [...alt, { titel: ordner.folderName, fehler }]);
+      naechster();
+      return;
+    }
     // Ein unmoegliches Jahr ("zuerst 6-6026") legte frueher ein Heft
     // "ZUERST! 6/6026" an. Jetzt haelt der Lauf an, bis der Name stimmt.
     if (name.problem) {
@@ -259,6 +272,15 @@ export default function FolderImport({
             `${cleanError(e) ?? "kein lesbares PDF"}. Der Lauf ist abgebrochen.`,
         );
       }
+      // Die Satzdatei muss lesbar sein, bevor das Heft angelegt wird; sonst
+      // bliebe ein leeres Heft stehen.
+      const satzMass = plan.idml ? await readIdmlMeta(plan.idml.file).catch(() => null) : null;
+      if (!satzMass) {
+        throw new Error(
+          `Satzdatei ${plan.idml?.name ?? ""} laesst sich nicht lesen. ` +
+            "Bitte die IDML neu aus InDesign exportieren. Der Lauf ist abgebrochen.",
+        );
+      }
       melde("heft", "Heft anlegen");
       const preis = await readPriceFromImprint(innenPdf).catch(() => undefined);
       const heft = await ensureIssue({
@@ -295,13 +317,9 @@ export default function FolderImport({
       //    Ordner und wird auf dem Server nur als Bild gebraucht. Geschnitten
       //    wird auf das Netzformat aus der Satzdatei, damit Anschnitt und
       //    Schnittmarken gar nicht erst im Reader landen.
-      const satzMass = plan.idml ? await readIdmlMeta(plan.idml.file).catch(() => null) : null;
       // Die gedruckte Zahl der ersten Innenseite steht im Satz. Fehlt sie,
       // gilt 3: Umschlag und Umschlaginnenseite sind die ersten beiden.
       const gedruckteStartseite = satzMass?.firstPrintedPage ?? 3;
-      if (plan.idml && !satzMass) {
-        offen.push("Netzformat aus der Satzdatei nicht lesbar — Seiten behalten den Anschnitt");
-      }
       melde("innenteil", `Innenteil ${innenteil.name} wird gerendert`);
       // Rendern und Hochladen laufen nebeneinander. Ohne das stand abwechselnd
       // der Rechner oder die Leitung still.
