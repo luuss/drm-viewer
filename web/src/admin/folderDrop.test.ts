@@ -78,3 +78,17 @@ describe("zusammenfuehren", () => {
     expect(hefte.map((h) => h.files.length)).toEqual([1, 2]);
   });
 });
+
+describe("lose PDFs ohne Ordner", () => {
+  const datei = (name: string) => ({ path: name, name, size: 1, file: new Blob() as File });
+  it("macht aus jedem PDF ein Heft mit dem Dateinamen", () => {
+    const hefte = zusammenfuehren([], [datei("Originalband 12.pdf"), datei("Flieger 3.pdf")]);
+    expect(hefte.map((h) => h.folderName)).toEqual(["Originalband 12.pdf", "Flieger 3.pdf"]);
+    expect(hefte[1].files.map((f) => f.name)).toEqual(["Flieger 3.pdf"]);
+  });
+  it("nimmt bei einem PDF die anderen losen Dateien mit", () => {
+    const hefte = zusammenfuehren([], [datei("Marine 7.pdf"), datei("Marine 7.idml")]);
+    expect(hefte).toHaveLength(1);
+    expect(hefte[0].files.map((f) => f.name)).toEqual(["Marine 7.pdf", "Marine 7.idml"]);
+  });
+});

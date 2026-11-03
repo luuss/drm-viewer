@@ -111,6 +111,15 @@ export function zusammenfuehren(ordner: DroppedFolder[], lose: ScannedFile[] = [
   const hefte = ordner.filter(hatPdf).map((o) => ({ ...o, files: [...o.files] }));
   if (!hefte.length) {
     if (!lose.length) return ordner;
+    // Nur lose Dateien, darunter PDFs (Weltkrieg-Baende kommen als einzelne
+    // Datei, 03.11.2026): jedes PDF ist ein Heft, sein Dateiname der
+    // Heftname. Gibt es genau ein PDF, gehen die anderen losen Dateien
+    // (IDML, Titelbild) mit hinein.
+    const pdfs = lose.filter((f) => /\.pdf$/i.test(f.name));
+    if (!ordner.length && pdfs.length) {
+      if (pdfs.length === 1) return [{ folderName: pdfs[0].name, files: [...lose] }];
+      return pdfs.map((f) => ({ folderName: f.name, files: [f] }));
+    }
     // Nur lose Dateien und Ordner ohne PDF: der erste Ordner gibt den Namen.
     return ordner.length
       ? [{ ...ordner[0], files: [...ordner[0].files, ...lose] }]
