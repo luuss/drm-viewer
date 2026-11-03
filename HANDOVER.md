@@ -38,6 +38,13 @@
   Zeitstempel, dann MinIO-Verschlüsselung.
 * **Später (nur notiert, nicht bauen):** Weltkrieg soll einen Modus bekommen, in dem
   man online liest und Hefte kauft (wie der Laden bei L&S, dort ohne PrestaShop).
+* **Weltkrieg: zwei Hefte nachimportieren** (vom User am 03.11. gelöscht, kaputt):
+  Magazin 77 „Arktis ist nicht …“ (0 Seiten, Abbruch 22:38) und Marine 77
+  „Eisbären vor Südafrika“. Der User importiert sie selbst neu.
+* **Weltkrieg: Benennung der ganzen Seite überarbeiten** (User 03.11.): die Software ist
+  dort für Hefte, nicht Artikel. Admin-Liste zeigt „1 Artikel prüfen“ → stattdessen
+  Seitenzahl/„Text prüfen“; überall „Artikel“ → „Text/Heft“, Artikelansicht ist schon
+  „Leseansicht“. Erst nach dem Massenimport ausrollen (Oberfläche neu = Tab-Risiko).
 * **Weltkrieg-Massenimport** lief am 03.11. ab ~22 Uhr (452 Hefte, ~4 h).
   Danach prüfen: Fehlerliste, Magazin 1/2 heißen "Weltkrieg 1"/"Weltkrieg 2"
   (Titel auf dem Umschlag nicht erkannt), Code-Reviews zu `preise_*`
