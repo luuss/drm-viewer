@@ -687,7 +687,7 @@ def _path_bounds(element, matrix) -> tuple[float, float, float, float] | None:
 
 
 def _graphic_crop(
-    grafik, matrix, rahmen: tuple[float, float, float, float]
+    grafik, matrix, rahmen: tuple[float, float, float, float], rahmen_element=None
 ) -> tuple[float, float, float, float] | None:
     """Sichtbarer Anteil des platzierten Bildes, in Anteilen des Originals.
 
@@ -696,13 +696,30 @@ def _graphic_crop(
     des Bildes, `ItemTransform` seine Lage. Beides zusammen sagt genau, welches
     Stueck der Datei gedruckt wird — ohne Raten am Seitenverhaeltnis.
 
-    Gedrehte oder gespiegelte Bilder geben None zurueck: dort stimmt der
-    Ausschnitt aus der gerenderten Seite eher als eine Rechnung, die die
-    Drehung ignoriert.
+    Ist der Rahmen samt Bild gedreht (die DMZ stellt Fotos gern um 1 Grad
+    schraeg), rechnet die Funktion im Koordinatensystem des Rahmens. Dort steht
+    das Bild gerade, und der Ausschnitt gilt fuer die gerade Datei. Sonst
+    schnitte der Import die achsparallele Huelle aus der Seite: ein schiefes
+    Foto mit Ecken vom Seitenhintergrund (DMZ 174 S. 40). Ein gedrehter
+    Rahmen gibt dann auch das ganze Bild als Ausschnitt zurueck, damit die
+    Datei aus `Links/` genommen wird und nicht der schiefe Seitenausschnitt.
+
+    Ist das Bild im Rahmen selbst gedreht oder gespiegelt, gibt es None
+    zurueck: dort stimmt der Ausschnitt aus der gerenderten Seite eher.
     """
-    a, b, c, d, tx, ty = _multiply(matrix, _matrix(grafik.get("ItemTransform")))
+    innen = _matrix(grafik.get("ItemTransform"))
+    a, b, c, d, tx, ty = _multiply(matrix, innen)
+    gedreht = False
     if abs(b) > 1e-6 or abs(c) > 1e-6 or a <= 0 or d <= 0:
-        return None
+        ia, ib, ic, id_, _, _ = innen
+        if rahmen_element is None or abs(ib) > 1e-6 or abs(ic) > 1e-6 or ia <= 0 or id_ <= 0:
+            return None
+        lokal = _path_bounds(rahmen_element, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
+        if lokal is None:
+            return None
+        a, b, c, d, tx, ty = innen
+        rahmen = lokal
+        gedreht = True
     bounds = next(grafik.iter("{*}GraphicBounds"), None)
     if bounds is None:
         return None
@@ -726,7 +743,7 @@ def _graphic_crop(
         return None
     if u0 < 0.005 and v0 < 0.005 and u1 > 0.995 and v1 > 0.995:
         # Der Rahmen zeigt das ganze Bild; kein Schneiden noetig.
-        return None
+        return (0.0, 0.0, 1.0, 1.0) if gedreht else None
     return (u0, v0, u1, v1)
 
 
@@ -878,7 +895,7 @@ def extract_idml_frames(
                         None,
                     )
                     bildrahmen.append(
-                        (*box, link, _graphic_crop(grafik, eigene, box), gruppen, _teilpfade(kind))
+                        (*box, link, _graphic_crop(grafik, eigene, box, kind), gruppen, _teilpfade(kind))
                     )
 
             walk(root.find("{*}Spread") if root.find("{*}Spread") is not None else root,

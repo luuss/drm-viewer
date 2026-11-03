@@ -1693,7 +1693,9 @@ def test_impressum_liefert_den_einzelpreis():
     assert parse_issue_meta(["ohne Angabe"]) == {}
 
 
-def _idml_mit_ausschnitt(graphic_transform: str, bounds: str) -> bytes:
+def _idml_mit_ausschnitt(
+    graphic_transform: str, bounds: str, rahmen_transform: str = "1 0 0 1 250 -150"
+) -> bytes:
     """Ein Bogen mit einem Rahmen, hinter dem ein groesseres Bild liegt.
 
     Der Rahmen ist 100 x 100 Punkt und sitzt bei (0,0). Das Bild ist ueber
@@ -1712,7 +1714,7 @@ def _idml_mit_ausschnitt(graphic_transform: str, bounds: str) -> bytes:
         '<Spread Self="sp1" ItemTransform="1 0 0 1 0 0">'
         '<Page Self="p1" Name="1" GeometricBounds="0 0 400 400" '
         'ItemTransform="1 0 0 1 200 -200"/>'
-        '<Rectangle Self="r0" ItemTransform="1 0 0 1 250 -150">'
+        f'<Rectangle Self="r0" ItemTransform="{rahmen_transform}">'
         '<Properties><PathGeometry><GeometryPathType PathOpen="false">'
         f'<PathPointArray>{punkte}</PathPointArray>'
         '</GeometryPathType></PathGeometry></Properties>'
@@ -1760,6 +1762,42 @@ def test_voll_gefuellter_rahmen_braucht_keinen_ausschnitt():
     )
     bilder, _ = extract_idml_frames(idml)
     assert bilder[0].crop is None
+
+
+def _drehung(grad: float) -> str:
+    import math
+
+    w = math.radians(grad)
+    return f"{math.cos(w)} {math.sin(w)} {-math.sin(w)} {math.cos(w)} 250 -150"
+
+
+def test_schraeger_rahmen_schneidet_die_gerade_datei():
+    # DMZ 174 S. 40: Rahmen samt Bild um 1 Grad gedreht. Der Ausschnitt gilt
+    # im System des Rahmens, also genau wie beim geraden Rahmen. Vorher kam
+    # None, und der Artikel bekam ein schiefes Stueck der Seite.
+    idml = _idml_mit_ausschnitt(
+        graphic_transform="1 0 0 1 0 0",
+        bounds='Left="-100" Top="-50" Right="100" Bottom="50"',
+        rahmen_transform=_drehung(1.0),
+    )
+    bilder, _ = extract_idml_frames(idml)
+    u0, v0, u1, v1 = bilder[0].crop
+    assert u0 == pytest.approx(0.25, abs=0.01)
+    assert u1 == pytest.approx(0.75, abs=0.01)
+    assert v0 == pytest.approx(0.0, abs=0.01)
+    assert v1 == pytest.approx(1.0, abs=0.01)
+
+
+def test_schraeger_voller_rahmen_nimmt_die_ganze_datei():
+    # Zeigt der gedrehte Rahmen das ganze Bild, gilt das ganze Bild als
+    # Ausschnitt, damit der Import die gerade Datei nimmt.
+    idml = _idml_mit_ausschnitt(
+        graphic_transform="1 0 0 1 0 0",
+        bounds='Left="-50" Top="-50" Right="50" Bottom="50"',
+        rahmen_transform=_drehung(-3.0),
+    )
+    bilder, _ = extract_idml_frames(idml)
+    assert bilder[0].crop == (0.0, 0.0, 1.0, 1.0)
 
 
 def test_gedrehtes_bild_gibt_keinen_ausschnitt():
