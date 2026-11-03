@@ -24,7 +24,7 @@ import { dateiStamm, readIdmlMeta, satzTexte, verlinkteBilder } from "./idmlMeta
 import { ausVersalien, nameVomUmschlag, schreibungAusSatz } from "./umschlagTitel";
 import { REIHEN } from "../lib/reihen";
 import { IST_WELTKRIEG } from "../lib/marke";
-import { HEFTARCHIV_EREIGNIS } from "./heftarchiv";
+import { HEFTARCHIV_EREIGNIS, fertigMerken } from "./heftarchiv";
 import { textebeneAlsBlob, type TextPage } from "./textLayer";
 import {
   oeffnePdf,
@@ -846,6 +846,7 @@ export default function FolderImport({
 
       setLauf({ text: "Fertig", prozent: 100 });
       setErledigtListe((alt) => [...alt, { titel: name.issueTitle, issueId }]);
+      if (IST_WELTKRIEG) fertigMerken(plan.folderName);
       setErgebnis({
         issueId,
         titel: name.issueTitle,

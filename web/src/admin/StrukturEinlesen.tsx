@@ -2,7 +2,14 @@ import { useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "../lib/api";
 import { alleDateien, strukturLesen } from "./folderDrop";
-import { HEFTARCHIV_EREIGNIS, MUSTERHEFTE, hefteImArchiv, type ArchivHeft } from "./heftarchiv";
+import {
+  HEFTARCHIV_EREIGNIS,
+  MUSTERHEFTE,
+  fertigeHefte,
+  fertigVergessen,
+  hefteImArchiv,
+  type ArchivHeft,
+} from "./heftarchiv";
 import { formatBytes } from "./folderScan";
 
 type Stand =
@@ -129,7 +136,12 @@ function ArchivImport() {
     }
   }
 
-  const auswahl = (gefunden ?? []).filter((h) => !nurMuster || MUSTERHEFTE.includes(h.kennung));
+  const [ohneFertige, setOhneFertige] = useState(true);
+  const fertig = gefunden ? fertigeHefte() : new Set<string>();
+  const auswahl = (gefunden ?? [])
+    .filter((h) => !nurMuster || MUSTERHEFTE.includes(h.kennung))
+    .filter((h) => !ohneFertige || !fertig.has(h.folderName));
+  const schonFertig = (gefunden ?? []).filter((h) => fertig.has(h.folderName)).length;
   const fehlen = nurMuster && gefunden
     ? MUSTERHEFTE.filter((k) => !gefunden.some((h) => h.kennung === k))
     : [];
@@ -172,6 +184,24 @@ function ArchivImport() {
           onChange={(e) => setNurMuster(e.target.checked)}
         />{" "}
         Nur die {MUSTERHEFTE.length} Musterhefte
+      </label>
+      <label className="muted">
+        <input
+          type="checkbox"
+          checked={ohneFertige}
+          onChange={(e) => setOhneFertige(e.target.checked)}
+        />{" "}
+        Schon importierte überspringen{schonFertig ? ` (${schonFertig})` : ""}{" "}
+        <button
+          type="button"
+          className="btn quiet small"
+          onClick={() => {
+            fertigVergessen();
+            setGefunden(gefunden ? [...gefunden] : null);
+          }}
+        >
+          Liste leeren
+        </button>
       </label>
       {liest !== null && (
         <p className="muted" role="status">

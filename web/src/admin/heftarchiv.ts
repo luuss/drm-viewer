@@ -137,3 +137,36 @@ export const MUSTERHEFTE = [
   "1fk", "34fk", "1legion", "49legion", "1soldaten", "74soldaten", "b1",
   "121d", "284n", "131g", "98f", "89m", "23fk", "33legion", "53soldaten", "81mag", "101mag",
 ];
+
+/**
+ * Welche Heftordner schon fertig importiert sind, im Browser gemerkt. Der
+ * Massenimport laeuft Stunden; bricht er ab, ueberspringt der naechste Lauf
+ * die fertigen Hefte, statt alles noch einmal hochzuladen.
+ */
+const FERTIG_SCHLUESSEL = "heftarchiv-fertig";
+
+export function fertigeHefte(): Set<string> {
+  try {
+    return new Set(JSON.parse(window.localStorage.getItem(FERTIG_SCHLUESSEL) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+export function fertigMerken(ordnerName: string): void {
+  try {
+    const satz = fertigeHefte();
+    satz.add(ordnerName);
+    window.localStorage.setItem(FERTIG_SCHLUESSEL, JSON.stringify([...satz]));
+  } catch {
+    // Kein Speicher im Browser: dann eben ohne Merken.
+  }
+}
+
+export function fertigVergessen(): void {
+  try {
+    window.localStorage.removeItem(FERTIG_SCHLUESSEL);
+  } catch {
+    // egal
+  }
+}
