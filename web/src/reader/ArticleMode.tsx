@@ -203,6 +203,13 @@ type Props = {
   puffer?: Paket | null;
   /** Satz der laufenden Sitzung (`satzVon`); zu ihm passen die Texte vom Server. */
   satz?: string | null;
+  /**
+   * Meldet beim Scrollen die Druckseite, die gerade oben im Text steht
+   * (Weltkrieg-Leser: der Regler zeigt Seiten, der Lesestand merkt sie).
+   */
+  onSeite?: (pageIndex: number) => void;
+  /** Zaehlt jeden Sprung ueber den Regler, auch zweimal auf dieselbe Seite. */
+  sprungNr?: number;
 };
 
 /** Fliesstext. Auf dem Telefon lesbar ohne Zoom, auf dem Schirm ruhig gesetzt. */
@@ -221,6 +228,8 @@ export default function ArticleMode({
   schutzKey,
   puffer = null,
   satz = null,
+  onSeite,
+  sprungNr = 0,
 }: Props) {
   // Text gibt es nur zu einer Lesesitzung, und nur verschluesselt.
   const live = useQuery(
@@ -328,7 +337,7 @@ export default function ArticleMode({
   const gesprungen = useRef<string | null>(null);
   useEffect(() => {
     if (!geladen || !schriftBereit || punktOffen) return;
-    const einstieg = `${articleId}|${zielOrder}|${einstiegPunkt?.n}|${fromPageIndex}`;
+    const einstieg = `${articleId}|${zielOrder}|${einstiegPunkt?.n}|${fromPageIndex}|${sprungNr}`;
     if (gesprungen.current === einstieg) return;
     gesprungen.current = einstieg;
     const absatz =
@@ -343,15 +352,53 @@ export default function ArticleMode({
       return;
     }
     if (fromPageIndex == null) return;
+    // Die erste Stelle der Seite; hat die Seite keinen Text (Bildseite,
+    // Anzeige), die naechste Seite danach.
     const ziel =
       fromPageIndex <= geladen.pageStart
         ? null
-        : koerper.current?.querySelector(
-            `[data-source-page="${fromPageIndex}"]`,
-          );
+        : Array.from(
+            koerper.current?.querySelectorAll<HTMLElement>("[data-source-page]") ?? [],
+          ).find((el) => Number(el.dataset.sourcePage) >= fromPageIndex);
     if (ziel) ziel.scrollIntoView({ block: "start" });
     else koerper.current?.scrollIntoView({ block: "start" });
-  }, [geladen, fromPageIndex, articleId, schriftBereit, punktOffen, zielOrder, einstiegPunkt?.n]);
+  }, [geladen, fromPageIndex, articleId, schriftBereit, punktOffen, zielOrder, einstiegPunkt?.n, sprungNr]);
+
+  // Welche Druckseite oben im Text steht: das erste Stueck mit Seitenmarke,
+  // das unter der Oberkante des Lesekastens noch sichtbar ist.
+  const onSeiteRef = useRef(onSeite);
+  onSeiteRef.current = onSeite;
+  const textDa = !!geladen && schriftBereit;
+  useEffect(() => {
+    const body = koerper.current;
+    const kasten = body?.closest<HTMLElement>(".article-mode");
+    if (!body || !kasten || !textDa || !onSeiteRef.current) return;
+    let zuletzt = -1;
+    let rahmen = 0;
+    const messen = () => {
+      rahmen = 0;
+      const oben = kasten.getBoundingClientRect().top + 24;
+      const stuecke = body.querySelectorAll<HTMLElement>("[data-source-page]");
+      for (const el of Array.from(stuecke)) {
+        if (el.getBoundingClientRect().bottom > oben) {
+          const seite = Number(el.dataset.sourcePage);
+          if (Number.isFinite(seite) && seite !== zuletzt) {
+            zuletzt = seite;
+            onSeiteRef.current?.(seite);
+          }
+          return;
+        }
+      }
+    };
+    const beimScrollen = () => {
+      if (!rahmen) rahmen = window.requestAnimationFrame(messen);
+    };
+    kasten.addEventListener("scroll", beimScrollen, { passive: true });
+    return () => {
+      kasten.removeEventListener("scroll", beimScrollen);
+      if (rahmen) window.cancelAnimationFrame(rahmen);
+    };
+  }, [textDa, articleId]);
 
   if (!articleId) {
     return (

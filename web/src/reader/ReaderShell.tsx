@@ -18,6 +18,7 @@ import ShopHinweis from "../components/ShopHinweis";
 import AppShell from "../components/AppShell";
 import NichtGefunden from "../components/NichtGefunden";
 import { reiheVon } from "../lib/reihen";
+import { IST_WELTKRIEG } from "../lib/marke";
 import { ProductChoice } from "./ShopProduct";
 import { wischachse, wischbar, wischziel, type Wischachse } from "./wischen";
 import { artikelAufSeite } from "./artikelAufSeite";
@@ -49,7 +50,9 @@ function useBreit() {
 }
 
 /** Erklaerung am Knopf "Artikelansicht", wenn ein Heft keine Artikel hat. */
-const OHNE_ARTIKEL = "Für diese Ausgabe gibt es keine Artikelansicht, nur die Seiten.";
+const OHNE_ARTIKEL = IST_WELTKRIEG
+  ? "Für diese Ausgabe gibt es keine Leseansicht, nur die Seiten."
+  : "Für diese Ausgabe gibt es keine Artikelansicht, nur die Seiten.";
 
 /** Umschlag allein, danach echte linke/rechte Magazinpaare. */
 function spreadStart(index: number) {
@@ -302,6 +305,8 @@ export default function ReaderShell() {
         setMode(imArtikel ? "article" : "page");
         setPageIndex(progress.pageIndex);
         setArticleId(gemerkt ?? null);
+        // Weltkrieg: der Lesestand ist eine Seite im durchgehenden Text.
+        if (IST_WELTKRIEG && imArtikel) setArtikelEinstieg(progress.pageIndex);
       }
       // Die Startansicht in die Adresse schreiben, damit "Zurück" aus der
       // naechsten Ansicht genau hierher findet.
@@ -504,6 +509,38 @@ export default function ReaderShell() {
       persist({ mode: "article", pageIndex: target, articleId: id });
     },
     [articleList, pageIndex, persist, adresse, mode],
+  );
+
+  // Weltkrieg-Leser: ein Heft ist ein durchgehender Text, der Regler zeigt
+  // Seiten. Beim Scrollen gilt die Seite oben im Text als Lesestand.
+  const [sprungNr, setSprungNr] = useState(0);
+  const aktuellerArtikel = articleId ?? articleList[0]?._id ?? null;
+  const seiteGelesen = useCallback(
+    (seite: number) => {
+      setPageIndex(seite);
+      persist({ mode: "article", pageIndex: seite, articleId: aktuellerArtikel });
+    },
+    [persist, aktuellerArtikel],
+  );
+  // Regler in der Leseansicht: zur Seite im Text, notfalls im Artikel, der
+  // diese Seite traegt.
+  const seiteImText = useCallback(
+    (seite: number) => {
+      const ziel =
+        articleList.find((a) => seite >= a.pageStart && seite <= a.pageEnd) ??
+        articleList.find((a) => a.pageStart >= seite) ??
+        articleList[articleList.length - 1];
+      if (!ziel) return goPage(seite, true);
+      if (ziel._id !== aktuellerArtikel) {
+        openArticle(ziel._id, seite, undefined, true);
+        return;
+      }
+      setArtikelEinstieg(seite);
+      setSprungNr((n) => n + 1);
+      setPageIndex(seite);
+      persist({ mode: "article", pageIndex: seite, articleId: ziel._id });
+    },
+    [articleList, aktuellerArtikel, openArticle, goPage, persist],
   );
 
   // Was PageMode aus dem Puffer liest; der Stand jeder Seite steht in der Liste.
@@ -860,7 +897,7 @@ export default function ReaderShell() {
             title={ohneArtikel ? OHNE_ARTIKEL : undefined}
           >
             <Icon name="book-open" />
-            Artikelansicht
+            {IST_WELTKRIEG ? "Leseansicht" : "Artikelansicht"}
           </button>
         </div>
         {mode === "page" && (
@@ -964,6 +1001,8 @@ export default function ReaderShell() {
               sessionToken={sessionToken}
               puffer={puffer ?? null}
               satz={sessionToken ? satzVon(sessionToken) : null}
+              onSeite={IST_WELTKRIEG ? seiteGelesen : undefined}
+              sprungNr={sprungNr}
             />
           )}
           {/* Im Artikelmodus an derselben Stelle wie auf der Seite: unten
@@ -993,11 +1032,13 @@ export default function ReaderShell() {
       </div>
 
       <ReaderRail
-        mode={mode}
-        position={mode === "page" ? pageIndex : Math.max(0, articleIndex)}
-        total={mode === "page" ? pageCount : articleList.length}
+        mode={IST_WELTKRIEG ? "page" : mode}
+        position={mode === "page" || IST_WELTKRIEG ? pageIndex : Math.max(0, articleIndex)}
+        total={mode === "page" || IST_WELTKRIEG ? pageCount : articleList.length}
         label={label}
-        onSeek={(p) => (mode === "page" ? goPage(p, true) : goArticle(p, true))}
+        onSeek={(p) =>
+          mode === "page" ? goPage(p, true) : IST_WELTKRIEG ? seiteImText(p) : goArticle(p, true)
+        }
       />
 
       {verdeckt && (
