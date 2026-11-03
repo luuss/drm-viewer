@@ -299,3 +299,23 @@ describe("fortschrittProzent", () => {
     expect(fortschrittProzent([], "bilder", -1)).toBe(0);
   });
 });
+
+describe("Weltkrieg-Ordner ohne Reihe", () => {
+  it("laesst die Kennung an der Nummer weg und nimmt die Standardreihe", () => {
+    const n = parseFolderName("159d Sturm zum Finnenmeer-Baltikum 1941", "Weltkrieg");
+    expect(n.issueNumber).toBe("159");
+    expect(n.issueTitle).toBe("Sturm zum Finnenmeer-Baltikum 1941");
+    expect(n.publicationName).toBe("Weltkrieg");
+  });
+  it("nimmt auch Grossbuchstaben und mehrere Buchstaben weg", () => {
+    expect(parseFolderName("117F Kronstadt", "Weltkrieg").issueTitle).toBe("Kronstadt");
+    expect(parseFolderName("315n Die Finte von Helmroth", "Weltkrieg").issueTitle).toBe(
+      "Die Finte von Helmroth",
+    );
+  });
+  it("aendert Ordner mit Reihe nicht", () => {
+    expect(parseFolderName("dmz 170, innenteil", "Weltkrieg").publicationName).toBe("Dmz");
+    expect(parseFolderName("schwerterträger 36 greim").issueTitle).toBe("Greim");
+  });
+});
+

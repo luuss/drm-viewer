@@ -36,6 +36,7 @@ from extractor.anzeige import (
 from extractor.article_assembler import assemble, assemble_cover_pages, flow_text_blocks
 from extractor.buecher import buecher_der_seiten
 from extractor import bildunterschriften
+from extractor.buch import buch_aus_satz
 from extractor.idml_extract import (
     BILD_MINDESTFLAECHE,
     extract_idml_blocks,
@@ -101,6 +102,9 @@ SERVICE_SECRET = (
 WORKER_ID = os.environ.get("WORKER_ID") or f"{socket.gethostname()}-{os.getpid()}"
 POLL_SECONDS = float(os.environ.get("WORKER_POLL_SECONDS", "5"))
 IDLE_POLL_MAX_SECONDS = float(os.environ.get("WORKER_IDLE_POLL_MAX_SECONDS", "60"))
+# "buch": jedes Heft ist ein durchgehender Text (Weltkrieg-Leser, siehe
+# extractor/buch.py). Gilt fuer die ganze Anlage, nicht fuer ein Heft.
+IMPORT_MODUS = os.environ.get("IMPORT_MODUS", "").strip().lower()
 MAX_SOURCE_BYTES = int(os.environ.get("MAX_SOURCE_BYTES", 400 * 1024 * 1024))
 # Umschlagtafeln, auf denen Anzeigen stehen. Die Titelseite gehoert nicht dazu.
 COVER_AD_ROLES = ("inside_front", "inside_back", "back_cover")
@@ -208,7 +212,10 @@ class Job:
         blocks, images, toc_hints = self._extract(pages, blobs, sources)
         satz = [b for b in blocks if b.origin == "idml"]
         rest = [b for b in blocks if b.origin != "idml"]
-        if satz:
+        if satz and IMPORT_MODUS == "buch":
+            articles = buch_aus_satz(satz, images, self.data.get("issueTitle"))
+            quelle = "buch"
+        elif satz:
             # Der Satz kennt seine Artikel selbst: eine Mengentext-Story ist
             # ein Artikel, die Reihenfolge der Absaetze steht in der Datei.
             # Damit braucht es weder Inhaltsverzeichnis noch Seitenbereiche.

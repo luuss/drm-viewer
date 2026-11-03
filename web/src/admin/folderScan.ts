@@ -290,7 +290,7 @@ function ohneFuellwort(s: string): string {
  *
  * Das Lesen der Nummer selbst steht in convex/heftnummer.ts.
  */
-export function parseFolderName(folderName: string): ParsedName {
+export function parseFolderName(folderName: string, ohneReihe?: string): ParsedName {
   let rest = folderName.trim().replace(/_/g, " ");
   // Alles ab dem ersten Hinweis auf den Inhalt abschneiden ("innen s. 20-39"
   // ist ein Seitenbereich, keine Heftnummer).
@@ -313,13 +313,24 @@ export function parseFolderName(folderName: string): ParsedName {
     issueNumber = formatHeftnummer(fund.heft);
     vor = rest.slice(0, fund.index);
     nach = rest.slice(fund.index + fund.laenge);
+    // Ein Buchstabe direkt an der Nummer ist eine interne Kennung der
+    // Druckvorstufe ("159d", "117F" bei weltkrieg-online.de), kein Titel.
+    if (/\d$/.test(rest.slice(0, fund.index + fund.laenge))) {
+      nach = nach.replace(/^[a-z]{1,3}(?![\p{L}\d])/iu, "");
+    }
   }
 
-  const publicationName = ohneFuellwort(vor) || ohneFuellwort(rest) || folderName;
+  // Ohne Reihe vor der Nummer ("159d Sturm zum Finnenmeer") gilt die
+  // Standardreihe der Anlage, sonst bekaeme jedes Heft eine eigene Reihe.
+  const publicationName =
+    ohneFuellwort(vor) || (fund && ohneReihe) || ohneFuellwort(rest) || folderName;
   const zusatz = ohneFuellwort(nach);
 
+  // Ein Zusatz ist ein Titel und bleibt geschrieben wie getippt, nur der
+  // Anfang gross ("Sturm zum Finnenmeer", nicht "Sturm Zum Finnenmeer").
+  const titelZusatz = zusatz ? zusatz.charAt(0).toUpperCase() + zusatz.slice(1) : "";
   const issueTitle = zusatz
-    ? grossAnfang(zusatz)
+    ? titelZusatz
     : issueNumber
       ? `${grossAnfang(publicationName)} ${issueNumber}`
       : grossAnfang(publicationName);
@@ -328,7 +339,7 @@ export function parseFolderName(folderName: string): ParsedName {
     publicationName: grossAnfang(publicationName),
     publicationSlug: slugify(publicationName),
     issueNumber,
-    issueSubtitle: zusatz ? grossAnfang(zusatz) : undefined,
+    issueSubtitle: zusatz ? titelZusatz : undefined,
     issueTitle,
     problem: fund?.problem,
   };
@@ -342,12 +353,15 @@ export function parseFolderName(folderName: string): ParsedName {
  * ("zuerst 6-6026", so kam ZUERST! 6/6026 in den Kiosk) oder keine
  * Heftnummer, gilt die Nummer aus der Datei derselben Reihe.
  */
-export function heftnameFuerPlan(plan: Pick<FolderPlan, "folderName" | "idml" | "inner">): ParsedName {
-  const ordner = parseFolderName(plan.folderName);
+export function heftnameFuerPlan(
+  plan: Pick<FolderPlan, "folderName" | "idml" | "inner">,
+  ohneReihe?: string,
+): ParsedName {
+  const ordner = parseFolderName(plan.folderName, ohneReihe);
   if (ordner.issueNumber && !ordner.problem) return ordner;
   for (const datei of [plan.idml, plan.inner]) {
     if (!datei) continue;
-    const aus = parseFolderName(datei.name);
+    const aus = parseFolderName(datei.name, ohneReihe);
     if (!aus.issueNumber || aus.problem) continue;
     if (aus.publicationSlug !== ordner.publicationSlug) continue;
     return {

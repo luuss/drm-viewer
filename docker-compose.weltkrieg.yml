@@ -205,6 +205,8 @@ services:
       EXTRACT_SERVICE_SECRET: ${EXTRACT_SERVICE_SECRET:?EXTRACT_SERVICE_SECRET fehlt}
       MEDIA_BUCKET: ${MEDIA_BUCKET:-emag-media}
       PAGE_RENDER_WIDTH: ${PAGE_RENDER_WIDTH:-2400}
+      # Jedes Heft ein durchgehender Text (extractor/buch.py).
+      IMPORT_MODUS: buch
     restart: unless-stopped
     logging: *default-logging
 

@@ -242,6 +242,7 @@ export const claimNextInternal = internalMutation({
       publicationId: issue?.publicationId ?? null,
       publicationSlug: publication?.slug ?? null,
       publicationName: publication?.name ?? null,
+      issueTitle: issue?.title ?? null,
       kind: queued.kind,
       payload: queued.payload ?? null,
       attempts: queued.attempts + 1,

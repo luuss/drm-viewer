@@ -134,7 +134,7 @@ export default function FolderImport({
     [ordner],
   );
   // Nummer aus dem Ordnernamen, gegengeprueft an IDML und Innenteil.
-  const gelesen = useMemo(() => (plan ? heftnameFuerPlan(plan) : null), [plan]);
+  const gelesen = useMemo(() => (plan ? heftnameFuerPlan(plan, IST_WELTKRIEG ? "Weltkrieg" : undefined) : null), [plan]);
   // Eine schon gepflegte Reihe steht unter ihrem Namen, nicht unter der
   // Abkuerzung aus dem Ordnernamen: "dmz" ist die Deutsche Militaerzeitschrift.
   const name: Heftname | null = useMemo(() => {
