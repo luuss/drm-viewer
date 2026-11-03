@@ -828,3 +828,31 @@ export const usersWithRolesInternal = internalQuery({
       .filter((u) => !!teil || u.roles.some((r) => r !== "customer"));
   },
 });
+
+/**
+ * Ein Heft in eine andere Reihe haengen (Kommandozeile). Fuer Hefte, deren
+ * Ordnername keine Reihe trug ("35 Hyacinth von Strachwitz" wurde eine
+ * eigene Reihe statt Schwertertraeger, 03.11.2026). Leere alte Reihen
+ * werden abgeschaltet, nicht geloescht.
+ */
+export const issueInReiheInternal = internalMutation({
+  args: { issueId: v.id("issues"), publicationSlug: v.string() },
+  handler: async (ctx, { issueId, publicationSlug }) => {
+    const ziel = await ctx.db
+      .query("publications")
+      .withIndex("by_slug", (q) => q.eq("slug", publicationSlug))
+      .unique();
+    if (!ziel) throw new Error(`Reihe ${publicationSlug} gibt es nicht`);
+    const heft = await ctx.db.get(issueId);
+    if (!heft) throw new Error("Heft gibt es nicht");
+    const alt = heft.publicationId;
+    await ctx.db.patch(issueId, { publicationId: ziel._id, updatedAt: Date.now() });
+    const rest = await ctx.db
+      .query("issues")
+      .withIndex("by_publication", (q) => q.eq("publicationId", alt))
+      .first();
+    if (!rest && alt !== ziel._id) await ctx.db.patch(alt, { isActive: false });
+    await audit(ctx, "issue.move", issueId, `${alt} -> ${ziel._id}`);
+    return { von: alt, nach: ziel._id, alteReiheLeer: !rest };
+  },
+});
