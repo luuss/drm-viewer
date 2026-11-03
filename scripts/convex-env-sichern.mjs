@@ -35,6 +35,8 @@ const freiwillig = [
   "REQUIRE_EMAIL_VERIFICATION",
   "MAX_UPLOAD_BYTES",
   "MAX_ACTIVE_SESSIONS",
+  "SHOP_API_URL",
+  "HEFT_ANKUENDIGUNG",
 ];
 
 function convex(args) {
