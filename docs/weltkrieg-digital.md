@@ -105,6 +105,23 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
   Schriften `web/public/fonts/domine-*.woff2` (vom Laden, selbst gehostet).
 * Ohne `VITE_MARKE` bleibt der Lesen-und-Schenken-Leser unverändert.
 
+## Heftimport (geprüft 03.11.2026)
+
+* Upload-Weg geht: vorsignierte Adresse (Signatur ohne `/medien`, wie
+  `convex/s3Presign.ts`), `PUT https://digital.weltkrieg-online.de/medien/emag-media/…`
+  → 200, Datei liegt in `files/minio/emag-media/`. Convex-Umgebung:
+  `S3_ENDPOINT_URL=https://digital.weltkrieg-online.de/medien`.
+* **Ohne IDML wird hier nur gewarnt, nicht gesperrt** (`IST_WELTKRIEG` in
+  `web/src/admin/FolderImport.tsx`): es gibt Bände nur als PDF. Beim
+  Lesen-und-Schenken-Leser hält der Import ohne IDML an.
+* Laden-Abfragen (Buchanzeigen, Produktabgleich, Cover) laufen nach dem
+  Import im Hintergrund und fangen `ShopApiError` ab; die 501 des mu-plugins
+  brechen den Import nicht ab.
+* Ordnername wie bei L&S: „Originalband 12“ → Reihe „Originalband“, Heft 12.
+* Der Worker meldete beim ersten Start `404 … HTTP actions enabled`, weil die
+  Convex-Funktionen noch nicht ausgerollt waren. Nach dem Deploy weg; nach
+  einem Neuaufbau zuerst `npx convex deploy`, dann den Worker starten.
+
 ## Offen
 
 * **Rechtstexte** (`drm-viewer-evz`): Impressum, Datenschutz, AGB, Widerruf

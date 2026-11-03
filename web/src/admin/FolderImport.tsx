@@ -20,6 +20,7 @@ import { Ladeschlange } from "./ladeschlange";
 import { buildPageOrder, type CoverPage } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
 import { readIdmlMeta } from "./idmlMeta";
+import { IST_WELTKRIEG } from "../lib/marke";
 import { textebeneAlsBlob, type TextPage } from "./textLayer";
 import {
   oeffnePdf,
@@ -166,8 +167,10 @@ export default function FolderImport({
     }
     // Ohne Satzdatei wird nicht importiert (Anweisung 03.11.2026): Artikel,
     // Bilder, Beschnitt und Verzeichnis kaemen dann nur geschaetzt aus dem PDF.
-    // Lieber anhalten, als ein ungenaues Heft anzulegen.
-    if (!plan.idml) {
+    // Lieber anhalten, als ein ungenaues Heft anzulegen. Beim Weltkrieg-Leser
+    // gibt es auch Baende nur als PDF; dort bleibt es bei einer Warnung
+    // (siehe `starten`).
+    if (!plan.idml && !IST_WELTKRIEG) {
       const fehler =
         "Keine IDML-Datei im Ordner. Ohne Satzdatei wird nicht importiert. " +
         "Bitte die IDML aus InDesign exportieren (Datei → Exportieren → InDesign Markup), " +
@@ -275,7 +278,13 @@ export default function FolderImport({
       // Die Satzdatei muss lesbar sein, bevor das Heft angelegt wird; sonst
       // bliebe ein leeres Heft stehen.
       const satzMass = plan.idml ? await readIdmlMeta(plan.idml.file).catch(() => null) : null;
-      if (!satzMass) {
+      if (!plan.idml) {
+        // Nur beim Weltkrieg-Leser kommt ein Ordner ohne IDML bis hier.
+        offen.push(
+          "Keine IDML im Ordner: Artikel, Bilder und Verzeichnis sind nur aus dem PDF " +
+            "geschaetzt. Mit IDML wird es genauer.",
+        );
+      } else if (!satzMass) {
         throw new Error(
           `Satzdatei ${plan.idml?.name ?? ""} laesst sich nicht lesen. ` +
             "Bitte die IDML neu aus InDesign exportieren. Der Lauf ist abgebrochen.",
