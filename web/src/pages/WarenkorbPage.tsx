@@ -6,6 +6,7 @@ import { heraus, kassenUrl, leeren, useWarenkorb } from "../lib/warenkorb";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import Kasse from "../components/Kasse";
+import { MARKE } from "../lib/marke";
 
 /**
  * Auswahl im Leser. Mit Kartenkauf (leserKasse.status.aktiv) wird hier
@@ -126,7 +127,7 @@ export default function WarenkorbPage() {
                 </Link>
               </div>
               <p className="hint">
-                Bezahlt wird im Netzladen auf lesenundschenken.de, die Hefte liegen dort schon im
+                Bezahlt wird im Netzladen auf {MARKE.ladenDomain}, die Hefte liegen dort schon im
                 Warenkorb.
                 {me?.email ? ` Die Freischaltung geht an ${me.email}.` : ""}
               </p>

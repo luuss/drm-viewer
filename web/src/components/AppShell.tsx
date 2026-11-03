@@ -6,8 +6,9 @@ import { api } from "../lib/api";
 import Icon from "./Icon";
 import HandyQr from "./HandyQr";
 import { useWarenkorb } from "../lib/warenkorb";
+import { MARKE } from "../lib/marke";
 
-const NETZLADEN = "https://lesenundschenken.de/";
+const NETZLADEN = MARKE.laden;
 
 /**
  * Rahmen der Anwendung. Mit `?embed=1` faellt er weg — fuer die Einbettung in
@@ -57,8 +58,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Icon name="menu" size={22} />
               <span>Menü</span>
             </button>
-            <Link to="/" className="brand" aria-label="Lesen und Schenken Digital">
-              <img src="/img/lesen-und-schenken.png" alt="Lesen und Schenken" className="brand-logo" />
+            <Link to="/" className="brand" aria-label={MARKE.name}>
+              <img src={MARKE.logo} alt={MARKE.logoAlt} className={MARKE.logoSchriftzug ? "brand-logo schriftzug" : "brand-logo"} />
               <span className="brand-sub">Digital</span>
             </Link>
           </div>
@@ -67,6 +68,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <WarenkorbLink active={here("/warenkorb")} kompakt />
           </div>
         </div>
+        {MARKE.streifen && (
+          <div className="marke-streifen" aria-hidden="true">
+            {MARKE.streifen.map((farbe, i) => (
+              <span key={i} style={{ background: farbe }} />
+            ))}
+          </div>
+        )}
       </header>
 
       <div
@@ -91,49 +99,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <footer className="app-footer">
         <div className="shell-inner footer-main">
           <div className="footer-brand">
-            <img src="/img/lesen-und-schenken.png" alt="Lesen und Schenken" className="footer-logo" />
+            <img src={MARKE.logo} alt={MARKE.logoAlt} className={MARKE.logoSchriftzug ? "footer-logo schriftzug" : "footer-logo"} />
             <ul className="footer-contact">
-              <li>
-                <span className="label">E-Post</span>
-                <a href="mailto:bestellung-netzladen@lesenundschenken.de">
-                  bestellung-netzladen@lesenundschenken.de
-                </a>
-              </li>
-              <li>
-                <span className="label">Telefon</span>
-                <a href="tel:+49438459700">04384 5970-0</a>
-              </li>
-              <li>
-                <span className="label">Fax</span>
-                <span>04384 5970-40</span>
-              </li>
+              {MARKE.kontakt.map((k) => (
+                <li key={k.label}>
+                  <span className="label">{k.label}</span>
+                  {k.href ? <a href={k.href}>{k.text}</a> : <span>{k.text}</span>}
+                </li>
+              ))}
             </ul>
           </div>
           <nav className="footer-links" aria-label="Hinweise">
             <h4>Hinweise</h4>
-            <Link to="/impressum">Impressum</Link>
-            <Link to="/datenschutz">Datenschutz</Link>
-            <Link to="/agb">AGB</Link>
-            <Link to="/widerruf">Vertrag widerrufen</Link>
+            {MARKE.recht.intern ? (
+              <>
+                <Link to="/impressum">Impressum</Link>
+                <Link to="/datenschutz">Datenschutz</Link>
+                <Link to="/agb">AGB</Link>
+                <Link to="/widerruf">Vertrag widerrufen</Link>
+              </>
+            ) : (
+              <>
+                <a href={MARKE.recht.impressum}>Impressum</a>
+                <a href={MARKE.recht.datenschutz}>Datenschutz</a>
+                <a href={MARKE.recht.agb}>AGB</a>
+                <a href={MARKE.recht.widerruf}>Widerrufsbelehrung</a>
+              </>
+            )}
           </nav>
           <div className="footer-col">
-            <h4>Lesen &amp; Schenken Digital</h4>
-            <p>
-              Die Zeitschriften des Verlags zum Lesen am Bildschirm. Einzelne
-              Ausgaben und Digital-Abos gibt es im{" "}
-              <a href="https://lesenundschenken.de/" target="_blank" rel="noopener noreferrer">
-                Netzladen
-              </a>
-              , gelesen wird hier auf jedem Gerät.
-            </p>
+            <h4>{MARKE.fussTitel}</h4>
+            <p>{MARKE.fussText}</p>
           </div>
           <HandyQr />
         </div>
         <div className="copyright">
           <div className="shell-inner">
-            <span>Copyright © {new Date().getFullYear()} Lesen und Schenken GmbH</span>
-            <a href="https://lesenundschenken.de/" target="_blank" rel="noopener noreferrer">
-              lesenundschenken.de
+            <span>Copyright © {new Date().getFullYear()} {MARKE.copyright}</span>
+            <a href={MARKE.laden} target="_blank" rel="noopener noreferrer">
+              {MARKE.ladenDomain}
             </a>
           </div>
         </div>
@@ -171,7 +175,7 @@ function MenueLinks({
       <Authenticated>
         <EditorLink active={adminAktiv ? "here" : undefined} />
       </Authenticated>
-      <a href={NETZLADEN} className="netzladen" title="Zum Netzladen lesenundschenken.de">
+      <a href={NETZLADEN} className="netzladen" title={`Zum Netzladen ${MARKE.ladenDomain}`}>
         Netzladen <Icon name="external" size={15} />
       </a>
       <Authenticated>

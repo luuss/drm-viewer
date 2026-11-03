@@ -9,6 +9,9 @@ COPY web /app/web
 COPY convex /app/convex
 ARG VITE_CONVEX_URL
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
+# Marke der Anlage (web/src/lib/marke.ts): leer = Lesen & Schenken, weltkrieg = digital.weltkrieg-online.de
+ARG VITE_MARKE=
+ENV VITE_MARKE=$VITE_MARKE
 RUN npm run build
 
 FROM nginx:alpine

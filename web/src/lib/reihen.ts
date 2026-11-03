@@ -7,6 +7,8 @@
  * weissen Grund (Kacheln im Kiosk), `dunkel` der fuer die Kopfleiste der
  * Leseansicht. `kasten`: der Schriftzug hat eine eigene Grundflaeche.
  */
+import { MARKE } from "./marke";
+
 export type Kontakt = {
   /** Eigene Internetseite; nur wenn sie die Zeitschrift auch zeigt. */
   web?: string;
@@ -40,7 +42,7 @@ export type Reihe = {
 // Telefon des Verlags, wie im Impressum aller Hefte.
 const VERLAG_TEL = "04384 59 70-0";
 
-export const REIHEN: Reihe[] = [
+const LUS_REIHEN: Reihe[] = [
   {
     slug: "zuerst",
     name: "ZUERST!",
@@ -128,8 +130,53 @@ export const REIHEN: Reihe[] = [
   },
 ];
 
+// Marke Weltkrieg (digital.weltkrieg-online.de): die Reihen aus der Menueleiste
+// von weltkrieg-online.de, gleiche Farben, Laden = Kategorie dort.
+// Schriftzuege: tools/marke/wk_schriftzuege.py.
+const WK = "https://weltkrieg-online.de/produkt-kategorie/";
+const WK_KONTAKT: Kontakt = {
+  web: "https://weltkrieg-online.de/",
+  webLabel: "Netzladen",
+  webBild: "/img/wk/kopf-1440.jpg",
+  mails: [],
+  tel: "",
+  social: [],
+};
+function wk(slug: string, name: string, farbe: string, match: RegExp, kategorie: string): Reihe {
+  return {
+    slug,
+    name,
+    untertitel: "",
+    farbe,
+    laden: `${WK}${kategorie}/`,
+    kontakt: WK_KONTAKT,
+    match,
+    alt: name,
+    hell: `/img/wk/reihe-${slug}.svg`,
+    dunkel: `/img/wk/reihe-${slug}.svg`,
+    kasten: false,
+  };
+}
+const WK_REIHEN: Reihe[] = [
+  wk("originalband", "Weltkrieg Originalband", "#ec6708", /original/i, "weltkrieg-originalband"),
+  wk("doppelband", "Weltkrieg Doppelband", "#22a636", /doppel/i, "weltkrieg-doppelband"),
+  wk("grossband", "Weltkrieg Großband", "#e40613", /gro(ss|ß)band/i, "weltkrieg-grossband"),
+  wk("flieger", "Weltkrieg Flieger", "#222a73", /flieger/i, "weltkrieg-flieger"),
+  wk("marine", "Weltkrieg Marine", "#018ec3", /marine/i, "weltkrieg-marine"),
+  wk("soldaten", "Weltkrieg Soldaten", "#8a3b2c", /soldaten/i, "weltkrieg-soldaten"),
+  wk("magazin", "Weltkrieg Magazin", "#edcd00", /magazin/i, "weltkrieg-magazin"),
+  wk("blitzkrieg", "Blitzkrieg", "#ec6708", /blitzkrieg/i, "blitzkrieg"),
+  wk("freikorps", "Freikorps", "#35532d", /freikorps/i, "freikorps"),
+  wk("legion", "Legion", "#9f862a", /legion/i, "legion"),
+];
+
+export const REIHEN: Reihe[] = MARKE.id === "weltkrieg" ? WK_REIHEN : LUS_REIHEN;
+
 /** Reihenfolge der Kacheln im Kiosk. */
-export const REIHENFOLGE = ["zuerst", "dmz", "dmz-zeitgeschichte", "schwertertraeger"];
+export const REIHENFOLGE =
+  MARKE.id === "weltkrieg"
+    ? WK_REIHEN.map((r) => r.slug)
+    : ["zuerst", "dmz", "dmz-zeitgeschichte", "schwertertraeger"];
 
 export function reiheMitSlug(slug: string | undefined): Reihe | null {
   return REIHEN.find((r) => r.slug === slug) ?? null;

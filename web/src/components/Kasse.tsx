@@ -6,6 +6,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api, cleanError, formatEuro, type Id } from "../lib/api";
 import { STRIPE_AUSSEHEN, stripeLaden } from "../lib/stripe";
 import MagicLinkForm from "./MagicLinkForm";
+import { MARKE } from "../lib/marke";
 
 /**
  * Kasse im Leser: Kartenzahlung mit Stripe, ohne Umleitung. Beim ersten Kauf
@@ -401,7 +402,7 @@ function KasseKonto({
         {busy ? "Zahlung läuft …" : knopf}
       </button>
       <p className="hint">
-        Verkäufer ist Lesen &amp; Schenken (lesenundschenken.de), dort entsteht Ihre Bestellung mit
+        Verkäufer ist {MARKE.copyright} ({MARKE.ladenDomain}), dort entsteht Ihre Bestellung mit
         Rechnung. Es gelten die <Link to="/agb">AGB</Link> und die{" "}
         <Link to="/datenschutz">Datenschutzerklärung</Link>. Die Karte verarbeitet Stripe.
       </p>

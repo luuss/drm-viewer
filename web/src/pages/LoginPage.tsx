@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import MagicLinkForm from "../components/MagicLinkForm";
 import { ABGEMELDET_KEY, safeNext } from "../lib/anmeldung";
+import { MARKE } from "../lib/marke";
 
 export default function LoginPage() {
   const [params] = useSearchParams();
@@ -34,7 +35,7 @@ export function AnmeldeRahmen({ titel, children }: { titel: string; children: Re
     <div className="auth-page">
       <div className="auth-box">
         <div className="auth-brand">
-          <img src="/img/lesen-und-schenken.png" alt="Lesen und Schenken" className="brand-logo" />
+          <img src={MARKE.logoHell} alt={MARKE.logoAlt} className={MARKE.logoSchriftzug ? "brand-logo schriftzug" : "brand-logo"} />
           <span className="brand-sub">Digital</span>
         </div>
         <div className="titles">

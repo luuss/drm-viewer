@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { MARKE } from "../lib/marke";
 
 /**
  * Rechtstexte des Lesers. Wo die Lage dieselbe ist wie im Netzladen
@@ -348,6 +349,15 @@ const DOCS: Record<string, { title: string; body: Section[] }> = {
 export default function LegalPage({ doc }: { doc?: string }) {
   const params = useParams();
   const key = doc ?? params.doc ?? window.location.pathname.replace(/^\//, "");
+  // Marke Weltkrieg: die Rechtstexte stehen im Laden (Histomedia AG), nicht hier.
+  if (!MARKE.recht.intern) {
+    const recht = MARKE.recht;
+    const ziel = ({ impressum: recht.impressum, datenschutz: recht.datenschutz, agb: recht.agb, widerruf: recht.widerruf } as Record<string, string>)[key];
+    if (ziel) {
+      window.location.replace(ziel);
+      return <div className="centered">Weiter zu {MARKE.ladenDomain} …</div>;
+    }
+  }
   const entry = DOCS[key] ?? null;
   if (!entry) return <div className="centered">Dokument nicht gefunden</div>;
 

@@ -214,6 +214,7 @@ services:
       dockerfile: web/Dockerfile
       args:
         VITE_CONVEX_URL: ${CONVEX_CLOUD_ORIGIN}
+        VITE_MARKE: weltkrieg
     depends_on:
       - tile-service
     ports:

@@ -264,7 +264,7 @@ export default function ReihePage() {
           )}
         </section>
 
-        <section className="reihe-kontakt">
+        {(k.mails.length > 0 || k.tel) && <section className="reihe-kontakt">
           <div className="reihe-kontakt-karte">
             <h3>Kontakt</h3>
             <ul className="reihe-kontakt-liste">
@@ -281,7 +281,7 @@ export default function ReihePage() {
                   </a>
                 </li>
               ))}
-              <li>
+              {k.tel && <li>
                 <a href={`tel:+49${k.tel.replace(/\D/g, "").replace(/^0/, "")}`}>
                   <Icon name="phone" />
                   <span>
@@ -289,10 +289,10 @@ export default function ReihePage() {
                     <span className="reihe-kontakt-wert">{k.tel}</span>
                   </span>
                 </a>
-              </li>
+              </li>}
             </ul>
           </div>
-        </section>
+        </section>}
 
       </div>
     </div>

@@ -4617,3 +4617,138 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 .bibliothek-reihe.liste .jahrgang-kopf h4 { font-size: var(--fs-mini); color: var(--ink-soft); }
 .bibliothek-reihe.liste .heft-liste a { gap: var(--s3); padding: var(--s1) var(--s3); }
 .bibliothek-reihe.liste .heft-liste-umschlag { flex-basis: 2.25rem; }
+
+/* ============================================================================
+   MARKE WELTKRIEG — digital.weltkrieg-online.de (VITE_MARKE=weltkrieg)
+
+   Werte aus weltkrieg-online.de (Theme gridhub, gemessen 03.11.2026):
+   Text Domine, Titel Playfair Display, Seitengrund #e6e6e6 mit Papierstruktur,
+   dunkle Knoepfe #333, Fuss #222 mit 3 px Linie #0077c0, Menueleiste in den
+   Hausfarben der Reihen (src/lib/marke.ts, `streifen`).
+   Steht absichtlich am Ende: gilt nur unter [data-marke="weltkrieg"] und
+   aendert sonst nichts an Lesen & Schenken.
+   ============================================================================ */
+@font-face {
+  font-family: 'Domine';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(/fonts/domine-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Domine';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(/fonts/domine-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+[data-marke="weltkrieg"] {
+  --sans: 'Domine', Georgia, 'Times New Roman', serif;
+  --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --knopf: 'Roboto Condensed', 'Arial Narrow', Arial, sans-serif;
+
+  --paper: #e6e6e6;
+  --paper-sunk: #dcdcdc;
+  --surface: #ffffff;
+  --ink: #1e1e1e;
+  --ink-soft: #3d3d3d;
+  --muted: #5f5f5f;
+  --rule: #d4d4d4;
+  --rule-soft: #e6e6e6;
+  --accent: #0077c0;        /* Linie ueber dem Fuss von weltkrieg-online.de */
+  --accent-deep: #005a92;
+  --accent-soft: #e0eef8;
+
+  --bar: #222222;
+  --bar-gradient: linear-gradient(180deg, #2a2a2a 0%, #1b1b1b 100%);
+  --footer: #222222;
+  --footer-text: #c8c8c8;
+  --copyright: #161616;
+  --copyright-text: #9a9a9a;
+}
+[data-marke="weltkrieg"] body {
+  background: var(--paper) url(/img/wk/grund.jpg) repeat;
+}
+
+/* Kopf: Schriftzug WELTKRIEG statt Bildzeichen, darunter der Farbstreifen */
+[data-marke="weltkrieg"] .brand-logo.schriftzug { height: 1.75rem; }
+[data-marke="weltkrieg"] .auth-brand .brand-logo.schriftzug { height: 2rem; }
+[data-marke="weltkrieg"] .footer-logo.schriftzug { height: 2.25rem; }
+@media (max-width: 900px) {
+  [data-marke="weltkrieg"] .app-header .brand-logo.schriftzug { height: 1.5rem; }
+}
+.marke-streifen {
+  display: flex;
+  height: 5px;
+}
+.marke-streifen span { flex: 1 1 0; }
+
+/* Fuss mit der blauen Linie wie im Laden */
+[data-marke="weltkrieg"] .app-footer { border-top: 3px solid #0077c0; }
+
+/* Knoepfe dunkel und in Versalien wie "SUCHEN" im Laden */
+[data-marke="weltkrieg"] button,
+[data-marke="weltkrieg"] .btn {
+  font-family: var(--knopf);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  background: #333333;
+  border-color: #333333;
+  border-radius: var(--radius-xs);
+}
+[data-marke="weltkrieg"] button:hover:not(:disabled),
+[data-marke="weltkrieg"] .btn:hover {
+  background: #111111;
+  border-color: #111111;
+}
+[data-marke="weltkrieg"] button.secondary,
+[data-marke="weltkrieg"] .btn.secondary {
+  background: var(--surface);
+  color: #222222;
+  border-color: #333333;
+}
+[data-marke="weltkrieg"] button.secondary:hover:not(:disabled),
+[data-marke="weltkrieg"] .btn.secondary:hover {
+  background: #f0f0f0;
+  color: #000000;
+  border-color: #000000;
+}
+[data-marke="weltkrieg"] button:disabled,
+[data-marke="weltkrieg"] .btn:disabled {
+  background: var(--paper-sunk);
+  border-color: var(--rule);
+  color: var(--muted);
+}
+/* Knoepfe in der Kopfleiste stehen auf dunklem Grund */
+[data-marke="weltkrieg"] .app-header .btn.secondary {
+  background: transparent;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+[data-marke="weltkrieg"] .app-header .btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #ffffff;
+}
+
+/* Kopfbild des Ladens oben im Kiosk */
+.marke-kopfbild {
+  margin: 0 0 var(--s5);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  background: #8fc3e8;
+}
+.marke-kopfbild img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2246 / 703;
+}
+.kiosk-leer { margin-top: var(--s5); max-width: 40rem; }
+
+/* Reihen-Schriftzuege (SVG) brauchen keinen Kasten, nur Luft */
+[data-marke="weltkrieg"] .reihen-kachel .reihen-logo img { object-fit: contain; }

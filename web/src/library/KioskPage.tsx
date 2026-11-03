@@ -5,6 +5,7 @@ import Icon from "../components/Icon";
 import { heraus, hinein, useWarenkorb } from "../lib/warenkorb";
 import ReihenKacheln from "../components/ReihenKacheln";
 import { reiheVon } from "../lib/reihen";
+import { MARKE } from "../lib/marke";
 
 /**
  * Kiosk: nur die Zeitschriften als Kacheln mit ihrem Schriftzug. Die Hefte
@@ -28,6 +29,19 @@ export default function KioskPage() {
 
   return (
     <div className="page">
+      {MARKE.kopfbild && (
+        <div className="marke-kopfbild">
+          <img
+            src={MARKE.kopfbild.src}
+            srcSet={MARKE.kopfbild.srcSet}
+            sizes="(min-width: 1240px) 1240px, 100vw"
+            width={MARKE.kopfbild.breite}
+            height={MARKE.kopfbild.hoehe}
+            alt={`${MARKE.logoAlt}: Erlebnisberichte`}
+            fetchPriority="high"
+          />
+        </div>
+      )}
       <div className="page-head kiosk-kopf">
         <span className="kicker">Kiosk</span>
         <h2>Für welche Zeitschrift interessieren Sie sich?</h2>
@@ -39,6 +53,14 @@ export default function KioskPage() {
       <div id="zeitschriften">
         <ReihenKacheln hefte={issues} />
       </div>
+
+      {issues.length === 0 && (
+        <p className="hint kiosk-leer">
+          Die ersten Ausgaben werden gerade eingestellt. Gekauft wird im{" "}
+          <a href={MARKE.laden}>Netzladen auf {MARKE.ladenDomain}</a>; mit derselben E-Mail-Adresse
+          lesen Sie Ihre Käufe danach hier.
+        </p>
+      )}
 
       {abos.length > 0 && (
         <section>
