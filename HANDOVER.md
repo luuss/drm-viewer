@@ -11,7 +11,17 @@
   Greim 36 doppelt (alt "Schwerterträger 36" und neu "36 Robert Ritter Von Greim").
   38 Werner Baumbach hatte am 03.11. 0 Seiten (Import lief noch). Zusammenlegen in
   "Schwerterträger" erst nach Rückfrage.
-* **DMZ 169** (Jan/Feb 2026) fehlt im Leser, sofern 2026 mit 169 beginnt.
+* **DMZ 169** (Jan/Feb 2026) fehlt im Leser, sofern 2026 mit 169 beginnt. Der User
+  findet das Heft nicht und muss erst jemanden fragen; er macht das selbst, nicht jetzt.
+  Nur erinnern.
+* **Erledigt 03.11.:** Schwerterträger 35–38 in der Reihe "Schwerterträger"
+  (`devtools:issueInReiheInternal`), Greim-Dublette (unveröffentlicht) gelöscht,
+  leere Reihen abgeschaltet. Umsatz-Seite + Rolle `umsatz` (chuk, Peggy) live bei L&S.
+  Admins von L&S in Weltkrieg angelegt (gleiche Rollen).
+* **Nach dem Weltkrieg-Import ausrollen** (Convex + web dort): Umsatz-Seite, Rolle
+  `umsatz`, Löschschutz, `issueInReiheInternal`. Vorher nicht, Import läuft.
+* **Später (nur notiert, nicht bauen):** Weltkrieg soll einen Modus bekommen, in dem
+  man online liest und Hefte kauft (wie der Laden bei L&S, dort ohne PrestaShop).
 * **Weltkrieg-Massenimport** lief am 03.11. ab ~22 Uhr (452 Hefte, ~4 h).
   Danach prüfen: Fehlerliste, Magazin 1/2 heißen "Weltkrieg 1"/"Weltkrieg 2"
   (Titel auf dem Umschlag nicht erkannt), Code-Reviews zu `preise_*`
