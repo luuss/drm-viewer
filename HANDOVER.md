@@ -1,59 +1,67 @@
 # Übergabe — Stand 30.09.2026
 
-**ERINNERN in der nächsten Sitzung (Stand 03.11.2026 abends):**
-* **Weltkrieg-Preise** sind nur vorläufig: vom Umschlag gelesen, bei E-Book-Fassungen
-  ohne Preis der Preis des neuesten Hefts der Reihe (`tools/weltkrieg/preise_setzen.sh`).
-  Der User: „ist egal, vielleicht will der Chef was anderes“. Den User daran
-  erinnern und fragen, welche Preise der Chef will. Bis dahin nichts weiter tun.
-  Preis-Übernahme beim Import selbst ist noch nicht gebaut (nach dem Massenimport).
-* **Lesen und Schenken, Schwerterträger:** 35, 36, 37, 38 liegen je in einer eigenen
-  Reihe ("35 Hyacinth Von Strachwitz" …), weil der Ordnername mit der Nummer beginnt.
-  Greim 36 doppelt (alt "Schwerterträger 36" und neu "36 Robert Ritter Von Greim").
-  38 Werner Baumbach hatte am 03.11. 0 Seiten (Import lief noch). Zusammenlegen in
-  "Schwerterträger" erst nach Rückfrage.
-* **DMZ 169** (Jan/Feb 2026) fehlt im Leser, sofern 2026 mit 169 beginnt. Der User
-  findet das Heft nicht und muss erst jemanden fragen; er macht das selbst, nicht jetzt.
-  Nur erinnern.
-* **Erledigt 03.11.:** Schwerterträger 35–38 in der Reihe "Schwerterträger"
-  (`devtools:issueInReiheInternal`), Greim-Dublette (unveröffentlicht) gelöscht,
-  leere Reihen abgeschaltet. Umsatz-Seite + Rolle `umsatz` (chuk, Peggy) live bei L&S.
-  Admins von L&S in Weltkrieg angelegt (gleiche Rollen).
-* **Erledigt 04.11. ~01:10:** Massenimport Weltkrieg durch (437 Hefte, 14 fehlen laut
-  `tools/weltkrieg/fehlende_hefte.py`), alles bei Weltkrieg ausgerollt (Convex, web, Worker,
-  Gateway), Apache beider Leser mit `X-Echte-IP` (Sicherung `vhost_ssl.conf.vor-echte-ip-2026-11-04`).
-  Läuft im Hintergrund: `/root/wk-freigeben-neu.sh` (Log `/root/wk-freigeben-neu.log`) gibt alle
-  436 Hefte frei, veröffentlicht sie und stellt je einen `full`-Auftrag zum Neuerkennen ein.
-* ~~Nach dem Weltkrieg-Import ausrollen~~ (Convex + web + tile-service dort): Umsatz-Seite,
-  Rolle `umsatz`, Löschschutz, `issueInReiheInternal`, Sicherheits-Fixes. Vorher nicht,
-  Import läuft. **Apache beider Leser** (`deploy/apache/digital*.vhost_ssl.conf`, neu:
-  `RequestHeader set X-Echte-IP`) erst danach einspielen und `plesk sbin httpdmng
-  --reconfigure-domain …`: ein Apache-Neuladen trifft beide Seiten.
-* **Sicherheitsprüfung 03.11.** (Ergebnis keine kritische/hohe Lücke): mittel = IP-Sperre
-  der Anmeldelinks per gefälschtem Kopf umgehbar → `x-echte-ip` (Apache) behoben, wirkt
-  erst mit der Apache-Vorlage. Niedrig behoben: Gateway ohne `issueId` → 403, Titelbild
-  unveröffentlichter Hefte nicht mehr öffentlich, `registerUpload` nur eigener Eimer +
-  `uploads/`, `plans.get` nur aktiv ohne Stripe-IDs, Portal-`returnUrl` nur eigene Seite,
-  Prototyp `backend/` (admin123) gelöscht. Offen (niedrig): Presign bindet Content-Type
-  nicht, Shop-HMAC ohne Zeitstempel, Convex-Admin-API öffentlich erreichbar (nur Admin-Key
-  schützt), Turnstile vor `/auth/link`.
-* **Später (nur notiert, nicht bauen): Trennung + Verschlüsselung**, Konzept in
-  `../docs/sicherheit-trennung-konzept.md`. Sofort erledigt: `chmod 700
-  /opt/hefte-digital/files` (lus_shop konnte alle L&S-Hefte lesen). Vorschlag zuerst:
-  PHP-Nutzer per Firewall von 127.0.0.1-Ports der Leser fernhalten, Shop-Secret mit
-  Zeitstempel, dann MinIO-Verschlüsselung.
-* **Später (nur notiert, nicht bauen):** Weltkrieg soll einen Modus bekommen, in dem
-  man online liest und Hefte kauft (wie der Laden bei L&S, dort ohne PrestaShop).
-* **Weltkrieg: zwei Hefte nachimportieren** (vom User am 03.11. gelöscht, kaputt):
-  Magazin 77 „Arktis ist nicht …“ (0 Seiten, Abbruch 22:38) und Marine 77
-  „Eisbären vor Südafrika“. Der User importiert sie selbst neu.
-* **Weltkrieg: Benennung der ganzen Seite überarbeiten** (User 03.11.): die Software ist
-  dort für Hefte, nicht Artikel. Admin-Liste zeigt „1 Artikel prüfen“ → stattdessen
-  Seitenzahl/„Text prüfen“; überall „Artikel“ → „Text/Heft“, Artikelansicht ist schon
-  „Leseansicht“. Erst nach dem Massenimport ausrollen (Oberfläche neu = Tab-Risiko).
-* **Weltkrieg-Massenimport** lief am 03.11. ab ~22 Uhr (452 Hefte, ~4 h).
-  Danach prüfen: Fehlerliste, Magazin 1/2 heißen "Weltkrieg 1"/"Weltkrieg 2"
-  (Titel auf dem Umschlag nicht erkannt), Code-Reviews zu `preise_*`
-  (bd drm-viewer-…), Uploads gelöschter Hefte aufräumen.
+## >>> WEITERMACHEN HIER (Stand 04.11.2026 ~01:30, nach Session-Kompaktierung zuerst lesen) <<<
+
+**Regeln, die der User heute gesetzt hat:**
+* Weltkrieg-Hefte sind **NICHT veröffentlichen**. `devtools:releaseIssueInternal` gibt frei
+  **und veröffentlicht** — für „Prüfung freigeben“ nie benutzen. Nur Artikel freigeben:
+  `articles:approveAllPending` (Identität editor) bzw. `devtools:setArticleStatusInternal`.
+  Am 04.11. hatte ich versehentlich 108 Hefte veröffentlicht (0 €), sofort wieder offline
+  genommen (`devtools:setPublishedInternal false`). Online ist nur 1 Blitzkrieg-Heft, das schon
+  vorher online war.
+* Kauf bei Weltkrieg noch nicht möglich und nicht einschalten.
+* Ein Heft = **ein durchgehender Text** (Einleitung und Geschichte gehören zusammen, nicht trennen).
+* Nichts neu starten/ausrollen, während der User importiert (Browser-Tab bricht sonst ab).
+* Hosts: alles bleibt auf dem TLDHost-Server 62.108.44.118, `pve` hat damit nichts zu tun.
+
+**Stand Weltkrieg (digital.weltkrieg-online.de):**
+* Massenimport aus dem Heftarchiv fertig: **437 Hefte** in 10 Reihen (Originalband 92,
+  Doppelband 54, Großband 54, Marine 47, Flieger 46, Magazin 44, Soldaten 39, Legion 35,
+  Freikorps 23, Blitzkrieg 3). Soll/Ist: `python3 -I tools/weltkrieg/fehlende_hefte.py` →
+  `docs/weltkrieg-fehlende-hefte.md` (14 fehlten, 85 nur INDD).
+* Alles ausgerollt (Commit `8a3f19f` und davor): Buch-Modus PDF/IDML, Titelseite nach
+  Heftnummer, Reihe Pflicht, Umsatz-Seite, Löschschutz, Sicherheits-Fixes, Knopf „Meine Ausgaben“.
+  Apache beider Leser mit `X-Echte-IP` (Sicherung `vhost_ssl.conf.vor-echte-ip-2026-11-04`).
+* Im Worker laufen noch `full`-Aufträge (Neuerkennung mit Trennstrich-Fix) für die ersten
+  ~110 Hefte aus dem abgebrochenen Skript `/root/wk-freigeben-neu.sh` (NICHT erneut starten,
+  es veröffentlicht!). Die erste Hälfte dieser Hefte hat freigegebene Artikel (bleibt beim
+  Neuerkennen so).
+
+**Offen, in dieser Reihenfolge:**
+1. **Prüfung freigeben (nicht veröffentlichen)** für alle Weltkrieg-Hefte: je Heft
+   `articles:approveAllPending {issueId}` mit Identität `import-test@weltkrieg-online.de`
+   (`tools/weltkrieg/wkrun.sh --identity '{"subject":"q973ryepe70ds5b3bczf34ewsn8hhhf1|x","issuer":"x","tokenIdentifier":"x"}' …`).
+2. **Neu erkennen** für die übrigen ~330 Hefte: `imports:enqueueInternal {issueId, kind:"full"}`
+   (ohne Freigabe/Veröffentlichung). IDs: `issues:overviewForEditors`.
+3. **Admins sehen die Hefte in „Meine Ausgaben“, sonst niemand** (User 04.11., noch NICHT
+   bauen, erst auf Zuruf): Bibliothek (`convex/issues.ts` ~Z. 189, `if (!issue?.isPublished) continue`)
+   zeigt nur Veröffentlichtes. Plan: für Konten mit Rolle editor/admin auch Unveröffentlichtes
+   listen (Zugriff haben sie schon über `hasIssueAccess`, rolle editor). Kiosk bleibt leer,
+   kaufen nicht möglich. Konten: chuk, Peggy, an@, Volkmar, Andreas, Jens (alle in Weltkrieg angelegt).
+4. **Benennung Weltkrieg überarbeiten:** keine „Artikel“ (Admin-Liste „1 Artikel prüfen“ →
+   Seiten/„Text prüfen“, Prüfansicht, Suche). Nur bei `IST_WELTKRIEG`.
+5. **Nachimportieren** (User macht es selbst): Magazin 77 „Arktis ist nicht…“, Marine 77
+   „Eisbären vor Südafrika“ (gelöscht, kaputt) + die Fehlenden aus dem Bericht.
+6. Titel: Magazin 1–10 heißen „Weltkrieg 1…10“ (Titel auf Umschlag nicht erkannt);
+   Kleinzeilen fehlen im Titel („Brückenschlag“ statt „Unternehmen Brückenschlag“);
+   Versalien-Schreibung („Grosser Zapfen-Streich“).
+7. **Preise** vorläufig (Umschlag / Reihenpreis, `tools/weltkrieg/preise_setzen.sh`), viele 0 €.
+   User: „vielleicht will der Chef was anderes“ → erinnern und fragen, nichts tun.
+8. PDF-Hefte ohne IDML haben keine Bilder in der Leseansicht (bd).
+9. Weltkrieg später: Online-Lesen + Heft-Kaufen-Modus (nur notiert).
+10. Sicherheit, nur Konzept: `../docs/sicherheit-trennung-konzept.md` (Trennung in Docker,
+    MinIO-Verschlüsselung, eigener Schlüsseldienst mit Lesekarte/Limit). Sofort-Fix erledigt:
+    `chmod 700 /opt/hefte-digital/files`. Rest-Lücken niedrig (Presign ohne Content-Type,
+    Shop-HMAC ohne Zeitstempel, Turnstile vor `/auth/link`).
+
+**Lesen und Schenken:**
+* Schwerterträger 35–38 in Reihe „Schwerterträger“, Greim-Dublette weg (erledigt).
+* **DMZ 169** (Jan/Feb 2026) fehlt; User muss jemanden fragen — nur erinnern.
+* Umsatz-Seite live, Rolle `umsatz` für chuk + Peggy.
+
+**Werkzeuge:** `tools/weltkrieg/` (README), Server-Helfer `/root/wkrun`, Musterhefte/Archiv-
+Erkennung `web/src/admin/heftarchiv.ts`, PDF-Text `extract-service/extractor/buch_pdf.py`
+(Prüfskript `_scratch/wk-pdf/probe3.py <textebene.json>`).
 
 **Neu am 03.11.2026: zweiter Leser https://digital.weltkrieg-online.de** (gleicher Code,
 eigene Anlage `/opt/weltkrieg-digital`, Marke `VITE_MARKE=weltkrieg`, Anmeldemails über
