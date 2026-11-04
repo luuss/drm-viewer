@@ -56,3 +56,21 @@ def test_kapitelzeile_und_werbeseite():
 
 def test_ohne_text_kein_artikel():
     assert buch_aus_textebene({}, set(), "x") == []
+
+
+def test_einleitung_und_geschichte_ein_text_seiten_getrennt():
+    # Ein Text je Heft; vorne beginnt jede Seite einen eigenen Absatz.
+    vorne = [T("Im Vorhof der Hölle", 0.1, 0.2, 0.6, size=18, h=0.03)] + [
+        T(f"Einleitung Zeile {n} mit Text.", 0.1, 0.3 + n * 0.0215, 0.88) for n in range(5)
+    ]
+    weiter = [T(f"Einleitung geht weiter {n}.", 0.1, 0.15 + n * 0.0215, 0.88) for n in range(5)]
+    geschichte = [
+        T("S", 0.10, 0.29, 0.18, size=70, h=0.11),
+        T("chon von weitem hörten", 0.18, 0.321, 0.88),
+        T("die Landser das Grollen.", 0.18, 0.343, 0.6),
+    ] + [T(f"Erzähltext Zeile {n} mit Wörtern.", 0.1, 0.45 + n * 0.0215, 0.88) for n in range(6)]
+    arts = buch_aus_textebene({2: vorne, 3: weiter, 4: geschichte}, set(), "Im Vorhof der Hölle")
+    assert [a.title for a in arts] == ["Im Vorhof der Hölle"]
+    texte = [b.text for b in arts[0].blocks]
+    assert any(t.startswith("Schon von weitem") for t in texte)
+    assert any(b.page_index == 3 and b.text.startswith("Einleitung geht weiter 0") for b in arts[0].blocks)

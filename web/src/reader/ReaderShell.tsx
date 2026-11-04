@@ -865,6 +865,17 @@ export default function ReaderShell() {
           <Icon name="arrow-left" />
           <span className="button-label">Zurück</span>
         </button>
+        {/* Direkt in die Bibliothek: "Zurück" geht nur einen Schritt und reicht
+            nach vielen Spruengen im Heft nicht (Wunsch 04.11.2026). */}
+        <button
+          className="btn quiet small"
+          onClick={() => navigate("/library")}
+          aria-label="Meine Ausgaben"
+          title="Meine Ausgaben"
+        >
+          <Icon name="library" />
+          <span className="button-label">Meine Ausgaben</span>
+        </button>
         {logo && (
           <img
             className={logo.kasten ? "reader-logo kasten" : "reader-logo"}

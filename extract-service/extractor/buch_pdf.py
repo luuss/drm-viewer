@@ -48,7 +48,15 @@ KAPITEL_HOECHSTLAENGE = 120
 KLEIN_FAKTOR = 0.85
 FUSSNOTE = re.compile(r"^\s*\*")
 SATZENDE = re.compile(r"[.!?…:“”\"»«)]\s*$")
-TRENNER = re.compile(r"^[\s*·•⁂~–-]{1,12}$")
+# Szenenwechsel ("* * *", "⁂"). Ein einzelner Strich ist kein Szenenwechsel,
+# sondern ein Trennstrich, der in der Textebene als eigene Zeile kam (121d:
+# "Man" | "-" | "stein").
+TRENNER = re.compile(r"^(?=.*[*·•⁂~])[\s*·•⁂~–-]{1,12}$")
+STRICH = re.compile(r"^[\s]*[-‐­–]\s*$")
+# Vorne steht Titel, Einleitung, Mahnung; die Hauptgeschichte beginnt auf der
+# ersten Seite mit einer Initiale. Im vorderen Teil beginnt jede Seite einen
+# neuen Absatz. Liegt die Initiale zu weit hinten, gilt kein vorderer Teil.
+VORNE_HOECHSTENS_SEITEN = 5
 
 
 @dataclass
@@ -141,7 +149,8 @@ def _zeilen(seite: int, items: list, grund: float) -> list[_Zeile]:
             (
                 z
                 for z in reversed(zeilen[-4:])
-                if z.spalte == sp and abs(z.y0 - i.y0) < hoehe * 0.45
+                if z.spalte == sp
+                and abs(z.y0 - i.y0) < hoehe * (0.9 if STRICH.match(i.text) else 0.45)
             ),
             None,
         )
@@ -188,8 +197,15 @@ def _zeilen(seite: int, items: list, grund: float) -> list[_Zeile]:
     return out
 
 
-def _absaetze(zeilen: list[_Zeile], grund: float) -> list[tuple[_Zeile, list[_Zeile]]]:
-    """Zeilen zu Absaetzen; jeder Absatz mit seiner ersten Zeile."""
+def _absaetze(
+    zeilen: list[_Zeile], grund: float, vorne_bis: int | None = None
+) -> list[tuple[_Zeile, list[_Zeile]]]:
+    """Zeilen zu Absaetzen; jeder Absatz mit seiner ersten Zeile.
+
+    `vorne_bis`: Seiten davor sind der vordere Teil (Titel, Einleitung,
+    Mahnung). Dort beginnt jede Seite einen neuen Absatz; sonst lief die
+    Einleitung von S. 2 in den Text von S. 3 hinein.
+    """
     # Linker Rand und Zeilenabstand je Seite und Spalte.
     rand: dict[tuple[int, int], float] = {}
     rechts: dict[tuple[int, int], float] = {}
@@ -235,6 +251,11 @@ def _absaetze(zeilen: list[_Zeile], grund: float) -> list[tuple[_Zeile, list[_Ze
                 neu = kurz and bool(SATZENDE.search(vorige.text))
             if TRENNER.match(z.text) or TRENNER.match(vorige.text):
                 neu = True
+        if vorne_bis is not None and vorige is not None and z.seite < vorne_bis and z.seite != vorige.seite:
+            neu = True
+        if STRICH.match(z.text):
+            # Ein Trennstrich, der keiner Zeile zuzuordnen war: weglassen.
+            continue
         if neu:
             out.append((z, [z]))
         else:
@@ -276,6 +297,9 @@ def _absatz_text(zeilen: list[_Zeile], rechts: dict[tuple[int, int], float] | No
         if not out:
             out = t
             vorige = z
+            continue
+        if STRICH.match(t):
+            out = out.rstrip() + "-"
             continue
         rand = (rechts or {}).get((vorige.seite, vorige.spalte))
         luecke = rand - vorige.x1 if rand is not None else None
@@ -322,7 +346,11 @@ def buch_aus_textebene(
         zeilen.extend(z for z in auf_seite if _klasse(z, grund) != "klein")
     # Fussnoten einer Seite hinter den Absatz, in dem ihr letzter Text steht:
     # sonst risse "vergan-" | Fussnote | "genen Stunden" den Satz auf.
-    absaetze = _absaetze(zeilen, grund)
+    erste_seite = min((z.seite for z in zeilen), default=0)
+    start = min((z.seite for z in zeilen if z.mit_initiale and z.seite > erste_seite), default=None)
+    if start is not None and start - erste_seite > VORNE_HOECHSTENS_SEITEN:
+        start = None
+    absaetze = _absaetze(zeilen, grund, start)
     letzte_auf_seite: dict[int, int] = {}
     for n, (_erste, teil) in enumerate(absaetze):
         for z in teil:
@@ -365,4 +393,7 @@ def buch_aus_textebene(
     if not blocks:
         return []
     erster = next((b.text for b in blocks if b.kind == "heading"), None)
-    return [AssembledArticle(title=(titel or erster or "Ganzes Heft").strip(), blocks=blocks)]
+    name = (titel or erster or "Ganzes Heft").strip()
+    # Ein Text je Heft: Einleitung und Geschichte gehoeren zusammen (User
+    # 04.11.2026). `start` trennt nur die Seiten des vorderen Teils sauber.
+    return [AssembledArticle(title=name, blocks=blocks)]
