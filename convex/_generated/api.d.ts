@@ -13,6 +13,7 @@ import type * as account from "../account.js";
 import type * as articleProductRules from "../articleProductRules.js";
 import type * as articleProducts from "../articleProducts.js";
 import type * as articles from "../articles.js";
+import type * as artikelStand from "../artikelStand.js";
 import type * as assets from "../assets.js";
 import type * as auth from "../auth.js";
 import type * as bildnachtrag from "../bildnachtrag.js";
@@ -86,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   articleProductRules: typeof articleProductRules;
   articleProducts: typeof articleProducts;
   articles: typeof articles;
+  artikelStand: typeof artikelStand;
   assets: typeof assets;
   auth: typeof auth;
   bildnachtrag: typeof bildnachtrag;

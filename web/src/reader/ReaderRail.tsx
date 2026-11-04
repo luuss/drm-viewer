@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   mode: "page" | "article";
@@ -16,23 +16,46 @@ type Props = {
 export default function ReaderRail({ mode, position, total, label, onSeek }: Props) {
   const [dragging, setDragging] = useState<number | null>(null);
   useEffect(() => setDragging(null), [position]);
+  const regler = useRef<HTMLInputElement>(null);
+  const onSeekRef = useRef(onSeek);
+  onSeekRef.current = onSeek;
+  // Ein Sprung je Loslassen: `change`, `pointerup` und die Tastatur koennen
+  // kurz hintereinander denselben Wert melden.
+  const zuletzt = useRef<{ wert: number; zeit: number } | null>(null);
+  const springen = (wert: number) => {
+    const jetzt = Date.now();
+    const z = zuletzt.current;
+    if (z && z.wert === wert && jetzt - z.zeit < 400) return;
+    zuletzt.current = { wert, zeit: jetzt };
+    setDragging(null);
+    onSeekRef.current(wert);
+  };
+  const springenRef = useRef(springen);
+  springenRef.current = springen;
+
+  // Das native `change` kommt in jedem Browser beim Loslassen, auch mit dem
+  // Finger auf iOS, wo `pointerup` am Fenster nicht verlaesslich ankommt.
+  useEffect(() => {
+    const el = regler.current;
+    if (!el) return;
+    const beimLoslassen = () => springenRef.current(Number(el.value));
+    el.addEventListener("change", beimLoslassen);
+    return () => el.removeEventListener("change", beimLoslassen);
+  }, []);
 
   // Das Loslassen wird am Fenster abgehoert, nicht am Regler. Wer beim Ziehen
   // den Regler verlaesst und die Taste woanders loslaesst, bekam sonst keinen
   // Sprung: die Anzeige stand auf der neuen Seite, der Reader auf der alten.
   useEffect(() => {
     if (dragging === null) return;
-    const commit = () => {
-      setDragging(null);
-      onSeek(dragging);
-    };
+    const commit = () => springenRef.current(dragging);
     window.addEventListener("pointerup", commit);
     window.addEventListener("pointercancel", commit);
     return () => {
       window.removeEventListener("pointerup", commit);
       window.removeEventListener("pointercancel", commit);
     };
-  }, [dragging, onSeek]);
+  }, [dragging]);
 
   const shown = dragging ?? position;
   return (
@@ -44,6 +67,7 @@ export default function ReaderRail({ mode, position, total, label, onSeek }: Pro
           Breite, sonst wandert der Regler bei jedem Blaettern seitwaerts. */}
       {label && <span className="rail-title">{label}</span>}
       <input
+        ref={regler}
         type="range"
         min={0}
         max={Math.max(0, total - 1)}
@@ -54,8 +78,7 @@ export default function ReaderRail({ mode, position, total, label, onSeek }: Pro
           // Sprung deshalb direkt nach dem Tastendruck ausgeloest.
           const keys = ["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"];
           if (keys.includes(e.key) && dragging !== null) {
-            setDragging(null);
-            onSeek(dragging);
+            springen(dragging);
           }
         }}
         aria-label={mode === "page" ? "Seite wählen" : "Artikel wählen"}
