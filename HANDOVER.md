@@ -18,7 +18,12 @@
   (`devtools:issueInReiheInternal`), Greim-Dublette (unveröffentlicht) gelöscht,
   leere Reihen abgeschaltet. Umsatz-Seite + Rolle `umsatz` (chuk, Peggy) live bei L&S.
   Admins von L&S in Weltkrieg angelegt (gleiche Rollen).
-* **Nach dem Weltkrieg-Import ausrollen** (Convex + web + tile-service dort): Umsatz-Seite,
+* **Erledigt 04.11. ~01:10:** Massenimport Weltkrieg durch (437 Hefte, 14 fehlen laut
+  `tools/weltkrieg/fehlende_hefte.py`), alles bei Weltkrieg ausgerollt (Convex, web, Worker,
+  Gateway), Apache beider Leser mit `X-Echte-IP` (Sicherung `vhost_ssl.conf.vor-echte-ip-2026-11-04`).
+  Läuft im Hintergrund: `/root/wk-freigeben-neu.sh` (Log `/root/wk-freigeben-neu.log`) gibt alle
+  436 Hefte frei, veröffentlicht sie und stellt je einen `full`-Auftrag zum Neuerkennen ein.
+* ~~Nach dem Weltkrieg-Import ausrollen~~ (Convex + web + tile-service dort): Umsatz-Seite,
   Rolle `umsatz`, Löschschutz, `issueInReiheInternal`, Sicherheits-Fixes. Vorher nicht,
   Import läuft. **Apache beider Leser** (`deploy/apache/digital*.vhost_ssl.conf`, neu:
   `RequestHeader set X-Echte-IP`) erst danach einspielen und `plesk sbin httpdmng
