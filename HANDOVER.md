@@ -28,6 +28,17 @@
   Neuerkennen so).
 
 **Offen, in dieser Reihenfolge:**
+0. **Stand 04.11. ~01:45:** `/root/wk-pruefen-neu.sh` läuft (Log `/root/wk-pruefen-neu.log`): erst
+   `full`-Aufträge für die 328 übrigen Hefte (`/root/wk-rest-ids.txt`), dann bei allen
+   (`/root/wk-alle-ids.txt`) nur `approveAllPending`. Veröffentlicht nichts. Ende = Zeile `ENDE n`.
+   Danach prüfen: `issues:overviewForEditors` → `artikelStand.offen` überall 0; Aufträge, die beim
+   Neuerkennen erst NACH der Freigabe fertig wurden, ggf. noch einmal freigeben.
+   Das alte Skript heißt jetzt `/root/wk-freigeben-neu.sh.GEFAEHRLICH-veroeffentlicht` (nicht ausführbar).
+   Großband 154 („ein“, leer) gelöscht → steht jetzt in der Fehlliste. Fehlliste neu: **15 Hefte**
+   (`docs/weltkrieg-fehlende-hefte.md`). Seitenregler der Leseansicht live geprüft (Klick, Ziehen,
+   Mausrad, Handy, PDF- und IDML-Heft): geht. Zusätzlich springt er jetzt beim nativen `change`
+   (Commit `3a73c4e`, ausgerollt). Ohne freigegebenen Text gibt es keine Leseansicht, nur Seiten.
+   Testanmeldung ohne Mail: `magicLink:requestInternal {email, ip, next}` → `/anmelden?t=<token>`.
 1. **Prüfung freigeben (nicht veröffentlichen)** für alle Weltkrieg-Hefte: je Heft
    `articles:approveAllPending {issueId}` mit Identität `import-test@weltkrieg-online.de`
    (`tools/weltkrieg/wkrun.sh --identity '{"subject":"q973ryepe70ds5b3bczf34ewsn8hhhf1|x","issuer":"x","tokenIdentifier":"x"}' …`).
