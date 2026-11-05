@@ -4826,19 +4826,14 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   height: 5.25rem;
   padding: var(--s3) var(--s5);
 }
+/* Alle Kacheln zeigen nur den Reihennamen in einer Zeile, gleich hoch. */
 .wk-reihe-kopf img {
   display: block;
   width: auto;
   max-width: 100%;
-  height: 2.5rem;
+  height: 1.75rem;
   object-fit: contain;
 }
-/* Einzeilige Schriftzuege (4,4 : 1 statt 2,56 : 1) waeren bei gleicher Hoehe
-   fast doppelt so gross; so sind ihre Buchstaben etwa so hoch wie
-   "WELTKRIEG" in den zweizeiligen. */
-.wk-reihe.reihe-blitzkrieg .wk-reihe-kopf img,
-.wk-reihe.reihe-freikorps .wk-reihe-kopf img,
-.wk-reihe.reihe-legion .wk-reihe-kopf img { height: 1.7rem; }
 .wk-reihe-name {
   font-family: var(--serif);
   font-size: var(--fs-h3);

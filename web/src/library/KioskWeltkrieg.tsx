@@ -58,7 +58,9 @@ function ReihenKarte({ gruppe }: { gruppe: KioskReihe<KioskHeft> }) {
     >
       <Link to={ziel} className="wk-reihe-kopf">
         {gruppe.reihe ? (
-          <img src={gruppe.reihe.hell} alt={gruppe.reihe.alt} />
+          // Nur der Reihenname ("DOPPELBAND"): "WELTKRIEG" steht schon im Kopf
+          // der Seite (Anweisung 05.11.2026).
+          <img src={gruppe.reihe.nurName ?? gruppe.reihe.hell} alt={gruppe.reihe.alt} />
         ) : (
           <span className="wk-reihe-name">{gruppe.name}</span>
         )}

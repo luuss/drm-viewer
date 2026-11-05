@@ -79,6 +79,9 @@ REIHEN = {
     "legion": ("LEGION", "#9f862a"),
 }
 for slug, (wort, farbe) in REIHEN.items():
+    # Nur der Reihenname, ohne "WELTKRIEG" darueber: Kacheln im Kiosk, wo
+    # die Marke schon im Kopf steht (Anweisung 05.11.2026).
+    svg(f"reihe-{slug}-name.svg", [(wort, farbe, 1)])
     if slug in ("freikorps", "legion", "blitzkrieg"):
         # eigene Hefttitel ohne "Weltkrieg"
         svg(f"reihe-{slug}.svg", [(wort, farbe, 1)])
