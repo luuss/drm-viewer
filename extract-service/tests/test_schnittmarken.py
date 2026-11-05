@@ -4,7 +4,9 @@ Vorlagen unter fixtures/schnittmarken/: gespeicherte Seitenbilder der Anlage
 digital.weltkrieg-online.de (05.11.2026), 1400 Punkte breit wie beim Import.
 Zwei Innenseiten aus Heften ohne IDML mit Anschnitt und Marken, vier aus
 Blitzkrieg 3 (IDML, also beschnitten): Textseite, Titel und U4 mit Bild bis
-an den Rand, ganzseitige Anzeige. Das Seiteninnere ist weiss gemacht, damit
+an den Rand, ganzseitige Anzeige. Dazu Magazin 7 S. 40 (Marken hinter einem
+leeren Papierrand) und Magazin 83 S. 12 (schon zugeschnitten, Kolumnentitel
+nah an den Ecken). Das Seiteninnere ist weiss gemacht, damit
 die Dateien klein bleiben; die Erkennung liest nur den aeusseren Rand.
 """
 
@@ -49,10 +51,44 @@ def test_marken_auf_den_schnittkanten(name):
         "ohne-titel-blitzkrieg-3-u1.jpg",
         "ohne-anzeige-blitzkrieg-3-s36.jpg",
         "ohne-u4-blitzkrieg-3.jpg",
+        # Schon zugeschnitten, Kolumnentitel nah an den Ecken: der gemessene
+        # Papierrand endet am Kolumnentitel, dort stehen keine Marken.
+        "ohne-netzformat-magazin-83-s12.jpg",
     ],
 )
 def test_beschnittene_seite_bleibt(name):
     assert schnittmarken(_bild(name)) is None
+
+
+def test_marken_hinter_leerem_papierrand():
+    # Magazin 7 (2015): vor den Marken noch 65 Punkte weisses Papier, die
+    # Marken beginnen nicht an der Bildkante. Bis 05.11.2026 blieben alle
+    # 96 Innenseiten mit Marken und Druckvermerk im Leser.
+    im = _bild("mit-marken-papierrand-magazin-7-s40.jpg")
+    s = schnittmarken(im)
+    assert s is not None
+    assert abs(s.links - 122) <= 1 and abs(s.oben - 128) <= 1
+    assert abs(s.rechts - 1277) <= 1 and abs(s.unten - 1761) <= 1
+    neu = zuschneiden(im, s)
+    assert abs(neu.width / neu.height - 210 / 297) < 0.002
+
+
+def test_kuenstliche_marken_hinter_papierrand():
+    # Dieselben Marken wie in _seite(), um 50 Punkte nach innen geschoben.
+    w, h, rand, vor, lang = 1400, 1927, 113, 50, 45
+    im = Image.new("L", (w, h), 255)
+    z = ImageDraw.Draw(im)
+    r, b = w - 1 - rand, h - 1 - rand
+    for x in (rand, r):
+        z.line([(x, vor), (x, vor + lang)], fill=0)
+        z.line([(x, h - 1 - vor - lang), (x, h - 1 - vor)], fill=0)
+    for y in (rand, b):
+        z.line([(vor, y), (vor + lang, y)], fill=0)
+        z.line([(w - 1 - vor - lang, y), (w - 1 - vor, y)], fill=0)
+    assert schnittmarken(im) == Schnitt(113, 113, 1286, 1813, 1400, 1927)
+    # Ein Bild in der Ecke vor den Marken verhindert den Schnitt weiter.
+    z.rectangle([0, 0, 40, 40], fill=60)
+    assert schnittmarken(im) is None
 
 
 def _seite(w=1400, h=1927, rand=63, ecken=("lo", "ro", "lu", "ru"), bild_in_ecke=False):
