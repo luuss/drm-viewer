@@ -328,3 +328,15 @@ def test_worker_zweiter_lauf_nimmt_schnitt_der_frueheren_seiten():
     job._schnittmarken(pages, [], {})
     [(_pfad, body)] = [g for g in job.convex.gesendet if g[0] == "/service/pages/beschnitten"]
     assert [(s["index"], s["width"], s["height"]) for s in body["seiten"]] == [(3, 1273, 1800)]
+
+
+def test_foto_bis_an_den_unteren_rand_vier_marken_reichen():
+    """Wie Magazin 83, S. 26: unten laeuft ein Foto ueber die ganze Breite bis
+    an den Bildrand, die unteren Marken sind darauf nicht zu sehen."""
+    from extractor.schnittmarken import MARKEN_MINDESTENS, marken_passen
+
+    ref = schnittmarken(_seite())
+    im = _seite()
+    ImageDraw.Draw(im).rectangle([0, 1000, 1399, 1926], fill=40)
+    assert schnittmarken(im) is None
+    assert marken_passen(im, ref) == 4 >= MARKEN_MINDESTENS

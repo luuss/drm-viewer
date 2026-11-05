@@ -42,8 +42,10 @@ SYMMETRIE = 0.01
 ECKE = 0.5
 ECKE_DUNKEL = 0.01
 # So viele der acht Marken muessen auf den Kanten stehen, wenn eine Seite den
-# Schnitt der anderen Seiten des Hefts uebernimmt (`marken_passen`).
-MARKEN_MINDESTENS = 5
+# Schnitt der anderen Seiten des Hefts uebernimmt (`marken_passen`). Vier sind
+# zwei ganze Ecken; laeuft unten ein Foto bis an den Bildrand, sind die
+# unteren Marken darauf unsichtbar (Magazin 83, S. 26/27).
+MARKEN_MINDESTENS = 4
 
 
 @dataclass(frozen=True)
