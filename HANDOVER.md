@@ -403,6 +403,24 @@ aus Abschnitt 1e bleibt dabei ganz.
   Ladezeit sichtbarer Kacheln mit/ohne Puffern daneben gemessen
   (`zeiten.mjs`); seit dem Nachlauf von 1,5 s (`vorrang.ts`) kein
   spuerbarer Unterschied.
+* **Nachgeprueft am 05.11.2026, live:**
+  - Engines: Chromium, Firefox und WebKit (Safari-Engine) je ganzer Ablauf
+    (`pruefen-engine.mjs <engine> <lus|wk> <ordner>`): puffern, Netz weg,
+    Neustart ohne Server (toter Proxy), Abmelden. Alles bestanden.
+    WebKit braucht lokal libavif/libgav1/libyuv im Ordner
+    `~/.cache/ms-playwright/webkit-2359/minibrowser-wpe/sys/lib`.
+  - Falle beim Testen: unter Playwrights `setOffline` liest WebKit keinen
+    Blob mehr (auch kein gewoehnliches Bild), die Seitenansicht bleibt
+    leer. Kein Fehler des Readers: mit abgebrochenen Anfragen und gekappter
+    Convex-Leitung (`NETZWEG=leitung`) geht es, ebenso nach dem Neustart.
+  - Sonderfaelle (`szenen.mjs`): zweiter Tab mit anderem Heft uebernimmt,
+    der erste puffert nicht weiter; Freischaltung entzogen: Reader geht auf
+    die Verkaufsseite, Paket leer; neue Sitzung nach > 5 min: 0 Kacheln neu,
+    nur 3 Schriften, Texte offline mit neuer Schrift lesbar.
+  - Grosses Heft (Weltkrieg 132 Seiten): 33,6 MB in gut 90 s. Seit `4d6543a`
+    laufen Texte und Schriften neben den Seiten; vorher warteten die Seiten
+    auf den einen grossen Text (300 KB, einmal bis zu 20 s).
+  - Nicht geprueft: echtes iPhone und Android-Geraet.
 * Cloudflare setzt fuer Browser auf `sw.js` `max-age=14400` (Zone-Einstellung
   Browser Cache TTL), nginx sendet `no-cache`. Unkritisch: die Registrierung
   laeuft mit `updateViaCache: "none"`, die Kante prueft jedes Mal nach.
