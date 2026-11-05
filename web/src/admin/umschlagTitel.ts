@@ -166,14 +166,19 @@ function titelZeilen(flach: TextItem[]): string[] {
 export function nameVomUmschlag(items: TextItem[], reihen: Reihe[]): UmschlagName | null {
   const flach = ohneDoppel(items.filter((i) => gerade(i) && i[0].trim()));
   const titelGedruckt = zeilenVerbinden(titelZeilen(flach));
-  // Die Reihe steht im Kopf ("erlebnisberichte – Doppelband"); erst dort
-  // suchen, dann auf der ganzen Seite. Der Schriftzug der Anlage
-  // ("WELTKRIEG") passt auf keine Reihe; steht keine da, bleibt es offen.
+  // Die Reihe steht in der Zeile ganz oben ("erlebnisberichte – Grossband");
+  // erst dort suchen, dann im Kopf, dann auf der ganzen Seite. Bis 05.11.2026
+  // zuerst im ganzen Kopf: "DOPPELSCHUSS ROT" (Grossband 147) passte auf
+  // Doppelband, weil der vor Grossband in der Liste steht. Der Schriftzug der
+  // Anlage ("WELTKRIEG") passt auf keine Reihe; steht keine da, bleibt es offen.
+  const zeile = flach.filter((i) => i[2] < KOPF_OBEN).map((i) => i[0]).join(" ");
   const kopf = flach.filter((i) => i[2] < REIHE_IM_KOPF).map((i) => i[0]).join(" ");
   const text = flach.map((i) => i[0]).join(" ");
   const passt = (r: Reihe, t: string) => (r.umschlag ?? r.match).test(t);
   const reihe =
-    (reihen.find((r) => passt(r, kopf)) ?? reihen.find((r) => passt(r, text)))?.name ?? null;
+    (reihen.find((r) => passt(r, zeile)) ??
+      reihen.find((r) => passt(r, kopf)) ??
+      reihen.find((r) => passt(r, text)))?.name ?? null;
   if (!titelGedruckt && !reihe) return null;
   return { titelGedruckt, reihe };
 }
@@ -186,7 +191,7 @@ export function nameVomUmschlag(items: TextItem[], reihen: Reihe[]): UmschlagNam
  * die Woerter kommen aus dem Satz, die Satzzeichen bleiben die des Umschlags
  * („DAS ALLES WEGEN ZWEIER BRÜCKEN!“ und im Satz „Das alles wegen zweier
  * Brücken…“ ergibt „Das alles wegen zweier Brücken!“). Versal-SS darf im
- * Satz ß sein (THEISS, Theiß). Ein Bindestrich im Wort kann eine Trennung am
+ * Satz ß sein (THEISS, Theiß), eine Null im Wort ein O (R0T, Rot). Ein Bindestrich im Wort kann eine Trennung am
  * Zeilenende des Umschlags sein ("OBERST-" / "LEUTNANT"): der Satz
  * entscheidet ("Oberstleutnant", aber "General-Stäbler").
  */
@@ -195,7 +200,13 @@ export function schreibungAusSatz(titel: string, satzTexte: string[]): string | 
   // teile: [vor, wort, zwischen, wort, …, nach]
   const woerter = teile.filter((_, i) => i % 2 === 1);
   if (woerter.length === 0) return null;
-  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ss/gi, "(?:ss|ß)");
+  // Eine Null zwischen Buchstaben kann ein O der Zierschrift sein ("R0T",
+  // Grossband 147, im Satz "Rot").
+  const esc = (w: string) =>
+    w
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/ss/gi, "(?:ss|ß)")
+      .replace(/(?<=\p{L})0|0(?=\p{L})/gu, "[0o]");
   let muster = "";
   for (let i = 0; i < woerter.length; i++) {
     if (i > 0) {

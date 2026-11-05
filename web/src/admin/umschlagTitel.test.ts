@@ -159,6 +159,33 @@ describe("Kopf der Titelseite (05.11.2026)", () => {
     // Die Unterzeile von Legion 43 (20 Punkt) steht weit unter dem Titel.
     expect(titel(U1_LEGION_43)).not.toMatch(/Fremdenlegion/);
   });
+  it("liest die Reihe aus der Zeile ganz oben, nicht aus dem Titel", () => {
+    // Grossband 147: "DOPPELSCHUSS" passte bis 05.11. auf Doppelband.
+    const R = [
+      { name: "Weltkrieg Doppelband", match: /doppel/i },
+      { name: "Weltkrieg Großband", match: /gro(ss|ß)band/i },
+      { name: "Weltkrieg Soldaten", match: /soldaten/i },
+      { name: "Freikorps", match: /freikorps/i, umschlag: /freikorps|erlebte geschichte|freiwillige wehrverb/i },
+    ];
+    const U1_147: TextItem[] = [
+      ["erlebnisberichte – Grossband", 0.09, 0.0111, 0.83, 0.0601, 29.2],
+      ["WELTKRIEG", 0.0419, 0.0112, 0.8745, 0.1792, 100],
+      ["nr. 147", 0.0719, 0.1784, 0.1671, 0.2053, 16],
+      ["DOPPELSCHUSS", 0.2585, 0.2371, 0.9135, 0.3211, 50],
+      ["R0T", 0.5078, 0.3194, 0.6642, 0.4034, 50],
+    ];
+    expect(nameVomUmschlag(U1_147, R)?.reihe).toBe("Weltkrieg Großband");
+    // Freikorps 25: "Sturmsoldaten" in der Unterzeile ist nicht die Reihe.
+    const U1_FK25: TextItem[] = [
+      ["ERLEBTE GESCHICHTE", 0.2862, 0.027, 0.778, 0.0673, 24],
+      ["Nr. 25", 0.756, 0.2093, 0.8293, 0.2315, 13.2],
+      ["Sturmsoldaten", 0.0465, 0.2872, 0.3243, 0.3158, 17],
+      ["„Sieg", 0.049, 0.4171, 0.3085, 0.523, 63],
+    ];
+    expect(nameVomUmschlag(U1_FK25, R)?.reihe).toBe("Freikorps");
+    // Ein Doppelband bleibt Doppelband.
+    expect(nameVomUmschlag(U1_121, R)?.reihe).toBe("Weltkrieg Doppelband");
+  });
   it("setzt Stuecke eines Worts ohne Luecke zusammen, getrennte Woerter nicht", () => {
     expect(titel(U1_137)).toBe("bombenkRieg in deR bocage");
     expect(titel(U1_121)).toContain("ZUR KRIM");
@@ -196,6 +223,11 @@ describe("Schreibung aus dem Satz (05.11.2026)", () => {
     expect(schreibungAusSatz("KAMPF UM BASTOGNE", ["der kampf Um Bastogne begann", "Kampf um Bastogne"])).toBe(
       "Kampf um Bastogne",
     );
+  });
+  it("liest eine Null im Wort als O, Zahlen bleiben Zahlen", () => {
+    expect(schreibungAusSatz("DOPPELSCHUSS R0T", ["Doppelschuß Rot\nFrankreich 1940"])).toBe("Doppelschuß Rot");
+    expect(schreibungAusSatz("ORKANBÖEN ÜBER U 47", ["Orkanböen über U 47"])).toBe("Orkanböen über U 47");
+    expect(schreibungAusSatz("RAUM 100", ["Raum 1oo"])).toBeNull();
   });
   it("laesst eine Zahl am Anfang stehen", () => {
     expect(schreibungAusSatz("14 MANN UND EIN BEFEHL", ["14 Mann und ein Befehl"])).toBe("14 Mann und ein Befehl");
