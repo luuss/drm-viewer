@@ -4785,6 +4785,12 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 [data-marke="weltkrieg"] .reader-screen .reader-turn:hover:not(:disabled) {
   border-color: var(--papier-tinte);
 }
+/* Das feste Verzeichnis hebt den aktuellen Eintrag sonst im Rot von Lesen &
+   Schenken hervor, das auf dem Papier pfirsichfarben wirkt. */
+[data-marke="weltkrieg"] .toc-docked .toc-entry.current,
+[data-marke="weltkrieg"] .toc-docked .toc-entry.current:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
 
 /* Umsatz (admin/Umsatz.tsx) */
 .umsatz-kacheln {
