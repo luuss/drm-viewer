@@ -8,7 +8,8 @@ Leser fuer jedes Heft der Reihe. Reihenpreis = Preis der Variante "E-Book"
 des neuesten E-Books der Reihe in der Kategorie E-Books von
 weltkrieg-online.de (WooCommerce Store API, oeffentlich). Aeltere E-Books mit
 anderem Preis (Doppelband 3,99, Grossband 2,99) und solche mit 0 € zaehlen
-nicht. Eine Reihe ohne E-Book im Laden (Magazin) bekommt keinen Preis.
+nicht. Das Magazin hat im Laden kein E-Book; es kostet als E-Book dasselbe
+wie der Grossband (Anweisung 05.11.2026, `WIE_REIHE`).
 
 Schreibt die Eintraege fuer `devtools:preiseSetzenInternal` und zeigt die
 Reihenpreise. Den Bestand fragt es ueber tools/weltkrieg/wkrun.sh ab.
@@ -38,6 +39,10 @@ REIHE = {
     "Blitzkrieg": "Blitzkrieg",
     "Freikorps": "Freikorps",
 }
+
+
+# Reihen ohne E-Book im Laden, die den Preis einer anderen Reihe bekommen.
+WIE_REIHE = {"Weltkrieg Magazin": "Weltkrieg Großband"}
 
 
 def holen(pfad: str):
@@ -80,6 +85,10 @@ def main() -> int:
         if reihe not in neueste or nr > neueste[reihe][0]:
             neueste[reihe] = (nr, preis, name)
 
+    for reihe, vorbild in WIE_REIHE.items():
+        if reihe not in neueste and vorbild in neueste:
+            nr, preis, name = neueste[vorbild]
+            neueste[reihe] = (nr, preis, f"wie {vorbild}")
     out = subprocess.run(
         ["tools/weltkrieg/wkrun.sh", "--identity", ID, "issues:overviewForEditors", "{}"],
         capture_output=True, text=True,
