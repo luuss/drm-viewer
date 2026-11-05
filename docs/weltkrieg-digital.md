@@ -188,9 +188,34 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
   als „Weltkrieg 1“ ins selbe Heft. Freikorps und Blitzkrieg haben den
   Schriftzug als Bild; erkannt an „Erlebte Geschichte / Freiwillige
   Wehrverbände“ bzw. „Second World War in Fight“ (`umschlag` in `reihen.ts`).
-* **Titel:** grösste Schrift unter dem Kopf, doppelte Konturzeilen einmal,
-  Trennstrich am Zeilenende zusammen; Schreibung von der Titelseite des
-  Innenteils (`anfangsText`), sonst Satz, sonst `ausVersalien`.
+  **Gesucht wird zuerst in der Zeile ganz oben** („erlebnisberichte –
+  Grossband“), erst dann im Kopf und auf der Seite. Bis 05.11. im ganzen Kopf:
+  „DOPPELSCHUSS ROT“ (Großband 147) wurde Doppelband und überschrieb das echte
+  Doppelband 147, „Sturmsoldaten“ machte Freikorps 25 zu Soldaten 25.
+* **Titel** (`umschlagTitel.ts`, neu 05.11.2026): Der Kopf (Schriftzug,
+  Reihenzeile, Nr., Preis, www) wird **auf jeder Titelseite gemessen**, der
+  Titel ist die grösste Schrift darunter samt direkt anschliessender Zeilen in
+  etwas kleinerer Schrift (Dienstgrad über dem Namen). Schmale Reste am Bund
+  („2o26“) zählen nicht, Stücke einer Zeile ohne Lücke sind ein Wort
+  (Zierschrift „b|ombenk|R|ieg“). Schreibung **Wort für Wort aus dem Satz**
+  (Innentitel, Kolumnentitel), Satzzeichen vom Umschlag; SS darf ß sein,
+  Null im Wort ein O („R0T“), eine Trennung am Zeilenende entscheidet der Satz
+  („Oberstleutnant“, aber „Rupel-Stellung“). Sonst `ausVersalien`.
+  Bis 05.11. galt fest alles oberhalb von 22 % als Kopf: bei 49 Heften fehlte
+  die erste Titelzeile („Stäbler“ Sander“ statt „„Generalstäbler“ Sander“).
+* **Berichtigung 05.11.2026:** 112 Titel (fehlende Zeilen, Zierschrift-Reste,
+  falsche Gross-/Kleinschreibung, Trennstriche) mit
+  `devtools:titelBerichtigenInternal` (Titel, Text, Adresse; alte Adresse in
+  `alteSlugs` führt weiter; je Aufruf höchstens ~15 Hefte, sonst
+  Lesegrenze 16 MB). Großband 147 und Freikorps 25 mit
+  `devtools:issueInReiheInternal` in ihre Reihe. **Offen:** Doppelband 147
+  „Ausbruch aus Oserki“ neu importieren (Ordner
+  `Doppelbände/141-150/147d …`, einzeln, die Massenliste hält ihn für fertig);
+  Magazin 1–10 haben keinen Titel auf dem Umschlag („Weltkrieg 7“).
+* **Prüfen nach jedem Import:** alle Titel gegen Titelseite und Satz und alle
+  Reihen gegen die oberste Zeile vergleichen (Skripte 05.11. im Scratchpad:
+  Textebenen holen, `nameVomUmschlag` mit esbuild bündeln, Liste der
+  Abweichungen), nicht nur das Musterheft.
 * Die 24 Testhefte vom 03.11. sind gelöscht (Liste `_scratch/wk-struktur/issues-vor-loeschen.json`),
   falsche Reihen „159d …“, „160d …“, „Weltkrieg“, „B“ abgeschaltet.
 * Convex der Anlage von der Kommandozeile: `/root/wkrun [--identity JSON] fn JSON`
