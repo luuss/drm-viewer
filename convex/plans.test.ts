@@ -81,13 +81,19 @@ describe("Abos im Kiosk", () => {
     expect(offer).not.toBeNull();
     expect(offer!.tiers.map((tier) => tier.tier)).toEqual([
       "Normalabonnement",
+      "Schüler- und Studentenabonnement",
+      "Kombi-Abonnement",
+      "Förderabonnement",
       "Zubuchung zur Druckausgabe",
     ]);
     expect(offer!.tiers[0].note).toBe("12 Ausgaben im Jahr, nur digital");
-    expect(offer!.tiers[1].note).toBe("Nur für Abonnenten der gedruckten Ausgabe");
+    expect(offer!.tiers[4].note).toBe("Nur für Abonnenten der gedruckten Ausgabe");
     // Digital gibt es je Abo-Art nur einen Preis, ohne Auslandspreise.
     expect(offer!.tiers.map((tier) => tier.plans.map((p) => [p.name, p.priceAmountCents]))).toEqual([
       [["Normalabonnement", 9600]],
+      [["Schüler- und Studentenabonnement", 8400]],
+      [["Kombi-Abonnement", 8880]],
+      [["Förderabonnement", 11460]],
       [["Zubuchung zur Druckausgabe", 1980]],
     ]);
     expect(offer!.headline!._id).toBe(offer!.tiers[0].plans[0]._id);
@@ -206,6 +212,11 @@ describe("Abo-Katalog", () => {
       // Ein Plan ohne Abo-Art (etwa aus der Verwaltung) blockiert nichts.
       { tier: undefined, region: undefined },
     ]);
-    expect(missing.map((v) => v.name)).toEqual(["Zubuchung zur Druckausgabe"]);
+    expect(missing.map((v) => v.name)).toEqual([
+      "Schüler- und Studentenabonnement",
+      "Kombi-Abonnement",
+      "Förderabonnement",
+      "Zubuchung zur Druckausgabe",
+    ]);
   });
 });

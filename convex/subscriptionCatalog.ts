@@ -9,9 +9,14 @@
  * Alle Preise sind Jahrespreise in Cent, inklusive Mehrwertsteuer.
  * Quelle: Preisblaetter "Abo 2027" des Verlags vom 26.10.2026
  * (docs/abo-preise-2027.md im Dachordner). Digital gibt es dort nur das
- * Online-Abo und die Gebuehr fuer die Zubuchung zur Druckausgabe; Schueler-,
- * Foerder- und Kombi-Abos gibt es nur gedruckt. Der Schlesier hat kein
- * Online-Abo. Digital gilt nur der Inlandspreis (27.10.2026).
+ * Online-Abo und die Gebuehr fuer die Zubuchung zur Druckausgabe. Der
+ * Schlesier hat kein Online-Abo. Digital gilt nur der Inlandspreis
+ * (27.10.2026).
+ *
+ * ZUERST! hat seit 05.11.2026 auch digital Schueler-/Studenten-, Kombi- und
+ * Foerderabo (Vorgabe des Verlags: Online-Abo Inland 96,00, Student 84,00,
+ * Kombi 88,80, Foerder 114,60). Hinweise der Stufen wie im frueheren Katalog
+ * nach zuerst.de/abo.
  */
 
 export type DeliveryRegion = "inland" | "ausland" | "luftpost";
@@ -55,6 +60,22 @@ export const SUBSCRIPTION_CATALOG: Record<string, CatalogEntry> = {
         name: "Normalabonnement",
         note: "12 Ausgaben im Jahr, nur digital",
         prices: { inland: 9600 },
+      },
+      {
+        name: "Schüler- und Studentenabonnement",
+        note: "Kopie des Schüler- oder Studentenausweises erforderlich",
+        prices: { inland: 8400 },
+      },
+      {
+        name: "Kombi-Abonnement",
+        note: "Zusammen mit einem Abonnement der Deutschen Militärzeitschrift",
+        prices: { inland: 8880 },
+        kombi: { mit: "dmz", mitStufe: "Normalabonnement", sonst: "Normalabonnement" },
+      },
+      {
+        name: "Förderabonnement",
+        note: "Der Förderbetrag fließt in die Werbung von ZUERST!",
+        prices: { inland: 11460 },
       },
       {
         name: "Zubuchung zur Druckausgabe",
