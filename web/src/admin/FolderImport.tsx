@@ -27,6 +27,7 @@ import { IST_WELTKRIEG } from "../lib/marke";
 import { HEFTARCHIV_EREIGNIS, fertigMerken } from "./heftarchiv";
 import { textebeneAlsBlob, type TextPage } from "./textLayer";
 import {
+  netzformatAusPdf,
   oeffnePdf,
   RENDER_SPUREN,
   readPriceFromImprint,
@@ -410,6 +411,13 @@ export default function FolderImport({
       // Die gedruckte Zahl der ersten Innenseite steht im Satz. Fehlt sie,
       // gilt 3: Umschlag und Umschlaginnenseite sind die ersten beiden.
       const gedruckteStartseite = satzMass?.firstPrintedPage ?? 3;
+      // Ohne Satzdatei nennt das Druck-PDF sein Netzformat selbst (TrimBox).
+      // Fehlt auch das, kaemen die Seiten mit Anschnitt und Schnittmarken;
+      // der Worker prueft die Bilder danach noch einmal und schneidet sie zu
+      // (extract-service/extractor/schnittmarken.py).
+      const netz = satzMass
+        ? { breitePt: satzMass.pageWidthPt, hoehePt: satzMass.pageHeightPt }
+        : await netzformatAusPdf(innenPdf);
       melde("innenteil", `Innenteil ${innenteil.name} wird gerendert`);
       // Rendern und Hochladen laufen nebeneinander. Ohne das stand abwechselnd
       // der Rechner oder die Leitung still.
@@ -437,8 +445,8 @@ export default function FolderImport({
           {
             targetWidth: INNEN_BREITE,
             quality: INNEN_GUETE,
-            trimWidthPt: satzMass?.pageWidthPt,
-            trimHeightPt: satzMass?.pageHeightPt,
+            trimWidthPt: netz?.breitePt,
+            trimHeightPt: netz?.hoehePt,
             spuren: RENDER_SPUREN,
             mitText: true,
           },

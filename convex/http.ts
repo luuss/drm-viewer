@@ -319,6 +319,15 @@ workerRoute("/service/pages/rendered", (ctx, body) =>
   }),
 );
 
+workerRoute("/service/pages/beschnitten", (ctx, body) =>
+  ctx.runMutation(internal.issuePages.beschnittUebernehmenInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    issueId: body.issueId,
+    seiten: body.seiten ?? [],
+  }),
+);
+
 workerRoute("/service/issue/counts", (ctx, body) =>
   ctx.runMutation(internal.issues.setCountsInternal, {
     issueId: body.issueId,

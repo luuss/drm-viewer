@@ -304,6 +304,147 @@ export const setRenderedInternal = internalMutation({
   },
 });
 
+type Ausschnitt = { x0: number; y0: number; x1: number; y1: number };
+
+const klemmen = (v: number) => Math.min(1, Math.max(0, v));
+
+/** Eine Strecke der alten Seite (Anteile) auf den Ausschnitt umrechnen. */
+export function aufAusschnitt(a: Ausschnitt, x: number, y: number): { x: number; y: number } {
+  return {
+    x: klemmen((x - a.x0) / (a.x1 - a.x0)),
+    y: klemmen((y - a.y0) / (a.y1 - a.y0)),
+  };
+}
+
+/**
+ * Schnittmarken entfernt (Auftrag `beschnitt` oder voller Import, Worker
+ * `_schnittmarken`): je Seite das zugeschnittene Bild uebernehmen und alles,
+ * was in Anteilen der alten Seite steht, auf den Ausschnitt umrechnen —
+ * Klickflaechen, Links nach draussen, Lage der Absaetze und Bilder.
+ *
+ * Eine Seite wird nur uebernommen, wenn ihr Bild noch `altKey` ist. Ein
+ * zweiter Lauf rechnet so nichts doppelt um. Das alte Bild bleibt im
+ * Speicher liegen.
+ */
+export const beschnittUebernehmenInternal = internalMutation({
+  args: {
+    jobId: v.id("importJobs"),
+    workerId: v.string(),
+    issueId: v.id("issues"),
+    seiten: v.array(
+      v.object({
+        index: v.number(),
+        altKey: v.string(),
+        neuKey: v.string(),
+        width: v.number(),
+        height: v.number(),
+        x0: v.number(),
+        y0: v.number(),
+        x1: v.number(),
+        y1: v.number(),
+      }),
+    ),
+  },
+  returns: v.object({
+    seiten: v.number(),
+    // Leserseiten, die jetzt das zugeschnittene Bild tragen.
+    angewendet: v.array(v.number()),
+    uebersprungen: v.number(),
+    flaechen: v.number(),
+    links: v.number(),
+    absaetze: v.number(),
+    bilder: v.number(),
+  }),
+  handler: async (ctx, { jobId, workerId, issueId, seiten }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job || job.issueId !== issueId) throw new Error("Auftrag passt nicht zur Ausgabe");
+    if (job.workerId && job.workerId !== workerId) {
+      throw new Error("Sperre liegt bei einem anderen Worker");
+    }
+    const ausschnitt = new Map<number, Ausschnitt>();
+    let uebersprungen = 0;
+    for (const s of seiten) {
+      const a = { x0: s.x0, y0: s.y0, x1: s.x1, y1: s.y1 };
+      if (!(a.x0 >= 0 && a.y0 >= 0 && a.x1 <= 1 && a.y1 <= 1 && a.x1 > a.x0 && a.y1 > a.y0)) {
+        throw new Error(`Ausschnitt ungueltig (Seite ${s.index})`);
+      }
+      const page = await ctx.db
+        .query("issuePages")
+        .withIndex("by_issue_index", (q) => q.eq("issueId", issueId).eq("index", s.index))
+        .unique();
+      if (!page || page.previewKey !== s.altKey || page.beschnitt) {
+        uebersprungen++;
+        continue;
+      }
+      await ctx.db.patch(page._id, {
+        previewKey: s.neuKey,
+        width: s.width,
+        height: s.height,
+        beschnitt: a,
+      });
+      ausschnitt.set(s.index, a);
+    }
+
+    const rechteck = (a: Ausschnitt, r: Ausschnitt) => {
+      const p = aufAusschnitt(a, r.x0, r.y0);
+      const q = aufAusschnitt(a, r.x1, r.y1);
+      return { x0: p.x, y0: p.y, x1: q.x, y1: q.y };
+    };
+    let flaechen = 0;
+    let links = 0;
+    let absaetze = 0;
+    let bilder = 0;
+    if (ausschnitt.size) {
+      for (const r of await ctx.db
+        .query("articleRegions")
+        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+        .collect()) {
+        const a = ausschnitt.get(r.pageIndex);
+        if (!a) continue;
+        await ctx.db.patch(r._id, rechteck(a, r));
+        flaechen++;
+      }
+      for (const l of await ctx.db
+        .query("pageLinks")
+        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+        .collect()) {
+        const a = ausschnitt.get(l.pageIndex);
+        if (!a) continue;
+        await ctx.db.patch(l._id, rechteck(a, l));
+        links++;
+      }
+      for (const b of await ctx.db
+        .query("articleBlocks")
+        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+        .collect()) {
+        const a = b.sourcePageIndex !== undefined ? ausschnitt.get(b.sourcePageIndex) : undefined;
+        if (!a || b.sourceY === undefined) continue;
+        await ctx.db.patch(b._id, { sourceY: aufAusschnitt(a, 0, b.sourceY).y });
+        absaetze++;
+      }
+      for (const b of await ctx.db
+        .query("articleAssets")
+        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+        .collect()) {
+        const a = b.sourcePageIndex !== undefined ? ausschnitt.get(b.sourcePageIndex) : undefined;
+        if (!a || b.sourceY === undefined) continue;
+        await ctx.db.patch(b._id, { sourceY: aufAusschnitt(a, 0, b.sourceY).y });
+        bilder++;
+      }
+      await ctx.db.patch(issueId, { updatedAt: Date.now() });
+    }
+    return {
+      seiten: ausschnitt.size,
+      angewendet: [...ausschnitt.keys()],
+      uebersprungen,
+      flaechen,
+      links,
+      absaetze,
+      bilder,
+    };
+  },
+});
+
 /** Der Kacheldienst fragt hier, welche Quellseite hinter einer Leserseite liegt. */
 export const resolveForServiceInternal = internalQuery({
   args: { issueId: v.id("issues"), index: v.number() },

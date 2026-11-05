@@ -39,6 +39,7 @@ from extractor import bildunterschriften
 from extractor.buch import buch_aus_satz
 from extractor.buch_pdf import buch_aus_textebene
 from extractor.buch_verzeichnis import buch_verzeichnis, verzeichnisseiten
+from extractor.schnittmarken import schnittmarken, textebene_umrechnen, zuschneiden
 from extractor.idml_extract import (
     BILD_MINDESTFLAECHE,
     extract_idml_blocks,
@@ -146,6 +147,8 @@ class Job:
         # die Meldung an die Redaktion. None: keine Textebene, nur geschaetzt.
         self._toc_bilanz: dict[str, int] | None = None
         self._toc_eintraege = 0
+        # Meldung, wenn Seitenbilder mit Schnittmarken zugeschnitten wurden.
+        self._beschnitt_meldung = ""
         # Leserseiten der Umschlaganzeigen: ihre Artikel sind ganzseitig
         # anklickbar.
         self._cover_pages: set[int] = set()
@@ -202,6 +205,13 @@ class Job:
             count=len(blobs),
             artwork=len(self._artwork),
         )
+
+        # Jeder Auftrag prueft die Seitenbilder auf Anschnitt und Schnittmarken
+        # (Druck-PDF ohne Netzformat) und schneidet sie zu, bevor etwas daraus
+        # gelesen wird. Der Auftrag "beschnitt" tut nur das (bestehende Hefte).
+        self._beschnitt_meldung = self._schnittmarken(pages, sources, blobs)
+        if self.data.get("kind") == "beschnitt":
+            return "done", self._beschnitt_meldung.lstrip(" ·") or "Keine Schnittmarken gefunden"
 
         if self.data.get("kind") == "toc":
             return self._nur_verzeichnis(pages, blobs, sources)
@@ -350,7 +360,12 @@ class Job:
             toc=result.get("toc"),
             seconds=round(time.time() - self.started, 1),
         )
-        return "review", "Bereit zur redaktionellen Pruefung" + self._verzeichnis_hinweis()
+        return (
+            "review",
+            "Bereit zur redaktionellen Pruefung"
+            + self._verzeichnis_hinweis()
+            + self._beschnitt_meldung,
+        )
 
     def _seitenlinks(self, payload_articles: list[dict]) -> tuple[list[dict], list[dict]]:
         """Anzeigen aus den Artikeln nehmen und als Seitenlinks zurueckgeben.
@@ -577,6 +592,203 @@ class Job:
             daten = self.convex.download(page["previewUrl"], MAX_SOURCE_BYTES)
         cache[schluessel] = daten
         return daten
+
+    # Seiten einer Quelle duerfen in den Marken um so viele Bildpunkte abweichen.
+    BESCHNITT_TOLERANZ = 2
+
+    def _schnittmarken(self, pages: list[dict], sources: list[dict], blobs: dict[str, bytes]) -> str:
+        """Anschnitt und Schnittmarken von den Seitenbildern nehmen.
+
+        Kam ein Druck-PDF ohne bekanntes Netzformat (keine Satzdatei, keine
+        TrimBox), rendert der Browser die ganze Bogenseite: rund 10 mm Rand mit
+        Marken in den Ecken (300 Weltkrieg-Hefte, 05.11.2026). Jede Seite wird
+        geprueft (extractor/schnittmarken.py). Alle Seiten einer Quelle haben
+        dieselbe Geometrie: zugeschnitten wird nur, wenn die erkannten Marken
+        uebereinstimmen und die Mehrheit der gleich grossen Seiten sie hat;
+        dann gilt derselbe Ausschnitt fuer alle diese Seiten.
+
+        Das zugeschnittene Bild bekommt einen neuen Schluessel, das alte
+        bleibt liegen. Convex rechnet Flaechen, Links und Absaetze der Seite
+        um (issuePages.beschnittUebernehmenInternal), hier die Textebene.
+        Rueckgabe: Meldung fuer den Auftrag, leer ohne Marken.
+        """
+        import io
+
+        from PIL import Image
+
+        gruppen: dict[str, list[tuple[dict, Image.Image, object]]] = {}
+        for page in pages:
+            if not page.get("previewKey") or page.get("beschnitt"):
+                continue
+            daten = self._page_image(page)
+            if not daten:
+                continue
+            try:
+                bild = Image.open(io.BytesIO(daten))
+                bild.load()
+            except Exception:
+                continue
+            gruppen.setdefault(str(page.get("sourceAssetId") or ""), []).append(
+                (page, bild, schnittmarken(bild))
+            )
+
+        stempel = int(time.time())
+        seiten: list[dict] = []
+        neu_daten: dict[int, bytes] = {}
+        uneinheitlich = 0
+        for eintraege in gruppen.values():
+            gefunden = [s for _p, _b, s in eintraege if s is not None]
+            if not gefunden:
+                continue
+            ref = sorted(gefunden, key=lambda s: s.box)[len(gefunden) // 2]
+            abweichend = [
+                s
+                for s in gefunden
+                if (s.breite, s.hoehe) != (ref.breite, ref.hoehe)
+                or max(abs(a - b) for a, b in zip(s.box, ref.box)) > self.BESCHNITT_TOLERANZ
+            ]
+            gleich_gross = [e for e in eintraege if e[1].size == (ref.breite, ref.hoehe)]
+            if abweichend or len(gefunden) * 2 < len(gleich_gross):
+                uneinheitlich += len(eintraege)
+                log(
+                    "job.beschnittUneinheitlich",
+                    jobId=self.job_id,
+                    seiten=len(eintraege),
+                    gefunden=len(gefunden),
+                    abweichend=len(abweichend),
+                )
+                continue
+            x0, y0, x1, y1 = ref.anteile
+            for page, bild, _s in gleich_gross:
+                try:
+                    ausschnitt = zuschneiden(bild, ref)
+                except ValueError:
+                    uneinheitlich += 1
+                    continue
+                puffer = io.BytesIO()
+                ausschnitt.convert("RGB").save(puffer, "JPEG", quality=88, optimize=True)
+                jpeg = puffer.getvalue()
+                key = issue_key(
+                    self.publication_id, self.issue_id, "pages", page["index"], f"netz-{stempel}.jpg"
+                )
+                stored = self.storage.put(key, jpeg, "image/jpeg")
+                self.convex.post(
+                    "/service/assets/register",
+                    {
+                        "key": key,
+                        "contentType": "image/jpeg",
+                        "kind": "page",
+                        "issueId": self.issue_id,
+                        "storageId": stored.convex_storage_id,
+                        "bucket": stored.bucket,
+                        "bytes": stored.bytes,
+                        "width": ausschnitt.width,
+                        "height": ausschnitt.height,
+                    },
+                )
+                seiten.append(
+                    {
+                        "index": page["index"],
+                        "altKey": page["previewKey"],
+                        "neuKey": key,
+                        "width": ausschnitt.width,
+                        "height": ausschnitt.height,
+                        "x0": x0,
+                        "y0": y0,
+                        "x1": x1,
+                        "y1": y1,
+                    }
+                )
+                neu_daten[page["index"]] = jpeg
+                if len(seiten) % 10 == 0:
+                    self.beat(3, f"Schnittmarken: {len(seiten)} Seiten zugeschnitten")
+
+        angewendet: set[int] = set()
+        if seiten:
+            res = self.convex.post(
+                "/service/pages/beschnitten",
+                {
+                    "jobId": self.job_id,
+                    "workerId": WORKER_ID,
+                    "issueId": self.issue_id,
+                    "seiten": seiten,
+                },
+            )
+            angewendet = set(res.get("angewendet") or [])
+            cache = getattr(self, "_page_cache", None)
+            if cache is None:
+                cache = self._page_cache = {}
+            nach_index = {s["index"]: s for s in seiten}
+            for page in pages:
+                s = nach_index.get(page["index"])
+                if s is None or page["index"] not in angewendet:
+                    continue
+                page["previewKey"] = s["neuKey"]
+                page["previewUrl"] = None
+                page["beschnitt"] = {k: s[k] for k in ("x0", "y0", "x1", "y1")}
+                cache[s["neuKey"]] = neu_daten[page["index"]]
+            if 0 in angewendet and self.data.get("kind") == "beschnitt":
+                # Das Titelbild im Kiosk kommt aus der ersten Seite.
+                cover = self._store_cover(neu_daten[0])
+                self.convex.post(
+                    "/service/issue/counts",
+                    {"issueId": self.issue_id, "pageCount": len(pages), "coverAssetId": cover},
+                )
+            log(
+                "job.beschnitt",
+                jobId=self.job_id,
+                seiten=len(angewendet),
+                flaechen=res.get("flaechen"),
+                links=res.get("links"),
+                absaetze=res.get("absaetze"),
+                uebersprungen=res.get("uebersprungen"),
+            )
+        text = self._textebene_zuschneiden(pages, sources, blobs)
+        if not angewendet and not uneinheitlich and not text:
+            return ""
+        teile = []
+        if angewendet:
+            teile.append(f"{len(angewendet)} Seiten auf das Netzformat zugeschnitten")
+        if text:
+            teile.append(f"Textebene von {text} Seiten umgerechnet")
+        if uneinheitlich:
+            teile.append(f"{uneinheitlich} Seiten mit uneinheitlichen Marken nicht zugeschnitten")
+        return " · Schnittmarken entfernt: " + ", ".join(teile)
+
+    def _textebene_zuschneiden(self, pages: list[dict], sources: list[dict], blobs: dict[str, bytes]) -> int:
+        """Die Textebene der Innenseiten auf zugeschnittene Seiten umrechnen.
+
+        Auch fuer Seiten eines frueheren Laufs (`beschnitt` an der Seite): die
+        Datei merkt sich, welche Seiten schon umgerechnet sind. Die alte Datei
+        bleibt als `<Schluessel>.vor-beschnitt` liegen.
+        """
+        ausschnitte = {
+            p["sourcePageIndex"]: (b["x0"], b["y0"], b["x1"], b["y1"])
+            for p in pages
+            if p.get("role") == "content" and (b := p.get("beschnitt"))
+        }
+        if not ausschnitte:
+            return 0
+        quelle = next(
+            (s for s in sources if s["kind"] == "text" and s.get("role") != "cover"), None
+        )
+        alt = blobs.get(quelle["assetId"]) if quelle else None
+        if not alt:
+            return 0
+        neu = textebene_umrechnen(alt, ausschnitte)
+        if neu is None:
+            return 0
+        if self.storage.uses_s3 and quelle.get("assetKey"):
+            sicherung = quelle["assetKey"] + ".vor-beschnitt"
+            try:
+                self.storage.get(sicherung)
+            except Exception:
+                self.storage.put(sicherung, alt, "application/json")
+            self.storage.put(quelle["assetKey"], neu, "application/json")
+        blobs[quelle["assetId"]] = neu
+        import json as _json
+
+        return len(_json.loads(neu).get("beschnitt", {}))
 
     def _store_cover(self, seite_jpeg: bytes) -> str | None:
         """Titelbild des Hefts aus der ersten Seite."""

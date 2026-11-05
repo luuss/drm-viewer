@@ -36,9 +36,13 @@ export const jobKind = v.union(
   // ("bilder-probe") nur Bilder und Unterschriften der bleibenden Artikel neu
   // (bildnachtrag.ts), Text und Freigaben unberuehrt.
   v.literal("nachtrag"),
+  // Seitenbilder mit Anschnitt und Schnittmarken auf das Netzformat
+  // zuschneiden; Text, Artikel und Freigaben bleiben (Weltkrieg-Hefte ohne
+  // IDML, 05.11.2026). Jeder volle Import prueft das ohnehin selbst.
+  v.literal("beschnitt"),
 );
 
-type JobKind = "prepare" | "pdf" | "idml" | "full" | "toc" | "nachtrag";
+type JobKind = "prepare" | "pdf" | "idml" | "full" | "toc" | "nachtrag" | "beschnitt";
 
 async function queueJob(
   ctx: MutationCtx,
@@ -234,6 +238,8 @@ export const claimNextInternal = internalMutation({
         printedLabel: p.printedLabel ?? null,
         previewKey: p.previewKey ?? null,
         previewUrl,
+        // Schon auf das Netzformat zugeschnitten (Schnittmarken entfernt).
+        beschnitt: p.beschnitt ?? null,
       });
     }
 
