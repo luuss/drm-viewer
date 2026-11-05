@@ -5,7 +5,8 @@ import Icon from "../components/Icon";
 import { heraus, hinein, useWarenkorb } from "../lib/warenkorb";
 import ReihenKacheln from "../components/ReihenKacheln";
 import { reiheVon } from "../lib/reihen";
-import { MARKE } from "../lib/marke";
+import { IST_WELTKRIEG, MARKE } from "../lib/marke";
+import KioskWeltkrieg from "./KioskWeltkrieg";
 
 /**
  * Kiosk: nur die Zeitschriften als Kacheln mit ihrem Schriftzug. Die Hefte
@@ -42,17 +43,26 @@ export default function KioskPage() {
           />
         </div>
       )}
-      <div className="page-head kiosk-kopf">
-        <span className="kicker">Kiosk</span>
-        <h2>Für welche Zeitschrift interessieren Sie sich?</h2>
-        <p className="hint">
-          Wählen Sie eine Zeitschrift. Dort finden Sie alle Ausgaben und das Digital-Abo.
-        </p>
-      </div>
+      {IST_WELTKRIEG ? (
+        // Weltkrieg: die Hefte gleich im Kiosk, mit Ansichten (KioskWeltkrieg).
+        <div id="zeitschriften">
+          <KioskWeltkrieg hefte={issues} />
+        </div>
+      ) : (
+        <>
+          <div className="page-head kiosk-kopf">
+            <span className="kicker">Kiosk</span>
+            <h2>Für welche Zeitschrift interessieren Sie sich?</h2>
+            <p className="hint">
+              Wählen Sie eine Zeitschrift. Dort finden Sie alle Ausgaben und das Digital-Abo.
+            </p>
+          </div>
 
-      <div id="zeitschriften">
-        <ReihenKacheln hefte={issues} />
-      </div>
+          <div id="zeitschriften">
+            <ReihenKacheln hefte={issues} />
+          </div>
+        </>
+      )}
 
 
       {abos.length > 0 && (
@@ -111,7 +121,8 @@ export default function KioskPage() {
         </section>
       )}
 
-      {hefte.length > 0 && (
+      {/* Bei Weltkrieg stehen Hefte ohne bekannte Reihe schon oben in den Ansichten. */}
+      {hefte.length > 0 && !IST_WELTKRIEG && (
         <section>
           <h3>Einzelausgaben</h3>
           <div className="issue-grid">
@@ -155,7 +166,7 @@ export default function KioskPage() {
           </div>
         </section>
       )}
-      {issues.length === 0 && (
+      {issues.length === 0 && !IST_WELTKRIEG && (
         <div className="empty">
           <p>Noch keine Ausgabe veröffentlicht.</p>
         </div>
