@@ -514,6 +514,10 @@ export const preiseSetzenInternal = internalMutation({
   args: {
     eintraege: v.array(v.object({ issueId: v.id("issues"), priceAmountCents: v.number() })),
     probelauf: v.optional(v.boolean()),
+    // Auch Preise mit Quelle "redaktion" ersetzen (Anweisung 05.11.2026: der
+    // Reihenpreis gilt fuer jedes Heft; die alten Umschlagpreise standen ueber
+    // issues.update als "redaktion" drin).
+    ueberschreiben: v.optional(v.boolean()),
   },
   returns: v.object({
     gesetzt: v.number(),
@@ -521,7 +525,7 @@ export const preiseSetzenInternal = internalMutation({
     redaktion: v.number(),
     fehlt: v.number(),
   }),
-  handler: async (ctx, { eintraege, probelauf }) => {
+  handler: async (ctx, { eintraege, probelauf, ueberschreiben }) => {
     let gesetzt = 0;
     let gleich = 0;
     let redaktion = 0;
@@ -535,7 +539,7 @@ export const preiseSetzenInternal = internalMutation({
         fehlt++;
         continue;
       }
-      if (issue.priceSource === "redaktion") {
+      if (issue.priceSource === "redaktion" && !ueberschreiben) {
         redaktion++;
         continue;
       }
