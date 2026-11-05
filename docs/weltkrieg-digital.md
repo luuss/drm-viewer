@@ -240,6 +240,31 @@ es wie bei digital.lesenundschenken.de funktionieren.
   ohne Knopf und Leiste (Desktop, Handy); Magazin 83 mit 16 Einträgen,
   Sprung in Seiten- und Leseansicht, Hervorhebung, Handy-Schublade.
 
+## Kiosk und Erscheinungsdatum (05.11.2026)
+
+* **Kiosk** (`web/src/library/KioskWeltkrieg.tsx`, nur bei `IST_WELTKRIEG`):
+  die Hefte stehen gleich im Kiosk, nicht hinter Reihen-Kacheln. Umschalter
+  oben rechts, Wahl in der Adresse (`?ansicht=`):
+  * Kategorien (Standard): je Reihe eine Kachel, drei je Zeile, mit Schriftzug,
+    neuestem Heft groß und vier weiteren daneben, Fuß „Zur Zeitschrift“.
+  * Alle: jedes Heft in fünf Spalten, nach Erscheinungsdatum, Hefte ohne Datum hinten.
+  * Neueste: das neueste Heft jeder Reihe.
+  In einer Reihe gilt immer die Heftnummer (höchste = neueste). Keine
+  Überschrift, nur Marke „Kiosk“ und Umschalter (Anweisung). Es erscheinen
+  nur veröffentlichte Hefte (Anweisung: keine Vorschau für die Redaktion).
+* **Erscheinungsdatum:** `tools/weltkrieg/erscheinung_aus_archiv.py <liste.json> <aus.json>`
+  nimmt je Heft das früheste Dateidatum seiner Innenteil-PDFs in der
+  Ordnerliste des Archivs (`emag-media/struktur/…-weltkrieg.json`), nur wo es
+  zur Nummernfolge der Reihe passt. Gesetzt mit `devtools:erscheinungSetzenInternal`
+  (nur Hefte ohne Datum, `probelauf`). Stand: 402 von 436 Hefte. Ohne Datum:
+  29 frühe Hefte, die nur als neu exportierte E-Book-Fassung (Dateidatum 2026)
+  im Archiv liegen (Originalband 2–14, Doppelband 2–8, Großband 1–5, Flieger
+  2–8, Marine 1–4), und 5 ohne Innenteil-PDF (Soldaten 25, 56, Freikorps 1–3).
+  Das Datum ist das der Herstellung, nicht des Kiosks; die Heftseite zeigt es
+  als Monat und Jahr.
+* Neu importierte Hefte bekommen kein Datum aus dem Archiv; im Kiosk stehen sie
+  in ihrer Reihe nach Nummer, in „Alle“ hinten, bis das Werkzeug erneut läuft.
+
 ## Offen
 
 * **Rechtstexte** (`drm-viewer-evz`): Impressum, Datenschutz, AGB, Widerruf
