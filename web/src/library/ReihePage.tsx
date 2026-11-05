@@ -6,6 +6,7 @@ import { api, formatEuro } from "../lib/api";
 import Icon from "../components/Icon";
 import SocialIcon from "../components/SocialIcon";
 import { reiheMitSlug, reihenSchluessel } from "../lib/reihen";
+import { MARKE } from "../lib/marke";
 
 /**
  * Die eigene Seite einer Zeitschrift: ihr Schriftzug, ihre Farbe, alle ihre
@@ -23,7 +24,7 @@ export default function ReihePage() {
   const storefront = useQuery(api.shopIntegration.storefront, {});
   const [nurMeine, setNurMeine] = useState(false);
 
-  if (!reihe) return <NichtGefunden text="Diese Zeitschrift gibt es hier nicht." />;
+  if (!reihe) return <NichtGefunden text={`Diese ${MARKE.reihenWort.eins} gibt es hier nicht.`} />;
   if (issues === undefined || offers === undefined || eigene === undefined) {
     return <div className="centered">Laden...</div>;
   }
@@ -63,7 +64,7 @@ export default function ReihePage() {
         <div className="reihe-kopf-innen">
           <nav className="reihe-pfad" aria-label="Pfad">
             <Link to="/#zeitschriften">
-              <Icon name="arrow-left" size={16} /> Alle Zeitschriften
+              <Icon name="arrow-left" size={16} /> Alle {MARKE.reihenWort.viele}
             </Link>
           </nav>
           <div className="reihe-kopf-zeile">

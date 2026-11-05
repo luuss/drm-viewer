@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../lib/api";
 import HeftMailWahl from "../components/HeftMailWahl";
+import { MARKE } from "../lib/marke";
 
 /**
  * Abmeldeseite aus den Mails zu neuen Heften (`/abbestellen?t=…&r=<reihe>`).
@@ -66,7 +67,7 @@ export default function AbbestellenPage() {
       )}
 
       <section>
-        <h3>Zeitschriften</h3>
+        <h3>{MARKE.reihenWort.viele}</h3>
         <HeftMailWahl
           stand={stand}
           setzen={(publicationId, erhalten) => einstellen({ token, publicationId, erhalten })}

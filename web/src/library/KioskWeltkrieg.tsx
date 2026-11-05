@@ -85,7 +85,7 @@ function ReihenKarte({ gruppe }: { gruppe: KioskReihe<KioskHeft> }) {
           {anzahl} {anzahl === 1 ? "Ausgabe" : "Ausgaben"}
         </span>
         <span className="wk-reihe-weiter">
-          Zur Zeitschrift <Icon name="arrow-right" size={16} />
+          Zur Reihe <Icon name="arrow-right" size={16} />
         </span>
       </Link>
     </section>

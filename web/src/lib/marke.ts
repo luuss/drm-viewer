@@ -31,6 +31,11 @@ export type Marke = {
   fussText: string;
   copyright: string;
   /**
+   * Wie die Leser-Seite eine Reihe nennt: bei Lesen und Schenken eigene
+   * Zeitschriften, bei Weltkrieg Reihen eines Titels (Anweisung 05.11.2026).
+   */
+  reihenWort: { eins: string; viele: string };
+  /**
    * Rechtstexte: `intern` = eigene Seiten des Lesers (LegalPage), sonst
    * Verweis auf die Seiten des Ladens.
    */
@@ -65,6 +70,7 @@ const LUS: Marke = {
   fussText:
     "Die Zeitschriften des Verlags zum Lesen am Bildschirm. Einzelne Ausgaben und Digital-Abos gibt es im Netzladen, gelesen wird hier auf jedem Gerät.",
   copyright: "Lesen und Schenken GmbH",
+  reihenWort: { eins: "Zeitschrift", viele: "Zeitschriften" },
   recht: { intern: true },
 };
 
@@ -88,6 +94,7 @@ const WELTKRIEG: Marke = {
   fussText:
     "Erlebnisberichte, E-Books und Hefte von weltkrieg-online.de zum Lesen am Bildschirm. Gekauft wird im Netzladen, gelesen wird hier auf jedem Gerät.",
   copyright: "Histomedia AG",
+  reihenWort: { eins: "Reihe", viele: "Reihen" },
   recht: {
     intern: false,
     impressum: `${WK_LADEN}impressum/`,
