@@ -152,15 +152,24 @@ async function tiffToCanvas(
     (kanaele === 4 || kanaele === 5) &&
     t.data instanceof Uint8Array &&
     t.data.length >= width * height * kanaele;
-  const rgba = istCmyk
-    ? await cmykZuRgba(
+  let rgba: Uint8Array | Uint8ClampedArray | null = null;
+  if (istCmyk) {
+    try {
+      rgba = await cmykZuRgba(
         t.data,
         width,
         height,
         kanaele,
-        Array.isArray(t.t34675) || ArrayBuffer.isView(t.t34675) ? Uint8Array.from(t.t34675 as ArrayLike<number>) : null,
-      )
-    : UTIF.toRGBA8(ifd);
+        Array.isArray(t.t34675) || ArrayBuffer.isView(t.t34675)
+          ? Uint8Array.from(t.t34675 as ArrayLike<number>)
+          : null,
+      );
+    } catch (e) {
+      // Lieber falsche Farben als ein fehlendes Bild im Heft.
+      console.warn("CMYK ohne Farbprofil umgerechnet:", e);
+    }
+  }
+  rgba ??= UTIF.toRGBA8(ifd);
   if (!rgba || !rgba.length || !width || !height) {
     throw new Error("TIFF liess sich nicht dekodieren");
   }

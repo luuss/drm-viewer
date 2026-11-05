@@ -32,7 +32,11 @@ let lcmsPromise: Promise<Lcms> | null = null;
 let standardProfil: Promise<Uint8Array> | null = null;
 
 function lcms(): Promise<Lcms> {
-  lcmsPromise ??= instantiate({ locateFile: () => wasmUrl });
+  // Ein Fehlschlag (Netz kurz weg) darf nicht fuer die ganze Sitzung haengen bleiben.
+  lcmsPromise ??= instantiate({ locateFile: () => wasmUrl }).catch((e) => {
+    lcmsPromise = null;
+    throw e;
+  });
   return lcmsPromise;
 }
 
@@ -42,7 +46,11 @@ function fogra39(): Promise<Uint8Array> {
       if (!r.ok) throw new Error(`Farbprofil FOGRA39: ${r.status}`);
       return r.arrayBuffer();
     })
-    .then((b) => new Uint8Array(b));
+    .then((b) => new Uint8Array(b))
+    .catch((e) => {
+      standardProfil = null;
+      throw e;
+    });
   return standardProfil;
 }
 
@@ -62,29 +70,28 @@ export async function cmykZuRgba(
   icc?: Uint8Array | null,
 ): Promise<Uint8ClampedArray> {
   const cms = await lcms();
-  let eingang = 0;
-  if (icc && icc.length > 128) {
-    eingang = cms.cmsOpenProfileFromMem(icc, icc.byteLength);
-    if (eingang && cms.cmsGetColorSpaceASCII(eingang) !== "CMYK") {
-      cms.cmsCloseProfile(eingang);
-      eingang = 0;
-    }
-  }
-  if (!eingang) {
-    const p = await fogra39();
-    eingang = cms.cmsOpenProfileFromMem(p, p.byteLength);
-  }
-  if (!eingang) throw new Error("CMYK-Profil liess sich nicht oeffnen");
   const ausgang = cms.cmsCreate_sRGBProfile();
-  const transform = cms.cmsCreateTransform(
-    eingang,
-    TYPE_CMYK_8,
-    ausgang,
-    TYPE_RGB_8,
-    INTENT_RELATIVE_COLORIMETRIC,
-    cmsFLAGS_BLACKPOINTCOMPENSATION,
-  );
-  cms.cmsCloseProfile(eingang);
+  // Erst das eingebettete Profil, dann FOGRA39: ein Profil kann sich oeffnen
+  // lassen und trotzdem keine Umrechnung hergeben.
+  const anlegen = (profil: Uint8Array): number => {
+    const eingang = cms.cmsOpenProfileFromMem(profil, profil.byteLength);
+    if (!eingang) return 0;
+    try {
+      if (cms.cmsGetColorSpaceASCII(eingang) !== "CMYK") return 0;
+      return cms.cmsCreateTransform(
+        eingang,
+        TYPE_CMYK_8,
+        ausgang,
+        TYPE_RGB_8,
+        INTENT_RELATIVE_COLORIMETRIC,
+        cmsFLAGS_BLACKPOINTCOMPENSATION,
+      );
+    } finally {
+      cms.cmsCloseProfile(eingang);
+    }
+  };
+  let transform = icc && icc.length > 128 ? anlegen(icc) : 0;
+  if (!transform) transform = anlegen(await fogra39());
   cms.cmsCloseProfile(ausgang);
   if (!transform) throw new Error("CMYK-Umrechnung liess sich nicht anlegen");
 

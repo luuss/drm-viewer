@@ -36,28 +36,36 @@ def als_rgb(image: Image.Image) -> Image.Image:
     """Ein Bild nach sRGB bringen; CMYK ueber Farbprofil statt Formel."""
     if image.mode != "CMYK":
         return image if image.mode == "RGB" else image.convert("RGB")
-    quelle = None
+    kandidaten = []
     icc = image.info.get("icc_profile")
     if icc:
         try:
-            quelle = ImageCms.ImageCmsProfile(io.BytesIO(icc))
-            if quelle.profile.xcolor_space.strip() != "CMYK":
-                quelle = None
+            p = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+            if p.profile.xcolor_space.strip() == "CMYK":
+                kandidaten.append(p)
         except Exception:
-            quelle = None
-    if quelle is None and os.path.exists(_FOGRA39):
-        quelle = ImageCms.ImageCmsProfile(_FOGRA39)
-    if quelle is None:
-        return image.convert("RGB")
-    # Adobe-JPEG speichert CMYK invertiert; Pillow dreht es beim Lesen schon um.
-    return ImageCms.profileToProfile(
-        image,
-        quelle,
-        _SRGB,
-        renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC,
-        outputMode="RGB",
-        flags=0x2000,  # Tiefenkompensierung (cmsFLAGS_BLACKPOINTCOMPENSATION)
-    )
+            pass
+    if os.path.exists(_FOGRA39):
+        kandidaten.append(_FOGRA39)
+    # Ein Profil kann sich oeffnen lassen und trotzdem keine Umrechnung
+    # hergeben; dann das naechste, zuletzt die einfache Formel. Ein einzelnes
+    # Bild darf den Auftrag nicht anhalten.
+    for quelle in kandidaten:
+        try:
+            if isinstance(quelle, str):
+                quelle = ImageCms.ImageCmsProfile(quelle)
+            # Adobe-JPEG speichert CMYK invertiert; Pillow dreht es beim Lesen schon um.
+            return ImageCms.profileToProfile(
+                image,
+                quelle,
+                _SRGB,
+                renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC,
+                outputMode="RGB",
+                flags=0x2000,  # Tiefenkompensierung (cmsFLAGS_BLACKPOINTCOMPENSATION)
+            )
+        except (ImageCms.PyCMSError, OSError):
+            continue
+    return image.convert("RGB")
 
 def render_page(
     pdf_bytes: bytes,
