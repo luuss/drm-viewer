@@ -27,6 +27,12 @@ type Props = {
   pageLabel: (index: number) => string;
   /** Das Verzeichnis aus dem Offline-Puffer, solange der Server nicht antwortet. */
   ersatz?: FunctionReturnType<typeof api.toc.listForReader>;
+  /**
+   * Buch-Modus: alle Eintraege gehoeren zum selben Text. Ein Eintrag fuehrt
+   * dann immer ueber seine Seite (`onPage`), auch in der Leseansicht, und der
+   * aktuelle richtet sich nach der Seite, nicht nach dem Artikel.
+   */
+  nachSeite?: boolean;
 };
 
 type Entry = {
@@ -79,12 +85,13 @@ export default function TocDrawer({
   currentPages,
   pageLabel,
   ersatz,
+  nachSeite = false,
 }: Props) {
   const visible = open || docked;
   const entries = useQuery(api.toc.listForReader, visible ? { issueId } : "skip") ?? ersatz;
   const list = useRef<HTMLUListElement>(null);
   const currentId = entries
-    ? currentEntryId(entries, currentArticleId, currentPages)
+    ? currentEntryId(entries, nachSeite ? null : currentArticleId, currentPages)
     : null;
 
   // Ein Heft hat achtzig Eintraege: der aktuelle steht beim Oeffnen in der
@@ -154,7 +161,7 @@ export default function TocDrawer({
                 className={current ? "toc-entry current" : "toc-entry"}
                 aria-current={current ? "true" : undefined}
                 onClick={() => {
-                  if (mode === "article" && e.articleId) onArticle(e.articleId);
+                  if (mode === "article" && e.articleId && !nachSeite) onArticle(e.articleId);
                   else if (e.pageIndex !== null) onPage(e.pageIndex);
                   else if (e.articleId) onArticle(e.articleId);
                   if (!docked) onClose();

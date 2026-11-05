@@ -343,13 +343,25 @@ export const activateTocRegionsInternal = internalMutation({
         }),
       ),
     ),
+    // Das Verzeichnis ganz durch `entries` ersetzen statt ergaenzen. Nur der
+    // Buch-Modus schickt es (Weltkrieg-Leser, extractor/buch_verzeichnis.py):
+    // dort ist ein Heft ein Text, und der bisherige Eintrag war nur sein
+    // Titel. Ohne `entries` bleibt das Verzeichnis, wie es ist.
+    ersetzen: v.optional(v.boolean()),
   },
-  handler: async (ctx, { jobId, workerId, issueId, regions, entries }) => {
+  handler: async (ctx, { jobId, workerId, issueId, regions, entries, ersetzen }) => {
     const job = await ctx.db.get(jobId);
     if (!job) throw new Error("Auftrag unbekannt");
     if (job.issueId !== issueId) throw new Error("Auftrag passt nicht zur Ausgabe");
     if (job.workerId && job.workerId !== workerId) {
       throw new Error("Sperre liegt bei einem anderen Worker");
+    }
+    if (ersetzen && entries?.length) {
+      const bisher = await ctx.db
+        .query("tocEntries")
+        .withIndex("by_issue", (q) => q.eq("issueId", issueId))
+        .collect();
+      for (const t of bisher) await ctx.db.delete(t._id);
     }
 
     const alt = await ctx.db

@@ -286,6 +286,7 @@ workerRoute("/service/jobs/toc-regions", (ctx, body) =>
     issueId: body.issueId,
     regions: body.regions ?? [],
     entries: body.entries,
+    ersetzen: body.ersetzen === true ? true : undefined,
   }),
 );
 

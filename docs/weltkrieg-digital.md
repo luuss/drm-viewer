@@ -196,6 +196,39 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
 * Convex der Anlage von der Kommandozeile: `/root/wkrun [--identity JSON] fn JSON`
   auf dem Server, lokal `_scratch/wk-struktur/wkrun.sh`.
 
+## Inhaltsverzeichnis: nur beim Magazin (05.11.2026)
+
+Anweisung: im Leser immer ausblenden, außer bei den Magazin-Heften; dort soll
+es wie bei digital.lesenundschenken.de funktionieren.
+
+* **Befund** (alle 436 Hefte): jedes Heft hatte genau einen Eintrag, seinen
+  Titel (der Import legt ohne erkanntes Verzeichnis je Artikel einen an, und
+  im Buch-Modus gibt es nur einen). Nur das **WELTKRIEG-Magazin** druckt ein
+  Verzeichnis: Seite „Inhaltsverzeichnis“ hinten im Heft (Leserseite 95–97),
+  je Beitrag „Titel . . . Seite“, darüber Rubriken („Erlebnisbericht:“).
+  Die Erzählhefte drucken keins; ihre großen Zeilen (Kapitelzeilen, Karten,
+  Bildzeilen, Kolumnentitel „WELTKRIEG“) taugen nicht als Verzeichnis.
+* **Import:** `extract-service/extractor/buch_verzeichnis.py` liest die
+  gedruckte Seite aus der Textebene (Beleg: Stück „Inhalt“/„Inhaltsverzeichnis“
+  + mindestens 3 Zeilen mit Seitenzahl am Rand). Ziel über `printedLabel`.
+  Im Buch-Modus ersetzt es das Titel-Verzeichnis, die Zeilen der gedruckten
+  Seite werden Klickflächen, und die Seite selbst ist kein Lesetext mehr
+  (nur bei neuem Import). Über alle 436 Hefte gelaufen: greift in allen 44
+  Magazin-Heften (712 Einträge), in keinem anderen. Tests:
+  `extract-service/tests/test_buch_verzeichnis.py` (echte Seiten, auch die
+  sechs Beinahe-Treffer aus Erzählheften).
+* **Vorhandene Hefte:** Auftrag `toc` (`imports:enqueueInternal {issueId,
+  kind:"toc"}`) liest im Buch-Modus nur das Verzeichnis neu und schickt
+  `ersetzen: true` an `/service/jobs/toc-regions`; Text, Freigaben und
+  Lesestände bleiben. Ohne gedrucktes Verzeichnis ändert er nichts.
+* **Leser:** `verzeichnisZeigen` (web/src/reader): bei `IST_WELTKRIEG` Knopf
+  und Leiste „Inhalt“ nur mit mindestens 2 Einträgen. Einträge führen dort
+  immer über die Seite (`nachSeite` in `TocDrawer`), in der Leseansicht an die
+  Stelle im Text wie der Regler (`seiteImText`); hervorgehoben ist der Eintrag
+  der aufgeschlagenen Seite.
+* Die Textebene verliert manche Bindestriche („Lockheed Martin F 35“,
+  „Flugabwehrrakete IRIS T“); sie werden nicht dazuerfunden.
+
 ## Offen
 
 * **Rechtstexte** (`drm-viewer-evz`): Impressum, Datenschutz, AGB, Widerruf
