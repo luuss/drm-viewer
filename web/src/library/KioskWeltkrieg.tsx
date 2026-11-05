@@ -111,7 +111,7 @@ export default function KioskWeltkrieg({ hefte }: { hefte: KioskHeft[] }) {
   };
 
   return (
-    <>
+    <div className="wk-kiosk">
       {/* Ohne Ueberschrift und Erklaerung (Anweisung 05.11.2026): nur die
           Marke und der Umschalter. */}
       <div className="page-head kiosk-kopf wk-kiosk-kopf">
@@ -147,6 +147,6 @@ export default function KioskWeltkrieg({ hefte }: { hefte: KioskHeft[] }) {
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }

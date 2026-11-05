@@ -4789,6 +4789,10 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
    mit Umschalter rechts wie "Meine Ausgaben"; Kategorien drei Reihen je
    Zeile, Alle und Neueste fuenf Hefte je Zeile. Hausfarbe der Reihe nur als
    Kante und Marke: Gelb (Magazin) waere als Schrift nicht lesbar. */
+/* Eigener Abstand zwischen Kopf und Heften: die Ansicht steht in einem
+   Behaelter (#zeitschriften), nicht direkt in der Seitenspalte. */
+.wk-kiosk { display: flex; flex-direction: column; gap: var(--s5); }
+.wk-kiosk .wk-kiosk-kopf { margin-bottom: 0; }
 .wk-kiosk-kopf {
   flex-direction: row;
   align-items: center;
