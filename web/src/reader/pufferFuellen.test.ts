@@ -199,6 +199,28 @@ describe("fuellen", () => {
     expect((await neuesPaket.kachel(0, "neu", 2, 0, 0))?.k).toBe(2);
   });
 
+  it("wartet mit den Seiten nicht auf einen langsamen Text", async () => {
+    const { geholt, convex } = anlage();
+    const listen = convex.query.getMockImplementation()!;
+    let textDa = 0;
+    let ersteKachelVorText = false;
+    convex.query.mockImplementation(async (ref: unknown, args: Record<string, unknown>) => {
+      if (getFunctionName(ref as never) === "articles:getForReader") {
+        await new Promise((ok) => setTimeout(ok, 400));
+        ersteKachelVorText = geholt.some((u) => u.includes("/tile/"));
+        textDa = Date.now();
+      }
+      return listen(ref, args);
+    });
+    await fuellen(auftrag(convex, "l".repeat(64), 1), new AbortController().signal);
+    expect(ersteKachelVorText).toBe(true);
+    expect(textDa).toBeGreaterThan(0);
+    // Die Bilder kommen trotzdem, nur spaeter.
+    const paket = (await paketFuer(HEFT, "leser-1"))!;
+    expect(await paket.bild(BILD, "x")).not.toBeNull();
+    expect(paket.kopf.fertig).toBe(true);
+  });
+
   it("hoert auf, wenn der Speicher des Geraets voll ist", async () => {
     const { geholt, convex } = anlage();
     const voll = new SpeicherAblage();

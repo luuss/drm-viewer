@@ -2,10 +2,9 @@
  * Fuellt den Offline-Puffer (`puffer.ts`) mit der offenen Ausgabe, nebenher
  * und ohne dem Leser im Weg zu stehen.
  *
- * Reihenfolge: Listen und Schriften, alle Artikeltexte (klein, schnell
- * geholt), dann Seite fuer Seite ab der aufgeschlagenen: Seitenmasse, die
- * Kacheln von grob nach fein bis Stufe 1, dazu die Bilder der Artikel dieser
- * Seite. Springt der Leser, geht es dort weiter. Stufe 0, die volle
+ * Reihenfolge: die Listen, dann Seite fuer Seite ab der aufgeschlagenen:
+ * Seitenmasse, die Kacheln von grob nach fein bis Stufe 1, dazu die Bilder
+ * der Artikel dieser Seite. Schriften und Texte kommen nebenher. Springt der Leser, geht es dort weiter. Stufe 0, die volle
  * Aufloesung, kaeme auf ein Vielfaches an Daten (35 Kacheln je Seite statt
  * 17); von ihr liegt nur im Puffer, was der Leser schon vergroessert hat.
  *
@@ -329,20 +328,68 @@ export async function fuellen(a: Fuellauftrag, signal: AbortSignal): Promise<voi
     k.fertig = false;
   });
 
-  // Schriften dieser Sitzung; ohne sie sind die Texte nicht lesbar.
-  await versuchen(
-    () =>
-      satzSchriften(satz, {
-        paket,
-        issueId: a.issueId,
-        sessionToken: a.sessionToken,
-        liveSatz: satz,
-      }),
-    signal,
-  );
+  // Schriften und Texte laufen neben den Seiten her, nicht davor: ein
+  // Weltkrieg-Heft ist ein einziger grosser Text (300 KB), und bis er da war,
+  // stand das Fuellen der Seiten (gemessen 05.11.2026: bis zu 20 s, in denen
+  // ohne Netz nur die eine angezeigte Seite da gewesen waere).
+  const textStand: { bilder: Map<number, Bildauftrag[]> | null } = { bilder: null };
+  const texteLauf = (async () => {
+    // Schriften dieser Sitzung; ohne sie sind die Texte nicht lesbar.
+    await versuchen(
+      () =>
+        satzSchriften(satz, {
+          paket,
+          issueId: a.issueId,
+          sessionToken: a.sessionToken,
+          liveSatz: satz,
+        }),
+      signal,
+    );
+    textStand.bilder = bilderJeSeite(await texteFuellen(paket, a, articles, satz, signal));
+  })();
+  // Gewartet wird unten; ein Fehler (Sitzung weg, Abbruch) kommt dort an.
+  texteLauf.catch(() => undefined);
 
-  // Alle Texte zur Schrift dieser Sitzung. Bis ein Text neu da ist, bleibt
-  // der alte mit seiner Schrift stehen.
+  const staende = new Map(pages.map((p) => [p.index, p.stand ?? ""]));
+  const offen = new Set(pages.map((p) => p.index));
+  const anzahl = Math.max(...offen) + 1;
+  while (offen.size > 0) {
+    if (signal.aborted) return;
+    const seite = naechsteSeite(offen, a.position(), anzahl);
+    offen.delete(seite);
+    await seiteFuellen(paket, a, seite, staende.get(seite) ?? "", signal);
+    // Die Bilder einer Seite, sobald die Texte (mit der Liste der Bilder) da sind.
+    const bilder = textStand.bilder;
+    if (bilder) {
+      await bilderFuellen(paket, a, bilder.get(seite) ?? [], signal);
+      bilder.delete(seite);
+    }
+  }
+  await texteLauf;
+  // Bilder der Seiten, die schon vor den Texten fertig waren, ab der Lesestelle.
+  const bilder = textStand.bilder ?? new Map<number, Bildauftrag[]>();
+  const rest = new Set(bilder.keys());
+  while (rest.size > 0) {
+    if (signal.aborted) return;
+    const seite = naechsteSeite(rest, a.position(), Math.max(anzahl, ...rest) + 1);
+    rest.delete(seite);
+    await bilderFuellen(paket, a, bilder.get(seite) ?? [], signal);
+  }
+  if (!signal.aborted) await paket.kopfAendern((k) => (k.fertig = true));
+}
+
+/**
+ * Alle Texte zur Schrift dieser Sitzung. Bis ein Text neu da ist, bleibt
+ * der alte mit seiner Schrift stehen; sind alle neu, fallen die alten
+ * Schriften weg.
+ */
+async function texteFuellen(
+  paket: Paket,
+  a: Fuellauftrag,
+  articles: ReadonlyArray<{ _id: Id<"articles"> }>,
+  satz: string,
+  signal: AbortSignal,
+): Promise<Map<string, PaketArtikel>> {
   const texte = new Map<string, PaketArtikel>();
   const alteSaetze = new Set<string>();
   await gleichzeitig(articles, ARTIKEL_GLEICHZEITIG, signal, async (art) => {
@@ -353,7 +400,11 @@ export async function fuellen(a: Fuellauftrag, signal: AbortSignal): Promise<voi
     }
     if (da) alteSaetze.add(da.satz);
     const body = await versuchen(
-      () => q.query(api.articles.getForReader, { articleId: art._id, sessionToken: a.sessionToken }),
+      () =>
+        a.convex.query(api.articles.getForReader, {
+          articleId: art._id,
+          sessionToken: a.sessionToken,
+        }),
       signal,
     );
     if (body) {
@@ -363,15 +414,17 @@ export async function fuellen(a: Fuellauftrag, signal: AbortSignal): Promise<voi
       texte.set(art._id, da.body);
     }
   });
-  const alleNeu = articles.every((art) => texte.has(art._id));
-  if (alleNeu) {
+  if (articles.every((art) => texte.has(art._id))) {
     for (const alt of alteSaetze) {
       if (alt === satz) continue;
       for (let nr = 0; nr < 3; nr++) await paket.schriftWeg(alt, nr).catch(() => undefined);
     }
   }
+  return texte;
+}
 
-  // Bilder nach der Seite, auf der sie im Heft stehen.
+/** Bilder nach der Seite, auf der sie im Heft stehen. */
+function bilderJeSeite(texte: ReadonlyMap<string, PaketArtikel>): Map<number, Bildauftrag[]> {
   const bilder = new Map<number, Bildauftrag[]>();
   for (const body of texte.values()) {
     for (const img of body.images) {
@@ -383,20 +436,7 @@ export async function fuellen(a: Fuellauftrag, signal: AbortSignal): Promise<voi
       bilder.set(seite, liste);
     }
   }
-
-  const staende = new Map(pages.map((p) => [p.index, p.stand ?? ""]));
-  const offen = new Set(pages.map((p) => p.index));
-  const anzahl = Math.max(...offen) + 1;
-  while (offen.size > 0) {
-    if (signal.aborted) return;
-    const seite = naechsteSeite(offen, a.position(), anzahl);
-    offen.delete(seite);
-    await seiteFuellen(paket, a, seite, staende.get(seite) ?? "", signal);
-    await bilderFuellen(paket, a, bilder.get(seite) ?? [], signal);
-    bilder.delete(seite);
-  }
-  for (const rest of bilder.values()) await bilderFuellen(paket, a, rest, signal);
-  if (!signal.aborted) await paket.kopfAendern((k) => (k.fertig = true));
+  return bilder;
 }
 
 let lauf: {
