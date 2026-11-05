@@ -19,7 +19,7 @@
  * Fremdanzeigen haben weder unsere Artikelnummer noch ein Produkt im Laden und
  * bleiben deshalb von selbst ohne Knopf.
  */
-import { SHOP_URL } from "./shopCovers";
+import { ladenUrl } from "./laden";
 
 export type RuleBlock = { order: number; text: string };
 
@@ -407,7 +407,7 @@ export function pickByTitle<P extends RuleProduct>(products: P[], hint: TitleHin
 export function isShopUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    const shop = new URL(SHOP_URL);
+    const shop = new URL(ladenUrl());
     return (
       parsed.protocol === "https:" &&
       (parsed.hostname === shop.hostname || parsed.hostname === `www.${shop.hostname}`)

@@ -2,7 +2,7 @@
  * Der Laden als Kaufweg: Adressen und Pruefungen ohne Convex-Bezug, damit
  * sie auch in `"use node"`-Dateien (billing.ts) und Tests nutzbar sind.
  */
-import { SHOP_URL } from "./shopCovers";
+import { ladenSuche } from "./laden";
 
 /**
  * Eigener Stripe-Checkout im Leser. Verkauft wird im Laden; der Checkout
@@ -14,8 +14,7 @@ export function stripeCheckoutEnabled(): boolean {
 }
 
 export function shopSearchUrl(term: string): string {
-  const q = term.trim();
-  return q ? `${SHOP_URL}/suche?s=${encodeURIComponent(q)}` : `${SHOP_URL}/`;
+  return ladenSuche(term);
 }
 
 /** Kaufadresse eines Hefts: eingetragene Produktseite, sonst Suche nach dem Namen. */

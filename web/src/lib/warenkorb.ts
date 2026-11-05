@@ -61,8 +61,10 @@ export function leeren() {
  * springt. Die E-Mail des Leser-Kontos wird dort vorbelegt, weil die
  * Freischaltung an ihr haengt.
  */
-export function kassenUrl(shopUrl: string, skus: string[], email?: string | null): string {
-  const url = new URL("module/lusdigital/warenkorb", shopUrl.endsWith("/") ? shopUrl : `${shopUrl}/`);
+export function kassenUrl(warenkorbUrl: string, skus: string[], email?: string | null): string {
+  // Die Seite kommt aus Convex (`storefront.warenkorbUrl`, convex/laden.ts):
+  // PrestaShop module/lusdigital/warenkorb, WooCommerce ?wkdigital-warenkorb=1.
+  const url = new URL(warenkorbUrl);
   url.searchParams.set("artikel", skus.join(","));
   if (email) url.searchParams.set("email", email);
   return url.toString();

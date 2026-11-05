@@ -30,7 +30,8 @@ import { requireEditor, audit } from "./roles";
 import { internal } from "./_generated/api";
 import { hasIssueAccess } from "./access";
 import { Doc, Id } from "./_generated/dataModel";
-import { SHOP_URL, seriesFor } from "./shopCovers";
+import { seriesFor } from "./shopCovers";
+import { ladenArt, ladenSuche, ladenUrl } from "./laden";
 import { callShopApi, parseProducts, ShopApiError, type ShopProduct } from "./shopApi";
 import { isShopUrl } from "./articleProductRules";
 
@@ -73,18 +74,22 @@ type PageLinkInput = {
 
 /** Das Abo-Formular einer Reihe im Laden, solange die Redaktion keins eintraegt. */
 export function defaultSubscriptionUrl(slug: string): string {
-  return `${SHOP_URL}/module/luszeitformulare/formular?f=abo-${slug}`;
+  // Abo-Formulare gibt es nur im Laden von Lesen und Schenken.
+  if (ladenArt() === "woocommerce") return `${ladenUrl()}/`;
+  return `${ladenUrl()}/module/luszeitformulare/formular?f=abo-${slug}`;
 }
 
 /** Die Kategorie einer Reihe im Laden. */
 export function seriesUrl(slug: string): string {
+  // WooCommerce: die Kategorie heisst wie die Zeitschrift (weltkrieg-originalband).
+  if (ladenArt() === "woocommerce") return `${ladenUrl()}/produkt-kategorie/${slug}/`;
   const series = seriesFor(slug);
-  return `${SHOP_URL}/${series?.category ?? `zeitschriften/${slug}`}`;
+  return `${ladenUrl()}/${series?.category ?? `zeitschriften/${slug}`}`;
 }
 
 /** Die Suchseite des Ladens. */
 export function searchUrl(query: string): string {
-  return `${SHOP_URL}/suche?s=${encodeURIComponent(query)}`;
+  return ladenSuche(query);
 }
 
 /**
@@ -148,7 +153,7 @@ async function zielAdresse(
     if (row.resolvedAt && row.label?.includes(BOOK_LABEL_SEPARATOR)) return null;
     // Noch nicht aufgeloest: die Suchseite mit dem genauesten Begriff.
     const q = row.queries?.[0] ?? row.reference;
-    return q ? searchUrl(q) : SHOP_URL;
+    return q ? searchUrl(q) : ladenUrl();
   }
   return null;
 }

@@ -1,3 +1,4 @@
+import { ladenArt } from "./laden";
 import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { requireEditor } from "./roles";
@@ -316,6 +317,11 @@ export const refreshAll = internalAction({
     currentIssues: string[];
     issues: string[];
   }> => {
+    // Liest die Seiten von lesenundschenken.de (PrestaShop). Ein anderer
+    // Laden (Weltkrieg, WooCommerce) hat weder diese Seiten noch diese Reihen.
+    if (ladenArt() !== "prestashop") {
+      return { updated: [], unchanged: [], missing: [], failed: [], currentIssues: [], issues: [] };
+    }
     const homepage = await getText(`${SHOP_URL}/`);
     if (!homepage) throw new Error("Startseite des Shops nicht erreichbar");
     const entries = parseMagazineStrip(homepage);
