@@ -39,7 +39,14 @@ from extractor import bildunterschriften
 from extractor.buch import buch_aus_satz
 from extractor.buch_pdf import buch_aus_textebene
 from extractor.buch_verzeichnis import buch_verzeichnis, verzeichnisseiten
-from extractor.schnittmarken import schnittmarken, textebene_umrechnen, zuschneiden
+from extractor.schnittmarken import (
+    MARKEN_MINDESTENS,
+    Schnitt,
+    marken_passen,
+    schnittmarken,
+    textebene_umrechnen,
+    zuschneiden,
+)
 from extractor.idml_extract import (
     BILD_MINDESTFLAECHE,
     extract_idml_blocks,
@@ -616,7 +623,9 @@ class Job:
 
         from PIL import Image
 
-        gruppen: dict[str, list[tuple[dict, Image.Image, object]]] = {}
+        # Gruppen nach Bildgroesse: Seiten gleicher Groesse kommen aus demselben
+        # Druckformat und tragen die Marken an derselben Stelle.
+        gruppen: dict[tuple[int, int], list[tuple[dict, Image.Image, object]]] = {}
         for page in pages:
             if not page.get("previewKey") or page.get("beschnitt"):
                 continue
@@ -628,27 +637,32 @@ class Job:
                 bild.load()
             except Exception:
                 continue
-            gruppen.setdefault(str(page.get("sourceAssetId") or ""), []).append(
-                (page, bild, schnittmarken(bild))
-            )
+            gruppen.setdefault(bild.size, []).append((page, bild, schnittmarken(bild)))
+        # Schon zugeschnittene Seiten (frueherer Lauf) nennen den Ausschnitt.
+        frueher = [p["beschnitt"] for p in pages if p.get("beschnitt")]
 
         stempel = int(time.time())
         seiten: list[dict] = []
         neu_daten: dict[int, bytes] = {}
         uneinheitlich = 0
-        for eintraege in gruppen.values():
+        ohne_beleg = 0
+        for (w, h), eintraege in gruppen.items():
             gefunden = [s for _p, _b, s in eintraege if s is not None]
-            if not gefunden:
+            if gefunden:
+                ref = sorted(gefunden, key=lambda s: s.box)[len(gefunden) // 2]
+            elif frueher:
+                f = sorted(frueher, key=lambda b: (b["x0"], b["y0"]))[len(frueher) // 2]
+                ref = Schnitt(
+                    round(f["x0"] * w), round(f["y0"] * h), round(f["x1"] * w), round(f["y1"] * h), w, h
+                )
+            else:
                 continue
-            ref = sorted(gefunden, key=lambda s: s.box)[len(gefunden) // 2]
             abweichend = [
                 s
                 for s in gefunden
-                if (s.breite, s.hoehe) != (ref.breite, ref.hoehe)
-                or max(abs(a - b) for a, b in zip(s.box, ref.box)) > self.BESCHNITT_TOLERANZ
+                if max(abs(a - b) for a, b in zip(s.box, ref.box)) > self.BESCHNITT_TOLERANZ
             ]
-            gleich_gross = [e for e in eintraege if e[1].size == (ref.breite, ref.hoehe)]
-            if abweichend or len(gefunden) * 2 < len(gleich_gross):
+            if abweichend:
                 uneinheitlich += len(eintraege)
                 log(
                     "job.beschnittUneinheitlich",
@@ -658,8 +672,17 @@ class Job:
                     abweichend=len(abweichend),
                 )
                 continue
+            # Jede Seite traegt ihren Beleg selbst: alle Pruefungen bestanden,
+            # oder die meisten Marken genau auf den Kanten der anderen Seiten
+            # (ein Bild im Anschnitt der Ecke, eine verdeckte Marke).
+            belegt = []
+            for page, bild, s in eintraege:
+                if s is not None or marken_passen(bild, ref) >= MARKEN_MINDESTENS:
+                    belegt.append((page, bild, s))
+                else:
+                    ohne_beleg += 1
             x0, y0, x1, y1 = ref.anteile
-            for page, bild, _s in gleich_gross:
+            for page, bild, _s in belegt:
                 try:
                     ausschnitt = zuschneiden(bild, ref)
                 except ValueError:
@@ -746,6 +769,8 @@ class Job:
         text = self._textebene_zuschneiden(pages, sources, blobs)
         if not angewendet and not uneinheitlich and not text:
             return ""
+        if ohne_beleg:
+            log("job.beschnittOhneBeleg", jobId=self.job_id, seiten=ohne_beleg)
         teile = []
         if angewendet:
             teile.append(f"{len(angewendet)} Seiten auf das Netzformat zugeschnitten")
@@ -753,6 +778,8 @@ class Job:
             teile.append(f"Textebene von {text} Seiten umgerechnet")
         if uneinheitlich:
             teile.append(f"{uneinheitlich} Seiten mit uneinheitlichen Marken nicht zugeschnitten")
+        if ohne_beleg:
+            teile.append(f"{ohne_beleg} Seiten ohne erkennbare Marken gelassen")
         return " · Schnittmarken entfernt: " + ", ".join(teile)
 
     def _textebene_zuschneiden(self, pages: list[dict], sources: list[dict], blobs: dict[str, bytes]) -> int:

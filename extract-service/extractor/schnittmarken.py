@@ -38,8 +38,12 @@ MAX_DICKE = 0.004
 # liegen, und so ungleich darf der Rand sein (Anteil der Seite).
 GLEICH = 0.004
 SYMMETRIE = 0.01
-# Aussen in der Ecke hoechstens so viel Dunkles.
+# Aussen in der Ecke (aeussere Haelfte des Randes) hoechstens so viel Dunkles.
+ECKE = 0.5
 ECKE_DUNKEL = 0.01
+# So viele der acht Marken muessen auf den Kanten stehen, wenn eine Seite den
+# Schnitt der anderen Seiten des Hefts uebernimmt (`marken_passen`).
+MARKEN_MINDESTENS = 5
 
 
 @dataclass(frozen=True)
@@ -118,38 +122,50 @@ def _dunkelanteil(maske: Image.Image, box: tuple[int, int, int, int]) -> float:
     return sum(p) / len(p)
 
 
-def schnittmarken(bild: Image.Image) -> Schnitt | None:
-    """Das Netzformat aus den Schnittmarken, oder None ohne klare Marken."""
+def _randlinien(bild: Image.Image) -> tuple[Image.Image, dict[str, list[float]]]:
+    """Die duennen Linien in den vier Randstreifen.
+
+    Schluessel: Streifen und Ende, etwa "oben_links" (senkrechte Linien im
+    oberen Streifen, linkes Achtel) oder "links_unten" (waagrechte Linien im
+    linken Streifen, unteres Achtel).
+    """
     w, h = bild.size
-    if w < 200 or h < 200:
-        return None
     m = _maske(bild)
     sx, sy = max(4, round(w * STREIFEN)), max(4, round(h * STREIFEN))
     zx, zy = round(w * SUCHE), round(h * SUCHE)
     dicke_x = max(4, round(w * MAX_DICKE))
     dicke_y = max(4, round(h * MAX_DICKE))
-
-    def senkrechte(y0: int, y1: int) -> tuple[float | None, float | None]:
+    out: dict[str, list[float]] = {}
+    for name, y0, y1 in (("oben", 0, sy), ("unten", h - sy, h)):
         p = _profil(m, (0, y0, w, y1), zeilen=False)
-        links = _linien(p, 0, zx, dicke_x)
-        rechts = _linien(p, w - zx, w, dicke_x)
-        # Die innerste Linie ist die Schnittkante (falls ausserdem eine
-        # Anschnittmarke weiter aussen steht).
-        return (max(links) if links else None, min(rechts) if rechts else None)
-
-    def waagrechte(x0: int, x1: int) -> tuple[float | None, float | None]:
+        out[f"{name}_links"] = _linien(p, 0, zx, dicke_x)
+        out[f"{name}_rechts"] = _linien(p, w - zx, w, dicke_x)
+    for name, x0, x1 in (("links", 0, sx), ("rechts", w - sx, w)):
         p = _profil(m, (x0, 0, x1, h), zeilen=True)
-        oben = _linien(p, 0, zy, dicke_y)
-        unten = _linien(p, h - zy, h, dicke_y)
-        return (max(oben) if oben else None, min(unten) if unten else None)
+        out[f"{name}_oben"] = _linien(p, 0, zy, dicke_y)
+        out[f"{name}_unten"] = _linien(p, h - zy, h, dicke_y)
+    return m, out
 
-    l_oben, r_oben = senkrechte(0, sy)
-    l_unten, r_unten = senkrechte(h - sy, h)
-    o_links, u_links = waagrechte(0, sx)
-    o_rechts, u_rechts = waagrechte(w - sx, w)
-    werte = (l_oben, r_oben, l_unten, r_unten, o_links, u_links, o_rechts, u_rechts)
-    if any(v is None for v in werte):
+
+def schnittmarken(bild: Image.Image) -> Schnitt | None:
+    """Das Netzformat aus den Schnittmarken, oder None ohne klare Marken."""
+    w, h = bild.size
+    if w < 200 or h < 200:
         return None
+    m, linien = _randlinien(bild)
+    sx, sy = max(4, round(w * STREIFEN)), max(4, round(h * STREIFEN))
+    # Die innerste Linie ist die Schnittkante (falls ausserdem eine
+    # Anschnittmarke weiter aussen steht).
+    innen = {
+        k: (max(v) if k.endswith(("_links", "_oben")) else min(v)) if v else None
+        for k, v in linien.items()
+    }
+    if any(v is None for v in innen.values()):
+        return None
+    l_oben, l_unten = innen["oben_links"], innen["unten_links"]
+    r_oben, r_unten = innen["oben_rechts"], innen["unten_rechts"]
+    o_links, o_rechts = innen["links_oben"], innen["rechts_oben"]
+    u_links, u_rechts = innen["links_unten"], innen["rechts_unten"]
     if (
         abs(l_oben - l_unten) > GLEICH * w
         or abs(r_oben - r_unten) > GLEICH * w
@@ -167,8 +183,9 @@ def schnittmarken(bild: Image.Image) -> Schnitt | None:
     if sx >= links or sy >= oben:
         return None
     # Aussen in jeder Ecke nichts als Papier: ein Bild, das bis an den Rand
-    # laeuft, hat hier Farbe.
-    ex, ey = int(links * 0.8), int(oben * 0.8)
+    # laeuft, hat hier Farbe. Die innere Haelfte des Randes ist Anschnitt
+    # (3 mm), dort darf ein Bild schon stehen.
+    ex, ey = int(links * ECKE), int(oben * ECKE)
     for box in (
         (0, 0, ex, ey),
         (w - ex, 0, w, ey),
@@ -178,6 +195,32 @@ def schnittmarken(bild: Image.Image) -> Schnitt | None:
         if _dunkelanteil(m, box) > ECKE_DUNKEL:
             return None
     return Schnitt(round(links), round(oben), round(rechts), round(unten), w, h)
+
+
+def marken_passen(bild: Image.Image, schnitt: Schnitt, toleranz: int = 2) -> int:
+    """Wie viele der acht Marken genau auf den Kanten von `schnitt` stehen.
+
+    Fuer Seiten, deren eigene Pruefung scheitert, weil ein Bild bis in den
+    Anschnitt der Ecke laeuft oder eine Marke verdeckt: stehen die uebrigen
+    Marken genau dort, wo sie auf den anderen Seiten des Hefts stehen, ist
+    der Schnitt derselbe.
+    """
+    if bild.size != (schnitt.breite, schnitt.hoehe):
+        return 0
+    _m, linien = _randlinien(bild)
+    soll = {
+        "oben_links": schnitt.links,
+        "unten_links": schnitt.links,
+        "oben_rechts": schnitt.rechts,
+        "unten_rechts": schnitt.rechts,
+        "links_oben": schnitt.oben,
+        "rechts_oben": schnitt.oben,
+        "links_unten": schnitt.unten,
+        "rechts_unten": schnitt.unten,
+    }
+    return sum(
+        1 for k, ziel in soll.items() if any(abs(v - ziel) <= toleranz for v in linien[k])
+    )
 
 
 def zuschneiden(bild: Image.Image, schnitt: Schnitt) -> Image.Image:

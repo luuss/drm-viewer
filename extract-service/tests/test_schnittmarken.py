@@ -272,3 +272,59 @@ def test_worker_laesst_uneinheitliche_marken_stehen():
     meldung = job._schnittmarken(pages, [], {})
     assert "2 Seiten mit uneinheitlichen Marken nicht zugeschnitten" in meldung
     assert not [g for g in job.convex.gesendet if g[0] == "/service/pages/beschnitten"]
+
+
+def _mit_bild_im_anschnitt():
+    """Seite mit Marken, ein Bild laeuft unten rechts in den Anschnitt bis in
+    die Ecke und verdeckt die waagrechte Marke dort (wie Magazin 83, S. 21)."""
+    im = _seite()
+    ImageDraw.Draw(im).rectangle([900, 1500, 1399, 1926], fill=70)
+    return im
+
+
+def test_marken_passen_bei_bild_im_anschnitt():
+    from extractor.schnittmarken import marken_passen
+
+    ref = schnittmarken(_seite())
+    im = _mit_bild_im_anschnitt()
+    assert schnittmarken(im) is None
+    assert marken_passen(im, ref) >= 5
+    # Eine gleich grosse Seite ganz ohne Marken traegt keinen Beleg.
+    assert marken_passen(Image.new("L", (1400, 1927), 255), ref) == 0
+
+
+def test_worker_uebernimmt_schnitt_fuer_seite_mit_bild_im_anschnitt():
+    ablage = _Ablage(
+        {
+            "s/2.jpg": _jpeg(_seite()),
+            "s/3.jpg": _jpeg(_mit_bild_im_anschnitt()),
+            "s/4.jpg": _jpeg(Image.new("L", (1400, 1927), 255)),
+        }
+    )
+    pages = [
+        {"index": i, "role": "content", "sourceAssetId": f"q{i}", "sourcePageIndex": i - 2, "previewKey": f"s/{i}.jpg"}
+        for i in (2, 3, 4)
+    ]
+    job = _BeschnittJob(ablage)
+    meldung = job._schnittmarken(pages, [], {})
+    [(_pfad, body)] = [g for g in job.convex.gesendet if g[0] == "/service/pages/beschnitten"]
+    # Auch ueber verschiedene Quellen hinweg: gleiche Groesse, gleiche Marken.
+    assert [s["index"] for s in body["seiten"]] == [2, 3]
+    assert "1 Seiten ohne erkennbare Marken gelassen" in meldung
+    assert pages[2]["previewKey"] == "s/4.jpg"
+
+
+def test_worker_zweiter_lauf_nimmt_schnitt_der_frueheren_seiten():
+    ablage = _Ablage({"s/3.jpg": _jpeg(_mit_bild_im_anschnitt())})
+    a = schnittmarken(_seite()).anteile
+    pages = [
+        # Im ersten Lauf zugeschnitten.
+        {"index": 2, "role": "content", "sourcePageIndex": 0, "previewKey": "s/2-netz.jpg",
+         "beschnitt": {"x0": a[0], "y0": a[1], "x1": a[2], "y1": a[3]}},
+        # Damals uebrig geblieben: eigene Pruefung scheitert am Bild in der Ecke.
+        {"index": 3, "role": "content", "sourcePageIndex": 1, "previewKey": "s/3.jpg"},
+    ]
+    job = _BeschnittJob(ablage)
+    job._schnittmarken(pages, [], {})
+    [(_pfad, body)] = [g for g in job.convex.gesendet if g[0] == "/service/pages/beschnitten"]
+    assert [(s["index"], s["width"], s["height"]) for s in body["seiten"]] == [(3, 1273, 1800)]
