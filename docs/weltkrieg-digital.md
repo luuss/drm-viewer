@@ -228,6 +228,17 @@ es wie bei digital.lesenundschenken.de funktionieren.
   der aufgeschlagenen Seite.
 * Die Textebene verliert manche Bindestriche („Lockheed Martin F 35“,
   „Flugabwehrrakete IRIS T“); sie werden nicht dazuerfunden.
+* **Nachgezogen am 05.11.2026:** `toc`-Auftrag für alle 44 Magazin-Hefte, 43
+  mit allen Klickflächen. **Magazin 101** („Parole Grosser Zapfen-Streich“):
+  der Lesetext reicht nur von Leserseite 2 bis 5 (alter Importfehler), daher
+  hängen die 15 Einträge an keinem Text und haben keine Klickflächen; in der
+  Seitenansicht führen sie zur Seite. Neu importieren und den Text prüfen.
+* Die gedruckte Verzeichnisseite steht bei den 44 vorhandenen Heften noch im
+  Lesetext (Punktleisten am Ende der Leseansicht); erst ein neuer Import
+  (`full`) nimmt sie heraus.
+* Geprüft live (Wegwerfkonto mit Rolle editor, danach gelöscht): Erzählheft
+  ohne Knopf und Leiste (Desktop, Handy); Magazin 83 mit 16 Einträgen,
+  Sprung in Seiten- und Leseansicht, Hervorhebung, Handy-Schublade.
 
 ## Offen
 
