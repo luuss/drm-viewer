@@ -77,10 +77,7 @@ function ReihenKarte({ gruppe }: { gruppe: KioskReihe<KioskHeft> }) {
           </div>
         )}
       </div>
-      <Link to={`/issue/${neuestes.slug}`} className="wk-reihe-neu">
-        <span className="wk-reihe-neu-titel">{neuestes.displayTitle}</span>
-        {neuestes.edition && <span className="wk-reihe-neu-nr">{neuestes.edition}</span>}
-      </Link>
+      {/* Kein Titel des neuesten Hefts unter der Buehne (Anweisung 05.11.2026). */}
       <Link to={ziel} className="wk-reihe-fuss">
         <span className="wk-reihe-anzahl">
           {anzahl} {anzahl === 1 ? "Ausgabe" : "Ausgaben"}
