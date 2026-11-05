@@ -4791,12 +4791,11 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
    Kante und Marke: Gelb (Magazin) waere als Schrift nicht lesbar. */
 .wk-kiosk-kopf {
   flex-direction: row;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--s3) var(--s5);
 }
-.wk-kiosk-kopf > div:first-child { display: flex; flex-direction: column; gap: var(--s2); }
 .wk-kiosk-kopf .kicker { color: var(--ink-soft); }
 
 .wk-reihen {
@@ -5008,7 +5007,6 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 @media (max-width: 640px) {
   .wk-reihen { grid-template-columns: minmax(0, 1fr); }
   .wk-hefte { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .wk-kiosk-kopf { align-items: flex-start; }
 }
 
 /* Das feste Verzeichnis hebt den aktuellen Eintrag sonst im Rot von Lesen &

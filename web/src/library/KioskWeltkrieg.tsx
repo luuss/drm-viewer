@@ -14,15 +14,6 @@ import { reiheVon } from "../lib/reihen";
 /** Hefte, die eine Reihe im Kiosk neben ihrem neuesten zeigt. */
 const KLEINE = 4;
 
-const KOPF: Record<string, { titel: string; hinweis: string }> = {
-  alle: { titel: "Alle Ausgaben", hinweis: "Die neuesten zuerst." },
-  kategorien: {
-    titel: "Für welche Zeitschrift interessieren Sie sich?",
-    hinweis: "Jede Reihe mit ihren neuesten Ausgaben.",
-  },
-  neueste: { titel: "Neueste Ausgaben", hinweis: "Die neueste Ausgabe jeder Reihe." },
-};
-
 function farbe(name: string | null): CSSProperties | undefined {
   const reihe = reiheVon(name);
   return reihe ? ({ "--reihe": reihe.farbe } as CSSProperties) : undefined;
@@ -121,12 +112,10 @@ export default function KioskWeltkrieg({ hefte }: { hefte: KioskHeft[] }) {
 
   return (
     <>
+      {/* Ohne Ueberschrift und Erklaerung (Anweisung 05.11.2026): nur die
+          Marke und der Umschalter. */}
       <div className="page-head kiosk-kopf wk-kiosk-kopf">
-        <div>
-          <span className="kicker">Kiosk</span>
-          <h2>{KOPF[ansicht].titel}</h2>
-          <p className="hint">{KOPF[ansicht].hinweis}</p>
-        </div>
+        <span className="kicker">Kiosk</span>
         <div className="segment" role="group" aria-label="Ansicht">
           {KIOSK_ANSICHTEN.map(([wert, text]) => (
             <button
