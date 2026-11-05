@@ -340,3 +340,15 @@ def test_foto_bis_an_den_unteren_rand_vier_marken_reichen():
     ImageDraw.Draw(im).rectangle([0, 1000, 1399, 1926], fill=40)
     assert schnittmarken(im) is None
     assert marken_passen(im, ref) == 4 >= MARKEN_MINDESTENS
+
+
+def test_doppelseitenfoto_zwei_marken_am_bund_reichen():
+    """Ganzseitiges Foto bis an drei Bildraender; nur am Bund (links) bleiben
+    die waagrechten Marken oben und unten sichtbar."""
+    from extractor.schnittmarken import MARKEN_MINDESTENS, marken_passen
+
+    ref = schnittmarken(_seite())
+    im = _seite()
+    ImageDraw.Draw(im).rectangle([50, 0, 1399, 1926], fill=50)
+    assert schnittmarken(im) is None
+    assert marken_passen(im, ref) == 2 >= MARKEN_MINDESTENS
