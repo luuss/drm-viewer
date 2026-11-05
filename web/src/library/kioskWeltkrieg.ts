@@ -8,7 +8,38 @@ export type KioskHeft = {
   edition: string | null;
   publicationName: string | null;
   coverUrl: string | null;
+  issueNumber: string | null;
+  publicationDate: number | null;
 };
+
+function nummer(h: KioskHeft): number | null {
+  const m = /\d+/.exec(h.issueNumber ?? "");
+  return m ? Number(m[0]) : null;
+}
+
+/** Hoehere Heftnummer zuerst; ohne Nummer bleibt die bisherige Folge. */
+function nachNummer(a: KioskHeft, b: KioskHeft): number {
+  const x = nummer(a);
+  const y = nummer(b);
+  return x === null || y === null ? 0 : y - x;
+}
+
+/**
+ * Alle Hefte, neueste zuerst. Ein Erscheinungsdatum hat bei Weltkrieg nur,
+ * wer es aus dem Heftarchiv bekam (Dateidatum des Innenteils, 05.11.2026);
+ * fruehe Hefte, die nur als neue E-Book-Fassung im Archiv liegen, haben
+ * keins. Sie stehen hinten, nach Nummer.
+ */
+export function alleNachNeuigkeit<H extends KioskHeft>(hefte: H[]): H[] {
+  return [...hefte].sort((a, b) => {
+    const da = a.publicationDate;
+    const db = b.publicationDate;
+    if (da && db && da !== db) return db - da;
+    if (da && !db) return -1;
+    if (!da && db) return 1;
+    return nachNummer(a, b);
+  });
+}
 
 export type KioskReihe<H extends KioskHeft> = {
   key: string;
@@ -37,9 +68,9 @@ function rang(key: string) {
 
 /**
  * Die Hefte je Reihe, Reihen in der Folge der Menueleiste des Ladens.
- * `hefte` kommt neueste zuerst (`issues.listPublished`, `heftZeitpunkt`);
- * die Folge bleibt in jeder Reihe erhalten. Ein Heft ohne bekannte Reihe
- * steht unter seinem Zeitschriftennamen hinter den bekannten.
+ * In einer Reihe gilt die Heftnummer: die hoechste ist das neueste Heft,
+ * auch ohne Datum. Ein Heft ohne bekannte Reihe steht unter seinem
+ * Zeitschriftennamen hinter den bekannten.
  */
 export function kioskReihen<H extends KioskHeft>(hefte: H[]): KioskReihe<H>[] {
   const gruppen = new Map<string, KioskReihe<H>>();
@@ -53,6 +84,7 @@ export function kioskReihen<H extends KioskHeft>(hefte: H[]): KioskReihe<H>[] {
     }
     g.hefte.push(h);
   }
+  for (const g of gruppen.values()) g.hefte.sort(nachNummer);
   return [...gruppen.values()].sort(
     (a, b) => rang(a.key) - rang(b.key) || a.name.localeCompare(b.name, "de"),
   );

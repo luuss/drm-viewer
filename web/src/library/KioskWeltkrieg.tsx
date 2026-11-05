@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import Icon from "../components/Icon";
 import {
   KIOSK_ANSICHTEN,
+  alleNachNeuigkeit,
   kioskAnsicht,
   kioskReihen,
   neuesteJeReihe,
@@ -142,7 +143,7 @@ export default function KioskWeltkrieg({ hefte }: { hefte: KioskHeft[] }) {
         </div>
       ) : (
         <div className="wk-hefte">
-          {(ansicht === "alle" ? hefte : neuesteJeReihe(hefte)).map((h) => (
+          {(ansicht === "alle" ? alleNachNeuigkeit(hefte) : neuesteJeReihe(hefte)).map((h) => (
             <HeftKarte key={h._id} heft={h} />
           ))}
         </div>

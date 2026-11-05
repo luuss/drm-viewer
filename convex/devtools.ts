@@ -467,6 +467,43 @@ export const erscheinungNachtragenInternal = internalMutation({
   },
 });
 
+/**
+ * Erscheinungsdatum aus einer Liste setzen (Weltkrieg: Dateidatum des
+ * Innenteils im Heftarchiv, `tools/weltkrieg/erscheinung_aus_archiv.py`).
+ * Nur Hefte ohne Datum; ein gesetztes bleibt. `probelauf` zaehlt nur.
+ */
+export const erscheinungSetzenInternal = internalMutation({
+  args: {
+    eintraege: v.array(v.object({ issueId: v.id("issues"), publicationDate: v.number() })),
+    probelauf: v.optional(v.boolean()),
+  },
+  returns: v.object({ gesetzt: v.number(), schonDa: v.number(), fehlt: v.number() }),
+  handler: async (ctx, { eintraege, probelauf }) => {
+    let gesetzt = 0;
+    let schonDa = 0;
+    let fehlt = 0;
+    for (const e of eintraege) {
+      const issue = await ctx.db.get(e.issueId);
+      if (!issue) {
+        fehlt++;
+        continue;
+      }
+      if (issue.publicationDate) {
+        schonDa++;
+        continue;
+      }
+      if (!probelauf) {
+        await ctx.db.patch(e.issueId, { publicationDate: e.publicationDate, updatedAt: Date.now() });
+      }
+      gesetzt++;
+    }
+    if (!probelauf && gesetzt) {
+      await audit(ctx, "issue.erscheinungSetzen", "issues", `${gesetzt} Hefte aus dem Heftarchiv (Kommandozeile)`);
+    }
+    return { gesetzt, schonDa, fehlt };
+  },
+});
+
 export const removeArticleImagesInternal = internalMutation({
   args: {
     issueId: v.id("issues"),
