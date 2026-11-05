@@ -919,6 +919,16 @@ export default defineSchema(
     createdAt: v.number(),
   }).index("by_code", ["code"]),
 
+  /**
+   * Zugaenge zu fremden Diensten, die nur interne Funktionen lesen
+   * (zuerstDirectus.ts). Gesetzt per `npx convex run`, nie ausgegeben.
+   */
+  dienstGeheimnisse: defineTable({
+    name: v.string(),
+    wert: v.string(),
+    gesetztAm: v.number(),
+  }).index("by_name", ["name"]),
+
   auditLog: defineTable({
     actorUserId: v.optional(v.id("users")),
     actorEmail: v.optional(v.string()),

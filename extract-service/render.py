@@ -8,9 +8,10 @@ Produktionspfad nicht mehr vor.
 from __future__ import annotations
 
 import io
+import os
 
 import pypdfium2 as pdfium
-from PIL import Image
+from PIL import Image, ImageCms
 
 from extractor.page_geometry import visible_page_box
 
@@ -20,6 +21,43 @@ PAGE_WIDTH_PX = int(__import__("os").environ.get("PAGE_RENDER_WIDTH", "2400"))
 PAGE_JPEG_QUALITY = int(__import__("os").environ.get("PAGE_JPEG_QUALITY", "88"))
 COVER_WIDTH_PX = 900
 
+
+
+# --- Farbe -------------------------------------------------------------------
+# Druckdaten sind CMYK. `Image.convert("RGB")` rechnet dann mit der einfachen
+# Formel ohne Profil: Rot und Haut zu bunt, Tiefen zu dunkel (ZUERST! 11/2026).
+# Richtig: eingebettetes Profil, sonst FOGRA39 (ISO Coated v2), relativ
+# farbmetrisch mit Tiefenkompensierung. Profil: colord-data, CC0-1.0.
+_FOGRA39 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icc", "FOGRA39L_coated.icc")
+_SRGB = ImageCms.createProfile("sRGB")
+
+
+def als_rgb(image: Image.Image) -> Image.Image:
+    """Ein Bild nach sRGB bringen; CMYK ueber Farbprofil statt Formel."""
+    if image.mode != "CMYK":
+        return image if image.mode == "RGB" else image.convert("RGB")
+    quelle = None
+    icc = image.info.get("icc_profile")
+    if icc:
+        try:
+            quelle = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+            if quelle.profile.xcolor_space.strip() != "CMYK":
+                quelle = None
+        except Exception:
+            quelle = None
+    if quelle is None and os.path.exists(_FOGRA39):
+        quelle = ImageCms.ImageCmsProfile(_FOGRA39)
+    if quelle is None:
+        return image.convert("RGB")
+    # Adobe-JPEG speichert CMYK invertiert; Pillow dreht es beim Lesen schon um.
+    return ImageCms.profileToProfile(
+        image,
+        quelle,
+        _SRGB,
+        renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC,
+        outputMode="RGB",
+        flags=0x2000,  # Tiefenkompensierung (cmsFLAGS_BLACKPOINTCOMPENSATION)
+    )
 
 def render_page(
     pdf_bytes: bytes,
@@ -66,7 +104,7 @@ def page_count(pdf_bytes: bytes) -> int:
 
 
 def make_thumbnail(jpeg_bytes: bytes, width_px: int = COVER_WIDTH_PX) -> bytes:
-    image = Image.open(io.BytesIO(jpeg_bytes)).convert("RGB")
+    image = als_rgb(Image.open(io.BytesIO(jpeg_bytes)))
     if image.width > width_px:
         height = round(image.height * width_px / image.width)
         image = image.resize((width_px, height), Image.LANCZOS)
@@ -131,7 +169,7 @@ def crop_region(
     trim_blank: bool = True,
 ) -> bytes:
     """Bildausschnitt in normierten Koordinaten — fuer Artikelbilder."""
-    image = Image.open(io.BytesIO(jpeg_bytes)).convert("RGB")
+    image = als_rgb(Image.open(io.BytesIO(jpeg_bytes)))
     box = (
         max(0, int(x0 * image.width)),
         max(0, int(y0 * image.height)),
@@ -160,10 +198,7 @@ def render_image_page(image_bytes: bytes, width_px: int = PAGE_WIDTH_PX):
     Vergroessert wird nicht; ein kleines Original bleibt klein.
     """
     image = Image.open(io.BytesIO(image_bytes))
-    if image.mode not in ("RGB", "L"):
-        image = image.convert("RGB")
-    else:
-        image = image.convert("RGB")
+    image = als_rgb(image)
     if image.width > width_px:
         height = max(1, round(image.height * width_px / image.width))
         image = image.resize((width_px, height), Image.LANCZOS)
@@ -174,7 +209,7 @@ def render_image_page(image_bytes: bytes, width_px: int = PAGE_WIDTH_PX):
 
 def fit_image(image_bytes: bytes, max_edge: int = 1600, quality: int = 82) -> bytes:
     """Ein platziertes Bild auf Artikelgroesse bringen, ohne es zu beschneiden."""
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image = als_rgb(Image.open(io.BytesIO(image_bytes)))
     laengste = max(image.width, image.height)
     if laengste > max_edge:
         faktor = max_edge / laengste

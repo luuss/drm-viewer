@@ -8,6 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY worker.py render.py storage.py ./
+COPY icc ./icc
 COPY extractor ./extractor
 
 CMD ["python", "worker.py"]

@@ -28,6 +28,7 @@ import { internal } from "./_generated/api";
 import { tocImages } from "./tocPreview";
 import { heftStueckeLoeschen } from "./suche";
 import { ankuendigungAnhalten, ankuendigungPlanen } from "./heftAnkuendigung";
+import { zuerstPushPlanen } from "./zuerstDirectus";
 
 /**
  * Anzeige-Bezeichnung eines Hefts: Name, Heftbezeichnung und
@@ -774,6 +775,8 @@ export async function publishIssue(ctx: MutationCtx, issueId: Id<"issues">) {
   await ctx.scheduler.runAfter(0, internal.suche.heftNeu, { issueId });
   // Kaeufer per Mail auf das neue Heft hinweisen (heftAnkuendigung.ts).
   await ankuendigungPlanen(ctx, issue, issue.publishedAt === undefined);
+  // ZUERST!: Titelbild und Inhaltsverzeichnis an zuerst.de (zuerstDirectus.ts).
+  await zuerstPushPlanen(ctx, issue);
 
   // Neue Ausgabe: laufende Abos der Publikation bekommen sie dauerhaft.
   const subs = await ctx.db.query("subscriptions").collect();

@@ -12,6 +12,7 @@
  */
 
 import UTIF from "utif2";
+import { cmykZuRgba } from "./cmyk";
 
 // UTIF prueft im CMYK-Zweig auf `window.UDOC` und faellt ohne diesen Eintrag
 // auf die einfache Umrechnung zurueck. Im Hintergrundfaden gibt es aber gar
@@ -137,9 +138,29 @@ async function tiffToCanvas(
   // Die Typen von utif2 kennen den dritten Parameter nicht; er wird fuer
   // mehrseitige Dateien gebraucht, in denen die Streifen gemeinsam liegen.
   (UTIF.decodeImage as (a: ArrayBuffer, b: unknown, c: unknown) => void)(daten, ifd, ifds);
-  const rgba = UTIF.toRGBA8(ifd);
   const width = ifd.width;
   const height = ifd.height;
+  // CMYK nicht ueber UTIF (einfache Formel ohne Profil), sondern mit
+  // Farbmanagement umrechnen (cmyk.ts). Nur der uebliche Fall: 8 Bit,
+  // Kanaele hintereinander; alles andere bleibt bei UTIF.
+  const t = ifd as Record<string, any>;
+  const kanaele = t.t277?.[0] ?? 1;
+  const istCmyk =
+    t.t262?.[0] === 5 &&
+    (t.t258?.[0] ?? 8) === 8 &&
+    (t.t284?.[0] ?? 1) === 1 &&
+    (kanaele === 4 || kanaele === 5) &&
+    t.data instanceof Uint8Array &&
+    t.data.length >= width * height * kanaele;
+  const rgba = istCmyk
+    ? await cmykZuRgba(
+        t.data,
+        width,
+        height,
+        kanaele,
+        Array.isArray(t.t34675) || ArrayBuffer.isView(t.t34675) ? Uint8Array.from(t.t34675 as ArrayLike<number>) : null,
+      )
+    : UTIF.toRGBA8(ifd);
   if (!rgba || !rgba.length || !width || !height) {
     throw new Error("TIFF liess sich nicht dekodieren");
   }

@@ -15,6 +15,7 @@
     "@types/qrcode": "^1.5.5",
     "convex": "^1.46.0",
     "jszip": "^3.10.2",
+    "lcms-wasm": "^1.0.5",
     "openseadragon": "^6.1.1",
     "pdfjs-dist": "^6.3.289",
     "qrcode": "^1.5.4",
