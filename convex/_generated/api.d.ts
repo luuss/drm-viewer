@@ -74,6 +74,7 @@ import type * as umsatz from "../umsatz.js";
 import type * as uploadRules from "../uploadRules.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
+import type * as zuerstDirectus from "../zuerstDirectus.js";
 
 import type {
   ApiFromModules,
@@ -148,6 +149,7 @@ declare const fullApi: ApiFromModules<{
   uploadRules: typeof uploadRules;
   uploads: typeof uploads;
   users: typeof users;
+  zuerstDirectus: typeof zuerstDirectus;
 }>;
 
 /**
