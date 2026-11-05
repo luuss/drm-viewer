@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import OpenSeadragon from "openseadragon";
 import { TILE_SERVICE_URL, type Id } from "../lib/api";
+import { OSD_ZEICHNER } from "../lib/osdZeichner";
 import ReaderTurnButton from "./ReaderTurnButton";
 import { kachelSeed, mitTicket, OHNE_NETZ, zusammensetzen } from "./schutz";
 import { mitWiederholung } from "./nachladen";
@@ -204,6 +205,7 @@ export default function PageMode({
     if (!hostRef.current) return;
     const viewer = OpenSeadragon({
       element: hostRef.current,
+      drawer: OSD_ZEICHNER,
       showNavigationControl: false,
       keyboardNavEnabled: false,
       gestureSettingsMouse: { clickToZoom: false, scrollToZoom: true },
