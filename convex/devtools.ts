@@ -3,7 +3,7 @@ import { artikelStandAktualisieren } from "./artikelStand";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { slugify } from "./publications";
-import { publishIssue } from "./issues";
+import { freierSlug, heftSlugBasis, publishIssue } from "./issues";
 import { audit, rolesOf } from "./roles";
 import { rebuildSearchText } from "./articles";
 import { deleteLinksForBlock } from "./articleProducts";
@@ -501,6 +501,77 @@ export const erscheinungSetzenInternal = internalMutation({
       await audit(ctx, "issue.erscheinungSetzen", "issues", `${gesetzt} Hefte aus dem Heftarchiv (Kommandozeile)`);
     }
     return { gesetzt, schonDa, fehlt };
+  },
+});
+
+/**
+ * Heftitel berichtigen (Weltkrieg, 05.11.2026: bei 110 Heften hatte der
+ * Archiv-Import den Titel falsch von der Titelseite gelesen, etwa
+ * "Stäbler“ Sander" statt "„Generalstäbler“ Sander"; berechnet mit
+ * web/src/admin/umschlagTitel.ts). Je Heft: Titel, der Titel des Artikels mit
+ * demselben falschen Titel (Buchmodus: ein Text je Heft) und die Adresse; die
+ * alte Adresse bleibt in `alteSlugs` und fuehrt weiter. Geaendert wird nur,
+ * wenn der Titel noch `alt` ist, sonst bleibt das Heft (Redaktion war
+ * schneller). `probelauf` zaehlt nur.
+ */
+export const titelBerichtigenInternal = internalMutation({
+  args: {
+    eintraege: v.array(v.object({ issueId: v.id("issues"), alt: v.string(), titel: v.string() })),
+    probelauf: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    geaendert: v.number(),
+    artikel: v.number(),
+    adressen: v.array(v.object({ alt: v.string(), neu: v.string() })),
+    abweichend: v.array(v.string()),
+    fehlt: v.number(),
+  }),
+  handler: async (ctx, { eintraege, probelauf }) => {
+    let geaendert = 0;
+    let artikel = 0;
+    let fehlt = 0;
+    const adressen: { alt: string; neu: string }[] = [];
+    const abweichend: string[] = [];
+    for (const e of eintraege) {
+      const issue = await ctx.db.get(e.issueId);
+      if (!issue) {
+        fehlt++;
+        continue;
+      }
+      const titel = e.titel.trim().slice(0, 300);
+      if (issue.title !== e.alt || !titel) {
+        abweichend.push(`${issue.title} (erwartet ${e.alt})`);
+        continue;
+      }
+      if (titel === issue.title) continue;
+      const texte = (
+        await ctx.db
+          .query("articles")
+          .withIndex("by_issue_order", (q) => q.eq("issueId", e.issueId))
+          .collect()
+      ).filter((a) => a.title === e.alt);
+      const slug = await freierSlug(ctx, heftSlugBasis(titel, issue.issueNumber), e.issueId);
+      if (slug !== issue.slug) adressen.push({ alt: issue.slug, neu: slug });
+      geaendert++;
+      artikel += texte.length;
+      if (probelauf) continue;
+      const jetzt = Date.now();
+      const alteSlugs =
+        slug !== issue.slug
+          ? [...new Set([...(issue.alteSlugs ?? []), issue.slug])].filter((x) => x !== slug)
+          : issue.alteSlugs;
+      await ctx.db.patch(e.issueId, { title: titel, slug, alteSlugs, updatedAt: jetzt });
+      for (const a of texte) {
+        // Der Suchtext beginnt mit dem Titel (articles.setTitleInternal).
+        const rest = a.searchText.startsWith(a.title)
+          ? a.searchText.slice(a.title.length)
+          : "\n\n" + a.searchText;
+        await ctx.db.patch(a._id, { title: titel, searchText: (titel + rest).slice(0, 100000), updatedAt: jetzt });
+        await sucheVormerken(ctx, e.issueId, a._id);
+      }
+      await audit(ctx, "issue.titel", e.issueId, `${e.alt} -> ${titel} (Kommandozeile)`);
+    }
+    return { geaendert, artikel, adressen, abweichend, fehlt };
   },
 });
 

@@ -623,7 +623,7 @@ export function heftSlugBasis(title: string, issueNumber?: string): string {
   return t ? `${t}-${n}` : n;
 }
 
-async function freierSlug(
+export async function freierSlug(
   ctx: MutationCtx,
   base: string,
   eigenes?: Id<"issues">,
