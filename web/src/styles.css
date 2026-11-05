@@ -4774,6 +4774,18 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
 /* Reihen-Schriftzuege (SVG) brauchen keinen Kasten, nur Luft */
 [data-marke="weltkrieg"] .reihen-kachel .reihen-logo img { object-fit: contain; }
 
+/* Leser: Tinte statt Ladenblau. Das Blau der Fusslinie stand auf dem
+   Papiergrund fremd (aktive Umschalter, Blaetterpfeile, Regler, aktueller
+   Verzeichniseintrag); im Leser gilt die Papier-Palette (.reader-screen). */
+[data-marke="weltkrieg"] .reader-screen {
+  --accent: var(--papier-tinte);
+  --accent-deep: var(--papier-tinte);
+  --accent-soft: var(--papier-tief);
+}
+[data-marke="weltkrieg"] .reader-screen .reader-turn:hover:not(:disabled) {
+  border-color: var(--papier-tinte);
+}
+
 /* Umsatz (admin/Umsatz.tsx) */
 .umsatz-kacheln {
   display: grid;
