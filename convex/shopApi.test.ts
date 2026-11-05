@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
 import {
-  DEFAULT_SHOP_API_URL,
+  standardShopApiUrl,
   callShopApi,
   digitalSku,
   parseProduct,
@@ -53,7 +53,7 @@ describe("Aufruf der Shop-Schnittstelle", () => {
     vi.stubEnv("SHOP_WEBHOOK_SECRET", SECRET);
     const fake = vi.fn(async (_url: string, _init: RequestInit) => jsonResponse({ ok: true }));
     await callShopApi("product", { id: 1 }, { fetch: fake as any });
-    expect(fake.mock.calls[0][0]).toBe(DEFAULT_SHOP_API_URL);
+    expect(fake.mock.calls[0][0]).toBe(standardShopApiUrl());
   });
 
   test("ohne Geheimnis kein Aufruf", async () => {
