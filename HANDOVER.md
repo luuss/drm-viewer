@@ -1,5 +1,21 @@
 # Übergabe — Stand 30.09.2026
 
+## ZUERST! → zuerst.de und CMYK-Farben (05.11.2026)
+
+* **Push an zuerst.de:** `publishIssue` → `convex/zuerstDirectus.ts` schickt bei
+  ZUERST!-Heften Titelbild + Inhaltsverzeichnis an Directus (`ausgaben`). Nur die
+  neueste Ausgabe. Zugang Directus-User "Leser-Push" (nur `ausgaben`
+  content/cover_image + JPEG-Upload), Token in Tabelle `dienstGeheimnisse`,
+  nie ausgegeben. Handausloeser `zuerstDirectus:sendenInternal {issueId}`,
+  Protokoll `zuerstDirectus:protokollLesenInternal`, aus mit `ZUERST_PUSH=aus`.
+  Doku: `../docs/zuerst-directus.md`. Der alte Heft-Bot ist gesperrt.
+* **CMYK-Farben:** Bilder aus `Links/` (CMYK-TIFF) rechnete UTIF mit der
+  Formel ohne Profil um (zu bunt, Haut magenta). Jetzt `web/src/admin/cmyk.ts`
+  (lcms-wasm, eingebettetes Profil, sonst FOGRA39 `icc/FOGRA39L_coated.icc`,
+  CC0) und `extract-service/render.py` `als_rgb` (ImageCms, gleiche Regeln).
+  Kaputtes Profil → FOGRA39 → alte Formel, nie Abbruch. Bereits importierte
+  Hefte behalten die falschen Artikelbilder bis zum Neuimport.
+
 ## >>> WEITERMACHEN HIER (Stand 04.11.2026 ~01:30, nach Session-Kompaktierung zuerst lesen) <<<
 
 **Regeln, die der User heute gesetzt hat:**
