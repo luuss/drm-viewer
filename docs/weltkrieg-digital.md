@@ -192,17 +192,23 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
   Grossband“), erst dann im Kopf und auf der Seite. Bis 05.11. im ganzen Kopf:
   „DOPPELSCHUSS ROT“ (Großband 147) wurde Doppelband und überschrieb das echte
   Doppelband 147, „Sturmsoldaten“ machte Freikorps 25 zu Soldaten 25.
-* **Titel** (`umschlagTitel.ts`, neu 05.11.2026): Der Kopf (Schriftzug,
-  Reihenzeile, Nr., Preis, www) wird **auf jeder Titelseite gemessen**, der
-  Titel ist die grösste Schrift darunter samt direkt anschliessender Zeilen in
-  etwas kleinerer Schrift (Dienstgrad über dem Namen). Schmale Reste am Bund
-  („2o26“) zählen nicht, Stücke einer Zeile ohne Lücke sind ein Wort
-  (Zierschrift „b|ombenk|R|ieg“). Schreibung **Wort für Wort aus dem Satz**
-  (Innentitel, Kolumnentitel), Satzzeichen vom Umschlag; SS darf ß sein,
-  Null im Wort ein O („R0T“), eine Trennung am Zeilenende entscheidet der Satz
-  („Oberstleutnant“, aber „Rupel-Stellung“). Sonst `ausVersalien`.
-  Bis 05.11. galt fest alles oberhalb von 22 % als Kopf: bei 49 Heften fehlte
-  die erste Titelzeile („Stäbler“ Sander“ statt „„Generalstäbler“ Sander“).
+* **Titel** (`heftTitel.ts`, seit 05.11.2026): erste Quelle ist der
+  **Kolumnentitel** (oberste Zeile der Innenseiten ohne Seitenzahl und
+  Schriftzug, 20–60× je Heft, in Satzschrift). Die Titelseite ist die
+  Gegenprobe (`umschlagTitel.ts`: Kopf je Seite gemessen, Zierschrift-Stücke
+  verbunden, Schreibung Wort für Wort aus dem Satz). Einig → Titel. Uneinig →
+  gedruckter Titel bleibt, wenn alle seine Wörter im Heft stehen, sonst der
+  Kolumnentitel; in beiden Fällen Vermerk **„Titel prüfen“** (`issues.titelPruefen`)
+  mit beiden Vorschlägen, im Admin als Kasten an den Angaben und als Filter
+  in der Heftliste. Übernimmt die Redaktion einen Titel (oder „stimmt so“),
+  entfällt der Vermerk und der Text des Hefts folgt. **Sammelheft** (Magazin):
+  mindestens 4 verschiedene Köpfe je ≥3× (gemessen: Magazin 5–14, sonst ≤3) →
+  Aufmacher der Titelseite, ohne Titel „Magazin Nr. 7“.
+  Messung 05.11. an 436 Heften: 374 einig, 35 Magazin mit Aufmacher,
+  9 „Magazin Nr.“, 18 Vermerke (Lang-/Kurzform, Dienstgrad, „in/für Berlin“).
+* **Reihe** zusätzlich aus dem **Archivordner** (`reiheAusArchivpfad`:
+  Doppelbände, Großbände, Normalhefte …); nennt die Titelseite etwas anderes,
+  hält der Import an. Der E-Book-Ordner nennt keine Reihe.
 * **Berichtigung 05.11.2026:** 112 Titel (fehlende Zeilen, Zierschrift-Reste,
   falsche Gross-/Kleinschreibung, Trennstriche) mit
   `devtools:titelBerichtigenInternal` (Titel, Text, Adresse; alte Adresse in
@@ -212,10 +218,15 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
   „Ausbruch aus Oserki“ neu importieren (Ordner
   `Doppelbände/141-150/147d …`, einzeln, die Massenliste hält ihn für fertig);
   Magazin 1–10 haben keinen Titel auf dem Umschlag („Weltkrieg 7“).
-* **Prüfen nach jedem Import:** alle Titel gegen Titelseite und Satz und alle
-  Reihen gegen die oberste Zeile vergleichen (Skripte 05.11. im Scratchpad:
-  Textebenen holen, `nameVomUmschlag` mit esbuild bündeln, Liste der
-  Abweichungen), nicht nur das Musterheft.
+* **Prüfen nach jedem Import:** `tools/weltkrieg/titel_pruefen.sh
+  [--archiv liste.json] [--anwenden]` prüft alle Hefte mit den Regeln des
+  Imports (Textebenen vom Server, lokal gebündelt) und meldet sichere
+  Berichtigungen, Vermerke, Reihen-Widersprüche und mit der Archivliste
+  fehlende Hefte. `--anwenden` schreibt Berichtigungen (nur wo beide Quellen
+  einig sind oder die Heftnummer gilt) und Vermerke; ein Titel mit Vermerk
+  bleibt. Lauf 05.11.: 12 Archivhefte fehlen in der Anlage (Freikorps 17,
+  Flieger 43/106/109, Marine 77/84, Magazin 77, Doppelband 147/158,
+  Großband 149/154, Originalband 256), einzeln neu importieren.
 * Die 24 Testhefte vom 03.11. sind gelöscht (Liste `_scratch/wk-struktur/issues-vor-loeschen.json`),
   falsche Reihen „159d …“, „160d …“, „Weltkrieg“, „B“ abgeschaltet.
 * Convex der Anlage von der Kommandozeile: `/root/wkrun [--identity JSON] fn JSON`

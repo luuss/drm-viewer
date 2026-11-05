@@ -136,6 +136,13 @@ export default defineSchema(
     // Fruehere Adressen nach einer Berichtigung (issues.slugErneuernInternal);
     // sie fuehren weiter zum Heft.
     alteSlugs: v.optional(v.array(v.string())),
+    // Weltkrieg-Import (web/src/admin/heftTitel.ts): Titelseite und
+    // Kolumnentitel widersprechen sich, oder nur eine Quelle kennt den Titel.
+    // Die Redaktion entscheidet; mit der Entscheidung (issues.update) entfaellt
+    // der Vermerk.
+    titelPruefen: v.optional(
+      v.object({ umschlag: v.optional(v.string()), kolumne: v.optional(v.string()), grund: v.string() }),
+    ),
     // "3/2026", Doppelheft "8-9/2025", laufend "170" (convex/heftnummer.ts).
     issueNumber: v.optional(v.string()),
     publicationDate: v.optional(v.number()),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ausVersalien, nameVomUmschlag, schreibungAusSatz } from "./umschlagTitel";
+import { ausVersalien, nameVomUmschlag, schreibungAusSatz, schreibungJeWort, woerterImSatz } from "./umschlagTitel";
 import type { TextItem } from "./textLayer";
 
 const REIHEN = [
@@ -235,5 +235,28 @@ describe("Schreibung aus dem Satz (05.11.2026)", () => {
   it("macht aus Zierschrift-Versalien einen lesbaren Titel, normale Titel bleiben", () => {
     expect(ausVersalien("bombenkRieg in deR bocage")).toBe("Bombenkrieg in der Bocage");
     expect(ausVersalien("Ein Himmel voller „Spitfire“")).toBe("Ein Himmel voller „Spitfire“");
+  });
+});
+
+describe("Woerter im Satz (05.11.2026)", () => {
+  const satz = ["Der Sanitäter des Bataillons war Oberfeldwebel Franz Schmitz.", "Theiß und Mátra"];
+  it("bestaetigt einen Titel, dessen Woerter alle im Heft stehen", () => {
+    expect(woerterImSatz("Sanitäter Franz Schmitz", satz)).toBe(true);
+    expect(woerterImSatz("„Marder“ zwischen THEISS und MÁTRA", ["„Marder“ zwischen Theiß und Mátra"])).toBe(true);
+  });
+  it("bestaetigt keine Zierschrift-Reste", () => {
+    expect(woerterImSatz("b ombenk R ieg", ["Bombenkrieg in der Bocage"])).toBe(false);
+  });
+  it("schreibt Wort fuer Wort wie der Satz, das erste Wort gross", () => {
+    expect(schreibungJeWort("ZUM WESTWALL ZURÜCK", ["Zurück zum Westwall", "und dann ging es zurück zum Westwall"])).toBe(
+      "Zum Westwall zurück",
+    );
+    expect(schreibungJeWort("GANZ UNBEKANNT", ["anderer Text"])).toBeNull();
+    // Ein Name bleibt gross, auch wenn das Wort einmal als Adjektiv klein steht.
+    expect(
+      schreibungJeWort("PANZER-AS ERNST BOLBRINKER", [
+        "Generalmajor Ernst Bolbrinker war ein Panzer-As. Die Lage war ernst. Als Ernst Bolbrinker kam",
+      ]),
+    ).toBe("Panzer-As Ernst Bolbrinker");
   });
 });

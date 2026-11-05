@@ -5020,3 +5020,20 @@ button.flaeche:hover:not(:disabled) { background: color-mix(in srgb, currentColo
   vertical-align: top;
 }
 .umsatz .tabelle td:nth-child(n + 2) { white-space: nowrap; }
+
+/* Admin: Vermerk "Titel pruefen" (Weltkrieg-Import, heftTitel.ts) */
+.titel-pruefen {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--radius, 6px);
+  padding: var(--s2, 0.5rem) var(--s3, 0.75rem);
+  display: grid;
+  gap: var(--s1, 0.25rem);
+}
+.titel-pruefen p,
+.titel-pruefen ul { margin: 0; }
+.titel-pruefen ul { padding: 0; list-style: none; display: grid; gap: var(--s1, 0.25rem); }
+.titel-pruefen li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2, 0.5rem); color: var(--ink, inherit); }
+.titel-pruefen .muted { min-width: 8.5em; }
+.titel-pruefen > .btn { justify-self: start; }
+.badge.titel-pruefen-marke { background: var(--warn-soft); color: var(--warn); }

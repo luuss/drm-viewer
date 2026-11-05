@@ -576,6 +576,47 @@ export const titelBerichtigenInternal = internalMutation({
 });
 
 /**
+ * Vermerk "Titel pruefen" fuer bestehende Hefte setzen oder aufheben
+ * (tools/weltkrieg/titel_pruefen.mjs, Regeln in web/src/admin/heftTitel.ts).
+ * `pruefen: null` hebt ihn auf. Der Titel selbst bleibt.
+ */
+export const titelPruefenInternal = internalMutation({
+  args: {
+    eintraege: v.array(
+      v.object({
+        issueId: v.id("issues"),
+        pruefen: v.union(
+          v.null(),
+          v.object({ umschlag: v.optional(v.string()), kolumne: v.optional(v.string()), grund: v.string() }),
+        ),
+      }),
+    ),
+    probelauf: v.optional(v.boolean()),
+  },
+  returns: v.object({ gesetzt: v.number(), aufgehoben: v.number(), fehlt: v.number() }),
+  handler: async (ctx, { eintraege, probelauf }) => {
+    let gesetzt = 0;
+    let aufgehoben = 0;
+    let fehlt = 0;
+    for (const e of eintraege) {
+      const issue = await ctx.db.get(e.issueId);
+      if (!issue) {
+        fehlt++;
+        continue;
+      }
+      if (e.pruefen) gesetzt++;
+      else if (issue.titelPruefen) aufgehoben++;
+      else continue;
+      if (!probelauf) await ctx.db.patch(e.issueId, { titelPruefen: e.pruefen ?? undefined });
+    }
+    if (!probelauf && (gesetzt || aufgehoben)) {
+      await audit(ctx, "issue.titelPruefen", "issues", `${gesetzt} gesetzt, ${aufgehoben} aufgehoben (Kommandozeile)`);
+    }
+    return { gesetzt, aufgehoben, fehlt };
+  },
+});
+
+/**
  * Preise aus dem Laden setzen (Weltkrieg: E-Book-Preis von weltkrieg-online.de,
  * `tools/weltkrieg/ebook_preise.py`). Quelle "laden"; ein von der Redaktion
  * gesetzter Preis bleibt. Wie `issues.update`: ein geaenderter Betrag macht

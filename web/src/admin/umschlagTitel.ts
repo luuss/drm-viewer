@@ -55,7 +55,7 @@ type Reihe = { name: string; match: RegExp; umschlag?: RegExp };
 /** Der Kopf der Titelseite: Reihenzeile und Schriftzug. */
 const REIHE_IM_KOPF = 0.3;
 
-function gerade(i: TextItem): boolean {
+export function gerade(i: TextItem): boolean {
   return i.length < 7 || !i[6] || i[6] % 360 === 0;
 }
 
@@ -86,14 +86,27 @@ function kopfEnde(items: TextItem[]): number {
   return ende;
 }
 
-type Zeile = { text: string; oben: number; unten: number; groesse: number };
+export type Zeile = { text: string; oben: number; unten: number; groesse: number; teile: TextItem[] };
 
 /**
- * Stuecke einer Zeile verbinden. Zierschriften liefern ein Wort in Stuecken
- * ("b" "ombenk" "R" "ieg", Doppelband 137); stossen sie ohne Luecke
- * aneinander, ist es ein Wort.
+ * Stuecke einer Zeile verbinden, von links nach rechts. Zierschriften liefern
+ * ein Wort in Stuecken ("b" "ombenk" "R" "ieg", Doppelband 137); stossen sie
+ * ohne Luecke aneinander, ist es ein Wort.
  */
-function zeilen(items: TextItem[]): Zeile[] {
+export function stueckeVerbinden(teile: TextItem[]): string {
+  let text = "";
+  let rechts = -1;
+  for (const t of [...teile].sort((a, b) => a[1] - b[1])) {
+    const luecke = t[1] - rechts;
+    const dicht = rechts >= 0 && luecke < (t[4] - t[2]) * 0.15;
+    text += (text && !dicht ? " " : "") + t[0].trim();
+    rechts = t[3];
+  }
+  return text;
+}
+
+/** Die Zeilen einer Seite: Stuecke auf gleicher Hoehe, von oben nach unten. */
+export function textZeilen(items: TextItem[]): Zeile[] {
   const sortiert = [...items].sort((a, b) => a[2] - b[2] || a[1] - b[1]);
   const out: { teile: TextItem[]; oben: number; unten: number }[] = [];
   for (const i of sortiert) {
@@ -104,17 +117,16 @@ function zeilen(items: TextItem[]): Zeile[] {
   }
   return out.map((z) => {
     const teile = z.teile.sort((a, b) => a[1] - b[1]);
-    let text = "";
-    let rechts = -1;
-    for (const t of teile) {
-      const luecke = t[1] - rechts;
-      const dicht = rechts >= 0 && luecke < (t[4] - t[2]) * 0.15;
-      text += (text && !dicht ? " " : "") + t[0].trim();
-      rechts = t[3];
-    }
-    return { text, oben: z.oben, unten: z.unten, groesse: Math.max(...teile.map((t) => t[5])) };
+    return {
+      text: stueckeVerbinden(teile),
+      oben: z.oben,
+      unten: z.unten,
+      groesse: Math.max(...teile.map((t) => t[5])),
+      teile,
+    };
   });
 }
+const zeilen = textZeilen;
 
 /** Zeilen verbinden; ein Trennstrich am Zeilenende verbindet ohne Luecke. */
 function zeilenVerbinden(zeilen: string[]): string {
@@ -254,6 +266,66 @@ export function schreibungAusSatz(titel: string, satzTexte: string[]): string | 
     }
   }
   return ersatz;
+}
+
+/** Ein Wort als Suchmuster: SS darf ß sein, eine Null zwischen Buchstaben ein O. */
+function wortMuster(w: string): string {
+  return w
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/ss/gi, "(?:ss|ß)")
+    .replace(/(?<=\p{L})0|0(?=\p{L})/gu, "[0o]");
+}
+
+/**
+ * Steht jedes Wort des Titels irgendwo im Satz? Dann ist er gelesen, nicht
+ * geraten, auch wenn der Satz ihn nicht in dieser Folge fuehrt
+ * ("Sanitäter Franz Schmitz" auf dem Umschlag, im Satz "Sanitäter" und
+ * "Franz Schmitz" getrennt). Zierschrift-Reste ("ombenk") stehen nirgends.
+ */
+export function woerterImSatz(titel: string, satzTexte: string[]): boolean {
+  const woerter = titel.match(/[\p{L}\p{N}]+/gu) ?? [];
+  if (!woerter.length) return false;
+  const text = satzTexte.join("\n");
+  return woerter.every((w) =>
+    new RegExp(`(?<![\\p{L}\\p{N}])${wortMuster(w)}(?![\\p{L}\\p{N}])`, "iu").test(text),
+  );
+}
+
+/**
+ * Schreibung Wort fuer Wort: je Wort die haeufigste Form im Satz, das erste
+ * gross. Fuer Titel, die der Satz nicht in dieser Folge fuehrt; besser als
+ * `ausVersalien`, das jedes Hauptwort nur raten kann. Ohne jedes Wort im
+ * Satz: null.
+ */
+export function schreibungJeWort(titel: string, satzTexte: string[]): string | null {
+  const text = satzTexte.join("\n");
+  let gefunden = 0;
+  const teile = titel.trim().split(/([\p{L}\p{N}]+)/u);
+  for (let i = 1; i < teile.length; i += 2) {
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${wortMuster(teile[i])}(?![\\p{L}\\p{N}])`, "giu");
+    // Formen mitten im Satz zaehlen; gross am Satzanfang sagt nichts.
+    const mitten = new Map<string, number>();
+    const anfang = new Map<string, number>();
+    for (const m of text.matchAll(re)) {
+      if (m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase()) continue; // Versalien zaehlen nicht
+      const davor = text.slice(Math.max(0, m.index! - 3), m.index!);
+      const satzanfang = m.index === 0 || /(^|[.!?:„"»«\n])\s*$/.test(davor);
+      const ziel = satzanfang ? anfang : mitten;
+      ziel.set(m[0], (ziel.get(m[0]) ?? 0) + 1);
+    }
+    // Die haeufigste Form mitten im Satz ("zurück" klein, "Ernst" als Name
+    // gross, auch wenn "ernst" einmal klein steht); sonst die am Satzanfang.
+    const formen = mitten.size ? mitten : anfang;
+    const beste = [...formen.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (beste) {
+      teile[i] = beste;
+      gefunden++;
+    } else {
+      teile[i] = ausVersalien(teile[i]);
+    }
+  }
+  if (!gefunden) return null;
+  return teile.join("").replace(/^(\P{L}*)(\p{Ll})/u, (_, vor, c) => vor + c.toLocaleUpperCase("de-DE"));
 }
 
 /** Kleine Woerter, die im Titel klein bleiben (ausser am Anfang). */
