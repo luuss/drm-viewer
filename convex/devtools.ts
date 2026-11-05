@@ -504,6 +504,62 @@ export const erscheinungSetzenInternal = internalMutation({
   },
 });
 
+/**
+ * Preise aus dem Laden setzen (Weltkrieg: E-Book-Preis von weltkrieg-online.de,
+ * `tools/weltkrieg/ebook_preise.py`). Quelle "laden"; ein von der Redaktion
+ * gesetzter Preis bleibt. Wie `issues.update`: ein geaenderter Betrag macht
+ * den Stripe-Preis ungueltig. `probelauf` zaehlt nur.
+ */
+export const preiseSetzenInternal = internalMutation({
+  args: {
+    eintraege: v.array(v.object({ issueId: v.id("issues"), priceAmountCents: v.number() })),
+    probelauf: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    gesetzt: v.number(),
+    gleich: v.number(),
+    redaktion: v.number(),
+    fehlt: v.number(),
+  }),
+  handler: async (ctx, { eintraege, probelauf }) => {
+    let gesetzt = 0;
+    let gleich = 0;
+    let redaktion = 0;
+    let fehlt = 0;
+    for (const e of eintraege) {
+      if (!Number.isInteger(e.priceAmountCents) || e.priceAmountCents <= 0) {
+        throw new Error(`Preis ungueltig: ${e.priceAmountCents}`);
+      }
+      const issue = await ctx.db.get(e.issueId);
+      if (!issue) {
+        fehlt++;
+        continue;
+      }
+      if (issue.priceSource === "redaktion") {
+        redaktion++;
+        continue;
+      }
+      if (issue.priceAmountCents === e.priceAmountCents && issue.priceSource === "laden") {
+        gleich++;
+        continue;
+      }
+      if (!probelauf) {
+        await ctx.db.patch(e.issueId, {
+          priceAmountCents: e.priceAmountCents,
+          priceSource: "laden",
+          updatedAt: Date.now(),
+          ...(issue.priceAmountCents !== e.priceAmountCents ? { stripePriceId: undefined } : {}),
+        });
+      }
+      gesetzt++;
+    }
+    if (!probelauf && gesetzt) {
+      await audit(ctx, "issue.preiseSetzen", "issues", `${gesetzt} Preise aus dem Laden (Kommandozeile)`);
+    }
+    return { gesetzt, gleich, redaktion, fehlt };
+  },
+});
+
 export const removeArticleImagesInternal = internalMutation({
   args: {
     issueId: v.id("issues"),
