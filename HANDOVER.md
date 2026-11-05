@@ -406,8 +406,15 @@ aus Abschnitt 1e bleibt dabei ganz.
 * Cloudflare setzt fuer Browser auf `sw.js` `max-age=14400` (Zone-Einstellung
   Browser Cache TTL), nginx sendet `no-cache`. Unkritisch: die Registrierung
   laeuft mit `updateViaCache: "none"`, die Kante prueft jedes Mal nach.
-* Nur auf digital.lesenundschenken.de ausgerollt; digital.weltkrieg-online.de
-  (gleicher Code, `docs/weltkrieg-digital.md`) hat es noch nicht.
+* **digital.weltkrieg-online.de** hat denselben Puffer (seit dem Rollout von
+  `3a73c4e` mit drin; Convex dort liefert `stand`, Gateway mit `puffer_spur`,
+  `sw.js` ohne Cloudflare mit `no-cache`). Live geprueft am 05.11.2026
+  (`_scratch/offline-puffer/pruefen-wk.mjs`, Wegwerfkonto, Heft "Von Insel zu
+  Insel", 68 Seiten): in 58 s gepuffert, 456 Abrufe, 22,7 MB, nichts lesbar,
+  Schluessel nicht exportierbar. Ohne Netz: Seitenansicht blaettert, die
+  Leseansicht (ein durchgehender Text, 134 000 Zeichen) liest weiter und der
+  Seitenregler folgt. Neustart ohne Server: Reader nach 7 s, Leseansicht am
+  Lesestand (Seite 16), Seitenansicht aus dem Paket. Abmelden: Paket leer.
 
 ## 1c. Adresswechsel auf digital.lesenundschenken.de (19.10.2026)
 

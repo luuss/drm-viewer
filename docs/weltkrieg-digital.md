@@ -211,3 +211,12 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
 * Admin-Bereiche sprechen noch vom „Netzladen“ mit PrestaShop-Funktionen
   (Druckheft suchen, E-Paper anbieten); die antworten hier 501.
 * Sicherung von `files/` gibt es wie beim ersten Leser noch nicht.
+
+## Lesen ohne Netz (seit 05.11.2026 geprueft)
+
+Wie bei digital.lesenundschenken.de puffert der Leser das offene Heft
+verschluesselt im Browser (HANDOVER Abschnitt 1g, `web/src/reader/puffer.ts`).
+In der Leseansicht gilt dabei der Lesestand je Seite: wer ohne Netz neu
+startet, steht an der zuletzt gelesenen Stelle im durchgehenden Text. Ein
+Heft mit 68 Seiten sind gut 20 MB. Pruefen: `node _scratch/offline-puffer/pruefen-wk.mjs <ordner> [heftId]`
+(Wegwerfkonto, veroeffentlicht nichts, loescht das Konto am Ende).
