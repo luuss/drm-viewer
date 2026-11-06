@@ -1397,6 +1397,23 @@ Skripts.
   `devtools:recentJobsInternal` ansehen; abgebrochenen Auftrag mit
   `devtools:requeueJob '{"jobId":"…"}'` neu starten.
 
+## 4q. ZUERST! digital 8,00 statt 8,70 (06.11.2026)
+
+Einzelheft digital kostet bei ZUERST! jetzt 8,00 € (Druck bleibt 8,70 €).
+Live geaendert, kein Deploy: die zehn Hefte 1/2026 bis 11/2026 per
+`issues:update` (Testkonto import-test@) auf `priceAmountCents: 800`, damit
+`priceSource: "redaktion"` (der Laden-Abgleich ueberschreibt das nicht).
+Danach `shopCatalog:offer` fuer 3/2026: Kombination 664
+(`ZUERST-3-2026-DIGITAL`) im Shop jetzt 8,00 € (Preiswirkung −0,654205 netto).
+Die Hefte von 2025 bleiben bei 7,95 €. Skript und Sicherung:
+`_scratch/zuerst-digital-8eur/` (`preise_setzen.sh 870` ist der Rueckweg,
+danach `shopCatalog:offer` fuer 3/2026).
+
+**Falle:** ein neues ZUERST!-Heft holt beim Abgleich wieder den Druckpreis
+8,70 €. Bis es einen Digitalpreis je Publikation gibt (drm-viewer-4gp): den
+Preis beim neuen Heft in der Redaktion auf 8,00 setzen, **bevor** „Im Shop als
+E-Paper anbieten“ gedrueckt wird.
+
 ## 5. Was in dieser Sitzung gebaut wurde
 
 * **Eine Story ist ein Artikel.** Der Satz wird direkt gelesen statt über
