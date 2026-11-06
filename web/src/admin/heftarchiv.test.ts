@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { heftKennung, hefteImArchiv } from "./heftarchiv";
+import { heftKennung, hefteImArchiv, reiheAusArchivpfad } from "./heftarchiv";
 
 const f = (path: string) => ({ path, name: path.split("/").pop()!, size: 1, file: new Blob() as File });
 
@@ -44,5 +44,24 @@ describe("hefteImArchiv", () => {
       "121d innenteil, durchbruch/121d durchbruch 2026.pdf",
       "121d umschlag, durchbruch/121d umschlag 2026.pdf",
     ]);
+  });
+});
+
+describe("Reihe aus dem Archivordner (05.11.2026)", () => {
+  it("liest die Reihe aus dem Reihenordner", () => {
+    expect(reiheAusArchivpfad("weltkrieg/Großbände/141-150g/147g Stoßtrupp Wimmer in Frankreich 1940")).toBe(
+      "Weltkrieg Großband",
+    );
+    expect(reiheAusArchivpfad("weltkrieg/Doppelbände/141-150/147d Die 45. ID Moskau 1941, Ausbruch aus Oserki-Jelez")).toBe(
+      "Weltkrieg Doppelband",
+    );
+    expect(reiheAusArchivpfad("weltkrieg/Freikorps/   Heft 21-30/25 Fk Sturmkompanie Ehrhardt von Killinger ")).toBe("Freikorps");
+    expect(reiheAusArchivpfad("weltkrieg/Normalhefte/321-330/327n Sprung ins Ungewisse")).toBe("Weltkrieg Originalband");
+  });
+  it("nennt keine Reihe ohne Reihenordner", () => {
+    expect(reiheAusArchivpfad("weltkrieg/       FÜR E-BOOKS/     E-Books zum Veröffentlichen/45legion im fadenkreuz")).toBeNull();
+    expect(reiheAusArchivpfad(undefined)).toBeNull();
+    // Ein Heftordner, der zufaellig wie eine Reihe klingt, ist kein Reihenordner.
+    expect(reiheAusArchivpfad("147g Doppelschuß Rot")).toBeNull();
   });
 });

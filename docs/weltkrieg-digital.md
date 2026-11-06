@@ -188,13 +188,118 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
   als „Weltkrieg 1“ ins selbe Heft. Freikorps und Blitzkrieg haben den
   Schriftzug als Bild; erkannt an „Erlebte Geschichte / Freiwillige
   Wehrverbände“ bzw. „Second World War in Fight“ (`umschlag` in `reihen.ts`).
-* **Titel:** grösste Schrift unter dem Kopf, doppelte Konturzeilen einmal,
-  Trennstrich am Zeilenende zusammen; Schreibung von der Titelseite des
-  Innenteils (`anfangsText`), sonst Satz, sonst `ausVersalien`.
+  **Gesucht wird zuerst in der Zeile ganz oben** („erlebnisberichte –
+  Grossband“), erst dann im Kopf und auf der Seite. Bis 05.11. im ganzen Kopf:
+  „DOPPELSCHUSS ROT“ (Großband 147) wurde Doppelband und überschrieb das echte
+  Doppelband 147, „Sturmsoldaten“ machte Freikorps 25 zu Soldaten 25.
+* **Titel** (`heftTitel.ts`, seit 05.11.2026): erste Quelle ist der
+  **Kolumnentitel** (oberste Zeile der Innenseiten ohne Seitenzahl und
+  Schriftzug, 20–60× je Heft, in Satzschrift). Die Titelseite ist die
+  Gegenprobe (`umschlagTitel.ts`: Kopf je Seite gemessen, Zierschrift-Stücke
+  verbunden, Schreibung Wort für Wort aus dem Satz). Einig → Titel. Uneinig →
+  gedruckter Titel bleibt, wenn alle seine Wörter im Heft stehen, sonst der
+  Kolumnentitel; in beiden Fällen Vermerk **„Titel prüfen“** (`issues.titelPruefen`)
+  mit beiden Vorschlägen, im Admin als Kasten an den Angaben und als Filter
+  in der Heftliste. Übernimmt die Redaktion einen Titel (oder „stimmt so“),
+  entfällt der Vermerk und der Text des Hefts folgt. **Sammelheft** (Magazin):
+  mindestens 4 verschiedene Köpfe je ≥3× (gemessen: Magazin 5–14, sonst ≤3) →
+  Aufmacher der Titelseite, ohne Titel „Magazin Nr. 7“.
+  Messung 05.11. an 436 Heften: 374 einig, 35 Magazin mit Aufmacher,
+  9 „Magazin Nr.“, 18 Vermerke (Lang-/Kurzform, Dienstgrad, „in/für Berlin“).
+* **Reihe** zusätzlich aus dem **Archivordner** (`reiheAusArchivpfad`:
+  Doppelbände, Großbände, Normalhefte …); nennt die Titelseite etwas anderes,
+  hält der Import an. Der E-Book-Ordner nennt keine Reihe.
+* **Berichtigung 05.11.2026:** 112 Titel (fehlende Zeilen, Zierschrift-Reste,
+  falsche Gross-/Kleinschreibung, Trennstriche) mit
+  `devtools:titelBerichtigenInternal` (Titel, Text, Adresse; alte Adresse in
+  `alteSlugs` führt weiter; je Aufruf höchstens ~15 Hefte, sonst
+  Lesegrenze 16 MB). Großband 147 und Freikorps 25 mit
+  `devtools:issueInReiheInternal` in ihre Reihe. **Offen:** Doppelband 147
+  „Ausbruch aus Oserki“ neu importieren (Ordner
+  `Doppelbände/141-150/147d …`, einzeln, die Massenliste hält ihn für fertig);
+  Magazin 1–10 haben keinen Titel auf dem Umschlag („Weltkrieg 7“).
+* **Prüfen nach jedem Import:** `tools/weltkrieg/titel_pruefen.sh
+  [--archiv liste.json] [--anwenden]` prüft alle Hefte mit den Regeln des
+  Imports (Textebenen vom Server, lokal gebündelt) und meldet sichere
+  Berichtigungen, Vermerke, Reihen-Widersprüche und mit der Archivliste
+  fehlende Hefte. `--anwenden` schreibt Berichtigungen (nur wo beide Quellen
+  einig sind oder die Heftnummer gilt) und Vermerke; ein Titel mit Vermerk
+  bleibt. Lauf 05.11.: 12 Archivhefte fehlen in der Anlage (Freikorps 17,
+  Flieger 43/106/109, Marine 77/84, Magazin 77, Doppelband 147/158,
+  Großband 149/154, Originalband 256), einzeln neu importieren.
 * Die 24 Testhefte vom 03.11. sind gelöscht (Liste `_scratch/wk-struktur/issues-vor-loeschen.json`),
   falsche Reihen „159d …“, „160d …“, „Weltkrieg“, „B“ abgeschaltet.
 * Convex der Anlage von der Kommandozeile: `/root/wkrun [--identity JSON] fn JSON`
   auf dem Server, lokal `_scratch/wk-struktur/wkrun.sh`.
+
+## Inhaltsverzeichnis: nur beim Magazin (05.11.2026)
+
+Anweisung: im Leser immer ausblenden, außer bei den Magazin-Heften; dort soll
+es wie bei digital.lesenundschenken.de funktionieren.
+
+* **Befund** (alle 436 Hefte): jedes Heft hatte genau einen Eintrag, seinen
+  Titel (der Import legt ohne erkanntes Verzeichnis je Artikel einen an, und
+  im Buch-Modus gibt es nur einen). Nur das **WELTKRIEG-Magazin** druckt ein
+  Verzeichnis: Seite „Inhaltsverzeichnis“ hinten im Heft (Leserseite 95–97),
+  je Beitrag „Titel . . . Seite“, darüber Rubriken („Erlebnisbericht:“).
+  Die Erzählhefte drucken keins; ihre großen Zeilen (Kapitelzeilen, Karten,
+  Bildzeilen, Kolumnentitel „WELTKRIEG“) taugen nicht als Verzeichnis.
+* **Import:** `extract-service/extractor/buch_verzeichnis.py` liest die
+  gedruckte Seite aus der Textebene (Beleg: Stück „Inhalt“/„Inhaltsverzeichnis“
+  + mindestens 3 Zeilen mit Seitenzahl am Rand). Ziel über `printedLabel`.
+  Im Buch-Modus ersetzt es das Titel-Verzeichnis, die Zeilen der gedruckten
+  Seite werden Klickflächen, und die Seite selbst ist kein Lesetext mehr
+  (nur bei neuem Import). Über alle 436 Hefte gelaufen: greift in allen 44
+  Magazin-Heften (712 Einträge), in keinem anderen. Tests:
+  `extract-service/tests/test_buch_verzeichnis.py` (echte Seiten, auch die
+  sechs Beinahe-Treffer aus Erzählheften).
+* **Vorhandene Hefte:** Auftrag `toc` (`imports:enqueueInternal {issueId,
+  kind:"toc"}`) liest im Buch-Modus nur das Verzeichnis neu und schickt
+  `ersetzen: true` an `/service/jobs/toc-regions`; Text, Freigaben und
+  Lesestände bleiben. Ohne gedrucktes Verzeichnis ändert er nichts.
+* **Leser:** `verzeichnisZeigen` (web/src/reader): bei `IST_WELTKRIEG` Knopf
+  und Leiste „Inhalt“ nur mit mindestens 2 Einträgen. Einträge führen dort
+  immer über die Seite (`nachSeite` in `TocDrawer`), in der Leseansicht an die
+  Stelle im Text wie der Regler (`seiteImText`); hervorgehoben ist der Eintrag
+  der aufgeschlagenen Seite.
+* Die Textebene verliert manche Bindestriche („Lockheed Martin F 35“,
+  „Flugabwehrrakete IRIS T“); sie werden nicht dazuerfunden.
+* **Nachgezogen am 05.11.2026:** `toc`-Auftrag für alle 44 Magazin-Hefte, 43
+  mit allen Klickflächen. **Magazin 101** („Parole Grosser Zapfen-Streich“):
+  der Lesetext reicht nur von Leserseite 2 bis 5 (alter Importfehler), daher
+  hängen die 15 Einträge an keinem Text und haben keine Klickflächen; in der
+  Seitenansicht führen sie zur Seite. Neu importieren und den Text prüfen.
+* Die gedruckte Verzeichnisseite steht bei den 44 vorhandenen Heften noch im
+  Lesetext (Punktleisten am Ende der Leseansicht); erst ein neuer Import
+  (`full`) nimmt sie heraus.
+* Geprüft live (Wegwerfkonto mit Rolle editor, danach gelöscht): Erzählheft
+  ohne Knopf und Leiste (Desktop, Handy); Magazin 83 mit 16 Einträgen,
+  Sprung in Seiten- und Leseansicht, Hervorhebung, Handy-Schublade.
+
+## Kiosk und Erscheinungsdatum (05.11.2026)
+
+* **Kiosk** (`web/src/library/KioskWeltkrieg.tsx`, nur bei `IST_WELTKRIEG`):
+  die Hefte stehen gleich im Kiosk, nicht hinter Reihen-Kacheln. Umschalter
+  oben rechts, Wahl in der Adresse (`?ansicht=`):
+  * Kategorien (Standard): je Reihe eine Kachel, drei je Zeile, mit Schriftzug,
+    neuestem Heft groß und vier weiteren daneben, Fuß „Zur Zeitschrift“.
+  * Alle: jedes Heft in fünf Spalten, nach Erscheinungsdatum, Hefte ohne Datum hinten.
+  * Neueste: das neueste Heft jeder Reihe.
+  In einer Reihe gilt immer die Heftnummer (höchste = neueste). Keine
+  Überschrift, nur Marke „Kiosk“ und Umschalter (Anweisung). Es erscheinen
+  nur veröffentlichte Hefte (Anweisung: keine Vorschau für die Redaktion).
+* **Erscheinungsdatum:** `tools/weltkrieg/erscheinung_aus_archiv.py <liste.json> <aus.json>`
+  nimmt je Heft das früheste Dateidatum seiner Innenteil-PDFs in der
+  Ordnerliste des Archivs (`emag-media/struktur/…-weltkrieg.json`), nur wo es
+  zur Nummernfolge der Reihe passt. Gesetzt mit `devtools:erscheinungSetzenInternal`
+  (nur Hefte ohne Datum, `probelauf`). Stand: 402 von 436 Hefte. Ohne Datum:
+  29 frühe Hefte, die nur als neu exportierte E-Book-Fassung (Dateidatum 2026)
+  im Archiv liegen (Originalband 2–14, Doppelband 2–8, Großband 1–5, Flieger
+  2–8, Marine 1–4), und 5 ohne Innenteil-PDF (Soldaten 25, 56, Freikorps 1–3).
+  Das Datum ist das der Herstellung, nicht des Kiosks; die Heftseite zeigt es
+  als Monat und Jahr.
+* Neu importierte Hefte bekommen kein Datum aus dem Archiv; im Kiosk stehen sie
+  in ihrer Reihe nach Nummer, in „Alle“ hinten, bis das Werkzeug erneut läuft.
 
 ## Offen
 
@@ -211,3 +316,12 @@ angemeldet, „Mein Konto“ und „Abmelden“ sichtbar. Testkonto danach mit
 * Admin-Bereiche sprechen noch vom „Netzladen“ mit PrestaShop-Funktionen
   (Druckheft suchen, E-Paper anbieten); die antworten hier 501.
 * Sicherung von `files/` gibt es wie beim ersten Leser noch nicht.
+
+## Lesen ohne Netz (seit 05.11.2026 geprueft)
+
+Wie bei digital.lesenundschenken.de puffert der Leser das offene Heft
+verschluesselt im Browser (HANDOVER Abschnitt 1g, `web/src/reader/puffer.ts`).
+In der Leseansicht gilt dabei der Lesestand je Seite: wer ohne Netz neu
+startet, steht an der zuletzt gelesenen Stelle im durchgehenden Text. Ein
+Heft mit 68 Seiten sind gut 20 MB. Pruefen: `node _scratch/offline-puffer/pruefen-wk.mjs <ordner> [heftId]`
+(Wegwerfkonto, veroeffentlicht nichts, loescht das Konto am Ende).

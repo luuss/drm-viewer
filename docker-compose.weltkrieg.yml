@@ -159,6 +159,9 @@ services:
       SHOP_API_URL: ${SHOP_API_URL:-}
       # Heft-Mails kann das WordPress-Plugin noch nicht: aus.
       HEFT_ANKUENDIGUNG: ${HEFT_ANKUENDIGUNG:-aus}
+      # Laden: WooCommerce auf weltkrieg-online.de (convex/laden.ts).
+      LADEN: woocommerce
+      SHOP_BASIS_URL: https://weltkrieg-online.de
     restart: "no"
     logging: *default-logging
 

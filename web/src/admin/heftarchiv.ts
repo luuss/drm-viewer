@@ -170,3 +170,31 @@ export function fertigVergessen(): void {
     // egal
   }
 }
+
+/**
+ * Die Reihenordner des Heftarchivs ("weltkrieg/Großbände/141-150g/147g …").
+ * Zweite, unabhaengige Quelle fuer die Reihe neben der Titelseite: am
+ * 03.11.2026 las der Import "DOPPELSCHUSS ROT" als Doppelband, obwohl das Heft
+ * unter Großbände lag, und ueberschrieb damit Doppelband 147. Der E-Book-Ordner
+ * ("FÜR E-BOOKS") nennt keine Reihe.
+ */
+const ARCHIV_REIHEN: Record<string, string> = {
+  "doppelbände": "Weltkrieg Doppelband",
+  "großbände": "Weltkrieg Großband",
+  "normalhefte": "Weltkrieg Originalband",
+  "fliegerhefte": "Weltkrieg Flieger",
+  "marinehefte": "Weltkrieg Marine",
+  "magazinhefte": "Weltkrieg Magazin",
+  "soldaten-reihe": "Weltkrieg Soldaten",
+  "fremdenlegion": "Legion",
+  "freikorps": "Freikorps",
+};
+
+/** Reihe nach dem Archivordner, oder null (E-Book-Ordner, einzeln gezogener Heftordner). */
+export function reiheAusArchivpfad(pfad: string | null | undefined): string | null {
+  for (const teil of (pfad ?? "").normalize("NFC").split("/")) {
+    const reihe = ARCHIV_REIHEN[teil.trim().toLocaleLowerCase("de-DE")];
+    if (reihe) return reihe;
+  }
+  return null;
+}

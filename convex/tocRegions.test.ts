@@ -222,3 +222,152 @@ describe("Klickflaechen des Inhaltsverzeichnisses", () => {
     expect(job.status).toBe("queued");
   });
 });
+
+/**
+ * Ein Heft im Buch-Modus (Weltkrieg-Leser): ein Text von Seite 2 bis 95, das
+ * Verzeichnis kennt nur seinen Titel. Das gedruckte Verzeichnis steht auf 95.
+ */
+async function buchHeft(t: any) {
+  return await t.run(async (ctx: any) => {
+    const now = Date.now();
+    const publicationId = await ctx.db.insert("publications", {
+      name: "Weltkrieg Magazin",
+      slug: "weltkrieg-magazin",
+      isActive: true,
+      createdAt: now,
+    });
+    const issueId = await ctx.db.insert("issues", {
+      publicationId,
+      title: "Nicht das Ende!",
+      slug: `wk-${Math.random().toString(36).slice(2)}`,
+      pageCount: 100,
+      priceAmountCents: 0,
+      isPublished: false,
+      includedInSubscription: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const text = await ctx.db.insert("articles", {
+      issueId,
+      order: 1,
+      title: "Nicht das Ende!",
+      source: "pdf",
+      reviewStatus: "approved",
+      primaryPageIndex: 2,
+      pageStart: 2,
+      pageEnd: 95,
+      searchText: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("tocEntries", {
+      issueId,
+      order: 1,
+      label: "Nicht das Ende!",
+      pageIndex: 2,
+      articleId: text,
+      level: 1,
+    });
+    const jobId = await ctx.db.insert("importJobs", {
+      issueId,
+      kind: "toc",
+      status: "running",
+      attempts: 1,
+      workerId: "w1",
+      createdAt: now,
+    });
+    return { issueId, jobId, text };
+  });
+}
+
+describe("Verzeichnis im Buch-Modus ersetzen", () => {
+  const eintraege = [
+    { label: "Major Wolfgang Wahl", pageIndex: 2, section: "Soldatenbiographie" },
+    { label: "Tscherkassy 1944", pageIndex: 18 },
+    { label: "Halten, nichts als halten!", pageIndex: 24, section: "Erlebnisbericht" },
+  ];
+
+  test("der Titel-Eintrag weicht den gedruckten Eintraegen, alle am einen Text", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, jobId, text } = await buchHeft(t);
+    const result = await t.mutation(internal.imports.activateTocRegionsInternal, {
+      jobId,
+      workerId: "w1",
+      issueId,
+      regions: eintraege.map((e, i) => ({
+        pageIndex: 95,
+        x0: 0.1,
+        y0: 0.26 + i * 0.03,
+        x1: 0.9,
+        y1: 0.28 + i * 0.03,
+        targetPageIndex: e.pageIndex,
+        label: e.label,
+      })),
+      entries: eintraege,
+      ersetzen: true,
+    });
+    expect(result).toEqual({ regions: 3, skipped: 0, entries: 3 });
+    const toc = await t.run(async (ctx: any) =>
+      (await ctx.db
+        .query("tocEntries")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect()).sort((a: any, b: any) => a.order - b.order),
+    );
+    expect(toc.map((e: any) => [e.order, e.label, e.pageIndex, e.section ?? null])).toEqual([
+      [1, "Major Wolfgang Wahl", 2, "Soldatenbiographie"],
+      [2, "Tscherkassy 1944", 18, null],
+      [3, "Halten, nichts als halten!", 24, "Erlebnisbericht"],
+    ]);
+    expect(new Set(toc.map((e: any) => e.articleId))).toEqual(new Set([text]));
+    const regions = await t.run(async (ctx: any) =>
+      await ctx.db
+        .query("articleRegions")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect(),
+    );
+    expect(regions.map((r: any) => [r.pageIndex, r.targetPageIndex, r.articleId])).toEqual([
+      [95, 2, text],
+      [95, 18, text],
+      [95, 24, text],
+    ]);
+  });
+
+  test("ohne Eintraege bleibt das Verzeichnis, wie es ist", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, jobId } = await buchHeft(t);
+    await t.mutation(internal.imports.activateTocRegionsInternal, {
+      jobId,
+      workerId: "w1",
+      issueId,
+      regions: [],
+      entries: [],
+      ersetzen: true,
+    });
+    const toc = await t.run(async (ctx: any) =>
+      await ctx.db
+        .query("tocEntries")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect(),
+    );
+    expect(toc.map((e: any) => e.label)).toEqual(["Nicht das Ende!"]);
+  });
+
+  test("ohne ersetzen kommen die Eintraege zum Titel dazu (Zeitschriften)", async () => {
+    const t = convexTest(schema, modules);
+    const { issueId, jobId } = await buchHeft(t);
+    await t.mutation(internal.imports.activateTocRegionsInternal, {
+      jobId,
+      workerId: "w1",
+      issueId,
+      regions: [],
+      entries: eintraege,
+    });
+    const toc = await t.run(async (ctx: any) =>
+      await ctx.db
+        .query("tocEntries")
+        .withIndex("by_issue", (q: any) => q.eq("issueId", issueId))
+        .collect(),
+    );
+    expect(toc).toHaveLength(4);
+  });
+});

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { createPortal } from "react-dom";
 import OpenSeadragon from "openseadragon";
 import Icon from "../components/Icon";
+import { OSD_ZEICHNER } from "../lib/osdZeichner";
 
 /** `titel`: das Titelbild gibt das Format des Rahmens vor. */
 export type GalerieBild = { url: string; alt: string; titel?: boolean };
@@ -119,6 +120,7 @@ function BildLupe({
     if (!hostRef.current) return;
     const viewer = OpenSeadragon({
       element: hostRef.current,
+      drawer: OSD_ZEICHNER,
       showNavigationControl: false,
       keyboardNavEnabled: false,
       gestureSettingsMouse: { clickToZoom: true, dblClickToZoom: false, scrollToZoom: true },

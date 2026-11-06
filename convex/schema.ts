@@ -136,6 +136,13 @@ export default defineSchema(
     // Fruehere Adressen nach einer Berichtigung (issues.slugErneuernInternal);
     // sie fuehren weiter zum Heft.
     alteSlugs: v.optional(v.array(v.string())),
+    // Weltkrieg-Import (web/src/admin/heftTitel.ts): Titelseite und
+    // Kolumnentitel widersprechen sich, oder nur eine Quelle kennt den Titel.
+    // Die Redaktion entscheidet; mit der Entscheidung (issues.update) entfaellt
+    // der Vermerk.
+    titelPruefen: v.optional(
+      v.object({ umschlag: v.optional(v.string()), kolumne: v.optional(v.string()), grund: v.string() }),
+    ),
     // "3/2026", Doppelheft "8-9/2025", laufend "170" (convex/heftnummer.ts).
     issueNumber: v.optional(v.string()),
     publicationDate: v.optional(v.number()),
@@ -268,6 +275,11 @@ export default defineSchema(
     height: v.number(),
     tileManifestKey: v.optional(v.string()),
     previewKey: v.optional(v.string()),
+    // Das Seitenbild kam mit Anschnitt und Schnittmarken und wurde auf das
+    // Netzformat zugeschnitten (extract-service/extractor/schnittmarken.py):
+    // der Ausschnitt als Anteile des alten Bildes. Alle Koordinaten der
+    // Seite sind schon umgerechnet (issuePages.beschnittUebernehmenInternal).
+    beschnitt: v.optional(v.object(regionBox)),
   })
     .index("by_issue", ["issueId"])
     .index("by_issue_index", ["issueId", "index"]),
@@ -686,6 +698,9 @@ export default defineSchema(
       // Nur die Klickflaechen des gedruckten Inhaltsverzeichnisses neu legen.
       v.literal("toc"),
       v.literal("nachtrag"),
+      // Nur Schnittmarken entfernen: Seitenbilder zuschneiden, Koordinaten
+      // umrechnen (issuePages.beschnittUebernehmenInternal).
+      v.literal("beschnitt"),
     ),
     status: v.union(
       v.literal("queued"),

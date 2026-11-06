@@ -22,6 +22,7 @@ import {
   type TextPage,
 } from "./textLayer";
 import { tafelnNachInhalt, umschlagTafeln, type Netz, type Tafel } from "./coverPages";
+import { netzformatPruefen, type Netzformat } from "./netzformat";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -94,6 +95,19 @@ export function anschnitt(
     breite,
     hoehe,
   };
+}
+
+/**
+ * Netzformat eines Druck-PDF ohne Satzdatei: die TrimBox, wenn sie zur ersten
+ * Seite passt (`netzformatPruefen`). Sonst undefined.
+ */
+export async function netzformatAusPdf(pdf: OffenesPdf): Promise<Netzformat | undefined> {
+  const trim = await trimBoxAusPdf(pdf.datei);
+  if (!trim) return undefined;
+  const page = await pdf.doc.getPage(1);
+  const roh = page.getViewport({ scale: 1 });
+  page.cleanup();
+  return netzformatPruefen(roh.width, roh.height, trim);
 }
 
 /**

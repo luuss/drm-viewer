@@ -11,6 +11,7 @@ import { requireEditor, requireAdmin, requirePublisher, audit } from "./roles";
 import { accessibleIssueIds, hasIssueAccess } from "./access";
 import { assetUrl } from "./assets";
 import { slugify } from "./publications";
+import { sucheVormerken } from "./suche";
 import { reihenDesAbos, syncSubscription } from "./subscriptions";
 import { subscriptionIsActive } from "./access";
 import { Id } from "./_generated/dataModel";
@@ -336,6 +337,7 @@ export const overviewForEditors = query({
           publicationName: names.get(pubKey) ?? null,
           title: i.title,
           displayTitle: i.shopTitle ?? i.title,
+          titelPruefen: !!i.titelPruefen,
           issueNumber: i.issueNumber ?? null,
           pageCount: i.pageCount,
           priceAmountCents: i.priceAmountCents,
@@ -415,6 +417,7 @@ export const getForEditor = query({
       shopDesignation: i.shopDesignation ?? null,
       shopSubtitle: i.shopSubtitle ?? null,
       shopSyncedAt: i.shopSyncedAt ?? null,
+      titelPruefen: i.titelPruefen ?? null,
       stripePriceId: i.stripePriceId ?? null,
       coverUrl: await assetUrl(ctx, i.coverAssetId),
       pageCount: pages.length || i.pageCount,
@@ -623,7 +626,7 @@ export function heftSlugBasis(title: string, issueNumber?: string): string {
   return t ? `${t}-${n}` : n;
 }
 
-async function freierSlug(
+export async function freierSlug(
   ctx: MutationCtx,
   base: string,
   eigenes?: Id<"issues">,
@@ -682,8 +685,10 @@ export const update = mutation({
     coverAssetId: v.optional(v.id("assets")),
     // Den Preis wieder dem Laden ueberlassen: der naechste Abgleich setzt ihn.
     priceAuto: v.optional(v.boolean()),
+    // "Titel stimmt so": Vermerk titelPruefen ohne neuen Titel aufheben.
+    titelGeprueft: v.optional(v.boolean()),
   },
-  handler: async (ctx, { issueId, externalSku, shopUrl, priceAuto, ...patch }) => {
+  handler: async (ctx, { issueId, externalSku, shopUrl, priceAuto, titelGeprueft, ...patch }) => {
     await requireEditor(ctx);
     const issue = await ctx.db.get(issueId);
     if (!issue) throw new Error("Ausgabe nicht gefunden");
@@ -717,7 +722,56 @@ export const update = mutation({
     // etwas anderes sagt.
     if (patch.priceAmountCents !== undefined) clean.priceSource = "redaktion";
     if (priceAuto && patch.priceAmountCents === undefined) clean.priceSource = undefined;
+    const neuerTitel =
+      patch.title !== undefined && patch.title.trim() && patch.title.trim() !== issue.title
+        ? patch.title.trim()
+        : null;
+    // Die Redaktion hat ueber den Titel entschieden: der Vermerk entfaellt.
+    if (issue.titelPruefen && (neuerTitel || titelGeprueft)) clean.titelPruefen = undefined;
     await ctx.db.patch(issueId, clean);
+    if (neuerTitel) {
+      // Buchmodus (ein Text je Heft): der Text traegt den Hefttitel und folgt.
+      const texte = await ctx.db
+        .query("articles")
+        .withIndex("by_issue_order", (q) => q.eq("issueId", issueId))
+        .take(2);
+      if (texte.length === 1 && texte[0].title === issue.title) {
+        const a = texte[0];
+        const rest = a.searchText.startsWith(a.title) ? a.searchText.slice(a.title.length) : "\n\n" + a.searchText;
+        await ctx.db.patch(a._id, {
+          title: neuerTitel,
+          searchText: (neuerTitel + rest).slice(0, 100000),
+          updatedAt: Date.now(),
+        });
+        await sucheVormerken(ctx, issueId, a._id);
+      }
+    }
+  },
+});
+
+/**
+ * Vermerk "Titel pruefen" setzen oder aufheben (Weltkrieg-Import im
+ * Browser, web/src/admin/heftTitel.ts). `null` hebt ihn auf, etwa wenn ein
+ * neuer Import beide Quellen einig findet.
+ */
+export const titelPruefenSetzen = mutation({
+  args: {
+    issueId: v.id("issues"),
+    pruefen: v.union(
+      v.null(),
+      v.object({ umschlag: v.optional(v.string()), kolumne: v.optional(v.string()), grund: v.string() }),
+    ),
+  },
+  handler: async (ctx, { issueId, pruefen }) => {
+    await requireEditor(ctx);
+    const issue = await ctx.db.get(issueId);
+    if (!issue) throw new Error("Ausgabe nicht gefunden");
+    const kurz = (t?: string) => (t === undefined ? undefined : t.trim().slice(0, 300));
+    await ctx.db.patch(issueId, {
+      titelPruefen: pruefen
+        ? { umschlag: kurz(pruefen.umschlag), kolumne: kurz(pruefen.kolumne), grund: pruefen.grund.slice(0, 200) }
+        : undefined,
+    });
   },
 });
 

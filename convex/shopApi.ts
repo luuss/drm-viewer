@@ -12,14 +12,19 @@
  * Signatur und Antwortverarbeitung ohne Laden testen lassen. Fehler sind
  * deutsche Saetze fuer die Redaktion.
  */
+import { ladenArt, ladenProdukt, ladenUrl } from "./laden";
 import {
-  SHOP_URL,
   designationMatches,
   searchQueryForIssue,
   seriesFor,
 } from "./shopCovers";
 
-export const DEFAULT_SHOP_API_URL = `${SHOP_URL}/module/lusdigital/api`;
+/** Schnittstelle des Ladens, wenn `SHOP_API_URL` nichts anderes sagt. */
+export function standardShopApiUrl(): string {
+  return ladenArt() === "woocommerce"
+    ? `${ladenUrl()}/wp-json/wkdigital/v1/api`
+    : `${ladenUrl()}/module/lusdigital/api`;
+}
 const TIMEOUT_MS = 15_000;
 
 export type ShopAction =
@@ -96,7 +101,7 @@ export async function callShopApi(
       "SHOP_WEBHOOK_SECRET ist nicht gesetzt. Ohne das gemeinsame Geheimnis spricht der Leser nicht mit dem Shop.",
     );
   }
-  const url = opts.url ?? process.env.SHOP_API_URL ?? DEFAULT_SHOP_API_URL;
+  const url = opts.url ?? process.env.SHOP_API_URL ?? standardShopApiUrl();
   const ts = Math.floor((opts.now ?? Date.now)() / 1000);
   const body = JSON.stringify({ action, ts, ...params });
   const signature = await hmacHex(body, secret);
@@ -214,7 +219,7 @@ export function parseProduct(raw: any): ShopProduct | null {
     name: asText(raw.name) || `Produkt ${id}`,
     reference: asText(raw.reference),
     priceCents: priceToCents(raw.price_gross),
-    url: httpUrl(raw.url) ?? `${SHOP_URL}/index.php?controller=product&id_product=${id}`,
+    url: httpUrl(raw.url) ?? ladenProdukt(id),
     coverUrl: httpUrl(raw.cover_url),
     manufacturer: asText(raw.manufacturer),
     active: asBool(raw.active),

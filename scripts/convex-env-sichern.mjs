@@ -37,6 +37,9 @@ const freiwillig = [
   "MAX_ACTIVE_SESSIONS",
   "SHOP_API_URL",
   "HEFT_ANKUENDIGUNG",
+  // Welcher Laden (convex/laden.ts): Weltkrieg setzt woocommerce und die Adresse.
+  "LADEN",
+  "SHOP_BASIS_URL",
 ];
 
 function convex(args) {

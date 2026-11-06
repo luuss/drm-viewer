@@ -6,7 +6,7 @@ import { api, formatEuro, type Id } from "../lib/api";
 import { heftStatus, MeldungZeile, useMeldung } from "./adminUi";
 
 type Heft = FunctionReturnType<typeof api.issues.overviewForEditors>[number];
-type Filter = "alle" | "entwurf" | "live" | "probleme";
+type Filter = "alle" | "entwurf" | "live" | "probleme" | "titel";
 
 /** Stand, an dem ein Heft ohne Eingriff nicht weiterkommt. */
 const PROBLEME = new Set(["fehler", "seiten", "unvollstaendig"]);
@@ -30,6 +30,7 @@ export default function AdminPage() {
       if (filter === "entwurf") return !i.isPublished;
       if (filter === "live") return i.isPublished;
       if (filter === "probleme") return PROBLEME.has(s.schritt);
+      if (filter === "titel") return i.titelPruefen;
       return true;
     });
   }, [issues, reihe, filter]);
@@ -37,6 +38,8 @@ export default function AdminPage() {
   const probleme = (issues ?? []).filter((i) => {
     return PROBLEME.has(heftStatus(i).schritt);
   }).length;
+  // Weltkrieg-Import: Titelseite und Kolumnentitel uneinig (heftTitel.ts).
+  const titelOffen = (issues ?? []).filter((i) => i.titelPruefen).length;
 
   return (
     <>
@@ -51,6 +54,7 @@ export default function AdminPage() {
                   ["entwurf", "Entwürfe"],
                   ["live", "Veröffentlicht"],
                   ["probleme", `Probleme${probleme ? ` (${probleme})` : ""}`],
+                  ...(titelOffen ? [["titel", `Titel prüfen (${titelOffen})`]] : []),
                 ] as [Filter, string][]
               ).map(([wert, text]) => (
                 <button
@@ -177,6 +181,7 @@ function HeftZeile({ heft: i, darfVeroeffentlichen }: { heft: Heft; darfVeroeffe
         </span>
         <span className="heft-stand">
           <span className={`badge ${status.ton}`}>{status.text}</span>
+          {i.titelPruefen && <span className="badge titel-pruefen-marke">Titel prüfen</span>}
           {i.isPublished && !i.shopOffered && (
             <span className="hint small">nicht im Netzladen angeboten</span>
           )}

@@ -3,7 +3,7 @@ import { internalMutation, query, MutationCtx } from "./_generated/server";
 import { requireAdmin } from "./roles";
 import { Doc, Id } from "./_generated/dataModel";
 import { normalizeEmail } from "./access";
-import { SHOP_URL } from "./shopCovers";
+import { ladenArt, ladenUrl, ladenWarenkorb } from "./laden";
 import { stripeCheckoutEnabled } from "./shopLinks";
 import { stripeKonfig } from "./leserStripe";
 
@@ -415,11 +415,20 @@ export async function assertSkuFree(
 /** Was die Oberflaeche ueber den Kaufweg wissen muss. */
 export const storefront = query({
   args: {},
-  returns: v.object({ stripeCheckout: v.boolean(), stripeAbo: v.boolean(), shopUrl: v.string() }),
+  returns: v.object({
+    stripeCheckout: v.boolean(),
+    stripeAbo: v.boolean(),
+    shopUrl: v.string(),
+    // Seite des Ladens, die Artikelnummern in den Warenkorb legt (laden.ts).
+    warenkorbUrl: v.string(),
+    laden: v.union(v.literal("prestashop"), v.literal("woocommerce")),
+  }),
   handler: async () => ({
     stripeCheckout: stripeCheckoutEnabled(),
     // Jahresabo ueber Stripe Checkout im Ladenkonto (leserAbo.ts).
     stripeAbo: stripeKonfig() !== null,
-    shopUrl: `${SHOP_URL}/`,
+    shopUrl: `${ladenUrl()}/`,
+    warenkorbUrl: ladenWarenkorb(),
+    laden: ladenArt(),
   }),
 });

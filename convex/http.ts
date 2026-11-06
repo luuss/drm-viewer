@@ -286,6 +286,7 @@ workerRoute("/service/jobs/toc-regions", (ctx, body) =>
     issueId: body.issueId,
     regions: body.regions ?? [],
     entries: body.entries,
+    ersetzen: body.ersetzen === true ? true : undefined,
   }),
 );
 
@@ -315,6 +316,15 @@ workerRoute("/service/pages/rendered", (ctx, body) =>
     height: Number(body.height),
     tileManifestKey: body.tileManifestKey,
     previewKey: body.previewKey,
+  }),
+);
+
+workerRoute("/service/pages/beschnitten", (ctx, body) =>
+  ctx.runMutation(internal.issuePages.beschnittUebernehmenInternal, {
+    jobId: body.jobId,
+    workerId: String(body.workerId ?? ""),
+    issueId: body.issueId,
+    seiten: body.seiten ?? [],
   }),
 );
 

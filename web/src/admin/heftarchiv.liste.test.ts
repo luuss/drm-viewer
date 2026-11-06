@@ -24,6 +24,10 @@ it.skipIf(!LISTE || !AUS)("Hefte des Archivs ausgeben", { timeout: 120000 }, () 
     pfad: h.pfad,
     mitIdml: h.mitIdml,
     mitPdf: h.mitPdf,
+    // Das Innenteil-PDF, das der Import nimmt; sein Dateidatum steht in der
+    // Liste (dritte Spalte) und dient als Erscheinungsdatum (05.11.2026).
+    innenteil:
+      h.files.find((f) => /\.pdf$/i.test(f.name) && /innenteil/i.test(f.path))?.path ?? null,
   }));
   // Dazu Hefte ohne PDF (nur INDD), die der Import gar nicht anfasst.
   const ohnePdf = new Map<string, string>();

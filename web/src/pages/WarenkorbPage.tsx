@@ -37,7 +37,7 @@ export default function WarenkorbPage() {
 
   function zurKasse() {
     const url = kassenUrl(
-      storefront!.shopUrl,
+      storefront!.warenkorbUrl,
       skus,
       me?.email ?? null,
     );
@@ -100,7 +100,7 @@ export default function WarenkorbPage() {
                 issueIds={zeilen.map((i) => i._id)}
                 shopKasse={
                   skus.length === zeilen.length
-                    ? kassenUrl(storefront.shopUrl, skus, me?.email ?? null)
+                    ? kassenUrl(storefront.warenkorbUrl, skus, me?.email ?? null)
                     : null
                 }
                 onBezahlt={() => setGekauft(zeilen.map((i) => i._id))}

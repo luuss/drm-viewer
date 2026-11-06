@@ -178,7 +178,7 @@ export default function IssueDetailPage() {
                 issueIds={[issue._id]}
                 shopKasse={
                   issue.shopSku
-                    ? kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)
+                    ? kassenUrl(storefront.warenkorbUrl, [issue.shopSku], me?.email ?? null)
                     : null
                 }
                 leseZiel={`/reader/${issueId}`}
@@ -196,7 +196,7 @@ export default function IssueDetailPage() {
                   {/* Direkt in die Kasse des Ladens, das Heft liegt dort schon im Warenkorb. */}
                   <a
                     className="btn"
-                    href={kassenUrl(storefront.shopUrl, [issue.shopSku], me?.email ?? null)}
+                    href={kassenUrl(storefront.warenkorbUrl, [issue.shopSku], me?.email ?? null)}
                     onClick={() => heraus(issue._id)}
                   >
                     Sofort kaufen <Icon name="arrow-right" />

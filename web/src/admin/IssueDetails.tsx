@@ -53,6 +53,65 @@ export default function IssueDetails({ issue }: { issue: EditorIssue }) {
         }}
       >
         <h3>Angaben</h3>
+        {issue.titelPruefen && (
+          <div className="titel-pruefen" role="status">
+            <p>
+              <strong>Titel prüfen:</strong> {issue.titelPruefen.grund}.
+            </p>
+            <ul>
+              {issue.titelPruefen.umschlag && (
+                <li>
+                  <span className="muted">Titelseite</span> „{issue.titelPruefen.umschlag}“
+                  {issue.titelPruefen.umschlag !== issue.title && (
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void tue(
+                          () => updateIssue({ issueId: issue._id, title: issue.titelPruefen!.umschlag! }),
+                          "Titel übernommen",
+                        )
+                      }
+                    >
+                      übernehmen
+                    </button>
+                  )}
+                </li>
+              )}
+              {issue.titelPruefen.kolumne && (
+                <li>
+                  <span className="muted">Kolumnentitel</span> „{issue.titelPruefen.kolumne}“
+                  {issue.titelPruefen.kolumne !== issue.title && (
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void tue(
+                          () => updateIssue({ issueId: issue._id, title: issue.titelPruefen!.kolumne! }),
+                          "Titel übernommen",
+                        )
+                      }
+                    >
+                      übernehmen
+                    </button>
+                  )}
+                </li>
+              )}
+            </ul>
+            <button
+              type="button"
+              className="btn quiet small"
+              disabled={busy !== null}
+              onClick={() =>
+                void tue(() => updateIssue({ issueId: issue._id, titelGeprueft: true }), "Titel bestätigt")
+              }
+            >
+              „{issue.title}“ stimmt so
+            </button>
+          </div>
+        )}
         {issue.shopTitle && (
           <p className="hint">
             Im Kiosk steht der Name aus dem Netzladen: <strong>{issue.shopTitle}</strong>

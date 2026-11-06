@@ -21,19 +21,21 @@ import { Ladeschlange } from "./ladeschlange";
 import { buildPageOrder, type CoverPage } from "./pageOrder";
 import { uploadAsset } from "./uploadAsset";
 import { dateiStamm, readIdmlMeta, satzTexte, verlinkteBilder } from "./idmlMeta";
-import { ausVersalien, nameVomUmschlag, schreibungAusSatz } from "./umschlagTitel";
+import { ausVersalien, nameVomUmschlag, schreibungAusSatz, schreibungJeWort, woerterImSatz } from "./umschlagTitel";
+import { kolumnentitel, titelEntscheiden, type TitelEntscheid } from "./heftTitel";
 import { REIHEN } from "../lib/reihen";
 import { IST_WELTKRIEG } from "../lib/marke";
-import { HEFTARCHIV_EREIGNIS, fertigMerken } from "./heftarchiv";
+import { HEFTARCHIV_EREIGNIS, fertigMerken, reiheAusArchivpfad } from "./heftarchiv";
 import { textebeneAlsBlob, type TextPage } from "./textLayer";
 import {
+  netzformatAusPdf,
   oeffnePdf,
   RENDER_SPUREN,
   readPriceFromImprint,
   renderPdfPages,
   renderUmschlag,
   umschlagTextAusPdf,
-  anfangsText,
+  textebeneAusPdf,
   type OffenesPdf,
   type RenderedPage,
 } from "./pageRender";
@@ -78,7 +80,7 @@ type Ergebnis = {
 };
 
 /** Der Ordner mit einer laufenden Nummer: sie stoesst den Lauf an. */
-type Eingelesen = { id: number; folderName: string; files: ScannedFile[] };
+type Eingelesen = { id: number; folderName: string; files: ScannedFile[]; pfad?: string };
 
 type Heftname = ParsedName & { bekannt: boolean };
 
@@ -95,6 +97,7 @@ export default function FolderImport({
 }) {
   const publications = useQuery(api.publications.listAll, {});
   const ensureIssue = useMutation(api.issues.ensureFromFolder);
+  const titelPruefenSetzen = useMutation(api.issues.titelPruefenSetzen);
   const presignUpload = useAction(api.uploads.presignUpload);
   const registerUpload = useMutation(api.assets.registerUpload);
   const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
@@ -203,7 +206,7 @@ export default function FolderImport({
       naechster();
       return;
     }
-    void starten(plan, name);
+    void starten(plan, name, ordner.pfad);
     // Angestossen wird allein von einem neuen Ordner; `gestartet` haelt jeden
     // weiteren Durchlauf dieses Effekts ab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,7 +256,7 @@ export default function FolderImport({
   }
   uebernehmenRef.current = uebernehmen;
 
-  async function starten(plan: FolderPlan, name: Heftname) {
+  async function starten(plan: FolderPlan, name: Heftname, archivPfad?: string) {
     if (!plan.inner) return;
     // Weltkrieg (Heftarchiv): nur die Bilder hoch, die der Satz verlinkt;
     // ohne Satzdatei gar keine, denn dann weiss niemand, wohin sie gehoeren.
@@ -325,9 +328,11 @@ export default function FolderImport({
             "Bitte die IDML neu aus InDesign exportieren. Der Lauf ist abgebrochen.",
         );
       }
-      // Weltkrieg: Titel und Reihe stehen auf der Titelseite, nicht sicher im
-      // Ordnernamen. Lesbar ist die Titelseite in einem Augenblick; der
-      // Umschlag wird spaeter ohnehin ganz gerendert.
+      // Weltkrieg: Titel aus dem Kolumnentitel des Innenteils, die Titelseite
+      // ist die Gegenprobe (heftTitel.ts); die Reihe von der Titelseite, gegen
+      // den Archivordner geprueft. Bis 05.11.2026 kam beides allein von der
+      // Titelseite: 112 falsche Titel, zwei Hefte in der falschen Reihe.
+      let titelEntscheid: TitelEntscheid | null = null;
       if (IST_WELTKRIEG) {
         // Ohne eigenes Umschlag-PDF steht die Titelseite vorn im Innenteil.
         const mitTitel = plan.cover ?? innenteil;
@@ -335,40 +340,68 @@ export default function FolderImport({
         const tafeln = await umschlagTextAusPdf(mitTitel.file, undefined, true, name.issueNumber).catch(() => null);
         const u1 = tafeln?.find((t) => t.role === "front_cover") ?? tafeln?.[0];
         const vomUmschlag = u1 ? nameVomUmschlag(u1.items, REIHEN) : null;
-        if (!vomUmschlag) {
+        if (!vomUmschlag?.reihe) {
+          // Ohne Reihe fielen Hefte verschiedener Reihen mit derselben
+          // Nummer in ein Heft "Weltkrieg 1" (03.11.2026: sechs Hefte in
+          // "Endstation Kaukasus"). Lieber anhalten.
           throw new Error(
-            `Die Titelseite in ${mitTitel.name} ist nicht lesbar: kein Titel, keine Reihe. ` +
-              "Das Heft wird nicht importiert.",
+            `Auf der Titelseite in ${mitTitel.name} ist keine Reihe zu erkennen (Originalband, ` +
+              "Doppelband, Flieger …). Das Heft wird nicht importiert.",
           );
         }
-        {
-          let titel = name.issueTitle;
-          if (vomUmschlag.titelGedruckt) {
-            // Schreibung: erst die Titelseite des Innenteils, dann der Satz.
-            const innen = innenPdf ? await anfangsText(innenPdf).catch(() => []) : [];
-            const satz = plan.idml ? await satzTexte(plan.idml.file).catch(() => []) : [];
-            titel =
-              schreibungAusSatz(vomUmschlag.titelGedruckt, [...innen, ...satz]) ??
-              ausVersalien(vomUmschlag.titelGedruckt);
-          }
-          if (!vomUmschlag.reihe) {
-            // Ohne Reihe fielen Hefte verschiedener Reihen mit derselben
-            // Nummer in ein Heft "Weltkrieg 1" (03.11.2026: sechs Hefte in
-            // "Endstation Kaukasus"). Lieber anhalten.
-            throw new Error(
-              "Auf der Titelseite ist keine Reihe zu erkennen (Originalband, Doppelband, " +
-                "Flieger …). Das Heft wird nicht importiert.",
-            );
-          }
-          const reihe = vomUmschlag.reihe;
-          name = {
-            ...name,
-            publicationName: reihe,
-            publicationSlug: slugify(reihe),
-            issueTitle: titel,
-            issueSubtitle: titel,
-          };
-          notiere(`Von der Titelseite: „${titel}“, Reihe ${reihe}`);
+        const reihe = vomUmschlag.reihe;
+        const ausOrdner = reiheAusArchivpfad(archivPfad);
+        if (ausOrdner && ausOrdner !== reihe) {
+          throw new Error(
+            `Die Titelseite nennt ${reihe}, das Heft liegt im Archiv aber unter ${ausOrdner} ` +
+              `(${archivPfad}). Das Heft wird nicht importiert; bitte den Ordner pruefen.`,
+          );
+        }
+        // Der Innenteil ohne Rendern gelesen: Kolumnentitel und Satz fuer die
+        // Schreibung. Ohne IDML ist er der einzige Satz.
+        melde("heft", `Kolumnentitel in ${innenteil.name} werden gelesen`);
+        const netzText = satzMass
+          ? { pageWidthPt: satzMass.pageWidthPt, pageHeightPt: satzMass.pageHeightPt }
+          : await netzformatAusPdf(innenPdf).then((n) => (n ? { pageWidthPt: n.breitePt, pageHeightPt: n.hoehePt } : undefined));
+        const innenSeitenText = await textebeneAusPdf(innenPdf, netzText).catch(() => [] as TextPage[]);
+        const satz = plan.idml ? await satzTexte(plan.idml.file).catch(() => []) : [];
+        const texte = [
+          ...innenSeitenText.map((p) =>
+            [...p.items].sort((x, y) => x[2] - y[2] || x[1] - y[1]).map((i) => i[0]).join("\n"),
+          ),
+          ...satz,
+        ];
+        const gedruckt = vomUmschlag.titelGedruckt || null;
+        const ausSatz = gedruckt ? schreibungAusSatz(gedruckt, texte) : null;
+        const umschlag = gedruckt ? (ausSatz ?? schreibungJeWort(gedruckt, texte) ?? ausVersalien(gedruckt)) : null;
+        titelEntscheid = titelEntscheiden({
+          umschlag,
+          umschlagBestaetigt: !!ausSatz || (!!umschlag && woerterImSatz(umschlag, texte)),
+          kolumne: kolumnentitel(innenSeitenText),
+          reihe,
+          nummer: name.issueNumber,
+        });
+        const titel = titelEntscheid.titel;
+        name = {
+          ...name,
+          publicationName: reihe,
+          publicationSlug: slugify(reihe),
+          issueTitle: titel,
+          issueSubtitle: titel,
+        };
+        const herkunft = {
+          beide: "Titelseite und Kolumnentitel",
+          kolumne: "Kolumnentitel",
+          umschlag: "Titelseite",
+          nummer: "kein Titel im Heft, Heftnummer",
+        }[titelEntscheid.quelle];
+        notiere(`Titel „${titel}“ (${herkunft}), Reihe ${reihe}${ausOrdner ? " (wie Archivordner)" : ""}`);
+        if (titelEntscheid.pruefen) {
+          offen.push(
+            `Titel prüfen: ${titelEntscheid.pruefen.grund}` +
+              (titelEntscheid.pruefen.umschlag ? ` · Titelseite „${titelEntscheid.pruefen.umschlag}“` : "") +
+              (titelEntscheid.pruefen.kolumne ? ` · Kolumnentitel „${titelEntscheid.pruefen.kolumne}“` : ""),
+          );
         }
       }
       melde("heft", "Heft anlegen");
@@ -381,6 +414,11 @@ export default function FolderImport({
         priceAmountCents: preis,
       });
       const issueId = heft.issueId;
+      if (titelEntscheid) {
+        // Auch aufheben: ein neuer Import, der beide Quellen einig findet,
+        // erledigt einen alten Vermerk.
+        await titelPruefenSetzen({ issueId, pruefen: titelEntscheid.pruefen ?? null });
+      }
       setHeft({ id: issueId, titel: name.issueTitle });
       notiere(
         heft.created
@@ -410,6 +448,13 @@ export default function FolderImport({
       // Die gedruckte Zahl der ersten Innenseite steht im Satz. Fehlt sie,
       // gilt 3: Umschlag und Umschlaginnenseite sind die ersten beiden.
       const gedruckteStartseite = satzMass?.firstPrintedPage ?? 3;
+      // Ohne Satzdatei nennt das Druck-PDF sein Netzformat selbst (TrimBox).
+      // Fehlt auch das, kaemen die Seiten mit Anschnitt und Schnittmarken;
+      // der Worker prueft die Bilder danach noch einmal und schneidet sie zu
+      // (extract-service/extractor/schnittmarken.py).
+      const netz = satzMass
+        ? { breitePt: satzMass.pageWidthPt, hoehePt: satzMass.pageHeightPt }
+        : await netzformatAusPdf(innenPdf);
       melde("innenteil", `Innenteil ${innenteil.name} wird gerendert`);
       // Rendern und Hochladen laufen nebeneinander. Ohne das stand abwechselnd
       // der Rechner oder die Leitung still.
@@ -437,8 +482,8 @@ export default function FolderImport({
           {
             targetWidth: INNEN_BREITE,
             quality: INNEN_GUETE,
-            trimWidthPt: satzMass?.pageWidthPt,
-            trimHeightPt: satzMass?.pageHeightPt,
+            trimWidthPt: netz?.breitePt,
+            trimHeightPt: netz?.hoehePt,
             spuren: RENDER_SPUREN,
             mitText: true,
           },

@@ -8,7 +8,12 @@
 
 import { parseFolderName, type ScannedFile } from "./folderScan";
 
-export type DroppedFolder = { folderName: string; files: ScannedFile[] };
+export type DroppedFolder = {
+  folderName: string;
+  files: ScannedFile[];
+  /** Pfad im Heftarchiv ("weltkrieg/Großbände/…"); fehlt beim einzeln gezogenen Ordner. */
+  pfad?: string;
+};
 
 function fileOf(entry: FileSystemFileEntry): Promise<File> {
   return new Promise((resolve, reject) => entry.file(resolve, reject));

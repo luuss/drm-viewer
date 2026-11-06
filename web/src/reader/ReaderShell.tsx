@@ -13,6 +13,7 @@ import { useDevtoolsWache, useKopierschutz } from "./kopierschutz";
 import ArticleMode from "./ArticleMode";
 import ReaderRail from "./ReaderRail";
 import TocDrawer from "./TocDrawer";
+import { verzeichnisZeigen } from "./verzeichnisZeigen";
 import Icon from "../components/Icon";
 import ShopHinweis from "../components/ShopHinweis";
 import AppShell from "../components/AppShell";
@@ -83,6 +84,9 @@ export default function ReaderShell() {
   const liveLinks = useQuery(api.pageLinks.forReader, { issueId });
   const liveProductLinks = useQuery(api.articleProducts.forReader, { issueId });
   const liveProgress = useQuery(api.progress.get, { issueId });
+  // Nur der Weltkrieg-Leser fragt hier: ob es ein Verzeichnis gibt, haengt
+  // dort an den Eintraegen (`verzeichnisZeigen`).
+  const liveToc = useQuery(api.toc.listForReader, IST_WELTKRIEG ? { issueId } : "skip");
   const openSession = useMutation(api.readerSessions.issue);
   const saveProgress = useMutation(api.progress.save);
   const sperrenWegenDevtools = useMutation(api.readerSessions.abschluss);
@@ -103,6 +107,10 @@ export default function ReaderShell() {
   const regions = liveRegions ?? gepuffert?.regions;
   const links = liveLinks ?? gepuffert?.links;
   const productLinks = liveProductLinks ?? gepuffert?.products;
+  const mitVerzeichnis = verzeichnisZeigen(
+    IST_WELTKRIEG,
+    (liveToc ?? gepuffert?.toc)?.length,
+  );
   // Die Lesestelle: die juengere aus Server und Puffer. Wer ohne Verbindung
   // weitergelesen hat, steht nach dem Neuladen dort, nicht am alten Stand.
   const [geduldVorbei, setGeduldVorbei] = useState(false);
@@ -177,7 +185,7 @@ export default function ReaderShell() {
   const [tocFest, setTocFest] = useState(
     () => window.localStorage.getItem("reader-toc-fest") !== "aus",
   );
-  const tocDocked = breit && tocFest;
+  const tocDocked = breit && tocFest && mitVerzeichnis;
   // Angetippte Anzeige im Seitenmodus: erst die Auswahl "bestellen oder lesen".
   const [adChoice, setAdChoice] = useState<{
     articleId: Id<"articles">;
@@ -939,14 +947,16 @@ export default function ReaderShell() {
             </button>
           </div>
         )}
-        <button
-          className={tocDocked ? "btn quiet small active" : "btn quiet small"}
-          aria-pressed={breit ? tocDocked : undefined}
-          onClick={() => (breit ? setTocFest((f) => !f) : setTocOpen(true))}
-        >
-          <Icon name="list" />
-          <span className="button-label">Inhalt</span>
-        </button>
+        {mitVerzeichnis && (
+          <button
+            className={tocDocked ? "btn quiet small active" : "btn quiet small"}
+            aria-pressed={breit ? tocDocked : undefined}
+            onClick={() => (breit ? setTocFest((f) => !f) : setTocOpen(true))}
+          >
+            <Icon name="list" />
+            <span className="button-label">Inhalt</span>
+          </button>
+        )}
       </header>
 
       <div className={tocDocked ? "reader-body toc-fest" : "reader-body"}>
@@ -1023,23 +1033,29 @@ export default function ReaderShell() {
           )}
         </main>
 
-        <TocDrawer
-          issueId={issueId}
-          issueTitle={issue?.title}
-          open={tocOpen && !tocDocked}
-          docked={tocDocked}
-          mode={mode}
-          currentArticleId={currentArticleId}
-          currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
-          pageLabel={pageLabel}
-          ersatz={gepuffert?.toc}
-          onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
-          onPage={zuVerzeichnisSeite}
-          onArticle={(id) => openArticle(id, undefined, undefined, true)}
-          onInhaltsseite={
-            inhaltsseite == null ? undefined : () => zuVerzeichnisSeite(inhaltsseite, true)
-          }
-        />
+        {mitVerzeichnis && (
+          <TocDrawer
+            issueId={issueId}
+            issueTitle={issue?.title}
+            open={tocOpen && !tocDocked}
+            docked={tocDocked}
+            mode={mode}
+            currentArticleId={currentArticleId}
+            currentPages={mode === "page" ? visiblePageIndexes : [pageIndex]}
+            pageLabel={pageLabel}
+            ersatz={gepuffert?.toc}
+            // Weltkrieg: alle Eintraege zeigen in denselben Text. Sie fuehren
+            // zur Seite, in der Leseansicht an ihre Stelle im Text wie der
+            // Regler, und hervorgehoben ist der Eintrag der Seite.
+            nachSeite={IST_WELTKRIEG}
+            onClose={() => (tocDocked ? setTocFest(false) : setTocOpen(false))}
+            onPage={IST_WELTKRIEG && mode === "article" ? seiteImText : zuVerzeichnisSeite}
+            onArticle={(id) => openArticle(id, undefined, undefined, true)}
+            onInhaltsseite={
+              inhaltsseite == null ? undefined : () => zuVerzeichnisSeite(inhaltsseite, true)
+            }
+          />
+        )}
       </div>
 
       <ReaderRail

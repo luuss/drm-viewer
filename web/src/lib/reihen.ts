@@ -29,6 +29,8 @@ export type Reihe = {
   alt: string;
   hell: string;
   dunkel: string;
+  /** Nur der Reihenname ohne Marke darueber ("DOPPELBAND"), fuer Kacheln. */
+  nurName?: string;
   kasten: boolean;
   /** Hausfarbe der Reihe fuer ihre eigene Seite. */
   farbe: string;
@@ -160,6 +162,7 @@ function wk(slug: string, name: string, farbe: string, match: RegExp, kategorie:
     alt: name,
     hell: `/img/wk/reihe-${slug}.svg`,
     dunkel: `/img/wk/reihe-${slug}.svg`,
+    nurName: `/img/wk/reihe-${slug}-name.svg`,
     kasten: false,
   };
 }

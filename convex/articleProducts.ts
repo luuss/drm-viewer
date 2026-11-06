@@ -13,7 +13,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { hasIssueAccess } from "./access";
 import { requireEditor, audit } from "./roles";
-import { SHOP_URL } from "./shopCovers";
+import { ladenUrl } from "./laden";
 import {
   ShopApiError,
   ShopProduct,
@@ -568,7 +568,7 @@ export const forReader = query({
         entry.products.push({
           productId: null,
           name: "",
-          url: `${SHOP_URL}/`,
+          url: `${ladenUrl()}/`,
           priceCents: null,
           blockOrder: block.order,
           order: row.order,
