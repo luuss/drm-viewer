@@ -1480,3 +1480,15 @@ kurze Reste werden eigene Artikel.
 * Passwörter in Bitwarden, nicht ins Repo. Die `.env` auf dem Verlagsserver ist
   die einzige Stelle für dessen Geheimnisse.
 * Lokal wird nicht mehr entwickelt; gearbeitet wird gegen die ausgerollte Anlage.
+
+## Weisse Seite auf alten iPhones (07.11.2026)
+
+* Ursache: Regex-Lookbehind (`(?<!\d)` in `convex/heftnummer.ts`) und
+  `static {}`-Bloecke (pdf.js) im Haupt-Bundle. Safari vor iOS 16.4 bricht
+  damit schon beim Parsen ab, das ganze Programm laeuft nicht.
+* Fix d4b9389: Lookbehind in `heftnummer.ts` ersetzt (`ohneZifferDavor`),
+  `build.target` mit `safari15` in `web/vite.config.ts`, Hinweistext in
+  `web/index.html`, wenn nach 12 s nichts geladen ist.
+* Pruefen nach jedem Build: `grep -oE '/\(\?<[=!]|static\{' dist/assets/index-*.js`
+  muss leer sein. Keine neuen Lookbehinds in Code, den der Leser laedt.
+* Offen (Bead): Lookbehinds in `web/src/admin/umschlagTitel.ts` (nur Admin).
