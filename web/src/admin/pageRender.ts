@@ -12,8 +12,7 @@
  * der Seitengroesse aus der Satzdatei — er liegt bei allen Heften mittig.
  */
 
-import * as pdfjs from "pdfjs-dist";
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import type * as Pdfjs from "pdfjs-dist";
 import {
   normiereTextelemente,
   trimBoxAusPdf,
@@ -24,7 +23,24 @@ import {
 import { tafelnNachInhalt, umschlagTafeln, type Netz, type Tafel } from "./coverPages";
 import { netzformatPruefen, type Netzformat } from "./netzformat";
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+/**
+ * pdf.js erst laden, wenn eine Seite gerendert wird, und zwar den
+ * legacy-Build mit Polyfills. pdf.js 6 greift schon beim Laden auf `Iterator`
+ * zu (gibt es in Safari erst ab 18.4). Im Haupt-Bundle hat das am 07.11.2026
+ * die ganze Seite auf iOS 18.1 weiss gelassen, auch fuer Leser.
+ */
+let pdfjsLaden: Promise<typeof Pdfjs> | null = null;
+function pdfjs(): Promise<typeof Pdfjs> {
+  pdfjsLaden ??= (async () => {
+    const [lib, worker] = await Promise.all([
+      import("pdfjs-dist/legacy/build/pdf.mjs"),
+      import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),
+    ]);
+    lib.GlobalWorkerOptions.workerSrc = worker.default;
+    return lib as unknown as typeof Pdfjs;
+  })();
+  return pdfjsLaden;
+}
 
 export type RenderedPage = {
   /** 0-basiert, in der Reihenfolge der Quelldatei. */
@@ -117,7 +133,7 @@ export async function netzformatAusPdf(pdf: OffenesPdf): Promise<Netzformat | un
  * spuerbar.
  */
 export type OffenesPdf = {
-  doc: pdfjs.PDFDocumentProxy;
+  doc: Pdfjs.PDFDocumentProxy;
   /** Die Datei dahinter: weitere Spuren oeffnen sie noch einmal. */
   datei: Blob;
   schliessen: () => Promise<void>;
@@ -125,7 +141,7 @@ export type OffenesPdf = {
 
 export async function oeffnePdf(file: Blob): Promise<OffenesPdf> {
   const daten = new Uint8Array(await file.arrayBuffer());
-  const auftrag = pdfjs.getDocument({ data: daten });
+  const auftrag = (await pdfjs()).getDocument({ data: daten });
   const doc = await auftrag.promise;
   return { doc, datei: file, schliessen: () => auftrag.destroy() };
 }
@@ -146,7 +162,7 @@ export const RENDER_SPUREN = (() => {
 /** Eine Datei oeffnen oder ein schon offenes PDF benutzen; nur Eigenes wird geschlossen. */
 async function mitPdf<T>(
   quelle: Blob | OffenesPdf,
-  arbeit: (doc: pdfjs.PDFDocumentProxy) => Promise<T>,
+  arbeit: (doc: Pdfjs.PDFDocumentProxy) => Promise<T>,
 ): Promise<T> {
   if ("doc" in quelle) return await arbeit(quelle.doc);
   const offen = await oeffnePdf(quelle);
@@ -160,7 +176,7 @@ async function mitPdf<T>(
 /** Seitenzahl eines PDF, ohne es zu rendern. */
 export async function pdfPageCount(file: Blob): Promise<number> {
   const daten = new Uint8Array(await file.arrayBuffer());
-  const auftrag = pdfjs.getDocument({ data: daten });
+  const auftrag = (await pdfjs()).getDocument({ data: daten });
   const doc = await auftrag.promise;
   const n = doc.numPages;
   await auftrag.destroy();
@@ -174,7 +190,7 @@ export async function pdfPageCount(file: Blob): Promise<number> {
  * gleich hochladen kann und nie ein ganzes Heft im Speicher liegt.
  */
 async function renderSeite(
-  doc: pdfjs.PDFDocumentProxy,
+  doc: Pdfjs.PDFDocumentProxy,
   i: number,
   options: RenderOptions,
 ): Promise<RenderedPage> {
@@ -190,7 +206,7 @@ async function renderSeite(
  * bezogen, damit Bild und Zeilen sich decken.
  */
 async function renderAusschnitt(
-  page: pdfjs.PDFPageProxy,
+  page: Pdfjs.PDFPageProxy,
   i: number,
   schnitt: Schnitt,
   options: RenderOptions,
@@ -399,7 +415,7 @@ export async function renderPdfPages(
     let naechste = 0;
     let fehler = false;
 
-    async function spur(eigenes: pdfjs.PDFDocumentProxy) {
+    async function spur(eigenes: Pdfjs.PDFDocumentProxy) {
       while (!fehler && !abgebrochen?.()) {
         const i = naechste++;
         if (i >= total) return;
