@@ -1489,6 +1489,8 @@ kurze Reste werden eigene Artikel.
 * Fix d4b9389: Lookbehind in `heftnummer.ts` ersetzt (`ohneZifferDavor`),
   `build.target` mit `safari15` in `web/vite.config.ts`, Hinweistext in
   `web/index.html`, wenn nach 12 s nichts geladen ist.
-* Pruefen nach jedem Build: `grep -oE '/\(\?<[=!]|static\{' dist/assets/index-*.js`
-  muss leer sein. Keine neuen Lookbehinds in Code, den der Leser laedt.
+* Pruefen nach jedem Build: `grep -c 'static{' dist/assets/index-*.js` muss 0
+  sein, und `grep -oE '.{40}\(\?<[=!]' dist/assets/index-*.js` darf nur
+  Treffer in `RegExp(`-Strings zeigen (die laufen erst beim Aufruf), nie in
+  einem Regex-Literal `/…/`. Keine neuen Lookbehinds in Code, den der Leser laedt.
 * Offen (Bead): Lookbehinds in `web/src/admin/umschlagTitel.ts` (nur Admin).
