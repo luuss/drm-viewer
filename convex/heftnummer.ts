@@ -71,6 +71,36 @@ const ZWISCHEN = String.raw`\s*(?:[-+/&]|und)\s*|\s+`;
 const VOR_JAHR = String.raw`\s*[-/]\s*|\s+`;
 
 /**
+ * Treffer von `re` (mit Flag g), vor denen keine Ziffer steht. Ersetzt das
+ * Lookbehind `(?<!\d)`: Safari unter iOS 16.4 kennt es nicht und bricht beim
+ * Laden des ganzen Bundles ab (weisse Seite auf alten iPhones, 07.11.2026).
+ * Nach einem verworfenen Treffer sucht es eine Stelle weiter, wie die Engine.
+ */
+function* ohneZifferDavor(re: RegExp, t: string): Generator<RegExpExecArray> {
+  re.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t))) {
+    const i = m.index;
+    if (i > 0 && t.charCodeAt(i - 1) >= 48 && t.charCodeAt(i - 1) <= 57) {
+      re.lastIndex = i + 1;
+      continue;
+    }
+    yield m;
+    if (m[0].length === 0) re.lastIndex++;
+  }
+}
+
+function ersetzeOhneZifferDavor(t: string, re: RegExp, f: (m: RegExpExecArray) => string): string {
+  let aus = "";
+  let pos = 0;
+  for (const m of ohneZifferDavor(re, t)) {
+    aus += t.slice(pos, m.index) + f(m);
+    pos = m.index + m[0].length;
+  }
+  return aus + t.slice(pos);
+}
+
+/**
  * Die Heftnummer in einem Ordner- oder Dateinamen finden.
  *
  * Gesucht wird in dieser Reihenfolge: Doppelheft mit Jahr ("8-9-2025"),
@@ -83,20 +113,23 @@ export function findeHeftnummer(text: string, doppel = false): Fund | null {
   // Daten mit Punkten ("28.10.2026", "8.9.25") ausblenden, ohne die
   // Stellen zu verschieben: sie sind nie eine Heftnummer.
   const leer = (m: string) => " ".repeat(m.length);
-  const t = text
+  const t0 = text
     .replace(/\b\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})\b/g, leer)
     // Tagesdatum mit Jahr vorn ("2026-07-15"): kein Heft, auch nicht "2026".
     // "2026-07-08" bleibt stehen, das liest Schritt 3 als Doppelheft 7-8.
-    .replace(/(?<!\d)((?:19|20)\d{2})[-_ ](\d{1,2})[-_ ](\d{1,2})(?!\d)/g, (m, _j, a, b) =>
-      istMonat(Number(a)) && istMonat(Number(b)) && folgt(Number(a), Number(b)) ? m : leer(m),
-    );
+;
+  const t = ersetzeOhneZifferDavor(
+    t0,
+    /((?:19|20)\d{2})[-_ ](\d{1,2})[-_ ](\d{1,2})(?!\d)/g,
+    (m) => (istMonat(Number(m[2])) && istMonat(Number(m[3])) && folgt(Number(m[2]), Number(m[3])) ? m[0] : leer(m[0])),
+  );
 
   // 1. Doppelheft mit Jahr: "8-9-2025", "8/9 2025", "8+9 2025", "08 09 2025".
   const doppelJahr = new RegExp(
-    String.raw`(?<!\d)(\d{1,2})(?:${ZWISCHEN})(\d{1,2})(?:${VOR_JAHR})(\d{4})(?!\d)`,
+    String.raw`(\d{1,2})(?:${ZWISCHEN})(\d{1,2})(?:${VOR_JAHR})(\d{4})(?!\d)`,
     "g",
   );
-  for (const m of t.matchAll(doppelJahr)) {
+  for (const m of ohneZifferDavor(doppelJahr, t)) {
     const a = Number(m[1]);
     const b = Number(m[2]);
     const jahr = Number(m[3]);
@@ -106,8 +139,8 @@ export function findeHeftnummer(text: string, doppel = false): Fund | null {
 
   // 2. Monatsheft mit Jahr: "3-2026", "3/2026", "3 2026", auch "6-6026"
   // (Tippfehler im Jahr, wird gemeldet statt verschluckt).
-  const monatJahr = new RegExp(String.raw`(?<!\d)(\d{1,2})(?:${VOR_JAHR})(\d{4})(?!\d)`, "g");
-  for (const m of t.matchAll(monatJahr)) {
+  const monatJahr = new RegExp(String.raw`(\d{1,2})(?:${VOR_JAHR})(\d{4})(?!\d)`, "g");
+  for (const m of ohneZifferDavor(monatJahr, t)) {
     const a = Number(m[1]);
     const jahr = Number(m[2]);
     if (!istMonat(a)) continue;
@@ -119,8 +152,8 @@ export function findeHeftnummer(text: string, doppel = false): Fund | null {
   }
 
   // 3. Jahr vorn: "2026-07-08" (Doppelheft), "2026-07", "2026_03".
-  const jahrVorn = /(?<!\d)((?:19|20)\d{2})[-_ ](\d{1,2})(?:[-_ +/](\d{1,2}))?(?!\d)/g;
-  for (const m of t.matchAll(jahrVorn)) {
+  const jahrVorn = /((?:19|20)\d{2})[-_ ](\d{1,2})(?:[-_ +/](\d{1,2}))?(?!\d)/g;
+  for (const m of ohneZifferDavor(jahrVorn, t)) {
     const jahr = Number(m[1]);
     const a = Number(m[2]);
     const b = m[3] !== undefined ? Number(m[3]) : undefined;
@@ -136,7 +169,7 @@ export function findeHeftnummer(text: string, doppel = false): Fund | null {
   // 4./5. Laufende Nummer: die erste Zahl im Namen, mit direkt folgender
   // zweiter als Doppelnummer ("170-171", "170/171"). Spaetere Zahlen sind
   // Seiten ("dmz 101 S. 21-22") und zaehlen nicht.
-  const erste = /(?<!\d)(\d{1,4})(?!\d)/.exec(t);
+  const erste = ohneZifferDavor(/(\d{1,4})(?!\d)/g, t).next().value;
   if (!erste) return null;
   const von = Number(erste[1]);
   const start = erste.index;

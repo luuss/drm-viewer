@@ -29,6 +29,12 @@ function marke(): Plugin {
 
 export default defineConfig({
   plugins: [react(), marke()],
+  build: {
+    // Aeltere iPhones (Safari 15/16) mitnehmen: Regex-Lookbehind und
+    // `static {}`-Bloecke (pdf.js) brechen dort sonst das ganze Bundle beim
+    // Parsen ab, die Seite bleibt weiss (07.11.2026).
+    target: ["es2020", "safari15", "chrome100", "firefox100", "edge100"],
+  },
   server: {
     // Entwicklungsbetrieb hinter einem Tunnel: fremde Host-Namen zulassen.
     allowedHosts: true,
