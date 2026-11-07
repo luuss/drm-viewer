@@ -1494,3 +1494,24 @@ kurze Reste werden eigene Artikel.
   Treffer in `RegExp(`-Strings zeigen (die laufen erst beim Aufruf), nie in
   einem Regex-Literal `/…/`. Keine neuen Lookbehinds in Code, den der Leser laedt.
 * Offen (Bead): Lookbehinds in `web/src/admin/umschlagTitel.ts` (nur Admin).
+* **Zweite Ursache, die eigentliche (iOS 18.1.1 laut access_ssl_log):** pdf.js 6
+  fuehrt beim Laden `typeof Iterator.prototype.join` aus. `Iterator` gibt es in
+  Safari erst ab 18.4 -> ReferenceError, ganze App tot, auch fuer Leser.
+  Fix cafb75e: `pageRender.ts` laedt pdf.js (legacy-Build) erst per `import()`,
+  `web/src/polyfills.ts` (erstes Modul in `main.tsx`) ergaenzt
+  `Promise.withResolvers`/`try`, `URL.parse`, `Map#getOrInsert*`.
+  Der legacy-Worker braucht trotzdem Safari >= 17.4 (`withResolvers` im Worker).
+* Ausgerollt nur als Einzeldateien, weil Git viel noch nicht ausgerollte Arbeit
+  hat: hefte-digital bekam eine gepatchte Server-Fassung von `pageRender.ts`
+  (Server war aelter als Git, Sicherung `/root/*.vor-iphone-2026-11-07`),
+  weltkrieg-digital die Git-Fassung (Sicherung `/root/wk-vor-iphone-2026-11-07.tgz`,
+  `code/STAND` steht weiter auf 476d6c2 plus diese Dateien).
+* **So pruefen** (ohne iPhone): Playwright-Chrome, per `addInitScript` vor dem
+  Laden `globalThis.Iterator`, die Iterator-Helfer, `Promise.try`,
+  `Map.prototype.getOrInsertComputed` usw. loeschen (Safari 18.1), fuer
+  Safari 15 zusaetzlich `Array.prototype.at`, `Object.hasOwn`,
+  `structuredClone`, `Promise.withResolvers`, `URL.parse`. Dann auf
+  `pageerror` hoeren. Welche iOS-Versionen kommen: `grep -oE "iPhone OS [0-9_]+"
+  /var/www/vhosts/system/digital.lesenundschenken.de/logs/access_ssl_log`.
+  Abgebrochener Start im Log: HTML + `index-*.js`, danach keine `/img`, `/fonts`,
+  `/convex`-Anfragen.
